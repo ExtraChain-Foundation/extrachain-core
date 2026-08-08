@@ -265,6 +265,9 @@ void DirsManager::network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpac
 void DirsManager::network_response_dir_rows(
     std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
     const Responder&                                          responder) {
+    // An empty response still proves that the peer understands staged sync.
+    // Do not fall back to a full metadata transfer merely because a requested
+    // actor currently has no DFS rows.
     node->dfs()->mark_startup_sync_response();
 
     if (node->dfs()->mode() == DfsMode::Light) {
@@ -314,6 +317,20 @@ void DirsManager::network_response_dir_rows(
                     continue;
                 }
 
+                // Vector/Dictionary newer on the network: route into the download
+                // queue, which admits it only for priority actors/files (or Full
+                // mode). The peer answers with a content package merged over the
+                // local db by signed rows, so local-only rows survive.
+                if ((row.type == Dfs::FileType::Vector || row.type == Dfs::FileType::Dictionary)
+                    && row.state == Dfs::FileState::Ready) {
+                    auto local = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
+                    if (local.has_value()
+                        && (local->state != Dfs::FileState::Ready || row.last_modified > local->last_modified
+                            || !node->dfs()->is_file_already_downloaded(owner_id, row.file_id, row.hash))) {
+                        dir_rows_todo.push_back(row);
+                    }
+                }
+
                 if (row.state == Dfs::FileState::Removed) {
                     if (row.type == Dfs::FileType::File && file_path->exists()) {
                         node->dfs()->remove_local_file(owner_id, row.file_id);
@@ -352,19 +369,20 @@ void DirsManager::network_response_dir_rows(
                 return;
             }
 
-            if (owner_id == node->network_id()) {
-                auto rows = dir_rows;
-                for (auto it = rows.begin(); it != rows.end();) {
-                    if (it->name == "Usernames") {
-                        node->dfs()->request_file(owner_id, it->file_id);
-                        it = rows.erase(it);
-                    } else {
-                        ++it;
-                    }
+            // Gossip fresh File rows that arrived via sync: a file added while its
+            // owner had no uplink reaches us through the handshake sync only, and
+            // without re-broadcast the rest of the network never hears about it.
+            // Receivers dedupe via is_file_already_downloaded; 10 min cap keeps a
+            // full catalog sync from turning into a broadcast storm.
+            if (node->dfs()->mode() == DfsMode::Full) {
+                const auto now_ms = Utils::current_date_ms();
+                for (const auto& row : dir_rows_res) {
+                    if (row.type != Dfs::FileType::File)
+                        continue;
+                    if (now_ms < 0 || now_ms - static_cast<long long>(row.last_modified) > 10 * 60 * 1000)
+                        continue;
+                    node->dfs()->broadcast_stored(owner_id, row);
                 }
-
-                node->dfs()->download_manager().add_to_queue(owner_id, rows, *responder.identifiers().begin());
-                continue;
             }
 
             node->dfs()->download_manager().add_to_queue(owner_id, dir_rows_res, *responder.identifiers().begin());

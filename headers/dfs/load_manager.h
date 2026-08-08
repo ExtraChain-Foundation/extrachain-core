@@ -49,9 +49,16 @@ struct LoadInfo {
     size_t                                amount_fragments;
     std::set<size_t>                      fragments_left;
     std::chrono::system_clock::time_point last_fragment_received {};
+    std::chrono::system_clock::time_point queued {};
 
     bool notify_neighbours;
     bool forced { false };
+    // Count of full source-exhaustion restarts: after 3 cycles the download goes
+    // into an exponential cooldown instead of being dropped — the only reachable
+    // peer may simply not have the content yet (leaf asks hub before hub fetched it).
+    int source_refresh_cycles { 0 };
+    int cooldown_rounds { 0 };
+    std::chrono::system_clock::time_point cooldown_until {};
 
     std::set<std::string>                         identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
@@ -110,9 +117,19 @@ public:
     }
 
 private:
-    void        timer_runner(const Dfs::FileLink file_link_to_proceed = {});
+    void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
+    // "Vectors before files" gate state; a full scan of both pools, so callers cache it.
+    bool compute_vectors_waiting();
+    // Instant (coalesced) scheduler wakeup — without it new queue items waited for the next
+    // 5-second timer tick.
+    void kick();
+
+    std::atomic_bool kick_pending_ { false };
+    std::atomic_int  vector_gate_state_ { -1 };
+
     void        schedule_watchdog();
     std::size_t max_concurrent_downloads() const;
+    std::size_t max_forced_downloads() const;
 
     ExtraChainNode* node;
 
@@ -136,6 +153,10 @@ private:
     SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;
     static constexpr std::size_t                            WRITE_STRIPES = 64;
     std::array<std::mutex, WRITE_STRIPES>                   m_write_file_mutexes;
+
+    // Files that already finished downloading this session: their re-downloads (vector
+    // hash-mismatch cycle) don't hold the "vectors before files" gate.
+    SafePtr<std::set<Dfs::FileLink>> m_completed_once;
 
     QTimer* m_timer;
 };

@@ -22,6 +22,83 @@
 #include "dfs/dfs_controller.h"
 #include "utils/exc_utils.h"
 
+#include <charconv>
+
+namespace {
+    constexpr std::size_t MAX_PACKAGE_ROWS  = 100000;
+    constexpr std::size_t MAX_PACKAGE_BYTES = 64ULL * 1024ULL * 1024ULL;
+
+    std::optional<std::uint64_t> row_timestamp(const DbRow &row) {
+        const auto it = row.find("timestamp");
+        if (it == row.end() || it->second.empty()) {
+            return std::nullopt;
+        }
+
+        std::uint64_t value     = 0;
+        const auto [end, error] = std::from_chars(it->second.data(), it->second.data() + it->second.size(), value);
+        if (error != std::errc() || end != it->second.data() + it->second.size()) {
+            return std::nullopt;
+        }
+        return value;
+    }
+
+    std::string canonical_row_hash(const DbRow &row) {
+        std::vector<std::pair<std::string_view, std::string_view>> fields;
+        fields.reserve(row.size());
+        for (const auto &[name, value] : row) {
+            fields.emplace_back(name, value);
+        }
+        std::ranges::sort(fields, {}, &std::pair<std::string_view, std::string_view>::first);
+
+        std::string canonical;
+        for (const auto &[name, value] : fields) {
+            canonical += std::to_string(name.size());
+            canonical += ':';
+            canonical += name;
+            canonical += std::to_string(value.size());
+            canonical += ':';
+            canonical += value;
+        }
+        return Utils::calculate_hash(canonical);
+    }
+
+    bool package_size_is_valid(const std::vector<DbRow> &rows) {
+        if (rows.size() > MAX_PACKAGE_ROWS) {
+            return false;
+        }
+
+        std::size_t bytes = 0;
+        for (const auto &row : rows) {
+            for (const auto &[name, value] : row) {
+                if (name.size() > MAX_PACKAGE_BYTES - bytes) {
+                    return false;
+                }
+                bytes += name.size();
+                if (value.size() > MAX_PACKAGE_BYTES - bytes) {
+                    return false;
+                }
+                bytes += value.size();
+            }
+        }
+        return true;
+    }
+} // namespace
+
+int DfsVector::compare_row_revisions(const DbRow &lhs, const DbRow &rhs) {
+    const auto lhs_timestamp = row_timestamp(lhs);
+    const auto rhs_timestamp = row_timestamp(rhs);
+    if (!lhs_timestamp.has_value() || !rhs_timestamp.has_value()) {
+        return lhs_timestamp.has_value() ? 1 : (rhs_timestamp.has_value() ? -1 : 0);
+    }
+    if (lhs_timestamp.value() != rhs_timestamp.value()) {
+        return lhs_timestamp.value() < rhs_timestamp.value() ? -1 : 1;
+    }
+
+    const auto lhs_hash = canonical_row_hash(lhs);
+    const auto rhs_hash = canonical_row_hash(rhs);
+    return lhs_hash.compare(rhs_hash);
+}
+
 DfsVector::DfsVector(ExtraChainNode              *node,
                      const Actor<KeyPrivate>     &actor,
                      const ActorId               &file_actor_id,
@@ -29,12 +106,12 @@ DfsVector::DfsVector(ExtraChainNode              *node,
                      Dfs::DataSecurity            data_security,
                      const Dfs::DataSecurityData &security_data,
                      Dfs::FileType                file_type) {
-    this->node           = node;
-    this->file_path_     = Dfs::Path::file_path(file_actor_id, file_id).value();
-    this->file_type_     = file_type;
+    this->node       = node;
+    this->file_path_ = Dfs::Path::file_path(file_actor_id, file_id).value();
+    this->file_type_ = file_type;
 
-    const std::string &extension = (file_type == Dfs::FileType::Dictionary) ? Dfs::Basic::DICTIONARY_FILE
-                                                                            : Dfs::Basic::VECTOR_FILE;
+    const std::string &extension =
+        (file_type == Dfs::FileType::Dictionary) ? Dfs::Basic::DICTIONARY_FILE : Dfs::Basic::VECTOR_FILE;
     this->vector_path_ = FsPath::create(this->file_path_.native().string() + extension).value();
 
     this->actor_         = actor;
@@ -157,7 +234,10 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
     }
 
     DbConnector db(dfs_vector.file_path_);
-    db.open();
+    if (!db.open()) {
+        eWarning("[DfsVector] Can't open vector db {}", dfs_vector.file_path_.string());
+        return std::unexpected(DfsVectorError::Unknown);
+    }
     auto res_create = db.create_table(schema.value());
     db.close();
 
@@ -209,7 +289,7 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load_network(ExtraChainNode 
 
 std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &primary_data) {
     DbConnector db(file_path_);
-    db.open();
+    db.open(/*create_if_missing*/ false);
     if (!db.is_open()) {
         return std::unexpected(DfsVectorError::CollectionNotFound);
     }
@@ -219,8 +299,8 @@ std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &prim
         field = collection_template_.primary.value().name();
     }
 
-    auto query = fmt::format("SELECT * FROM {} WHERE {} = '{}' AND status = '1'", "Vector", field, primary_data);
-    std::vector<DbRow> db_rows = db.select(query);
+    auto               query   = fmt::format("SELECT * FROM {} WHERE {} = ? AND status = '1'", "Vector", field);
+    std::vector<DbRow> db_rows = db.select(query, "Vector", { { field, primary_data } });
 
     if (db_rows.empty()) {
         return std::unexpected(DfsVectorError::CollectionEmpty);
@@ -243,7 +323,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &prim
 
 std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std::string &where_statement) {
     DbConnector db(file_path_);
-    db.open();
+    db.open(/*create_if_missing*/ false);
     if (!db.is_open()) {
         return std::unexpected(DfsVectorError::CollectionNotFound);
     }
@@ -286,6 +366,10 @@ std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template(
 
     auto content = Utils::read_file_content(vector_path_);
     if (!content.has_value()) {
+        // Companion file lost (interrupted write) — recover via two paths together: direct
+        // content package + the normal state->queue (REPAIR in add_to_queue skips "already
+        // downloaded" for an unreadable vector). Both are throttled.
+        node->dfs()->request_vector_content(file_actor_id_, file_id_);
         node->dfs()->request_file(file_actor_id_, file_id_);
         eCritical("[DfsVector] Can't find {}", vector_path_.native());
         return std::unexpected(DfsVectorError::Unknown);
@@ -351,12 +435,9 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
 }
 
 bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
-    // Dictionary uses static template, no file to write
-    if (file_type_ != Dfs::FileType::Dictionary) {
-        auto res_json = Utils::write_file_content(vector_path_, dfs_vector_content.vector_file);
-        if (!res_json.has_value()) {
-            return false;
-        }
+    if (dfs_vector_content.owner_id != file_actor_id_ || dfs_vector_content.file_id != file_id_
+        || !package_size_is_valid(dfs_vector_content.content)) {
+        return false;
     }
 
     auto vector_template = dfs_vector_content.vector_template;
@@ -364,25 +445,53 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         return false;
     }
 
+    collection_template_ = vector_template;
+
+    std::string primary_field = "actor";
+    if (collection_template_.primary.has_value()) {
+        primary_field = collection_template_.primary->name();
+    }
+
+    std::unordered_set<std::string> allowed_fields { "actor", "sign", "timestamp", "status" };
+    allowed_fields.insert(primary_field);
+    for (const auto &field : collection_template_.fields()) {
+        allowed_fields.insert(field.name());
+    }
+
+    for (const auto &row : dfs_vector_content.content) {
+        const auto status = row.find("status");
+        if (!row.contains(primary_field) || !row.contains("actor") || !row.contains("sign")
+            || !row_timestamp(row).has_value() || status == row.end()
+            || (status->second != "0" && status->second != "1")
+            || std::ranges::any_of(row,
+                                   [&](const auto &field) {
+                                       return !allowed_fields.contains(field.first);
+                                   })
+            || !verify(row)) {
+            return false;
+        }
+    }
+
+    auto storage_template = vector_template;
     if (is_encrypted_) {
-        vector_template.set_to_blob();
+        storage_template.set_to_blob();
     }
 
-    if (vector_template.primary.has_value()) {
-        const auto &primary = vector_template.primary.value();
-        vector_template.preadd_fields({ primary,
-                                        Dfs::Field::ActorId("actor").not_null(),
-                                        Dfs::Field::Blob("sign").not_null(),
-                                        Dfs::Field::Timestamp("timestamp").not_null(),
-                                        Dfs::Field::Integer("status").not_null() });
+    if (storage_template.primary.has_value()) {
+        const auto &primary = storage_template.primary.value();
+        storage_template.preadd_fields({ primary,
+                                         Dfs::Field::ActorId("actor").not_null(),
+                                         Dfs::Field::Blob("sign").not_null(),
+                                         Dfs::Field::Timestamp("timestamp").not_null(),
+                                         Dfs::Field::Integer("status").not_null() });
     } else {
-        vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                        Dfs::Field::Blob("sign").not_null(),
-                                        Dfs::Field::Timestamp("timestamp").not_null(),
-                                        Dfs::Field::Integer("status").not_null() });
+        storage_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
+                                         Dfs::Field::Blob("sign").not_null(),
+                                         Dfs::Field::Timestamp("timestamp").not_null(),
+                                         Dfs::Field::Integer("status").not_null() });
     }
 
-    auto schema = vector_template.to_db_schema();
+    auto schema = storage_template.to_db_schema();
     if (!schema.has_value()) {
         return false;
     }
@@ -390,14 +499,40 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
     schema->set_table_name("Vector");
 
     DbConnector db(file_path_);
-    db.open();
-    db.create_table(schema.value());
-
-    for (const auto &db_row : dfs_vector_content.content) {
-        db.replace("Vector", db_row);
+    if (!db.open()) {
+        eWarning("[DfsVector] Can't open vector db {}, package will be retried", file_path_.string());
+        return false;
+    }
+    if (!db.create_table(schema.value()).has_value() || !db.query("BEGIN IMMEDIATE")) {
+        return false;
     }
 
-    db.close();
+    for (const auto &db_row : dfs_vector_content.content) {
+        auto existing = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", primary_field),
+                                  "Vector",
+                                  { { primary_field, db_row.at(primary_field) } });
+        if (!existing.empty() && compare_row_revisions(db_row, existing.front()) <= 0) {
+            continue;
+        }
+        if (!db.replace("Vector", db_row)) {
+            db.query("ROLLBACK");
+            return false;
+        }
+    }
+
+    if (!db.query("COMMIT")) {
+        db.query("ROLLBACK");
+        return false;
+    }
+
+    // Write the companion template only after the complete database package is valid.
+    if (file_type_ != Dfs::FileType::Dictionary) {
+        auto res_json = Utils::write_file_content(vector_path_, dfs_vector_content.vector_file);
+        if (!res_json.has_value()) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -432,25 +567,16 @@ bool DfsVector::store_add(DbRow &row) {
 }
 
 bool DfsVector::local_add(const DbRow &row, bool check) {
-    bool verify = this->verify(row);
-    if (!verify) {
+    if (!this->verify(row)) {
         return false;
     }
 
-    if (check) {
-        std::string field = "actor";
-        if (collection_template_.primary.has_value()) {
-            field = collection_template_.primary.value().name();
-        }
-
-        auto exrow = read_row(row.at(field));
-        if (exrow.has_value()) {
-            auto extimestamp = std::stoull(exrow->at("timestamp"));
-            auto timestamp   = std::stoull(row.at("timestamp"));
-            if (extimestamp > timestamp) {
-                return true;
-            }
-        }
+    std::string field = "actor";
+    if (collection_template_.primary.has_value()) {
+        field = collection_template_.primary.value().name();
+    }
+    if (!row.contains(field) || !row_timestamp(row).has_value()) {
+        return false;
     }
 
     DbConnector db(file_path_);
@@ -458,9 +584,27 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
         return false;
     }
 
-    bool res = db.replace("Vector", row);
-    db.close();
-    return res;
+    if (check) {
+        if (!db.query("BEGIN IMMEDIATE")) {
+            return false;
+        }
+        auto existing = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field),
+                                  "Vector",
+                                  { { field, row.at(field) } });
+        if (!existing.empty() && compare_row_revisions(row, existing.front()) <= 0) {
+            return db.query("COMMIT");
+        }
+    }
+
+    const bool result = db.replace("Vector", row);
+    if (!check) {
+        return result;
+    }
+    if (!result || !db.query("COMMIT")) {
+        db.query("ROLLBACK");
+        return false;
+    }
+    return true;
 }
 
 std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
@@ -554,7 +698,7 @@ std::optional<std::pair<std::string, std::size_t>> DfsVector::calculate_template
 
 std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
     DbConnector db(file_path_.native());
-    if (!db.open()) {
+    if (!db.open(/*create_if_missing*/ false)) {
         return std::nullopt;
     }
 
@@ -564,9 +708,18 @@ std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
 }
 
 bool DfsVector::verify(const DbRow &row) {
-    auto      actor_id = ActorId(row.at("actor"));
-    auto      actor    = node->actor_index()->read_actor_old(actor_id);
-    Signature sign     = ByteArray(row.at("sign")).toArray<crypto_sign_BYTES>();
+    if (!row.contains("actor") || !row.contains("sign") || !row.contains("status")
+        || row.at("sign").size() != crypto_sign_BYTES || !row_timestamp(row).has_value()) {
+        return false;
+    }
+
+    auto actor_id = ActorId::create(row.at("actor"));
+    if (!actor_id.has_value()) {
+        return false;
+    }
+
+    auto      actor = node->actor_index()->read_actor_old(actor_id.value());
+    Signature sign  = ByteArray(row.at("sign")).toArray<crypto_sign_BYTES>();
 
     auto [hash, all_empty] = calculate_hash(row);
     if (hash.empty() || all_empty) {

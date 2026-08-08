@@ -57,7 +57,7 @@ static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 static constexpr int HOT_PACK_LAG = 200;
 // Keep at most two not-yet-packed ranges in memory. The hot store remains the
 // source of truth, so dropping a cache entry only causes a later database read.
-static constexpr std::size_t PACK_HOT_CACHE_LIMIT = Pack::SECTIONS_PER_PACK * 2;
+static constexpr std::size_t   PACK_HOT_CACHE_LIMIT     = Pack::SECTIONS_PER_PACK * 2;
 static constexpr std::size_t   PACK_SYNC_MAX_PACKS      = 100000;
 static constexpr std::uint64_t PACK_SYNC_MAX_PACK_BYTES = 512ULL * 1024ULL * 1024ULL;
 
@@ -80,6 +80,17 @@ static inline SectionId align_down20(const SectionId &s) {
 }
 static inline SectionId max_sid(const SectionId &a, const SectionId &b) {
     return (a < b) ? b : a;
+}
+
+static inline SectionId control_interval_end(const SectionId &start) {
+    return start == SectionId(0) ? SectionId(0) : start + CONTROL_INTERVAL_DIFF;
+}
+
+static inline bool control_interval_is_closed(const SectionId &start,
+                                              const SectionId &chain_tip,
+                                              const SectionId &cache_tip) {
+    const auto end = control_interval_end(start);
+    return end <= chain_tip && end <= cache_tip;
 }
 
 // generate control sections [from..to] with step 20
@@ -729,9 +740,10 @@ private:
     std::map<std::pair<ActorId, TokenId>, BigNumberFloat> token_allocations_cache_;
     DagCache                                              cache_; // Balance cache for fast calculations
 
-    mutable std::shared_mutex   section_mutex_; //
-    mutable std::mutex          range_mutex_;   //
-    std::optional<SectionRange> persisted_range_;
+    mutable std::shared_mutex    section_mutex_; // Protects one storage operation.
+    mutable std::recursive_mutex save_mutex_;    // Protects section read-modify-write cycles.
+    mutable std::mutex           range_mutex_;   //
+    std::optional<SectionRange>  persisted_range_;
 
     SectionId current_section_     = SectionId(-1);      // Current (latest) section ID
     SectionId first_saved_section_ = SectionId(-1);      // First section ID saved in the chain
@@ -773,6 +785,7 @@ private:
     // Set once the control index has been populated for the loaded chain, so the
     // one-time lazy rebuild (first control lookup on a cold index) runs only once.
     std::atomic_bool control_index_ready_ = false;
+    std::atomic_bool controls_generating_ = false;
 
     // Populate the control index from disk on first use if it is cold. Idempotent
     // and cheap once warm. Called from control lookups so it is independent of

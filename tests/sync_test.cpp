@@ -43,6 +43,7 @@
 #include "chain/transaction.h"
 #include "chat/chat.h"
 #include "dfs/name_validator.h"
+#include "dfs/dfs_vector.h"
 #include "encryption/encryption_tools.h"
 #include "network/isocket_service.h"
 #include "network/message_body.h"
@@ -79,6 +80,36 @@ class SyncTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void controlHashUsesOnlyClosedIntervals() {
+        QCOMPARE(control_interval_end(SectionId(0)), SectionId(0));
+        QCOMPARE(control_interval_end(SectionId(1)), SectionId(20));
+        QCOMPARE(control_interval_end(SectionId(21)), SectionId(40));
+
+        QVERIFY(control_interval_is_closed(SectionId(0), SectionId(0), SectionId(0)));
+        QVERIFY(!control_interval_is_closed(SectionId(1), SectionId(19), SectionId(19)));
+        QVERIFY(!control_interval_is_closed(SectionId(1), SectionId(20), SectionId(19)));
+        QVERIFY(control_interval_is_closed(SectionId(1), SectionId(20), SectionId(20)));
+        QVERIFY(!control_interval_is_closed(SectionId(21), SectionId(40), SectionId(39)));
+        QVERIFY(control_interval_is_closed(SectionId(21), SectionId(40), SectionId(40)));
+    }
+
+    void vectorRevisionOrderIsIndependentOfDeliveryOrder() {
+        const DbRow older { { "timestamp", "100" }, { "value", "old" } };
+        const DbRow newer { { "timestamp", "101" }, { "value", "new" } };
+        QVERIFY(DfsVector::compare_row_revisions(older, newer) < 0);
+        QVERIFY(DfsVector::compare_row_revisions(newer, older) > 0);
+
+        const DbRow same_a { { "timestamp", "101" }, { "value", "A" }, { "status", "1" } };
+        const DbRow same_b { { "status", "1" }, { "value", "B" }, { "timestamp", "101" } };
+        const auto  forward = DfsVector::compare_row_revisions(same_a, same_b);
+        const auto  reverse = DfsVector::compare_row_revisions(same_b, same_a);
+        QVERIFY(forward != 0);
+        QCOMPARE(forward, -reverse);
+
+        const DbRow same_a_reordered { { "value", "A" }, { "status", "1" }, { "timestamp", "101" } };
+        QCOMPARE(DfsVector::compare_row_revisions(same_a, same_a_reordered), 0);
+    }
+
     // ----- Pack-sync data path ------------------------------------------------
 
     // The exact transfer a syncing node performs: server serialises each pack

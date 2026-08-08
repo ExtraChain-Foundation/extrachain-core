@@ -34,11 +34,38 @@
 
 #include <QTimer>
 
+namespace {
+    constexpr std::size_t request_history_limit = 4096;
+    constexpr auto        request_history_ttl   = std::chrono::minutes(5);
+
+    void prune_request_history(std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> &history,
+                               const std::chrono::steady_clock::time_point                     now) {
+        if (history.size() < request_history_limit) {
+            return;
+        }
+
+        std::erase_if(history, [now](const auto &entry) {
+            return now - entry.second > request_history_ttl;
+        });
+        if (history.size() >= request_history_limit) {
+            const auto oldest =
+                std::min_element(history.begin(), history.end(), [](const auto &left, const auto &right) {
+                    return left.second < right.second;
+                });
+            history.erase(oldest);
+        }
+    }
+} // namespace
+
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
     , node(node)
     , dirs_manager_(DirsManager(node))
     , load_manager_(LoadManager(node)) {
+
+    // Default download rank for the raccoon actor (vectors and files) is 1.
+    // Chat/main actors register in ExtraChainNode::start(), network in download_rank.
+    set_download_rank(ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373"), 1, 1);
 
     refresh_calculate();
     // loadBytesLimit();
@@ -1360,11 +1387,81 @@ void DfsController::download_waiting_files() {
     }
 }
 
-void DfsController::request_file(const ActorId &owner_id, const std::string &file_id) {
-    eLog("[Dfs] Request file: {} / {}", owner_id, file_id);
+int DfsController::download_rank(const ActorId &owner_id, const Dfs::DirRow &dir_row) const {
+    // Vector class = the DBs themselves (Vector/Dictionary/Collection) plus their templates
+    // (File type under :CollectionTemplate — no template means the vector can't be read).
+    // Classifying by folder doesn't work: chat attachments live under :DApp:Chat:*.
+    const bool is_vector =
+        dir_row.type == Dfs::FileType::Vector || dir_row.type == Dfs::FileType::Dictionary
+        || dir_row.type == Dfs::FileType::Collection
+        || (dir_row.folder.has_value() && dir_row.folder.value() == Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE);
+
+    // Name-based overrides (owner+name) have top priority in the registry: let a specific
+    // vector (e.g. the network Usernames vector) be demoted off the critical path.
+    if (auto it = download_rank_name_overrides_.find({ owner_id, dir_row.name });
+        it != download_rank_name_overrides_.end()) {
+        return it->second;
+    }
+
+    // Rank registry (raccoon from the constructor, chat/main actors from
+    // ExtraChainNode::start(), custom via set_download_rank from the app).
+    if (auto it = download_rank_overrides_.find(owner_id); it != download_rank_overrides_.end()) {
+        const int rank = is_vector ? it->second.first : it->second.second;
+        if (rank >= 0) {
+            return rank;
+        }
+    }
+
+    if (owner_id == node->network_id() && is_vector) {
+        return 0;
+    }
+    return is_vector ? RANK_OTHER_VECTORS : RANK_FILES;
+}
+
+// Direct request for full vector content (DfsFileRequest -> peer replies with a
+// DfsVectorContent package): handle_package restores both the DB and the .vector companion.
+// Used to repair vectors with a lost template (read_template).
+void DfsController::request_vector_content(const ActorId &owner_id, const std::string &file_id) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
 
-    forces_files_.insert(file_link);
+    const auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard lock(request_times_mutex_);
+        prune_request_history(request_vector_times_, now);
+        auto it = request_vector_times_.find(file_link);
+        if (it != request_vector_times_.end() && now - it->second < std::chrono::seconds(30)) {
+            return;
+        }
+        request_vector_times_[file_link] = now;
+    }
+
+    eLog("[Dfs] Request vector content: {} / {}", owner_id, file_id);
+    Dfs::FileLinkFragment request;
+    request.file_link = file_link;
+    request.fragment_numbers.emplace(1);
+    node->network()->send_message(request,
+                                  MessageType::DfsFileRequest,
+                                  SendMode::Neighbours,
+                                  MessageStatus::NoStatus);
+}
+
+void DfsController::request_file(const ActorId &owner_id, const std::string &file_id) {
+    auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
+
+    // First request goes out immediately, retries at most every 30s per file.
+    const auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard lock(request_times_mutex_);
+        prune_request_history(request_file_times_, now);
+        auto it = request_file_times_.find(file_link);
+        if (it != request_file_times_.end() && now - it->second < std::chrono::seconds(30)) {
+            return;
+        }
+        request_file_times_[file_link] = now;
+    }
+
+    eLog("[Dfs] Request file: {} / {}", owner_id, file_id);
+    mark_forced_file(file_link);
 
     this->node->network()->send_message(file_link,
                                         MessageType::DfsFileState,
@@ -1736,21 +1833,42 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
 void DfsController::network_response_content_vector(
     const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
     ThreadPoolBoost::instance_dfs()->post([this, dfs_vector_content] {
+        eLog("[Dfs] Vector content package: {} / {}", dfs_vector_content.owner_id, dfs_vector_content.file_id);
         auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
         if (!dfs_vector_result.has_value()) {
+            eWarning("[Dfs] Vector content package: make_vector failed for {} / {}",
+                     dfs_vector_content.owner_id,
+                     dfs_vector_content.file_id);
             return;
         }
 
         auto &[dir_row, dfs_vector] = dfs_vector_result.value();
 
         bool res_handle = dfs_vector.handle_package(dfs_vector_content);
+        if (!res_handle) {
+            eWarning("[Dfs] Vector content package: handle failed for {} / {}",
+                     dfs_vector_content.owner_id,
+                     dfs_vector_content.file_id);
+            Dfs::FileLinkFragment failed_fragment;
+            failed_fragment.file_link =
+                Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id };
+            failed_fragment.fragment_numbers.emplace(1);
+            load_manager_.remove_active_download(failed_fragment);
+            QTimer::singleShot(std::chrono::seconds(30),
+                               this,
+                               [this,
+                                owner_id = dfs_vector_content.owner_id,
+                                file_id  = dfs_vector_content.file_id] {
+                                   request_file(owner_id, file_id);
+                               });
+            return;
+        }
 
-        Dfs::FileLinkFragment file_link_fragment;
-        file_link_fragment.file_link =
+        Dfs::FileLinkFragment completed_fragment;
+        completed_fragment.file_link =
             Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id };
-        file_link_fragment.fragment_numbers.emplace(1);
-        load_manager_.remove_active_download(file_link_fragment);
-
+        completed_fragment.fragment_numbers.emplace(1);
+        load_manager_.remove_active_download(completed_fragment);
         load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
     });
 }
@@ -1780,10 +1898,10 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
         // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
         if (row.at("status") == "1") {
             emit vectorRowAdded(owner_id, dir_row, row);
-            node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
         } else {
             emit vectorRowRemoved(owner_id, dir_row, row);
         }
+        node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
     }
 }
 
@@ -1803,6 +1921,9 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
     auto available_state = dir_row->state;
     if (available_state == Dfs::FileState::Ready
         && !is_file_already_downloaded(owner_id, file_id, dir_row->hash)) {
+        // Metadata can arrive before content. Do not advertise such a row as
+        // a usable source: the requester would otherwise retry a peer that
+        // cannot serve the file.
         available_state = Dfs::FileState::Known;
     }
 
@@ -1831,6 +1952,8 @@ void DfsController::network_response_file_state(const Dfs::Packets::FileState &d
     auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
                                                                   data.owner_id,
                                                                   data.file_id);
+
+    eLog("[Dfs] File state response: {}/{} state={}", data.owner_id, data.file_id, data.state);
 
     if (!dir_row.has_value()) {
         return;
@@ -2102,14 +2225,11 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     if (dir_row.type == Dfs::FileType::File && network_stote == Dfs::NetworkStoreFile::Broadcast) {
         emit stored(owner_id, dir_row);
 
-        auto               file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
-        auto               load_info = LoadInfo { .dir_row = dir_row };
-        LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now() };
-
-        // check real status
-        load_info.dir_row.state = Dfs::FileState::Known;
-        // load_manager_.active_downloads.insert({ file_link, load_info });
-        // TODO: what need to do here?
+        // Full nodes replicate content, not only metadata: without this the
+        // gossiped row lands as Known and the file itself is never fetched.
+        if (mode() == DfsMode::Full) {
+            request_file(owner_id, dir_row.file_id);
+        }
     }
 
     emit added(owner_id, dir_row);
@@ -2626,6 +2746,12 @@ std::vector<ActorId> DfsController::startup_sync_actors() const {
         actors.insert(actor_id);
     }
 
+    // The chat actor owns the chat list, invites and chat vectors; without it the
+    // Light-mode filter drops its dirs rows and chats never appear on a clean profile.
+    if (auto chat_actor = node->account_controller()->chat_actor(); chat_actor.has_value()) {
+        actors.insert(chat_actor->get().id());
+    }
+
     for (const auto &file_link : priority_file_link_) {
         actors.insert(file_link.owner_id);
     }
@@ -2638,11 +2764,11 @@ std::vector<ActorId> DfsController::startup_sync_actors() const {
 }
 
 void DfsController::sync(const std::string &identifier) {
-    static std::once_flag check_flag;
     ThreadPoolBoost::instance_dfs()->post([this, identifier]() {
-        std::call_once(check_flag, [this, &identifier]() {
-            check_all_files(identifier);
-        });
+        // Not once-per-process: a file left in a non-final state (peer had it only
+        // as Known when we first asked, or our queue was lost to a restart mid-
+        // download) gets re-offered on every sync until it actually lands.
+        check_all_files(identifier);
 
         if (mode() == DfsMode::Full) {
             dirs_manager_.temp_sync_all(identifier);
@@ -2655,7 +2781,9 @@ void DfsController::sync(const std::string &identifier) {
         eLog("[Dfs] Staged startup sync: identifier={}, actors={}", identifier, actors.size());
         dirs_manager_.temp_sync_actors(identifier, actors);
 
-        constexpr auto stagedFallbackDelayMs = 5000;
+        // 3s: prod nodes without staged support don't respond at all, and every clean
+        // sync used to pay this timeout in full (was 15s).
+        constexpr auto stagedFallbackDelayMs = 3000;
         QTimer::singleShot(stagedFallbackDelayMs, node, [this, identifier, responses_before]() {
             ThreadPoolBoost::instance_dfs()->post([this, identifier, responses_before]() {
                 if (mode() != DfsMode::Light) {
@@ -2691,7 +2819,7 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
         return false;
     }
 
-    // Light mode must accept the directory response for each requested actor.
+    // Otherwise the Light filter in network_response_dir_rows would drop the response to this request.
     bool has_new_actors = false;
     {
         std::lock_guard lock(requested_sync_actors_mutex_);
@@ -2710,8 +2838,11 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
             }
         });
 
-    // Old nodes ignore a targeted request. Start a full sync if no staged
-    // response arrives. Do this only for new actors to limit network load.
+    // Prod nodes without staged support ignore the targeted request (same as in sync()).
+    // If no staged response arrives within 3s, request a full sync: network_response_dir_rows
+    // will filter the response, and the requested actors are already in allowed.
+    // Only for new actors: periodic refreshes (raccoon from ClientController) without new
+    // actors shouldn't have to pull the full ~600-actor dump every time.
     if (has_new_actors) {
         constexpr auto stagedFallbackDelayMs = 3000;
         QTimer::singleShot(stagedFallbackDelayMs, node, [this, responses_before]() {

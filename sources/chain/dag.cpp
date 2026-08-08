@@ -60,6 +60,7 @@ Dag::Dag(ExtraChainNode *node)
     , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
     timer_sync_ = new QTimer();
 
+    bool storage_reset = false;
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
     std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
     pack_registry_->rescan();
@@ -164,6 +165,7 @@ Dag::Dag(ExtraChainNode *node)
     } else {
         // QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).removeRecursively();
         clear_dag();
+        storage_reset = true;
     }
 
     // The section stores are authoritative. Repair a stale or missing range
@@ -219,7 +221,7 @@ Dag::Dag(ExtraChainNode *node)
         node->actor_index()->set_network_id(network_id);
     }
 
-    if (mode_ == DagMode::Light && cache_.section() == SectionId(-1)) {
+    if (mode_ == DagMode::Light && cache_.section() == SectionId(-1) && !storage_reset) {
         clear_dag();
         cache_.reset_db();
         cache_.init_db();
@@ -897,8 +899,10 @@ std::optional<bool> Dag::write_section(const Section &section) {
 }
 
 std::optional<std::pair<WriteResult, std::optional<SectionDiff>>> Dag::write_section_diff(const Section &section) {
-    std::optional<SectionDiff> section_diff;
-    auto                       existing_section = this->read_section(section.id);
+    // Same-section RMW race: a sync write must not clobber a concurrent tx insert.
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+    std::optional<SectionDiff>            section_diff;
+    auto                                  existing_section = this->read_section(section.id);
 
     if (existing_section.has_value()) {
         if (existing_section->transactions.size() == section.transactions.size()
@@ -928,7 +932,10 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
         return std::nullopt;
     }
 
-    auto section = this->read_section(section_id);
+    // Serialize against save_transaction: a concurrent tx insert into this section
+    // must not race with writing its control hash.
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+    auto                                  section = this->read_section(section_id);
     if (!section.has_value()) {
         section = Section { .id = section_id };
     }
@@ -953,7 +960,8 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
 }
 
 std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
-    auto section = this->read_section(section_id);
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+    auto                                  section = this->read_section(section_id);
     if (!section.has_value()) {
         return std::nullopt;
     }
@@ -1026,6 +1034,11 @@ SectionDiff Dag::calculate_section_diff(const Section &old_section, const Sectio
 }
 
 bool Dag::save_transaction(const Transaction &transaction) {
+    // Hold save_mutex_ across the whole read-insert-write cycle: without it two
+    // concurrent transactions for the same section both read the old set and one
+    // insert is lost, so sections diverge between nodes and ControlIndex fails.
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+
     auto section = this->read_section(transaction.section());
 
     if (!section.has_value()) {
@@ -1127,6 +1140,8 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
     if (transactions.empty()) {
         return std::nullopt;
     }
+    // Same section RMW race as save_transaction — serialize the batch too.
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
 
     bool      all_saved   = true;
     bool      has_changes = false;
@@ -1221,8 +1236,8 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
     return std::make_pair(min_section, max_section);
 }
 
-TransactionProveError Dag::prove_transaction(const Transaction &tx,
-                                             const std::set<Transaction> &,
+TransactionProveError Dag::prove_transaction(const Transaction           &tx,
+                                             const std::set<Transaction> &transactions,
                                              const std::set<Transaction> *pending_transactions,
                                              const SectionId             *validation_frontier) {
     // Check Genesis transactions
@@ -1294,16 +1309,14 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx,
         return TransactionProveError::WrongHash;
     }
 
-    // Reject replays: the hash commits to the section, so a valid tx can only
-    // live in its own section — a matching hash already stored there is a dup.
     const bool pending_duplicate =
         pending_transactions != nullptr && std::ranges::any_of(*pending_transactions, [&](const auto &pending) {
             return pending.hash() == tx.hash();
         });
-    const bool duplicate =
-        pending_duplicate
-        || (tx.section() <= current_section_ && find_transaction(tx.section(), tx.hash()).has_value());
-    if (duplicate) {
+    const bool stored_duplicate = std::ranges::any_of(transactions, [&](const auto &existing) {
+        return existing.hash() == tx.hash();
+    });
+    if (pending_duplicate || stored_duplicate) {
         return TransactionProveError::Duplicate;
     }
 
@@ -1689,10 +1702,23 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
-    // temp
 #ifndef IS_APP_CLIENT
     if (status_ == DagStatus::Ready) {
-        return;
+        // Section 0 is the sync base and must exist on every FULL node (the
+        // genesis tx also carries the network id). A fresh full node joins
+        // already-Ready (set unconditionally at init), so without this check it
+        // would never run the initial chain sync: it would miss the genesis
+        // section, write_control would later materialize an empty stub and its
+        // control chain would diverge from the network forever. Light nodes keep
+        // the old behavior (they sync via the light package, not full sections).
+        if (mode_ != DagMode::Full) {
+            return;
+        }
+        auto zero = this->read_section(SectionId(0));
+        if (zero.has_value() && !zero->transactions.empty()) {
+            return;
+        }
+        eLog("[Dag] start_check: no genesis section yet — running initial sync");
     }
 #endif
 
@@ -2046,8 +2072,8 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
     // A legacy server sends section file_bytes in hex; our disk is canonical
     // (decimal), so such sections need re-serializing before they're written.
-    auto peer_id     = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
-    auto meta        = node->network()->peer_meta_for(peer_id);
+    auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+    auto meta    = node->network()->peer_meta_for(peer_id);
     if (!meta.has_value()) {
         eWarning("[Dag] Reject file sections from a peer without negotiated metadata");
         return;
@@ -2596,8 +2622,19 @@ void Dag::handle_sync_request() {
         responder.add_identifier(id);
     }
 
-    auto last_block  = this->read_section(current_section_);
-    auto sync_index  = last_block.has_value() ? last_block->id + 1 : SectionId(0);
+    auto last_block = this->read_section(current_section_);
+    auto sync_index = last_block.has_value() ? last_block->id + 1 : SectionId(0);
+    // Section 0 is the sync base (genesis tx carries the network id). If we never
+    // received it — even though live traffic already advanced current_section_ —
+    // pull the chain from the very beginning; section sync merges idempotently.
+    {
+        auto zero = this->read_section(SectionId(0));
+        if (!zero.has_value() || zero->transactions.empty()) {
+            eLog("[Dag] handle_sync_request: genesis section missing — syncing from 0");
+            sync_index = SectionId(0);
+        }
+    }
+
     sync_last_index_ = nodes_by_block.front().second;
 
     if (need_recontrol && mode_ == DagMode::Full) {
@@ -2633,17 +2670,23 @@ void Dag::handle_sync_request() {
     eLog("[Dag] sync_last_index: {} sections", sync_last_index_.to_string());
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        // Pack-capable peer: fetch cold history wholesale, then file-sync only the
-        // hot tail once pack-sync finishes (see issue_next_pack_request) so the
-        // two paths never overlap. Legacy peers fall straight through to file-sync.
-        auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
-        auto meta    = node->network()->peer_meta_for(peer_id);
-        if (meta.has_value() && meta->supports_pack_sync()) {
-            start_pack_sync(responder);
-        } else {
-            request_file_sections(current_section_,
-                                  std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH),
+        if (sync_index == SectionId(0) && current_section_ >= SectionId(0)) {
+            request_file_sections(SectionId(0),
+                                  std::min(sync_last_index_, SectionId(SYNC_SECTIONS_BATCH)),
                                   responder);
+        } else {
+            // Pack-capable peer: fetch cold history wholesale, then file-sync only the
+            // hot tail once pack-sync finishes (see issue_next_pack_request) so the
+            // two paths never overlap. Legacy peers fall straight through to file-sync.
+            auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+            auto meta    = node->network()->peer_meta_for(peer_id);
+            if (meta.has_value() && meta->supports_pack_sync()) {
+                start_pack_sync(responder);
+            } else {
+                request_file_sections(current_section_,
+                                      std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH),
+                                      responder);
+            }
         }
     } else {
         auto responder_new = responder.with_new_message_id();
@@ -3003,7 +3046,7 @@ void Dag::issue_next_pack_request(const Responder &responder) {
             try_pack_hot();
 
             if (installed_any && chain_index_enabled_ && chain_index_) {
-                auto *index              = chain_index_.get();
+                auto *index = chain_index_.get();
                 ThreadPoolBoost::instance_dag_sync()->post([index]() {
                     index->rebuild_from_disk();
                 });
@@ -3958,9 +4001,11 @@ std::optional<DagControl> Dag::read_control_next(const SectionId &section_id) {
 }
 
 std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &start, std::string &last_hash) {
-    SectionId interval_end = (start == SectionId(0) /*&& current_section_ < 20*/)
-                                 ? SectionId(0)
-                                 : start + (start == 0 ? CONTROL_INTERVAL_DIFF + 1 : CONTROL_INTERVAL_DIFF);
+    const SectionId interval_end = control_interval_end(start);
+
+    if (!control_interval_is_closed(start, current_section_, cache_.section())) {
+        return std::nullopt;
+    }
 
     if (start != 0 && start % 20 == 0) {
 #ifdef IS_APP_UI_CLIENT
@@ -4014,11 +4059,14 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
 std::optional<std::string> Dag::generate_hash_from_section(const SectionId &start,
                                                            Force            full_generation,
                                                            Force            qt_signals) {
-    static bool generating = false;
-
-    if (generating) {
+    if (controls_generating_.exchange(true)) {
         return std::nullopt;
     }
+
+    const auto finish = [this](std::optional<std::string> result) {
+        controls_generating_.store(false);
+        return result;
+    };
 
     std::string last_hash = "";
 
@@ -4028,37 +4076,29 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
         if (last_control.has_value()) {
             last_hash = last_control.value().control;
         } else {
-            generating = false;
-            return std::nullopt;
+            return finish(std::nullopt);
         }
     }
 
     if (/*full_generation || */ start == SectionId(0)) {
-        this->generate_hash_for_interval(SectionId(0), last_hash);
+        if (!this->generate_hash_for_interval(SectionId(0), last_hash).has_value()) {
+            return finish(std::nullopt);
+        }
         if (full_generation == Force::None) {
-            generating = false;
-            return last_hash;
+            return finish(last_hash);
         }
     }
 
-    generating = true;
-
     SectionId current_start = start == SectionId(0) ? SectionId(1) : start;
-    for (; current_start <= current_section_ && current_start < current_section_;
+    for (; control_interval_is_closed(current_start, current_section_, cache_.section());
          current_start += CONTROL_INTERVAL) {
-        if (current_start + CONTROL_INTERVAL > current_section_) {
-            break;
+        if (!this->generate_hash_for_interval(current_start, last_hash).has_value()) {
+            return finish(std::nullopt);
         }
-
-        if (current_start > cache_.section()) {
-            break;
-        }
-
-        this->generate_hash_for_interval(current_start, last_hash);
 
         if (current_start % 600 == 1) {
             if (!node_enabled.load()) {
-                return std::nullopt;
+                return finish(std::nullopt);
             }
 
             if (qt_signals == Force::Active) {
@@ -4067,8 +4107,7 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
         }
     }
 
-    generating = false;
-    return last_hash;
+    return finish(last_hash);
 }
 
 bool Dag::generate_hash(const SectionId &start_section, Force qt_signals) {

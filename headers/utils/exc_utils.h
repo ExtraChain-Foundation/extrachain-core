@@ -861,6 +861,9 @@ namespace Utils {
      * @brief Remove data and cache files
      */
     EXTRACHAIN_EXPORT void wipeDataFiles();
+    // Removes key material and the logged-in profile (works in release too,
+    // unlike wipeDataFiles which is debug-gated).
+    EXTRACHAIN_EXPORT void wipeSessionKeys();
 
     EXTRACHAIN_EXPORT QString              detect_compiler();
     EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);

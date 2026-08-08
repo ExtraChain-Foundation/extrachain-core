@@ -317,7 +317,6 @@ void ExtraChainNode::process() {
 
     timer_reward_ = new QTimer(this);
     connect(timer_reward_, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
-
     timer_info_ = new QTimer(this);
     connect(timer_info_, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
 
@@ -436,22 +435,6 @@ bool ExtraChainNode::create_usernames_vector() {
 
 bool ExtraChainNode::create_chat_templates() {
     auto system_actor_id   = account_controller()->system_actor().id();
-    auto my_chats_template = Dfs::CollectionTemplate::create(CHAT_MY_CHATS)
-                                 .value()
-                                 .use_id()
-                                 .add_fields({ Dfs::Field::Json("chat").not_null(),
-                                               Dfs::Field::ActorId("owner_id").not_null(),
-                                               Dfs::Field::String("file_id").not_null(),
-                                               Dfs::Field::String("chat_key").not_null() });
-
-    auto my_chats_result = dfs()->store_template(system_actor_id, my_chats_template);
-    if (!my_chats_result.has_value()) {
-        eCritical("Can't create my chats template, because {}", my_chats_result.error());
-        return false;
-    } else {
-        eLog("My chats template created");
-    }
-
     auto chat_template = Dfs::CollectionTemplate::create("Chat").value().use_id().add_fields(
         { Dfs::Field::Json("message").not_null() });
 
@@ -786,7 +769,21 @@ DfsFileStatus ExtraChainNode::create_channels_vector() {
         return DfsFileStatus::Existed;
     }
 
-    if (!create_file_id_vector(CHANNELS_VECTOR_NAME, Dfs::FileIdState::Without)) {
+    auto vector_template = Dfs::CollectionTemplate::create(CHANNELS_VECTOR_NAME)
+                               .value()
+                               .add_fields({ Dfs::Field::String("name"),
+                                             Dfs::Field::String("owner_id").not_null(),
+                                             Dfs::Field::String("file_id").unique().not_null() });
+
+    auto template_res = dfs()->store_template(system_id, vector_template);
+    if (!template_res.has_value()) {
+        eCritical("Can't create channels template, because {}", template_res.error());
+        return DfsFileStatus::CantCreate;
+    }
+
+    auto vec_res =
+        dfs()->store_vector(system_id, system_id, CHANNELS_VECTOR_NAME, template_res->actor_id, template_res->file_id);
+    if (!vec_res.has_value()) {
         return DfsFileStatus::CantCreate;
     }
 
@@ -884,6 +881,22 @@ void ExtraChainNode::start() {
 
         // emit m_blockchain->transaction_cache().make_cache();
     }
+
+    // DFS download ranks (see DfsController::download_rank): chat-actor vectors -> 2,
+    // main-actor vectors -> 3. The account is already loaded at this point.
+    if (!account_controller_->empty()) {
+        if (auto chat_actor = account_controller_->chat_actor(); chat_actor.has_value()) {
+            dfs_->set_download_rank(chat_actor->get().id(), 2, -1);
+        }
+        dfs_->set_download_rank(account_controller_->current_profile().main_id(), 3, -1);
+    }
+
+    // Priority overrides: large non-critical vectors must not delay the critical path
+    // (Thoth/MyChats/chats) — demote them to the tail of the vector phase.
+    dfs_->set_download_rank_by_name(network_id(), "Usernames", DfsController::RANK_OTHER_VECTORS);
+    dfs_->set_download_rank_by_name(ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373"),
+                                    "RaccoonSubscription",
+                                    DfsController::RANK_OTHER_VECTORS);
 
     // Version compatibility: 0.17.0 (temp)
 #ifdef IS_APP_UI_CLIENT
@@ -2123,6 +2136,8 @@ void ExtraChainNode::connect_signals() {
     });
 
     connect(actor_index_, &ActorIndex::firstSyncEnded, [this]() {
+        chat_manager_->activate();
+
         dag_->start_check();
 
         for (const auto& [ip, identifier] : identifiers_after_actors_sync_) {

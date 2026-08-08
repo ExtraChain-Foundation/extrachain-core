@@ -58,6 +58,11 @@ private:
               Dfs::FileType                file_type = Dfs::FileType::Vector);
 
 public:
+    // Returns a negative value when lhs is older, zero when rows are equal,
+    // and a positive value when lhs must replace rhs. Equal timestamps use a
+    // canonical BLAKE3 digest so delivery order cannot change the final row.
+    static int compare_row_revisions(const DbRow& lhs, const DbRow& rhs);
+
     // static std::expected<DfsVector, DfsVectorError> create(
     //     ExtraChainNode*              node,
     //     const Actor<KeyPrivate>&     main_actor,

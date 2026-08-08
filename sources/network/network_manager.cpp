@@ -231,11 +231,13 @@ bool NetworkManager::is_first_node(const std::string &identifier) {
 }
 
 void NetworkManager::process() {
-#ifndef IS_APP_CLIENT
-    if (!node->is_client_application())
-        return;
-#endif
-
+    // Full nodes also re-dial, but only towards peers already proven reachable:
+    // their configured first_node (uplink) and entries in reconn_, which is
+    // populated exclusively from sockets that reached SocketMode::Full (i.e. real
+    // servers we connected out to). A client behind NAT/router never lands there,
+    // so this never spams unreachable clients — it only restores a lost uplink so
+    // the node keeps replicating instead of silently falling out of the mesh.
+    // The reconnection() slot also guards against a seed whose first_node is self.
     connect(reconnect_timer_, &QTimer::timeout, this, &NetworkManager::reconnection);
     schedule_reconnection(Utils::RECONNECT_INTERVAL);
 }
@@ -258,7 +260,53 @@ void NetworkManager::schedule_reconnection(int delay_ms) {
     }
 }
 
+void NetworkManager::go_offline() {
+    offline_ = true;
+    reconnect_timer_->stop();
+    {
+        auto reconnectionsLocked = *reconnections_to_identifier_;
+        reconnectionsLocked->clear();
+    }
+    auto connectionsLocked = *connections_;
+    for (const auto &connection : *connectionsLocked) {
+        emit connection->close();
+    }
+    eWarning("[NetworkManager] offline mode: all connections closed, reconnects disabled");
+}
+
+bool NetworkManager::is_own_address(const std::string &ip) const {
+    if (ip.empty()) {
+        return false;
+    }
+    QHostAddress target(QString::fromStdString(ip));
+    if (target.isNull()) {
+        return false;
+    }
+    // A first_node equal to one of this host's own interface addresses means this
+    // node is the seed. Loopback is deliberately NOT treated as "self" here: on a
+    // single-host test mesh several nodes share 127.0.0.x and must still dial each
+    // other; a genuine self-loop there is caught by the network-id check instead.
+    for (const QHostAddress &addr : QNetworkInterface::allAddresses()) {
+        if (addr.isLoopback()) {
+            continue;
+        }
+        if (addr.isEqual(target, QHostAddress::TolerantConversion)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void NetworkManager::reconnection() {
+    if (offline_) {
+        return;
+    }
+    // Do not dial ourselves: the network seed's first_node resolves to one of this
+    // host's own listening addresses. A self-connection would pass the handshake
+    // (matching network id) and loop, so skip re-dial entirely for the seed.
+    if (ws_server_ != nullptr && ws_server_->isListening() && is_own_address(first_node_)) {
+        return;
+    }
     if (this->node->account_controller()->empty()) {
         schedule_reconnection(30000);
         return;
@@ -384,7 +432,12 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
 
-        if (service->mode() == SocketMode::Full && service->ip() != first_node()) {
+        // Only remember peers we dialled out to (Outgoing): those are reachable
+        // servers worth re-dialling. An Incoming socket can be a client behind
+        // NAT/router — we could never dial it back, so keeping it here would just
+        // produce endless reconnect attempts into the void.
+        if (service->mode() == SocketMode::Full && service->ip() != first_node()
+            && service->direction() == SocketDirection::Outgoing) {
             reconn_.insert({ service->ip().toStdString(), {} });
         }
     });
@@ -472,29 +525,55 @@ void NetworkManager::check_port(const QString     ip,
                                 Network::Protocol protocol,
                                 const bool        request,
                                 const bool        isConstant) {
-    // if (active_connections_count() > Network::maxConnections) {
-    //     return;
-    // }
+    if (offline_) {
+        return;
+    }
+    // Limit already reached — no need for new probes (the app used to handshake the entire
+    // node list, killing dozens of excess sockets right after creation).
+    if (active_connections_count() >= Network::maxConnections) {
+        return;
+    }
+
+    // Also cap in-flight candidates, but with headroom: not all nodes hold the network's DFS
+    // data, so too narrow a search leaves us with neighbours lacking the needed files
+    // (normal responses become Unknown, and files don't download).
+    static std::atomic_int pending_probes { 0 };
+    if (pending_probes.load() + active_connections_count() >= Network::maxConnections * 5) {
+        return;
+    }
+    pending_probes.fetch_add(1);
+    auto probe_done = std::make_shared<std::atomic_bool>(false);
+    auto release    = [probe_done]() {
+        if (!probe_done->exchange(true)) {
+            pending_probes.fetch_sub(1);
+        }
+    };
 
     auto *socket = new QTcpSocket(this);
     auto *timer  = new QTimer(this);
     timer->setSingleShot(true);
 
-    connect(socket, &QTcpSocket::connected, this, [this, socket, timer, ip, protocol, request, isConstant]() {
+    connect(socket,
+            &QTcpSocket::connected,
+            this,
+            [this, socket, timer, ip, protocol, request, isConstant, release]() {
+                release();
+                timer->stop();
+                timer->deleteLater();
+                socket->disconnectFromHost();
+                socket->deleteLater();
+                connect_to_node_slot(ip, protocol, request, isConstant);
+            });
+
+    connect(socket, &QTcpSocket::errorOccurred, this, [socket, timer, release](QAbstractSocket::SocketError) {
+        release();
         timer->stop();
         timer->deleteLater();
-        socket->disconnectFromHost();
-        socket->deleteLater();
-        connect_to_node_slot(ip, protocol, request, isConstant);
-    });
-
-    connect(socket, &QTcpSocket::errorOccurred, this, [socket, timer](QAbstractSocket::SocketError) {
-        timer->stop();
-        timer->deleteLater();
         socket->deleteLater();
     });
 
-    connect(timer, &QTimer::timeout, this, [socket, timer]() {
+    connect(timer, &QTimer::timeout, this, [socket, timer, release]() {
+        release();
         socket->abort();
         socket->deleteLater();
         timer->deleteLater();
@@ -913,7 +992,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
             bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
 
             if (res) {
-                // eTemp("[VPN] brocast further to socket: {}", socket_identifier);
+                // eTemp("[Network] Broadcast further to socket: {}", socket_identifier);
             }
             return res;
         }
@@ -1209,7 +1288,6 @@ qint64 NetworkManager::connection_pending_bytes(const std::string &identifier) c
     }
     return 0;
 }
-
 bool NetworkManager::check_message_count(const std::string &msg) {
     bool        flag_result = true;
     std::string hashMsg     = Utils::calculate_hash(msg);
@@ -1311,8 +1389,8 @@ void NetworkManager::message_received(const std::string &message,
                 return;
             }
 
-            auto res = messages_locked->emplace(message_id,
-                                                std::make_pair(identifier, QDateTime::currentDateTime()));
+            auto res =
+                messages_locked->emplace(message_id, std::make_pair(identifier, QDateTime::currentDateTime()));
             if (!res.second) {
                 return;
             }
@@ -1544,8 +1622,7 @@ void NetworkManager::message_received(const std::string &message,
 
             auto save_result = node->actor_index()->save_actor(actor_result.value());
             if (!save_result.has_value() && save_result.error() != ActorSaveError::AlreadyExists) {
-                eWarning("[NetworkManager] Cannot save actor: error {}",
-                         static_cast<int>(save_result.error()));
+                eWarning("[NetworkManager] Cannot save actor: error {}", static_cast<int>(save_result.error()));
             }
         }
 
@@ -1715,15 +1792,19 @@ void NetworkManager::message_received(const std::string &message,
         break;
     }
     case MessageType::DfsFileFragment: {
-        auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
-        if (!fragment_data_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for FragmentData", type);
-            break;
-        }
-
-        // TIMER_START(FRAG)
-        node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value(), identifier);
-        // TIMER_END(FRAG)
+        // Bulk payload off the dispatch thread: during a replication wave the
+        // MB-sized deserialize + disk write queued for seconds ahead of consensus
+        // messages and delayed transactions fell out of the accept window
+        // (TooSectionDiff). Per-file striped locks serialize disk writes, and
+        // SafePtr guards bookkeeping, so pool execution is safe.
+        ThreadPoolBoost::instance_dfs()->post([this, serialized = std::string(serialized), identifier]() {
+            auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
+            if (!fragment_data_result.has_value()) {
+                eWarning("[NetworkManager] DfsFileFragment deserialization failed");
+                return;
+            }
+            node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value(), identifier);
+        });
 
         break;
     }

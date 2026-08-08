@@ -19,11 +19,15 @@
 
 #include "chain/pack.h"
 #include "chain/pack_registry.h"
+#include "encryption/encryption_tools.h"
+#include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
 #include "utils/compression.h"
 #include "utils/exc_logs.h"
 #include <QtTest/QtTest>
+#include <algorithm>
 #include <filesystem>
+#include <sstream>
 
 class Test : public QObject {
     Q_OBJECT
@@ -52,6 +56,36 @@ private slots:
         auto decrypted2 = actor2.key()->decrypt(encrypted2, actor1.key()->publicKey());
 
         QCOMPARE(decrypted, decrypted2);
+    }
+
+    void mnemonicRoundTrip() {
+        MasterSeed seed;
+        for (std::size_t i = 0; i < seed.size(); ++i) {
+            seed[i] = static_cast<std::uint8_t>(i + 1);
+        }
+
+        const auto mnemonic = Cryptography::create_mnemonic(seed);
+        QCOMPARE(mnemonic.size(), std::size_t(24));
+
+        std::ostringstream phrase;
+        for (std::size_t i = 0; i < mnemonic.size(); ++i) {
+            if (i != 0) {
+                phrase << ' ';
+            }
+            phrase << mnemonic[i];
+        }
+
+        const auto phraseText = phrase.str();
+        QVERIFY(Cryptography::validate_mnemonic(phraseText));
+
+        const auto restored = Cryptography::restore_seed_from_mnemonic(phraseText);
+        QVERIFY(restored.has_value());
+        QVERIFY(restored.value() == seed);
+    }
+
+    void defaultProfileDoesNotExportMnemonic() {
+        AccountController accounts(nullptr);
+        QVERIFY(accounts.seed_mnemonic().empty());
     }
 
     //    auto key1 =
@@ -434,6 +468,63 @@ private slots:
         node           = new ExtraChainNode;
         bool isCreated = node->createNewNetwork("login", "password", "Token", "1000", "#ffffff");
         QVERIFY(isCreated);
+    }
+
+    void chatJsonRemainsBackwardCompatible() {
+        Actor<KeyPrivate> owner;
+        owner.create(ActorType::User);
+
+        Chat::Chat chat { .id       = "row-id",
+                          .owner_id = owner.id(),
+                          .file_id  = "chat-file" };
+        auto json = Json::serialize_value(chat).as_object();
+        json.erase("invite_pending");
+
+        auto restored = Json::deserialize<Chat::Chat>(boost::json::serialize(json));
+        QVERIFY(restored.has_value());
+        QCOMPARE(restored->id, chat.id);
+        QCOMPARE(restored->owner_id, chat.owner_id);
+        QCOMPARE(restored->file_id, chat.file_id);
+        QVERIFY(!restored->invite_pending);
+    }
+
+    void chatCreationPersistsBeforeSuccess() {
+        QVERIFY(node != nullptr);
+
+        auto activation = node->chat_manager()->activate();
+        QVERIFY(activation.has_value());
+
+        Actor<KeyPrivate> peer;
+        peer.create(ActorType::User);
+
+        auto created = node->chat_manager()->create_dialogue(peer.id());
+        QVERIFY(created.has_value());
+        QVERIFY(!created->id.empty());
+        QVERIFY(!created->owner_id.is_zero());
+        QVERIFY(!created->file_id.empty());
+
+        auto stored = node->chat_manager()->read_chats();
+        QVERIFY(stored.has_value());
+        auto persisted = std::find_if(stored->cbegin(), stored->cend(), [&created](const auto &chat) {
+            return chat.id == created->id && chat.owner_id == created->owner_id
+                   && chat.file_id == created->file_id;
+        });
+        QVERIFY(persisted != stored->cend());
+        QCOMPARE(persisted->invite_pending, created->invite_pending);
+    }
+
+    void targetedActorRefreshReportsNoActivePeers() {
+        QVERIFY(node != nullptr);
+
+        Actor<KeyPrivate> actor;
+        actor.create(ActorType::User);
+
+        QVERIFY(!node->dfs()->refresh_actors({ actor.id(), actor.id(), ActorId() }));
+    }
+
+    void vectorRowRebroadcastReportsNoActivePeers() {
+        QVERIFY(node != nullptr);
+        QVERIFY(!node->dfs()->rebroadcast_vector_row(ActorId(), "missing", "missing"));
     }
 
     void blocks() {

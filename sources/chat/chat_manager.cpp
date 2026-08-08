@@ -679,6 +679,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
     chats_ = std::move(chats);
 
     retry_pending_invites();
+    node->thoth_manager()->reconcile_tokens_for_chats(chats_);
 
     // From-scratch import: staged startup sync only pulls .dirs for network/priority/my
     // accounts — chat owner-actors (peers' per-chat actors) aren't included. Without their
@@ -1329,6 +1330,9 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     auto encrypted = Dfs::Tables::DirsFile::ActorSpace::get_file_content(owner_id, dir_row.file_id);
     if (!encrypted.has_value()) {
         eWarning("[Chat] parse_invite {}: no file content", dir_row.file_id);
+        // The dir row is known but the file never arrived (interrupted first sync);
+        // re-request it, `downloaded` will re-run parse_invite on arrival.
+        node->dfs()->request_file(owner_id, dir_row.file_id);
         return false;
     }
 

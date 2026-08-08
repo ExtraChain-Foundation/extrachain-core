@@ -1,12 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
-# Version string is sourced from extrachain_version.h; the old plain-text
-# `extrachain_version` file no longer exists, so don't hard-depend on it.
-if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../extrachain_version")
-    file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/../extrachain_version" EXTRACHAIN_VERSION)
-else()
-    set(EXTRACHAIN_VERSION "0.25")
-endif()
+file(STRINGS "../extrachain_version.h" EXTRACHAIN_VERSION_LINE REGEX "extrachain_version =")
+string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" EXTRACHAIN_VERSION "${EXTRACHAIN_VERSION_LINE}")
 project(extrachain-tests LANGUAGES C CXX VERSION ${EXTRACHAIN_VERSION})
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Test REQUIRED)

@@ -274,6 +274,7 @@ private:
     std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;
     std::map<std::string, MessageIdDataReceived>                                messages_received_;
     QTimer*                                                                     reconnect_timer_;
+    std::atomic_bool                                                            offline_ { false };
     QTimer*                                                                     clear_network_caches_timer_;
     CalculateTraffic*                                                           calculate_traffic_;
     SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> forwarded_messages_;
@@ -334,6 +335,7 @@ public:
     std::optional<PeerMeta> peer_meta_for(const std::string& identifier) const;
     bool                    server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void                    connect_network();
+    bool                    is_own_address(const std::string& ip) const;
 
 public slots:
     void remove_connection(const QString& identifier);
@@ -385,6 +387,9 @@ protected slots:
 
 public slots:
     void start_network();
+    // Permanent offline for a revoked client: closes every socket, stops the
+    // reconnect timer and refuses any new connections until process exit.
+    void go_offline();
     void connect_to_node_slot(const QString&    ip,
                               Network::Protocol protocol,
                               const bool        request    = false,

@@ -125,12 +125,21 @@ public:
     ~DfsController();
 
     // auto: + network id + local actors
-    std::set<ActorId>       priority_actors_;
+    // raccoon stays in priority (its files are rank 1 in download order);
+    // startup_metadata_actors_ additionally guarantees it participates in bootstrap sync.
+    std::set<ActorId> priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
+    // actor -> {vectors_rank, files_rank}; -1 = default classification for that kind
+    std::map<ActorId, std::pair<int, int>> download_rank_overrides_;
+    // (actor, file name) -> rank; overrides that win over per-actor ranks
+    std::map<std::pair<ActorId, std::string>, int> download_rank_name_overrides_;
+    // Some service actors are needed during bootstrap for metadata discovery,
+    // but their entire content must not become an eager download dependency.
     std::set<ActorId>       startup_metadata_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
     std::set<Dfs::FileLink> priority_file_link_;
-    // Actors requested through refresh_actors(). Light mode must keep these
-    // actors in startup_sync_actors() to accept their directory responses.
-    // The node thread writes this set and the DFS pool reads it.
+    // Actors whose dirs were explicitly requested via refresh_actors() (e.g. chat owner-actors
+    // after read_chats). Feeds startup_sync_actors(): without it the Light filter in
+    // network_response_dir_rows drops the response. Mutex-guarded: written from the node
+    // thread, read from the DFS pool.
     mutable std::mutex requested_sync_actors_mutex_;
     std::set<ActorId>  requested_sync_actors_;
     DfsMode            dfs_mode_ = DfsMode::Full;
@@ -197,6 +206,35 @@ public:
         return false;
     }
 
+    // Download ordering (lower = first): 0 network-space vectors, 1 raccoon actor
+    // files, 2 chat-actor vectors, 3 main-actor vectors, 4 other vectors, 5 files.
+    // Vectors (0-4) are scheduled before plain files (5) — see LoadManager.
+    // Per-actor overrides (set_download_rank) win over these defaults.
+    static constexpr int RANK_OTHER_VECTORS = 4;
+    static constexpr int RANK_FILES         = 5;
+
+    int download_rank(const ActorId &owner_id, const Dfs::DirRow &dir_row) const;
+
+    // Custom per-actor ranks: separate values for the actor's vectors and files;
+    // -1 keeps the default classification for that kind.
+    void set_download_rank(const ActorId &actor_id, int vectors_rank, int files_rank) {
+        download_rank_overrides_[actor_id] = { vectors_rank, files_rank };
+    }
+    void clear_download_rank(const ActorId &actor_id) {
+        download_rank_overrides_.erase(actor_id);
+    }
+
+    void request_vector_content(const ActorId &owner_id, const std::string &file_id);
+
+    // Per-actor filename overrides win over per-actor ranks; used to pull a specific vector
+    // off the critical path (e.g. the large network Usernames vector -> RANK_OTHER_VECTORS).
+    void set_download_rank_by_name(const ActorId &actor_id, const std::string &name, int rank) {
+        download_rank_name_overrides_[{ actor_id, name }] = rank;
+    }
+    void clear_download_rank_by_name(const ActorId &actor_id, const std::string &name) {
+        download_rank_name_overrides_.erase({ actor_id, name });
+    }
+
     DfsMode mode() const {
         return dfs_mode_;
     }
@@ -222,7 +260,30 @@ public:
         Utils::write_settings(settings);
     }
 
+    void mark_forced_file(const Dfs::FileLink &file_link) {
+        std::lock_guard lock(forced_files_mutex_);
+        forces_files_.insert(file_link);
+    }
+    bool is_forced_file(const Dfs::FileLink &file_link) const {
+        std::lock_guard lock(forced_files_mutex_);
+        return forces_files_.contains(file_link);
+    }
+    void consume_forced_file(const Dfs::FileLink &file_link) {
+        std::lock_guard lock(forced_files_mutex_);
+        forces_files_.erase(file_link);
+    }
+
     std::set<Dfs::FileLink> forces_files_;
+    mutable std::mutex      forced_files_mutex_;
+
+    // Throttle for request_file: read paths (read_template, avatars, chat vectors)
+    // re-request a missing file on EVERY failed read; without this the client spams
+    // the network several times per second for files the node can't serve.
+    std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> request_file_times_;
+    // Separate throttle for request_vector_content: a shared map ate into request_file's
+    // window and blocked the state-response -> add_to_queue path.
+    std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> request_vector_times_;
+    std::mutex                                                     request_times_mutex_;
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
