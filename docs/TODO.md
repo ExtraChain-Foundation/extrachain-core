@@ -8,6 +8,23 @@ what we deliberately postponed.
 
 ## Open
 
+### 0. Vectors and dictionaries are not covered by load testing
+
+Stand runs so far exercised plain files only: a typical run replicated ~235 files
+(`FileType::File`) against 3 vectors and 1 dictionary — and those four were created by
+the core itself at startup, not by the stand. So the whole structured-data path
+(`store_vector`, row appends, `DfsVectorContent` replication, per-row signatures,
+`DataSecurity` variants) has never been under concurrent load with node restarts.
+
+This matters more than the file path: vectors carry chat history, profiles and
+dictionaries, they replicate row-by-row rather than as an immutable blob, and rows are
+signed individually — a whole class of races the file path cannot expose.
+
+What the stand needs: create vectors on several nodes, append rows continuously from
+different nodes to the same vector, and audit that every node converges on the same row
+set (not just the same dir row). Encrypted variants (`DataSecurity::Key` / `Self`) should
+get their own pass, since decryption failures look like missing data.
+
 ### 1. Controls are computed over still-mutable sections → control chain splits
 
 **The only remaining cause of divergence after all the fixes below.** Final 3.5h run:
