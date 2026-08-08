@@ -11,6 +11,7 @@
 #pragma once
 
 #include <expected>
+#include <semaphore>
 #include <span>
 
 #include "contracts/contract_types.h"
@@ -18,9 +19,15 @@
 
 namespace ExtraChain::Contracts {
 
+    struct RuntimeTuning {
+        std::size_t max_concurrent_executions = 4;
+        std::size_t module_cache_entries      = 8;
+        std::size_t module_cache_bytes        = 16 * 1024 * 1024;
+    };
+
     class EXTRACHAIN_EXPORT WasmRuntime {
     public:
-        explicit WasmRuntime(ExecutionLimits limits = {});
+        explicit WasmRuntime(ExecutionLimits limits = {}, RuntimeTuning tuning = {});
         ~WasmRuntime();
 
         WasmRuntime(const WasmRuntime &)            = delete;
@@ -35,8 +42,10 @@ namespace ExtraChain::Contracts {
             std::span<const std::uint8_t> input) const;
 
     private:
-        ExecutionLimits limits_;
-        bool            available_ = false;
+        ExecutionLimits                     limits_;
+        RuntimeTuning                       tuning_;
+        mutable std::counting_semaphore<64> execution_slots_;
+        bool                                available_ = false;
     };
 
 } // namespace ExtraChain::Contracts

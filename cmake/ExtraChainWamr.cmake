@@ -6,6 +6,9 @@ endif()
 
 if(ANDROID)
     set(WAMR_BUILD_PLATFORM android)
+    # Android may reject the guard-page signal setup used by WAMR hardware
+    # bounds checks. Keep interpreter bounds checks enabled in software.
+    set(WAMR_DISABLE_HW_BOUND_CHECK 1)
 elseif(WIN32)
     set(WAMR_BUILD_PLATFORM windows)
 elseif(APPLE)

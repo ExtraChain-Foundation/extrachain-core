@@ -116,7 +116,10 @@ void ThreadPoolBoost::terminate() {
         thread_pool_dag_sync.reset();
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    if (thread_pool_prove) {
+        thread_pool_prove->m_thread_pool->stop();
+        thread_pool_prove.reset();
+    }
 }
 
 void ThreadPoolBoost::join() {

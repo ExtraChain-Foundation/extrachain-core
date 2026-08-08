@@ -102,9 +102,11 @@ namespace ExtraChain::Contracts {
         return {};
     }
 
-    ContractManager::ContractManager(std::unique_ptr<ContractStorage> storage, ExecutionLimits limits)
+    ContractManager::ContractManager(std::unique_ptr<ContractStorage> storage,
+                                     ExecutionLimits                  limits,
+                                     RuntimeTuning                    tuning)
         : storage_(std::move(storage))
-        , runtime_(limits)
+        , runtime_(limits, tuning)
         , limits_(limits) {
     }
 
@@ -181,16 +183,16 @@ namespace ExtraChain::Contracts {
             previous == nullptr || previous->checkpoint_revision == 0
             || next_revision - previous->checkpoint_revision >= ContractCheckpointInterval;
         return StateRevision {
-            .revision                    = next_revision,
-            .block                       = block,
-            .previous_hash               = previous == nullptr ? std::string() : previous->state_hash,
-            .state_hash                  = content_hash(output.state),
-            .transaction_hash            = {},
-            .author_id                   = author_id,
-            .state                       = output.state,
-            .checkpoint_revision         = make_checkpoint ? next_revision : previous->checkpoint_revision,
-            .checkpoint_block            = make_checkpoint ? block : previous->checkpoint_block,
-            .checkpoint_hash = make_checkpoint ? content_hash(output.state) : previous->checkpoint_hash,
+            .revision            = next_revision,
+            .block               = block,
+            .previous_hash       = previous == nullptr ? std::string() : previous->state_hash,
+            .state_hash          = content_hash(output.state),
+            .transaction_hash    = {},
+            .author_id           = author_id,
+            .state               = output.state,
+            .checkpoint_revision = make_checkpoint ? next_revision : previous->checkpoint_revision,
+            .checkpoint_block    = make_checkpoint ? block : previous->checkpoint_block,
+            .checkpoint_hash     = make_checkpoint ? content_hash(output.state) : previous->checkpoint_hash,
             .checkpoint_transaction_hash = make_checkpoint ? std::string() : previous->checkpoint_transaction_hash,
             .checkpoint_storage_id       = make_checkpoint ? std::string() : previous->checkpoint_storage_id,
             .checkpoint_author_id = make_checkpoint ? std::string(author_id) : previous->checkpoint_author_id,
@@ -297,7 +299,7 @@ namespace ExtraChain::Contracts {
         std::span<const std::uint8_t> arguments,
         std::uint64_t                 block,
         const VerifiedInputs         &verified) {
-        std::unique_lock lock(mutex_);
+        std::unique_lock                lock(mutex_);
         std::vector<std::string>        stack { std::string(contract_id) };
         std::unordered_set<std::string> touched { std::string(contract_id) };
         std::uint32_t                   call_count = 1;
@@ -365,7 +367,7 @@ namespace ExtraChain::Contracts {
             return std::unexpected(next.error());
         }
         version.revisions.push_back(std::move(*next));
-        auto expected_version = version.version;
+        auto                   expected_version = version.version;
         PreparedContractChange change {
             .kind                = ContractChangeKind::Replace,
             .record              = std::move(record),
@@ -534,7 +536,7 @@ namespace ExtraChain::Contracts {
     }
 
     std::expected<void, ContractFailure> ContractManager::stage(const PreparedContractChange &change) {
-        std::unique_lock lock(mutex_);
+        std::unique_lock                            lock(mutex_);
         std::vector<const PreparedContractChange *> changes;
         const auto collect = [&](const auto &self, const PreparedContractChange &current) -> void {
             changes.push_back(&current);
@@ -557,7 +559,7 @@ namespace ExtraChain::Contracts {
 
     std::expected<ContractReceipt, ContractFailure> ContractManager::commit(PreparedContractChange change,
                                                                             std::string transaction_hash) {
-        std::unique_lock lock(mutex_);
+        std::unique_lock                      lock(mutex_);
         std::vector<PreparedContractChange *> changes;
         const auto collect = [&](const auto &self, PreparedContractChange &current) -> void {
             changes.push_back(&current);

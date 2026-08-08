@@ -27,8 +27,6 @@ namespace ExtraChain::Contracts {
 
         constexpr std::size_t ErrorBufferBytes = 256;
 
-        constexpr std::size_t ModuleCacheEntries = 8;
-
         class RuntimeHost final {
         public:
             RuntimeHost()
@@ -91,6 +89,12 @@ namespace ExtraChain::Contracts {
 
         class ThreadModuleCache final {
         public:
+            void configure(std::size_t max_entries, std::size_t max_bytes) {
+                max_entries_ = std::max<std::size_t>(1, max_entries);
+                max_bytes_   = std::max<std::size_t>(1, max_bytes);
+                trim();
+            }
+
             wasm_module_t find(std::span<const std::uint8_t> bytes) {
                 const auto hash = content_hash(bytes);
                 for (auto &entry : entries_) {
@@ -113,23 +117,38 @@ namespace ExtraChain::Contracts {
                                                   static_cast<std::uint32_t>(error_size));
                 if (entry->module == nullptr)
                     return nullptr;
-                entry->used = ++clock_;
-                if (entries_.size() >= ModuleCacheEntries) {
+                entry->used       = ++clock_;
+                const auto module = entry->module;
+                entries_.push_back(std::move(entry));
+                trim();
+                return module;
+            }
+
+        private:
+            [[nodiscard]] std::size_t bytes() const {
+                std::size_t result = 0;
+                for (const auto &entry : entries_)
+                    result += entry->bytes.size();
+                return result;
+            }
+
+            void trim() {
+                while (entries_.size() > max_entries_ || bytes() > max_bytes_) {
                     auto oldest = std::min_element(entries_.begin(),
                                                    entries_.end(),
                                                    [](const auto &left, const auto &right) {
                                                        return left->used < right->used;
                                                    });
+                    if (oldest == entries_.end())
+                        break;
                     entries_.erase(oldest);
                 }
-                const auto module = entry->module;
-                entries_.push_back(std::move(entry));
-                return module;
             }
 
-        private:
             std::vector<std::unique_ptr<CachedModule>> entries_;
-            std::uint64_t                              clock_ = 0;
+            std::uint64_t                              clock_       = 0;
+            std::size_t                                max_entries_ = 8;
+            std::size_t                                max_bytes_   = 16 * 1024 * 1024;
         };
 
         ThreadEnvironment &thread_environment() {
@@ -155,10 +174,31 @@ namespace ExtraChain::Contracts {
             return ExecutionError::ExecutionFailed;
         }
 
+        class ExecutionSlot final {
+        public:
+            explicit ExecutionSlot(std::counting_semaphore<64> &semaphore)
+                : slots_(semaphore) {
+                slots_.acquire();
+            }
+
+            ~ExecutionSlot() {
+                slots_.release();
+            }
+
+            ExecutionSlot(const ExecutionSlot &)            = delete;
+            ExecutionSlot &operator=(const ExecutionSlot &) = delete;
+
+        private:
+            std::counting_semaphore<64> &slots_;
+        };
+
     } // namespace
 
-    WasmRuntime::WasmRuntime(ExecutionLimits limits)
+    WasmRuntime::WasmRuntime(ExecutionLimits limits, RuntimeTuning tuning)
         : limits_(limits)
+        , tuning_(tuning)
+        , execution_slots_(
+              static_cast<std::ptrdiff_t>(std::clamp<std::size_t>(tuning.max_concurrent_executions, 1, 64)))
         , available_(runtime_host().ready()) {
     }
 
@@ -185,6 +225,8 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ExecutionError::InputTooLarge, "Contract input cannot be addressed"));
         }
 
+        ExecutionSlot execution_slot(execution_slots_);
+
         if (!thread_environment().ready()) {
             return std::unexpected(
                 failure(ExecutionError::RuntimeUnavailable, "Cannot initialize the WAMR thread environment"));
@@ -192,7 +234,9 @@ namespace ExtraChain::Contracts {
 
         std::array<char, ErrorBufferBytes> error_buffer {};
         auto                              &module_cache = thread_module_cache();
-        wasm_module_t                      module       = module_cache.find(module_bytes);
+        module_cache.configure(tuning_.module_cache_entries,
+                               std::max(tuning_.module_cache_bytes, module_bytes.size()));
+        wasm_module_t module = module_cache.find(module_bytes);
         if (module == nullptr) {
             const auto policy_result = Internal::validate_wasm_policy(module_bytes);
             if (policy_result == Internal::WasmPolicyResult::FloatingPoint) {

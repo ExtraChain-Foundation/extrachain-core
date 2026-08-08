@@ -98,6 +98,29 @@ BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, sectio
 
 extern std::atomic<bool> node_enabled;
 
+enum class RuntimeProfile {
+    MobileLight,
+    DesktopLight,
+    FullNode
+};
+
+enum class RuntimeActivity {
+    Foreground,
+    Background
+};
+
+struct RuntimeLimits {
+    std::size_t dfs_workers;
+    std::size_t general_workers;
+    std::size_t dag_sync_workers;
+    std::size_t peer_limit;
+    std::size_t dfs_downloads;
+    std::size_t pack_sync_window;
+    std::size_t cached_transactions;
+    std::size_t wasm_concurrency;
+    std::size_t wasm_cache_bytes_per_thread;
+};
+
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
@@ -141,11 +164,13 @@ private:
     QTimer*                                                                        timer_info_      = nullptr;
     QTimer*                                                                        timer_luminance_ = nullptr;
 
-    bool                        started_               = false;
-    bool                        is_client_application_ = false;
-    std::vector<BigNumber>      resive_counts_;
-    std::pair<QString, QString> init_public_ip_and_country_;
-    std::function<void()>       cleanup_callback_ = nullptr;
+    bool                         started_               = false;
+    bool                         is_client_application_ = false;
+    RuntimeProfile               runtime_profile_       = RuntimeProfile::FullNode;
+    std::atomic<RuntimeActivity> runtime_activity_ { RuntimeActivity::Foreground };
+    std::vector<BigNumber>       resive_counts_;
+    std::pair<QString, QString>  init_public_ip_and_country_;
+    std::function<void()>        cleanup_callback_ = nullptr;
 
     std::optional<SubscriptionRow> subscription_row_;
 
@@ -186,9 +211,13 @@ public:
     std::vector<std::pair<ActorId, std::string>> read_actor_renames();
 
     // not only for the one
-    bool create_subscription_vector(const std::string& file_name);
-    void start();
-    bool is_client_application() const;
+    bool            create_subscription_vector(const std::string& file_name);
+    void            start();
+    bool            is_client_application() const;
+    RuntimeProfile  runtime_profile() const;
+    RuntimeActivity runtime_activity() const;
+    RuntimeLimits   runtime_limits() const;
+    void            set_runtime_activity(RuntimeActivity activity);
 
     std::pair<QString, QString> init_public_ip_and_country() const;
 
@@ -340,6 +369,7 @@ signals:
 
     void actorRenamedLoaded();
     void actorRenamed(ActorId actor_id, std::string name);
+    void runtimeActivityChanged(RuntimeActivity activity);
 
 private slots:
     void timer_reward_request();

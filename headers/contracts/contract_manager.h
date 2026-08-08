@@ -61,7 +61,8 @@ namespace ExtraChain::Contracts {
     public:
         explicit ContractManager(
             std::unique_ptr<ContractStorage> storage = std::make_unique<MemoryContractStorage>(),
-            ExecutionLimits                  limits  = {});
+            ExecutionLimits                  limits  = {},
+            RuntimeTuning                    tuning  = {});
 
         [[nodiscard]] std::expected<PreparedContractChange, ContractFailure> prepare_deploy(
             std::string                   contract_id,

@@ -219,6 +219,11 @@ ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app, s
     : is_client_application_(is_client_application)
     , is_custom_app_(is_custom_app)
     , ws_port(port) {
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    runtime_profile_ = is_client_application_ ? RuntimeProfile::MobileLight : RuntimeProfile::FullNode;
+#else
+    runtime_profile_ = is_client_application_ ? RuntimeProfile::DesktopLight : RuntimeProfile::FullNode;
+#endif
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
 }
 
@@ -235,8 +240,10 @@ void ExtraChainNode::process() {
         QCoreApplication::exit(-1000);
     }
 
-    ThreadPoolBoost::instance_dfs(4);
-    ThreadPoolBoost::instance(4);
+    const auto limits = runtime_limits();
+    ThreadPoolBoost::instance_dfs(limits.dfs_workers);
+    ThreadPoolBoost::instance(limits.general_workers);
+    ThreadPoolBoost::instance_dag_sync(limits.dag_sync_workers);
 
     prepare_folders();
 
@@ -263,8 +270,16 @@ void ExtraChainNode::process() {
     network_manager_    = new NetworkManager(this, ws_port);
     dag_                = new Dag(this);
     dfs_                = new DfsController(this);
-    contract_manager_   = std::make_unique<ExtraChain::Contracts::ContractManager>(
-        std::make_unique<ExtraChain::Contracts::DfsContractStorage>(dfs_, dag_));
+    contract_manager_   = std::make_unique<
+          ExtraChain::Contracts::ContractManager>(std::make_unique<ExtraChain::Contracts::DfsContractStorage>(dfs_,
+                                                                                                            dag_),
+                                                ExtraChain::Contracts::ExecutionLimits {},
+                                                ExtraChain::Contracts::RuntimeTuning {
+                                                      .max_concurrent_executions = limits.wasm_concurrency,
+                                                      .module_cache_entries =
+                                                        runtime_profile_ == RuntimeProfile::MobileLight ? 2U : 8U,
+                                                      .module_cache_bytes = limits.wasm_cache_bytes_per_thread,
+                                                });
     toolchain_registry_  = std::make_unique<ExtraChain::Contracts::ToolchainRegistry>(this);
     auto retry_contracts = [this](ActorId, Dfs::DirRow row) {
         if (row.folder == Dfs::Basic::TEMPLATE_CONTRACTS) {
@@ -299,15 +314,17 @@ void ExtraChainNode::process() {
 
     timer_reward_ = new QTimer(this);
     connect(timer_reward_, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
-    timer_reward_->start(MINING_TIMER_TICK);
 
     timer_info_ = new QTimer(this);
     connect(timer_info_, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
-    timer_info_->start(10000);
 
     timer_luminance_ = new QTimer(this);
     connect(timer_luminance_, &QTimer::timeout, this, &ExtraChainNode::timer_luminance_autoremove);
-    timer_luminance_->start(30000);
+    if (runtime_profile_ == RuntimeProfile::FullNode) {
+        timer_reward_->start(MINING_TIMER_TICK);
+        timer_info_->start(10000);
+        timer_luminance_->start(30000);
+    }
 
     init_public_ip_and_country_ = network_manager_->search_public_ip_and_country_();
 
@@ -950,6 +967,90 @@ void ExtraChainNode::start() {
 
 bool ExtraChainNode::is_client_application() const {
     return is_client_application_;
+}
+
+RuntimeProfile ExtraChainNode::runtime_profile() const {
+    return runtime_profile_;
+}
+
+RuntimeActivity ExtraChainNode::runtime_activity() const {
+    return runtime_activity_.load();
+}
+
+RuntimeLimits ExtraChainNode::runtime_limits() const {
+    const auto activity = runtime_activity_.load();
+    switch (runtime_profile_) {
+    case RuntimeProfile::MobileLight:
+        return RuntimeLimits {
+            .dfs_workers                 = 1,
+            .general_workers             = 1,
+            .dag_sync_workers            = 2,
+            .peer_limit                  = activity == RuntimeActivity::Background ? 1U : 3U,
+            .dfs_downloads               = activity == RuntimeActivity::Background ? 0U : 3U,
+            .pack_sync_window            = 2,
+            .cached_transactions         = 1024,
+            .wasm_concurrency            = 1,
+            .wasm_cache_bytes_per_thread = 4 * 1024 * 1024,
+        };
+    case RuntimeProfile::DesktopLight:
+        return RuntimeLimits {
+            .dfs_workers                 = 2,
+            .general_workers             = 2,
+            .dag_sync_workers            = 4,
+            .peer_limit                  = activity == RuntimeActivity::Background ? 2U : 5U,
+            .dfs_downloads               = activity == RuntimeActivity::Background ? 1U : 5U,
+            .pack_sync_window            = activity == RuntimeActivity::Background ? 2U : 4U,
+            .cached_transactions         = 4096,
+            .wasm_concurrency            = 2,
+            .wasm_cache_bytes_per_thread = 8 * 1024 * 1024,
+        };
+    case RuntimeProfile::FullNode:
+        return RuntimeLimits {
+            .dfs_workers                 = 4,
+            .general_workers             = 4,
+            .dag_sync_workers            = 8,
+            .peer_limit                  = 0,
+            .dfs_downloads               = 5,
+            .pack_sync_window            = 8,
+            .cached_transactions         = 16384,
+            .wasm_concurrency            = 4,
+            .wasm_cache_bytes_per_thread = 16 * 1024 * 1024,
+        };
+    }
+    return {};
+}
+
+void ExtraChainNode::set_runtime_activity(RuntimeActivity activity) {
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, activity]() {
+                set_runtime_activity(activity);
+            },
+            Qt::QueuedConnection);
+        return;
+    }
+
+    if (runtime_activity_.load() == activity) {
+        return;
+    }
+
+    runtime_activity_.store(activity);
+    if (runtime_profile_ == RuntimeProfile::FullNode) {
+        if (activity == RuntimeActivity::Background) {
+            if (timer_info_) {
+                timer_info_->stop();
+            }
+        } else if (timer_info_ && !timer_info_->isActive()) {
+            timer_info_->start(10000);
+        }
+    }
+    if (activity == RuntimeActivity::Background) {
+        emit dagTimerStop();
+    } else if (started_ && dag_) {
+        emit dagTimerStart(15000);
+    }
+    emit runtimeActivityChanged(activity);
 }
 
 Dag* ExtraChainNode::dag() const {
@@ -2110,6 +2211,9 @@ void ExtraChainNode::set_cleanup_callback(std::function<void()> callback) {
 
 void ExtraChainNode::dagTimerStarting(int ms) {
     // eLog("[Dag] Timer start, {} ms", ms);
+    if (runtime_activity_.load() == RuntimeActivity::Background) {
+        return;
+    }
     dag_->timer_sync_->stop();
     dag_->timer_sync_->start(ms);
 }
