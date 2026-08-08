@@ -766,13 +766,13 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
     // Regular transactions
     else {
         // If receiver is valid, add funds
-        if (!tx.receiver().is_zero() && !tx.token().is_zero()) {
+        if (!tx.receiver().is_zero()) {
             auto key = std::make_pair(tx.receiver(), tx.token());
 
             balances[key] += tx.amount();
         }
         // If sender is valid, deduct funds
-        if (!tx.sender().is_zero() && !tx.token().is_zero()) {
+        if (!tx.sender().is_zero()) {
             auto key = std::make_pair(tx.sender(), tx.token());
 
             balances[key] -= tx.amount();
@@ -1067,13 +1067,13 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
     // Regular transactions - reverse: subtract from receiver, add to sender
     else {
         // If receiver is valid, subtract funds (reverse of addition)
-        if (!tx.receiver().is_zero() && !tx.token().is_zero()) {
+        if (!tx.receiver().is_zero()) {
             auto key = std::make_pair(tx.receiver(), tx.token());
             balances[key] -= tx.amount();
         }
 
         // If sender is valid, add funds back (reverse of deduction)
-        if (!tx.sender().is_zero() && !tx.token().is_zero()) {
+        if (!tx.sender().is_zero()) {
             auto key = std::make_pair(tx.sender(), tx.token());
             balances[key] += tx.amount();
         }

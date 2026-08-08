@@ -81,11 +81,16 @@ add_executable(extrachain-amount-rt amount_roundtrip.cpp)
 target_link_libraries(extrachain-amount-rt PRIVATE Qt${QT_VERSION_MAJOR}::Core extrachain)
 set_property(TARGET extrachain-amount-rt PROPERTY POSITION_INDEPENDENT_CODE 1)
 
+add_executable(extrachain-native-balance native_balance.cpp)
+target_link_libraries(extrachain-native-balance PRIVATE Qt${QT_VERSION_MAJOR}::Core extrachain)
+set_property(TARGET extrachain-native-balance PROPERTY POSITION_INDEPENDENT_CODE 1)
+
 enable_testing()
 add_test(NAME core-unit COMMAND extrachain-ci-unit)
 add_test(NAME amount-roundtrip COMMAND extrachain-amount-rt)
 add_test(NAME sync-roundtrip COMMAND extrachain-sync-tests)
-set_tests_properties(core-unit amount-roundtrip sync-roundtrip PROPERTIES
+add_test(NAME native-balance COMMAND extrachain-native-balance)
+set_tests_properties(core-unit amount-roundtrip sync-roundtrip native-balance PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt${QT_VERSION_MAJOR}::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:unofficial::sqlite3::sqlite3>"
     TIMEOUT 120
