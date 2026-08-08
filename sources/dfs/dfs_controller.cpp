@@ -1735,11 +1735,21 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return;
     }
-    if (!rows.has_value()) {
-        return;
+
+    // An empty vector still has to be answered: staying silent left the requester
+    // without the vector files forever (the dir row replicates, the payload never
+    // does, and nothing retries). Freshly created vectors are exactly this case —
+    // on a stand only a third of them ever reached every node, while plain files
+    // were always at 100%. Send an empty package, same as vector creation does.
+    Dfs::Packets::DfsVectorContentPackage package;
+    if (rows.has_value()) {
+        package = rows.value();
+    } else {
+        package.owner_id = owner_id;
+        package.file_id  = file_id;
     }
 
-    responder.send_response(rows.value(),
+    responder.send_response(package,
                             MessageType::DfsVectorContent,
                             SendMode::Focused,
                             MessageStatus::Response);
@@ -2062,6 +2072,20 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     if (is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
         eSuccess("[Dfs] Ignoring file download: file already exists 👌😎👍");
         return "";
+    }
+
+    // A vector arrives as two independent broadcasts: the dir row (this path, reliable)
+    // and its content (DfsVectorCreation, fire-and-forget). A node busy at that moment
+    // keeps the row forever without the payload, and nothing ever re-requests it — on a
+    // stand only a third of vectors ended up complete on every node while plain files
+    // were always at 100%. Ask for the content whenever we know the row but lack the data.
+    if (dir_row.type == Dfs::FileType::Vector || dir_row.type == Dfs::FileType::Dictionary) {
+        if (mode() == DfsMode::Full) {
+            const auto main_path = std::filesystem::path(Dfs::Path::filePath(owner_id, dir_row.file_id));
+            if (!std::filesystem::exists(main_path)) {
+                request_vector_content(owner_id, dir_row.file_id);
+            }
+        }
     }
 
     if (dir_row.type == Dfs::FileType::Folder) {
