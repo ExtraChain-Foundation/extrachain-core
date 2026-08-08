@@ -212,7 +212,7 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load_network(ExtraChainNode 
 
 std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &primary_data) {
     DbConnector db(file_path_);
-    db.open();
+    db.open(/*create_if_missing*/ false);
     if (!db.is_open()) {
         return std::unexpected(DfsVectorError::CollectionNotFound);
     }
@@ -246,7 +246,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &prim
 
 std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std::string &where_statement) {
     DbConnector db(file_path_);
-    db.open();
+    db.open(/*create_if_missing*/ false);
     if (!db.is_open()) {
         return std::unexpected(DfsVectorError::CollectionNotFound);
     }
@@ -564,7 +564,7 @@ std::optional<std::pair<std::string, std::size_t>> DfsVector::calculate_template
 
 std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
     DbConnector db(file_path_.native());
-    if (!db.open()) {
+    if (!db.open(/*create_if_missing*/ false)) {
         return std::nullopt;
     }
 

@@ -171,7 +171,7 @@ public:
 public:
     static QString sqlite_version();
 
-    bool                        open();
+    bool                        open(bool create_if_missing = true);
     bool                        close();
     std::vector<DbRow>          select(std::string query, std::string tableName = "", DbRow binds = {});
     std::vector<DbRow>          select_all(std::string table, int limit = -1);

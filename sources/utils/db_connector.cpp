@@ -92,7 +92,7 @@ QString DbConnector::sqlite_version() {
     return sqlite3_libversion();
 }
 
-bool DbConnector::open() {
+bool DbConnector::open(bool create_if_missing) {
     if (is_open()) {
         eFatal("[DbConnector] Double open");
         return false;
@@ -102,9 +102,15 @@ bool DbConnector::open() {
         return false;
     }
 
-    int rc = sqlite3_open(m_file.c_str(), &db);
+    int flags = SQLITE_OPEN_READWRITE | (create_if_missing ? SQLITE_OPEN_CREATE : 0);
+    int rc    = sqlite3_open_v2(m_file.c_str(), &db, flags, nullptr);
     if (rc) {
-        eWarning("[DbConnector] {}, failed to open database: {}", m_file, sqlite3_errmsg(db));
+        // Missing file is an expected outcome for read-side opens: no empty db is created
+        if (create_if_missing) {
+            eWarning("[DbConnector] {}, failed to open database: {}", m_file, sqlite3_errmsg(db));
+        }
+        sqlite3_close_v2(db);
+        db = nullptr;
         return false;
     } else {
         if (!QFile::exists(m_file.c_str())) {
