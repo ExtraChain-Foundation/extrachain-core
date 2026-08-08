@@ -325,7 +325,14 @@ void DirsManager::network_response_dir_rows(
                 if ((row.type == Dfs::FileType::Vector || row.type == Dfs::FileType::Dictionary)
                     && row.state == Dfs::FileState::Ready) {
                     auto local = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
-                    if (local.has_value() && row.last_modified > local->last_modified) {
+                    // Queue when the content is newer OR when we have no content at all.
+                    // Requiring a local dir row meant a vector first seen through a sync
+                    // was never queued: the row replicated, the payload did not, and no
+                    // later sync ever corrected it — a node that missed the creation
+                    // broadcast stayed permanently without that vector (files do not
+                    // have this hole because they test the file's presence on disk).
+                    if (!local.has_value() || row.last_modified > local->last_modified
+                        || !file_path->exists()) {
                         dir_rows_todo.push_back(row);
                     }
                 }
