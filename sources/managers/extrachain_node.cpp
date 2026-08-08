@@ -191,9 +191,23 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     eLog("ExtraChainNodeWrapper::~ExtraChainNodeWrapper");
     node_enabled.store(false);
     eLog("Set node_enabled to {}", node_enabled);
+    const auto stop_node = [this] {
+        if (node != nullptr && node->dag() != nullptr) {
+            node->dag()->stop();
+        }
+        if (node != nullptr && node->network() != nullptr) {
+            node->network()->go_offline();
+        }
+    };
+    if (node != nullptr && m_thread != nullptr && m_thread->isRunning()
+        && node->thread() != QThread::currentThread()) {
+        QMetaObject::invokeMethod(node, stop_node, Qt::BlockingQueuedConnection);
+    } else {
+        stop_node();
+    }
+    ThreadPoolBoost::terminate();
 
     if (m_thread) {
-        ThreadPoolBoost::terminate();
         m_thread->quit();
         m_thread->wait();
         node->deleteLater();

@@ -60,17 +60,13 @@ serialization instead of doing it per insert.
 worth revisiting before any load growth. Stands bypass it with a test-only env switch;
 the limit itself is untouched in production code.
 
-### 5. Windows node-run shutdown
-
-The two-node runner reaches its target section and prints a successful result, but the
-join process can then exit with the Windows access-violation code during teardown. The
-sync result is valid, but the runner cannot yet be used as a reliable process-exit gate.
-Find and fix the shutdown order instead of hiding the fault with a forced process exit.
-
 ---
 
 ## Done in this session (for context)
 
+- **Synchronous node shutdown** — the wrapper now stops DAG admission and network
+  reconnects, then stops worker pools before it deletes the node. The Windows two-node
+  runner exits with code `0` after it reaches the target section.
 - **Duplicate-connection arbitration** (`eb7117fe`) — a side-change in #152 commented out
   the `is_active` guard, turning dedup into newest-wins; mutual dials then fought forever
   and broadcasts sent into an about-to-die socket were silently lost.
