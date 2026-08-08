@@ -25,6 +25,82 @@ different nodes to the same vector, and audit that every node converges on the s
 set (not just the same dir row). Encrypted variants (`DataSecurity::Key` / `Self`) should
 get their own pass, since decryption failures look like missing data.
 
+### 0.4 Why is the dir row missing in the first place? (dirs distribution strategy)
+
+While fixing vector replication we made the download queue accept a vector that has no
+local dir row (it previously required one, so a vector first seen through a sync was
+never queued). That is a correct guard, but it treats a symptom: the real question is
+**why a node lacks the dir row at all**, and what the intended distribution model for
+`.dirs` is.
+
+Right now dirs arrive opportunistically — partly through the creation broadcast, partly
+through handshake sync — and a node that was busy at the wrong moment can stay without a
+row indefinitely, or hold a row whose payload never follows. There is no explicit policy
+saying who is supposed to know what.
+
+**Chosen model: light by default, high-light as a priority overtake on top of it.**
+
+- **light (the default, always).** A node pulls the *whole* `.dirs` catalogue — metadata
+  only, not payloads — and keeps it complete. This is the base: without the full
+  catalogue a node cannot know what it is missing, so no repair, catch-up or audit has
+  anything to compare against. A payload is then fetched lazily, but the fact of its
+  existence is never in doubt. This is also what makes the stand honest: the vector audit
+  measures convergence against what a node *knows* it should hold.
+- **high-light (urgent).** Not a separate mode and not a replacement — an overtake. When
+  something is needed *now* (a chat is opened), fetch that specific row plus its content
+  immediately, ahead of the background catalogue work. The background pull of the full
+  `.dirs` continues regardless and is never cancelled by it: fetch what is needed first,
+  then still request the full catalogue.
+
+The order matters. The inverse — fetch only what is asked for, and the full catalogue
+"when needed" — reproduces exactly the state we are trying to leave: a node that never
+learns a vector exists, for which no catch-up can help because it has nothing to
+reconcile against.
+
+Mechanism is the second question, once the model is fixed: how `.dirs` is obtained
+efficiently (incremental deltas, digest comparison with peers, periodic reconciliation)
+so that both "row known, payload missing" and "row unknown" self-heal. The current queue
+guard stays as a safety net either way, not as the answer.
+
+### 0.5 A node can report "listening" while its listener accepts nothing
+
+Seen once on a six-node stand (not reproducible on a rerun of the same seed, so a startup
+race): the last node to start logged `Start listening: <ip>:<port>`, but from that moment
+its network layer went completely silent — zero incoming connections were ever accepted
+(peers dialled it six times each), its single outgoing socket hung at `New service`
+without activating, and no further network log line appeared. The process itself stayed
+healthy: console commands worked, vectors were created locally, transactions were emitted
+with `section: 1` for the whole run.
+
+Two things worth fixing regardless of the root cause:
+- the node has no self-check that would notice "I am listening but nobody ever connects
+  and my only socket never activated" — it stayed in that state indefinitely;
+- a stand cannot detect it either, because liveness looks fine from the outside. Any
+  harness should treat "zero peers for N minutes" as a failure, not as idleness.
+
+### 0.7 Transaction timestamp is attacker-controlled and unvalidated
+
+`prove_transaction` never checks `timestamp` — not against the local clock, not against
+the previous section, not at all. The field is signed, but a signature only proves
+authorship, not truthfulness: the sender picks the value.
+
+It is already load-bearing in two places:
+- **Anti-spam.** `network_transaction` stores `last_txs_[sender] = transaction.timestamp()`
+  and later compares it against the local clock (`current_date_ms() - stored < 4500`).
+  A sender who backdates the field makes the difference arbitrarily large, so the rate
+  limit never triggers — the limit is bypassed by one unvalidated number.
+- **Section content hash.** `Transaction::operator<` orders by `timestamp` before `hash`,
+  and `Section::calculate_hash` concatenates transactions in set order — so the field
+  influences the consensus hash of a section.
+
+This also rules out using transaction time as a "closing" boundary for control hashes:
+anything derived from it is attacker-steerable. Section-based watermarks (derived from
+chain height, not from any clock) do not have this problem.
+
+Minimum fix: reject a transaction whose timestamp is further ahead of local time than a
+small tolerance, and further behind than the acceptance window allows; keep anti-spam
+state on the receiver's own clock rather than on a value the sender supplies.
+
 ### 1. Controls are computed over still-mutable sections → control chain splits
 
 **The only remaining cause of divergence after all the fixes below.** Final 3.5h run:
