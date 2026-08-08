@@ -297,6 +297,12 @@ public:
         std::string_view                             method,
         std::span<const std::uint8_t>                arguments,
         const ExtraChain::Contracts::VerifiedInputs& verified_inputs = {});
+    std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_contract_call(
+        const Actor<KeyPrivate>&                     signer,
+        const ActorId&                               contract_id,
+        std::string_view                             method,
+        std::span<const std::uint8_t>                arguments,
+        const ExtraChain::Contracts::VerifiedInputs& verified_inputs = {});
     std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_contract_upgrade(
         const ActorId&                contract_id,
         std::span<const std::uint8_t> module,

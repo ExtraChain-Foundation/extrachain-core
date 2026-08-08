@@ -19,6 +19,7 @@
 
 #include "chain/dag_cache.h"
 #include "chain/dag.h"
+#include "contracts/contract_codec.h"
 #include "contracts/contract_transaction.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
@@ -42,13 +43,18 @@ namespace {
         if (!metadata.has_value() || metadata->kind != "fungible-token") {
             return {};
         }
-        auto decoded = Utils::from_base64<std::vector<std::uint8_t>>(metadata->arguments_base64);
-        if (!decoded.has_value()) {
+        auto encoded = Utils::from_base64<std::vector<std::uint8_t>>(metadata->effects_base64);
+        if (!encoded.has_value()) {
+            return {};
+        }
+        auto effects = ExtraChain::Contracts::Codec::decode_effects(encoded.value());
+        if (!effects.has_value()
+            || ExtraChain::Contracts::Codec::effect_hash(effects.value()) != metadata->effects_hash) {
             return {};
         }
 
-        auto amount = [](std::uint64_t value, bool positive) {
-            auto result = BigNumberFloat(std::to_string(value));
+        auto amount = [](const std::string& value, bool positive) {
+            auto result = BigNumberFloat(value);
             return positive ? result : -result;
         };
         auto actor = [](std::string value) -> std::optional<ActorId> {
@@ -60,49 +66,46 @@ namespace {
         };
 
         try {
-            auto handle = msgpack::unpack(reinterpret_cast<const char*>(decoded->data()), decoded->size());
-            auto object = handle.get();
-            if (transaction.type() == TransactionType::ContractDeploy && metadata->method == "init") {
-                std::tuple<std::string, std::string, std::uint8_t, std::uint64_t> init;
-                object.convert(init);
-                return { { transaction.sender(), amount(std::get<3>(init), true) } };
-            }
-            if (transaction.type() != TransactionType::ContractCall) {
-                return {};
-            }
-            if (metadata->method == "transfer" || metadata->method == "mint") {
-                std::tuple<std::string, std::uint64_t> arguments;
-                object.convert(arguments);
-                auto receiver = actor(std::get<0>(arguments));
-                if (!receiver.has_value()) {
-                    return {};
+            std::vector<ContractDelta> result;
+            for (const auto& effect : effects.value()) {
+                if (effect.kind != ExtraChain::Contracts::ContractEffectKind::TokenDelta
+                    || effect.target != transaction.receiver().to_string()) {
+                    continue;
                 }
-                auto value = std::get<1>(arguments);
-                if (metadata->method == "mint") {
-                    return { { *receiver, amount(value, true) } };
+                auto handle = msgpack::unpack(reinterpret_cast<const char*>(effect.arguments.data()),
+                                              effect.arguments.size());
+                auto object = handle.get();
+                if (effect.operation == "mint" || effect.operation == "burn") {
+                    std::vector<std::tuple<std::string, std::string>> entries;
+                    object.convert(entries);
+                    if (entries.size() != 1) {
+                        return {};
+                    }
+                    auto owner = actor(std::get<0>(entries.front()));
+                    if (!owner.has_value()) {
+                        return {};
+                    }
+                    result.emplace_back(owner.value(),
+                                        amount(std::get<1>(entries.front()), effect.operation == "mint"));
+                } else if (effect.operation == "transfer") {
+                    std::vector<std::tuple<std::string, std::string>> entries;
+                    object.convert(entries);
+                    if (entries.size() != 2 || std::get<1>(entries[0]) != std::get<1>(entries[1])) {
+                        return {};
+                    }
+                    auto sender   = actor(std::get<0>(entries[0]));
+                    auto receiver = actor(std::get<0>(entries[1]));
+                    if (!sender.has_value() || !receiver.has_value()) {
+                        return {};
+                    }
+                    result.emplace_back(sender.value(), amount(std::get<1>(entries[0]), false));
+                    result.emplace_back(receiver.value(), amount(std::get<1>(entries[1]), true));
                 }
-                return { { transaction.sender(), amount(value, false) }, { *receiver, amount(value, true) } };
             }
-            if (metadata->method == "transfer_from") {
-                std::tuple<std::string, std::string, std::uint64_t> arguments;
-                object.convert(arguments);
-                auto owner    = actor(std::get<0>(arguments));
-                auto receiver = actor(std::get<1>(arguments));
-                if (!owner.has_value() || !receiver.has_value()) {
-                    return {};
-                }
-                auto value = std::get<2>(arguments);
-                return { { *owner, amount(value, false) }, { *receiver, amount(value, true) } };
-            }
-            if (metadata->method == "burn") {
-                std::uint64_t value = 0;
-                object.convert(value);
-                return { { transaction.sender(), amount(value, false) } };
-            }
+            return result;
         } catch (const std::exception&) {
             return {};
         }
-        return {};
     }
 
     void apply_contract_deltas(const Transaction& transaction, Balances& balances, bool reverse) {
@@ -869,7 +872,7 @@ void DagCache::index_contract_transaction(const Transaction& transaction) {
 
     const auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
     const auto section  = transaction.section().to_int();
-    if (!metadata.has_value() || !section.has_value() || metadata->schema != 3 || metadata->kind.empty()
+    if (!metadata.has_value() || !section.has_value() || metadata->schema != 4 || metadata->kind.empty()
         || metadata->version == 0 || metadata->revision == 0) {
         return;
     }

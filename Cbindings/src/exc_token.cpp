@@ -10,6 +10,8 @@
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
 
+#include <unordered_map>
+
 using namespace exc_ffi;
 
 extern "C" {
@@ -35,20 +37,34 @@ EXC_API ExcError exc_token_create(const char* name,
         auto* tm = gs.node->token_manager();
         auto* ac = gs.node->account_controller();
 
-        ActorId owner = ac->current_wallet().id();
-        BigNumberFloat amt{std::string(amount)};
+        ActorId        owner = ac->current_wallet().id();
+        BigNumberFloat amt { std::string(amount) };
 
         auto res =
             tm->create_token(owner, std::string(name), std::string(ticker), amt, std::string(color), "", decimals);
         if (!res.has_value()) {
             switch (res.error()) {
-            case CreateTokenError::NoConnections: result = EXC_ERR_TOKEN_NO_CONNECTIONS; break;
-            case CreateTokenError::InvalidAmount: result = EXC_ERR_TOKEN_INVALID_AMOUNT; break;
-            case CreateTokenError::InvalidName:   result = EXC_ERR_TOKEN_INVALID_NAME; break;
-            case CreateTokenError::ExistToken:    result = EXC_ERR_TOKEN_EXISTS; break;
-            case CreateTokenError::InvalidTx:     result = EXC_ERR_TOKEN_INVALID_TX; break;
-            case CreateTokenError::InvalidOwnerId: result = EXC_ERR_TOKEN_INVALID_OWNER; break;
-            default:                              result = EXC_ERR_UNKNOWN; break;
+            case CreateTokenError::NoConnections:
+                result = EXC_ERR_TOKEN_NO_CONNECTIONS;
+                break;
+            case CreateTokenError::InvalidAmount:
+                result = EXC_ERR_TOKEN_INVALID_AMOUNT;
+                break;
+            case CreateTokenError::InvalidName:
+                result = EXC_ERR_TOKEN_INVALID_NAME;
+                break;
+            case CreateTokenError::ExistToken:
+                result = EXC_ERR_TOKEN_EXISTS;
+                break;
+            case CreateTokenError::InvalidTx:
+                result = EXC_ERR_TOKEN_INVALID_TX;
+                break;
+            case CreateTokenError::InvalidOwnerId:
+                result = EXC_ERR_TOKEN_INVALID_OWNER;
+                break;
+            default:
+                result = EXC_ERR_UNKNOWN;
+                break;
             }
             return;
         }
@@ -65,8 +81,8 @@ EXC_API ExcError exc_token_exists(const char* name, const char* ticker, bool* ou
     EXC_CHECK_NULL(out_exists);
 
     bool ok = dispatch_sync([&]() {
-        auto& gs = GlobalState::instance();
-        auto* tm = gs.node->token_manager();
+        auto& gs    = GlobalState::instance();
+        auto* tm    = gs.node->token_manager();
         *out_exists = tm->token_exists(std::string(name), std::string(ticker));
     });
 
@@ -78,13 +94,63 @@ EXC_API ExcError exc_token_list(char** out_json) {
     EXC_CHECK_NULL(out_json);
 
     ExcError result = EXC_OK;
-    *out_json = nullptr;
+    *out_json       = nullptr;
 
     bool ok = dispatch_sync([&]() {
-        auto tokens = TokenManager::read_tokens();
-        *out_json = exc_strdup(Json::serialize(tokens));
+        auto tokens = GlobalState::instance().node->token_manager()->list_tokens();
+        std::unordered_map<ActorId, std::string> names;
+        names.reserve(tokens.size());
+        for (const auto& token : tokens) {
+            names.insert_or_assign(token.token_id, token.name);
+        }
+        *out_json = exc_strdup(Json::serialize(names));
     });
 
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_token_legacy_list(char** out_json) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(out_json);
+
+    *out_json = nullptr;
+    bool ok   = dispatch_sync([&]() {
+        auto tokens = GlobalState::instance().node->token_manager()->legacy_tokens();
+        *out_json   = exc_strdup(Json::serialize(tokens));
+    });
+    return ok ? EXC_OK : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_token_migrate(const char* token_id, char** out_token_json) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(token_id);
+    EXC_CHECK_NULL(out_token_json);
+
+    ExcError result = EXC_OK;
+    *out_token_json = nullptr;
+    bool ok         = dispatch_sync([&]() {
+        auto parsed = TokenId::create(std::string(token_id));
+        if (!parsed.has_value() || parsed.value().is_zero()) {
+            result = EXC_ERR_TOKEN_INVALID_TX;
+            return;
+        }
+        auto migrated = GlobalState::instance().node->token_manager()->migrate_legacy_token(parsed.value());
+        if (!migrated.has_value()) {
+            switch (migrated.error()) {
+            case CreateTokenError::InvalidAmount:
+                result = EXC_ERR_TOKEN_INVALID_AMOUNT;
+                break;
+            case CreateTokenError::InvalidOwnerId:
+                result = EXC_ERR_TOKEN_INVALID_OWNER;
+                break;
+            default:
+                result = EXC_ERR_TOKEN_INVALID_TX;
+                break;
+            }
+            return;
+        }
+        *out_token_json = exc_strdup(Json::serialize(migrated.value()));
+    });
     return ok ? result : EXC_ERR_DISPATCH_FAILED;
 }
 

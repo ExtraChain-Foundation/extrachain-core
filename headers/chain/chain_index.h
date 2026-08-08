@@ -93,6 +93,12 @@ public:
                                                   std::uint64_t      before_timestamp = 0,
                                                   int                limit            = 50) const;
 
+    // Count transactions of one type that involve the actor at or after the
+    // supplied timestamp. This avoids loading matching DAG sections.
+    std::uint64_t count_for_actor_by_type_since(const std::string &actor,
+                                                int                type,
+                                                std::uint64_t      since_timestamp) const;
+
     // Sections that contain a root or nested transition for this contract.
     // The result is ordered and contains no duplicates.
     std::vector<SectionId> find_contract_sections(const std::string &contract,

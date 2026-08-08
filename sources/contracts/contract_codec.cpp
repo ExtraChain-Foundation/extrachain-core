@@ -20,6 +20,28 @@
 namespace ExtraChain::Contracts::Codec {
     namespace {
 
+        std::string_view effect_name(ContractEffectKind kind) {
+            switch (kind) {
+            case ContractEffectKind::ContractCall:
+                return "contract_call";
+            case ContractEffectKind::TokenDelta:
+                return "token_delta";
+            case ContractEffectKind::DfsWrite:
+                return "dfs_write";
+            }
+            return {};
+        }
+
+        std::optional<ContractEffectKind> effect_kind(std::string_view name) {
+            if (name == "contract_call")
+                return ContractEffectKind::ContractCall;
+            if (name == "token_delta")
+                return ContractEffectKind::TokenDelta;
+            if (name == "dfs_write")
+                return ContractEffectKind::DfsWrite;
+            return std::nullopt;
+        }
+
         void pack_binary(msgpack::packer<msgpack::sbuffer> &packer, std::span<const std::uint8_t> value) {
             if (value.size() > std::numeric_limits<std::uint32_t>::max()) {
                 throw std::length_error("MessagePack binary value is too large");
@@ -259,11 +281,11 @@ namespace ExtraChain::Contracts::Codec {
                 std::string    kind;
                 ContractEffect decoded;
                 effect.via.array.ptr[0].convert(kind);
-                if (kind == "contract_call") {
-                    decoded.kind = ContractEffectKind::ContractCall;
-                } else {
+                const auto decoded_kind = effect_kind(kind);
+                if (!decoded_kind.has_value()) {
                     throw msgpack::type_error();
                 }
+                decoded.kind = decoded_kind.value();
                 effect.via.array.ptr[1].convert(decoded.target);
                 effect.via.array.ptr[2].convert(decoded.operation);
                 decoded.arguments = binary(effect.via.array.ptr[3]);
@@ -288,13 +310,49 @@ namespace ExtraChain::Contracts::Codec {
         packer.pack_array(static_cast<std::uint32_t>(effects.size()));
         for (const auto &effect : effects) {
             packer.pack_array(4);
-            packer.pack("contract_call");
+            packer.pack(effect_name(effect.kind));
             packer.pack(effect.target);
             packer.pack(effect.operation);
             pack_binary(packer, effect.arguments);
         }
         const auto *begin = reinterpret_cast<const std::uint8_t *>(buffer.data());
         return { begin, begin + buffer.size() };
+    }
+
+    std::expected<std::vector<ContractEffect>, ContractFailure> decode_effects(
+        std::span<const std::uint8_t> encoded) {
+        try {
+            std::size_t offset = 0;
+            auto handle = msgpack::unpack(reinterpret_cast<const char *>(encoded.data()), encoded.size(), offset);
+            const auto &root = handle.get();
+            if (offset != encoded.size() || root.type != msgpack::type::ARRAY
+                || root.via.array.size > ContractMaximumEffects) {
+                throw msgpack::type_error();
+            }
+            std::vector<ContractEffect> result;
+            result.reserve(root.via.array.size);
+            for (std::uint32_t index = 0; index < root.via.array.size; ++index) {
+                const auto &value = root.via.array.ptr[index];
+                if (value.type != msgpack::type::ARRAY || value.via.array.size != 4) {
+                    throw msgpack::type_error();
+                }
+                std::string name;
+                value.via.array.ptr[0].convert(name);
+                const auto kind = effect_kind(name);
+                if (!kind.has_value()) {
+                    throw msgpack::type_error();
+                }
+                ContractEffect effect;
+                effect.kind = kind.value();
+                value.via.array.ptr[1].convert(effect.target);
+                value.via.array.ptr[2].convert(effect.operation);
+                effect.arguments = binary(value.via.array.ptr[3]);
+                result.push_back(std::move(effect));
+            }
+            return result;
+        } catch (const std::exception &error) {
+            return std::unexpected(ContractFailure { ContractError::InvalidResponse, error.what() });
+        }
     }
 
     std::string effect_hash(std::span<const ContractEffect> effects) {

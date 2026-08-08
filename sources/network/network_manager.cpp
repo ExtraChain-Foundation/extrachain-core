@@ -724,6 +724,24 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
     }
 }
 
+void NetworkManager::connect_to_endpoint(const QString &ip,
+                                         quint16        port,
+                                         bool           requestListNodes,
+                                         bool           isConstant,
+                                         bool           is_light) {
+    const auto normalized_ip = ip.simplified();
+    if (normalized_ip.isEmpty() || port == 0) {
+        eWarning("[NetworkManager] Invalid endpoint {}:{}", ip, port);
+        return;
+    }
+    if (active_connections_count() >= Network::maxConnections && (!isConstant || !remove_one_connection())) {
+        eWarning("[NetworkManager] Can't connect to {}:{}: maximum connections reached", ip, port);
+        return;
+    }
+    eLog("[NetworkManager] Connect to endpoint {}:{}", normalized_ip, port);
+    connect_to_websocket(normalized_ip, port, requestListNodes, isConstant, is_light);
+}
+
 void NetworkManager::connect_to_websocket(const QString &ip,
                                           quint16        port,
                                           bool           requestListNodes,

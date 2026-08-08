@@ -453,6 +453,12 @@ EXC_API ExcError exc_token_exists(const char* name, const char* ticker, bool* ou
 /* Read all known tokens. Returns JSON object {token_id: name, ...}. */
 EXC_API ExcError exc_token_list(char** out_json);
 
+/* Read legacy tokens that can be converted to standard contracts. Full nodes only. */
+EXC_API ExcError exc_token_legacy_list(char** out_json);
+
+/* Convert one legacy token in place. The current profile must contain the owner key. */
+EXC_API ExcError exc_token_migrate(const char* token_id, char** out_token_json);
+
 /* ════════════════════════════════════════════════════════════════════
  *  WebAssembly contracts
  * ════════════════════════════════════════════════════════════════════ */

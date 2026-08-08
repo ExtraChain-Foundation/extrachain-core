@@ -120,8 +120,25 @@ namespace {
         append_array(result, 4);
         append_string(result, "Example Token");
         append_string(result, "EXT");
-        append_unsigned(result, 8);
+        append_unsigned(result, 0);
         append_unsigned(result, 1'000);
+        return result;
+    }
+
+    Bytes token_migration_argument() {
+        Bytes result;
+        append_array(result, 5);
+        append_string(result, "Legacy Token");
+        append_string(result, "LEG");
+        append_unsigned(result, 0);
+        append_string(result, "1000");
+        append_array(result, 2);
+        append_array(result, 2);
+        append_string(result, "alice");
+        append_string(result, "700");
+        append_array(result, 2);
+        append_string(result, "bob");
+        append_string(result, "300");
         return result;
     }
 
@@ -143,7 +160,7 @@ namespace {
         append_array(result, 2);
         append_array(result, 0);
         append_array(result, 0);
-        append_unsigned(result, 2);
+        append_unsigned(result, ExtraChain::Contracts::ContractAbiVersion);
         return result;
     }
 
@@ -542,19 +559,41 @@ namespace {
         ExtraChain::Contracts::ContractManager manager;
 
         auto token =
-            manager.deploy("token-contract", "alice", "fungible", fungible_module, token_init_argument(), 1);
+            manager.deploy("token-contract", "alice", "fungible-token", fungible_module, token_init_argument(), 1);
         require(token.has_value(), "ContractManager token deploy failed");
         auto transfer = manager.call("token-contract", "alice", "transfer", pair_argument("bob", 200), 2);
-        require(transfer.has_value() && transfer->revision == 2, "ContractManager token transfer failed");
+        if (!transfer.has_value()) {
+            throw std::runtime_error("ContractManager token transfer failed: " + transfer.error().detail);
+        }
+        require(transfer.value().revision == 2, "ContractManager token transfer revision is invalid");
         auto balance = manager.query("token-contract", "alice", "balance_of", string_argument("bob"), 2);
         require(balance.has_value() && balance->revision == 2, "ContractManager read-only token query failed");
         Reader balance_reader(balance->data);
-        require(balance_reader.unsigned_value() == 200, "ContractManager returned an invalid token balance");
+        require(balance_reader.string() == "200", "ContractManager returned an invalid token balance");
         auto upgrade = manager.upgrade("token-contract", "alice", fungible_module, {}, 3);
         require(upgrade.has_value() && upgrade->version == 2, "ContractManager token upgrade failed");
         auto token_record = manager.inspect("token-contract");
         require(token_record.has_value() && token_record->versions.size() == 2,
                 "ContractManager did not retain the immutable token version chain");
+        auto frozen = manager.call("token-contract", "alice", "transfer", pair_argument("bob", 799), 4);
+        require(frozen.has_value(), "Upgraded token did not enter the one-token freeze state");
+        auto denied_frozen = manager.call("token-contract", "alice", "transfer", pair_argument("bob", 1), 5);
+        require(!denied_frozen.has_value(), "Upgraded token allowed transfer of the frozen reserve");
+
+        auto legacy = manager.prepare_deploy("legacy-token",
+                                             "alice",
+                                             "fungible-token",
+                                             fungible_module,
+                                             token_migration_argument(),
+                                             1);
+        require(legacy.has_value() && legacy->output.effects.empty(),
+                "Legacy token migration emitted a second balance delta");
+        require(manager.stage(*legacy).has_value(), "Legacy token migration could not be staged");
+        require(manager.commit(std::move(*legacy)).has_value(), "Legacy token migration could not be committed");
+        auto legacy_balance = manager.query("legacy-token", "alice", "balance_of", string_argument("bob"), 1);
+        require(legacy_balance.has_value(), "Migrated token balance query failed");
+        Reader legacy_balance_reader(legacy_balance->data);
+        require(legacy_balance_reader.string() == "300", "Migrated token balance changed");
 
         auto claim = manager.deploy("claim-contract", "alice", "message-claim", message_module, {}, 1);
         require(claim.has_value(), "ContractManager claim deploy failed");
@@ -622,7 +661,7 @@ namespace {
             ExtraChain::Contracts::ContractManager manager;
             auto                                   deploy = manager.prepare_deploy("checkpoint-contract",
                                                  "alice",
-                                                 "fungible",
+                                                 "fungible-token",
                                                  fungible_module,
                                                  token_init_argument(),
                                                  1);
@@ -705,6 +744,37 @@ namespace {
                 "Contract content hash is not BLAKE3");
     }
 
+    void test_effect_codec() {
+        const std::vector<ExtraChain::Contracts::ContractEffect> effects {
+            { .kind      = ExtraChain::Contracts::ContractEffectKind::ContractCall,
+              .target    = "child",
+              .operation = "store",
+              .arguments = { 1, 2 } },
+            { .kind      = ExtraChain::Contracts::ContractEffectKind::TokenDelta,
+              .target    = "token",
+              .operation = "transfer",
+              .arguments = { 3, 4 } },
+            { .kind      = ExtraChain::Contracts::ContractEffectKind::DfsWrite,
+              .target    = "contract",
+              .operation = "state.bin",
+              .arguments = { 5, 6 } },
+        };
+        auto encoded = ExtraChain::Contracts::Codec::encode_effects(effects);
+        auto decoded = ExtraChain::Contracts::Codec::decode_effects(encoded);
+        require(decoded.has_value() && decoded.value().size() == effects.size(),
+                "Contract effects did not round-trip");
+        for (std::size_t index = 0; index < effects.size(); ++index) {
+            require(decoded.value()[index].kind == effects[index].kind
+                        && decoded.value()[index].target == effects[index].target
+                        && decoded.value()[index].operation == effects[index].operation
+                        && decoded.value()[index].arguments == effects[index].arguments,
+                    "Contract effect changed during decoding");
+        }
+        encoded.push_back(0);
+        require(!ExtraChain::Contracts::Codec::decode_effects(encoded).has_value(),
+                "Contract effect decoder accepted trailing data");
+    }
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -720,6 +790,7 @@ int main(int argc, char **argv) {
         test_worker_thread(runtime, message_module);
         test_parallel_worker_threads(runtime, message_module);
         test_contract_hash();
+        test_effect_codec();
         test_json_codec();
         test_fungible(runtime, fungible_module);
         test_message_claim(runtime, message_module);

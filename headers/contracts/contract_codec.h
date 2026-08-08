@@ -35,6 +35,9 @@ namespace ExtraChain::Contracts::Codec {
 
     [[nodiscard]] std::vector<std::uint8_t> encode_effects(std::span<const ContractEffect> effects);
 
+    [[nodiscard]] std::expected<std::vector<ContractEffect>, ContractFailure> decode_effects(
+        std::span<const std::uint8_t> encoded);
+
     [[nodiscard]] std::string effect_hash(std::span<const ContractEffect> effects);
 
 } // namespace ExtraChain::Contracts::Codec

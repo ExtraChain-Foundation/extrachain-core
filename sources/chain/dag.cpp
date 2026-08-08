@@ -1764,22 +1764,18 @@ void Dag::network_status_sync_request(const Responder &responder) {
     if (!last_control.has_value()) {
         this->start_control(Force::Active);
         last_control = this->find_last_control();
-        // return;
-    }
-
-    if (!last_control.has_value()) {
-        eCritical("[Dag] Sync response problem: no last control");
-        return;
     }
 
     std::uint64_t zero_timestamp =
         zero_section.has_value() ? (zero_section->transactions.size() == 1 ? zero_section->middle() : 0) : 0;
 
-    auto last_info = DagLastInfo { .last_section_id         = section_id,
-                                   .last_control_section_id = last_control->section_id,
-                                   .last_control_hash       = last_control->control,
-                                   .zero_date               = zero_section.has_value() ? zero_timestamp : 0,
-                                   .status                  = status_ };
+    auto last_info = DagLastInfo {
+        .last_section_id         = section_id,
+        .last_control_section_id = last_control.has_value() ? last_control.value().section_id : SectionId(-1),
+        .last_control_hash       = last_control.has_value() ? last_control.value().control : std::string(),
+        .zero_date               = zero_section.has_value() ? zero_timestamp : 0,
+        .status                  = status_,
+    };
     // eLog("network_status_sync_request, send: {}", last_info);,
     responder.send_response(last_info, MessageType::DagSyncLastInfo, SendMode::Focused, MessageStatus::Response);
 }
@@ -2501,11 +2497,7 @@ void Dag::handle_sync_request() {
         for (const auto &[_, info] : last_info_) {
             // eLog("----- {}", info);
             if (info.last_section_id >= 0 || (info.last_section_id == SectionId(0))) {
-                if (mode_ == DagMode::Light) {
-                    need_sync = true;
-                } else {
-                    need_recontrol = true;
-                }
+                need_sync = true;
                 break;
             }
         }
@@ -2517,13 +2509,18 @@ void Dag::handle_sync_request() {
         // TODO: better cons
         for (const auto &[_, info] : last_info_) {
             if (info.last_section_id > my_index) {
-                // need_sync = true;
-                need_recontrol = true;
+                if (info.last_control_section_id < SectionId(0)) {
+                    need_sync = true;
+                } else {
+                    need_recontrol = true;
+                }
                 break;
             }
 
             if (!last_control.has_value()) {
-                // need_sync = true;
+                if (info.last_control_section_id < SectionId(0)) {
+                    continue;
+                }
                 emit node->dagControlStarted();
                 this->start_control(Force::Active);
                 last_control = this->find_last_control();

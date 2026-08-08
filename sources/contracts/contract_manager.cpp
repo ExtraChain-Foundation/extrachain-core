@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <mutex>
 
+#include <msgpack.hpp>
+
 #include "contracts/contract_codec.h"
 #include "contracts/contract_hash.h"
 
@@ -39,6 +41,59 @@ namespace ExtraChain::Contracts {
                 .data                = output.data,
                 .events              = output.events,
             };
+        }
+
+        bool valid_amount(std::string_view value) {
+            constexpr std::string_view MaximumU128 = "340282366920938463463374607431768211455";
+            return !value.empty() && value != "0"
+                   && std::ranges::all_of(value,
+                                          [](char digit) {
+                                              return digit >= '0' && digit <= '9';
+                                          })
+                   && (value.size() < MaximumU128.size()
+                       || (value.size() == MaximumU128.size() && value <= MaximumU128));
+        }
+
+        bool valid_token_delta(const ContractEffect &effect) {
+            try {
+                std::size_t offset = 0;
+                auto        handle = msgpack::unpack(reinterpret_cast<const char *>(effect.arguments.data()),
+                                              effect.arguments.size(),
+                                              offset);
+                if (offset != effect.arguments.size()) {
+                    return false;
+                }
+                std::vector<std::tuple<std::string, std::string>> entries;
+                handle.get().convert(entries);
+                const auto expected_size = effect.operation == "transfer" ? 2U : 1U;
+                if ((effect.operation != "mint" && effect.operation != "burn" && effect.operation != "transfer"
+                     && effect.operation != "lock")
+                    || entries.size() != expected_size) {
+                    return false;
+                }
+                const auto entries_valid = std::ranges::all_of(entries, [](const auto &entry) {
+                    return !std::get<0>(entry).empty() && valid_amount(std::get<1>(entry));
+                });
+                const auto transfer_valid =
+                    effect.operation != "transfer" || std::get<1>(entries.front()) == std::get<1>(entries.back());
+                return entries_valid && transfer_valid;
+            } catch (const std::exception &) {
+                return false;
+            }
+        }
+
+        bool effects_match_contract(const ContractOutput &output,
+                                    std::string_view      contract_id,
+                                    std::string_view      kind) {
+            return std::ranges::all_of(output.effects, [&](const ContractEffect &effect) {
+                if (effect.kind == ContractEffectKind::ContractCall) {
+                    return true;
+                }
+                if (effect.kind == ContractEffectKind::TokenDelta) {
+                    return kind == "fungible-token" && effect.target == contract_id && valid_token_delta(effect);
+                }
+                return false;
+            });
         }
 
     } // namespace
@@ -246,11 +301,15 @@ namespace ExtraChain::Contracts {
         if (!output.has_value()) {
             return std::unexpected(output.error());
         }
-        if (!output->effects.empty()) {
+        if (std::ranges::any_of(output.value().effects,
+                                [](const ContractEffect &effect) {
+                                    return effect.kind == ContractEffectKind::ContractCall;
+                                })
+            || !effects_match_contract(output.value(), contract_id, kind)) {
             return std::unexpected(
-                failure(ContractError::InvalidResponse, "Contract initialization cannot emit effects"));
+                failure(ContractError::InvalidResponse, "Contract initialization emitted an invalid effect"));
         }
-        auto initial_revision = revision(*output, nullptr, block, owner_id);
+        auto initial_revision = revision(output.value(), nullptr, block, owner_id);
         if (!initial_revision.has_value()) {
             return std::unexpected(initial_revision.error());
         }
@@ -265,13 +324,13 @@ namespace ExtraChain::Contracts {
                       .module_hash          = content_hash(module),
                       .previous_module_hash = {},
                       .module               = { module.begin(), module.end() },
-                      .revisions            = { std::move(*initial_revision) },
+                      .revisions            = { std::move(initial_revision.value()) },
             } },
         };
         return PreparedContractChange {
             .kind       = ContractChangeKind::Create,
             .record     = std::move(record),
-            .output     = std::move(*output),
+            .output     = std::move(output.value()),
             .checkpoint = true,
         };
     }
@@ -352,31 +411,38 @@ namespace ExtraChain::Contracts {
         if (!output.has_value()) {
             return std::unexpected(output.error());
         }
-        if (output->state == previous.state && output->effects.empty()) {
+        if (!effects_match_contract(output.value(), contract_id, record.kind)) {
+            return std::unexpected(
+                failure(ContractError::InvalidResponse, "Contract emitted an effect for another authority"));
+        }
+        if (output.value().state == previous.state && output.value().effects.empty()) {
             auto expected_version = version.version;
             return PreparedContractChange {
                 .kind                = ContractChangeKind::ReadOnly,
                 .record              = std::move(record),
-                .output              = std::move(*output),
+                .output              = std::move(output.value()),
                 .expected_version    = expected_version,
                 .expected_state_hash = previous.state_hash,
             };
         }
-        auto next = revision(*output, &previous, block, std::string(sender_id));
+        auto next = revision(output.value(), &previous, block, std::string(sender_id));
         if (!next.has_value()) {
             return std::unexpected(next.error());
         }
-        version.revisions.push_back(std::move(*next));
+        version.revisions.push_back(std::move(next.value()));
         auto                   expected_version = version.version;
         PreparedContractChange change {
             .kind                = ContractChangeKind::Replace,
             .record              = std::move(record),
-            .output              = std::move(*output),
+            .output              = std::move(output.value()),
             .expected_version    = expected_version,
             .expected_state_hash = previous.state_hash,
             .checkpoint = version.revisions.back().checkpoint_revision == version.revisions.back().revision,
         };
         for (const auto &effect : change.output.effects) {
+            if (effect.kind != ContractEffectKind::ContractCall) {
+                continue;
+            }
             if (call_count >= ContractMaximumCalls || depth >= ContractMaximumCallDepth) {
                 return std::unexpected(
                     failure(ContractError::CallDepthExceeded, "Contract call graph exceeds its limit"));

@@ -36,12 +36,14 @@ struct TokenData {
     BigNumberFloat             count;
     std::string                color;
     std::string                smart;
+    std::uint32_t              decimals = 0;
     std::optional<SectionId>   section_id;
     std::optional<std::string> tx_hash;
 
     bool operator==(const TokenData &other) const {
         return token_id == other.token_id && owner_id == other.owner_id && count == other.count
-               && name == other.name && ticker == other.ticker && color == other.color && smart == other.smart;
+               && name == other.name && ticker == other.ticker && color == other.color && smart == other.smart
+               && decimals == other.decimals;
     }
 
     // Overload the inequality operator
@@ -49,7 +51,9 @@ struct TokenData {
         return !(*this == other);
     }
 };
-BOOST_DESCRIBE_STRUCT(TokenData, (), (token_id, owner_id, count, name, ticker, color, smart, section_id, tx_hash))
+BOOST_DESCRIBE_STRUCT(TokenData,
+                      (),
+                      (token_id, owner_id, count, name, ticker, color, smart, decimals, section_id, tx_hash))
 
 struct TokenDataShort { // for data in transaction
     std::string                name;
@@ -79,7 +83,17 @@ public:
     bool name_exists(const std::string &name);
     bool ticker_exists(const std::string &ticker);
 
-    static std::unordered_map<ActorId, std::string> read_tokens();
+    static std::unordered_map<ActorId, std::string>            read_tokens();
+    std::vector<TokenData>                                     read_registry() const;
+    std::vector<TokenData>                                     list_tokens() const;
+    std::optional<TokenData>                                   token(const TokenId &token_id) const;
+    bool                                                       is_contract_token(const TokenId &token_id) const;
+    std::expected<std::vector<std::uint8_t>, CreateTokenError> transfer_arguments(
+        const TokenId        &token_id,
+        const ActorId        &receiver,
+        const BigNumberFloat &amount) const;
+    std::vector<TokenData>                     legacy_tokens() const;
+    std::expected<TokenData, CreateTokenError> migrate_legacy_token(const TokenId &token_id);
 
     std::expected<TokenData, CreateTokenError> create_token(const ActorId        &owner_id,
                                                             const std::string    &token_name,
@@ -95,8 +109,14 @@ public:
     static bool id_valid_token_ticker(const std::string &ticker);
 
 private:
+    std::optional<std::string> registry_file_id() const;
+    bool                       registry_row_valid(const TokenData &token_data) const;
+
     ExtraChainNode                            *node;
     std::unordered_map<std::string, TokenData> cache_creation_; // TODO: also save to temp file
+    mutable std::mutex                         legacy_cache_mutex_;
+    mutable std::optional<SectionId>           legacy_cache_section_;
+    mutable std::vector<TokenData>             legacy_cache_;
 
 signals:
     void verifyActor(Actor<KeyPublic> actor);

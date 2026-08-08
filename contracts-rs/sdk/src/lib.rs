@@ -9,7 +9,7 @@ use core::convert::Infallible;
 use rmp::decode::{RmpRead, read_array_len, read_bin_len, read_bool, read_int, read_str_len};
 use rmp::encode::{write_array_len, write_bin, write_bool, write_nil, write_str, write_u64};
 
-pub const ABI_VERSION: u32 = 2;
+pub const ABI_VERSION: u32 = 3;
 pub const MAX_PROOFS: u32 = 64;
 
 #[cfg(target_family = "wasm")]
@@ -67,6 +67,21 @@ impl<'a> Decoder<'a> {
         read_int(&mut self.source).map_err(|_| CodecError::InvalidData)
     }
 
+    pub fn amount(&mut self) -> Result<u128, CodecError> {
+        let marker = self
+            .source
+            .first()
+            .copied()
+            .ok_or(CodecError::InvalidData)?;
+        if marker & 0xe0 == 0xa0 || matches!(marker, 0xd9 | 0xda | 0xdb) {
+            return self
+                .string()?
+                .parse::<u128>()
+                .map_err(|_| CodecError::InvalidData);
+        }
+        self.u64().map(u128::from)
+    }
+
     pub fn boolean(&mut self) -> Result<bool, CodecError> {
         read_bool(&mut self.source).map_err(|_| CodecError::InvalidData)
     }
@@ -102,6 +117,10 @@ impl Encoder {
 
     pub fn u64(&mut self, value: u64) {
         write_u64(&mut self.output, value).expect("writing to memory cannot fail");
+    }
+
+    pub fn amount(&mut self, value: u128) {
+        self.string(&value.to_string());
     }
 
     pub fn boolean(&mut self, value: bool) {
@@ -278,6 +297,16 @@ pub enum Effect {
         method: String,
         arguments: Vec<u8>,
     },
+    TokenDelta {
+        token_id: String,
+        operation: String,
+        arguments: Vec<u8>,
+    },
+    DfsWrite {
+        owner_id: String,
+        name: String,
+        arguments: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -346,6 +375,28 @@ impl InvokeResponse {
                     encoder.string("contract_call");
                     encoder.string(contract_id);
                     encoder.string(method);
+                    encoder.bytes(arguments);
+                }
+                Effect::TokenDelta {
+                    token_id,
+                    operation,
+                    arguments,
+                } => {
+                    encoder.array(4);
+                    encoder.string("token_delta");
+                    encoder.string(token_id);
+                    encoder.string(operation);
+                    encoder.bytes(arguments);
+                }
+                Effect::DfsWrite {
+                    owner_id,
+                    name,
+                    arguments,
+                } => {
+                    encoder.array(4);
+                    encoder.string("dfs_write");
+                    encoder.string(owner_id);
+                    encoder.string(name);
                     encoder.bytes(arguments);
                 }
             }
@@ -433,7 +484,17 @@ mod tests {
     }
 
     #[test]
-    fn abi_two_request_round_trips_verified_inputs() {
+    fn amount_round_trips_full_u128_range() {
+        let mut encoder = Encoder::new();
+        encoder.amount(u128::MAX);
+        let encoded = encoder.finish();
+        let mut decoder = Decoder::new(&encoded);
+        assert_eq!(decoder.amount(), Ok(u128::MAX));
+        assert!(decoder.is_empty());
+    }
+
+    #[test]
+    fn current_abi_request_round_trips_verified_inputs() {
         let request = InvokeRequest {
             sender: "alice".to_string(),
             caller: "parent".to_string(),

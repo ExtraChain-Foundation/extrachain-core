@@ -341,6 +341,11 @@ public slots:
     void remove_connection(const QString& identifier);
     void check_port(const QString ip, Network::Protocol protocol, const bool request, const bool isConstant);
     bool check_port_sync(const QString& ip, Network::Protocol protocol, const bool request, const bool isConstant);
+    void connect_to_endpoint(const QString& ip,
+                             quint16        port,
+                             bool           requestListNodes = false,
+                             bool           isConstant       = false,
+                             bool           is_light         = false);
 
 signals:
     void finished(); // ThreadPool

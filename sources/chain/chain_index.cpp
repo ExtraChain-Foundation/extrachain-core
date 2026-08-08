@@ -168,6 +168,7 @@ struct ChainIndex::Impl {
     sqlite3_stmt *stmt_token_insert            = nullptr;
     sqlite3_stmt *stmt_actor_blob_by_id        = nullptr;
     sqlite3_stmt *stmt_token_blob_by_id        = nullptr;
+    sqlite3_stmt *stmt_count_actor_type_since  = nullptr;
 
     mutable std::mutex                    write_mutex;
     bool                                  derived_index_ready  = false;
@@ -207,6 +208,7 @@ struct ChainIndex::Impl {
         finalize(stmt_token_insert);
         finalize(stmt_actor_blob_by_id);
         finalize(stmt_token_blob_by_id);
+        finalize(stmt_count_actor_type_since);
         if (db)
             sqlite3_close(db);
     }
@@ -401,17 +403,21 @@ struct ChainIndex::Impl {
             "SELECT DISTINCT section FROM contract_tx_index"
             " WHERE contract = ? AND section >= ? ORDER BY section");
 
-        stmt_actor_select     = prepare("SELECT id FROM actors WHERE actor = ?");
-        stmt_actor_insert     = prepare("INSERT INTO actors(actor) VALUES (?)");
-        stmt_actor_blob_by_id = prepare("SELECT actor FROM actors WHERE id = ?");
-        stmt_token_select     = prepare("SELECT id FROM tokens WHERE actor = ?");
-        stmt_token_insert     = prepare("INSERT INTO tokens(actor) VALUES (?)");
-        stmt_token_blob_by_id = prepare("SELECT actor FROM tokens WHERE id = ?");
+        stmt_actor_select           = prepare("SELECT id FROM actors WHERE actor = ?");
+        stmt_actor_insert           = prepare("INSERT INTO actors(actor) VALUES (?)");
+        stmt_actor_blob_by_id       = prepare("SELECT actor FROM actors WHERE id = ?");
+        stmt_token_select           = prepare("SELECT id FROM tokens WHERE actor = ?");
+        stmt_token_insert           = prepare("INSERT INTO tokens(actor) VALUES (?)");
+        stmt_token_blob_by_id       = prepare("SELECT actor FROM tokens WHERE id = ?");
+        stmt_count_actor_type_since = prepare(
+            "SELECT COUNT(*) FROM tx_index"
+            " WHERE type = ? AND timestamp >= ? AND (sender = ? OR receiver = ?)");
 
         return stmt_insert_tx && stmt_delete_section && stmt_find_sent && stmt_find_sent_token && stmt_find_recv
                && stmt_find_recv_token && stmt_row_count && stmt_last_section && stmt_delete_contract_section
                && stmt_insert_contract_tx && stmt_find_contract_sections && stmt_actor_select && stmt_actor_insert
-               && stmt_token_select && stmt_token_insert && stmt_actor_blob_by_id && stmt_token_blob_by_id;
+               && stmt_token_select && stmt_token_insert && stmt_actor_blob_by_id && stmt_token_blob_by_id
+               && stmt_count_actor_type_since;
     }
 
     bool should_index(const Transaction &tx) const {
@@ -497,7 +503,7 @@ struct ChainIndex::Impl {
         if (!tx.meta().has_value())
             return false;
         const auto metadata = Json::deserialize<ContractTransactionData>(*tx.meta());
-        if (!metadata.has_value() || metadata->schema != 3)
+        if (!metadata.has_value() || metadata->schema != 4)
             return false;
 
         std::vector<std::string> contracts;
@@ -736,6 +742,39 @@ std::vector<ChainIndexEntry> ChainIndex::find_for_actor(const std::string &actor
             break;
     }
     return out;
+}
+
+std::uint64_t ChainIndex::count_for_actor_by_type_since(const std::string &actor,
+                                                        int                type,
+                                                        std::uint64_t      since_timestamp) const {
+    if (!impl_->db || !impl_->stmt_actor_select || !impl_->stmt_count_actor_type_since)
+        return 0;
+
+    std::lock_guard<std::mutex> lock(impl_->write_mutex);
+    const auto                  actor_blob = hex_to_blob(actor);
+    if (actor_blob.empty())
+        return 0;
+
+    sqlite3_reset(impl_->stmt_actor_select);
+    sqlite3_clear_bindings(impl_->stmt_actor_select);
+    sqlite3_bind_blob(impl_->stmt_actor_select,
+                      1,
+                      actor_blob.data(),
+                      static_cast<int>(actor_blob.size()),
+                      SQLITE_TRANSIENT);
+    if (sqlite3_step(impl_->stmt_actor_select) != SQLITE_ROW)
+        return 0;
+    const auto actor_id = sqlite3_column_int64(impl_->stmt_actor_select, 0);
+
+    auto *statement = impl_->stmt_count_actor_type_since;
+    sqlite3_reset(statement);
+    sqlite3_clear_bindings(statement);
+    sqlite3_bind_int(statement, 1, type);
+    sqlite3_bind_int64(statement, 2, static_cast<sqlite3_int64>(since_timestamp));
+    sqlite3_bind_int64(statement, 3, actor_id);
+    sqlite3_bind_int64(statement, 4, actor_id);
+    return sqlite3_step(statement) == SQLITE_ROW ? static_cast<std::uint64_t>(sqlite3_column_int64(statement, 0))
+                                                 : 0;
 }
 
 void ChainIndex::rebuild_from_disk() {

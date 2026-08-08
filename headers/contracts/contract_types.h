@@ -20,7 +20,7 @@
 
 namespace ExtraChain::Contracts {
 
-    inline constexpr std::uint32_t ContractAbiVersion         = 2;
+    inline constexpr std::uint32_t ContractAbiVersion         = 3;
     inline constexpr std::uint64_t ContractCheckpointInterval = 256;
     inline constexpr std::uint32_t ContractMaximumCallDepth   = 8;
     inline constexpr std::uint32_t ContractMaximumCalls       = 32;
@@ -96,7 +96,9 @@ namespace ExtraChain::Contracts {
     };
 
     enum class ContractEffectKind {
-        ContractCall
+        ContractCall,
+        TokenDelta,
+        DfsWrite
     };
 
     struct ContractEffect {
@@ -107,12 +109,12 @@ namespace ExtraChain::Contracts {
     };
 
     struct ContractOutput {
-        bool                       ok = false;
-        std::vector<std::uint8_t>  state;
-        std::vector<std::uint8_t>  data;
-        std::vector<ContractEvent> events;
+        bool                        ok = false;
+        std::vector<std::uint8_t>   state;
+        std::vector<std::uint8_t>   data;
+        std::vector<ContractEvent>  events;
         std::vector<ContractEffect> effects;
-        std::optional<std::string> error;
+        std::optional<std::string>  error;
     };
 
     struct StateRevision {
@@ -241,12 +243,12 @@ namespace ExtraChain::Contracts {
     };
 
     struct PreparedContractChange {
-        ContractChangeKind kind = ContractChangeKind::ReadOnly;
-        ContractRecord     record;
-        ContractOutput     output;
-        std::uint32_t      expected_version = 0;
-        std::string        expected_state_hash;
-        bool               checkpoint = false;
+        ContractChangeKind                  kind = ContractChangeKind::ReadOnly;
+        ContractRecord                      record;
+        ContractOutput                      output;
+        std::uint32_t                       expected_version = 0;
+        std::string                         expected_state_hash;
+        bool                                checkpoint = false;
         std::vector<PreparedContractChange> children;
     };
 

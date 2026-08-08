@@ -315,7 +315,7 @@ namespace ExtraChain::Contracts {
                                                  : std::vector<ContractTransitionData>::const_iterator {};
                 const bool root_head       = transaction->receiver() == contract_id;
                 const bool head_matches =
-                    metadata.has_value() && metadata->schema == 3
+                    metadata.has_value() && metadata->schema == 4
                     && ((root_head && metadata->revision == cache.head.revision
                          && metadata->state_hash == cache.head.state_hash
                          && metadata->previous_state_hash == cache.head.previous_hash
@@ -351,7 +351,7 @@ namespace ExtraChain::Contracts {
                                                        : std::vector<ContractTransitionData>::const_iterator {};
                 const bool root_checkpoint       = checkpoint_transaction->receiver() == contract_id;
                 const bool checkpoint_matches =
-                    checkpoint_metadata.has_value() && checkpoint_metadata->schema == 3
+                    checkpoint_metadata.has_value() && checkpoint_metadata->schema == 4
                     && ((root_checkpoint && checkpoint_metadata->checkpoint
                          && checkpoint_metadata->revision == cache.checkpoint.revision
                          && checkpoint_metadata->state_hash == cache.checkpoint.state_hash
@@ -464,7 +464,7 @@ namespace ExtraChain::Contracts {
                                                 }
                                                 const auto metadata = Json::deserialize<ContractTransactionData>(
                                                     *transaction.meta());
-                                                if (!metadata.has_value() || metadata->schema != 3) {
+                                                if (!metadata.has_value() || metadata->schema != 4) {
                                                     continue;
                                                 }
                                                 ContractTransitionData invocation;
@@ -479,6 +479,7 @@ namespace ExtraChain::Contracts {
                                                         .previous_state_hash = metadata->previous_state_hash,
                                                         .state_hash          = metadata->state_hash,
                                                         .effects_hash        = metadata->effects_hash,
+                                                        .effects_base64      = metadata->effects_base64,
                                                         .version             = metadata->version,
                                                         .revision            = metadata->revision,
                                                         .checkpoint          = metadata->checkpoint,
@@ -510,7 +511,7 @@ namespace ExtraChain::Contracts {
                                                     return failure(ContractError::StorageError,
                                                                    "Contract replay arguments are invalid");
                                                 }
-                                                auto output = evaluator.evaluate(version.module,
+                                                auto       output = evaluator.evaluate(version.module,
                                                                                  transaction.sender().to_string(),
                                                                                  invocation.method,
                                                                                  *arguments,
@@ -519,8 +520,13 @@ namespace ExtraChain::Contracts {
                                                                                  record.contract_id,
                                                                                  invocation.caller_contract_id,
                                                                                  metadata->verified_inputs);
+                                                const auto encoded_effects =
+                                                    output.has_value()
+                                                        ? Utils::to_base64(Codec::encode_effects(output->effects))
+                                                        : std::string {};
                                                 if (!output.has_value()
                                                     || content_hash(output->state) != invocation.state_hash
+                                                    || encoded_effects != invocation.effects_base64
                                                     || Codec::effect_hash(output->effects)
                                                            != invocation.effects_hash) {
                                                     return failure(ContractError::StorageError,
@@ -591,7 +597,7 @@ namespace ExtraChain::Contracts {
                                                 }
                                                 const auto metadata = Json::deserialize<ContractTransactionData>(
                                                     *transaction.meta());
-                                                if (!metadata.has_value() || metadata->schema != 3) {
+                                                if (!metadata.has_value() || metadata->schema != 4) {
                                                     continue;
                                                 }
                                                 const bool root_transaction =

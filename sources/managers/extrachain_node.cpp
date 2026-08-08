@@ -63,6 +63,10 @@
 
 std::atomic<bool> node_enabled { true };
 
+static void initialize_contract_resources() {
+    Q_INIT_RESOURCE(contracts);
+}
+
 namespace {
     std::string contract_hash_prefix(std::string_view value) {
         return std::string(value.substr(0, std::min<std::size_t>(value.size(), 12)));
@@ -85,6 +89,9 @@ namespace {
                                 const ExtraChain::Contracts::PreparedContractChange& parent) -> void {
             std::size_t child_index = 0;
             for (const auto& effect : parent.output.effects) {
+                if (effect.kind != ExtraChain::Contracts::ContractEffectKind::ContractCall) {
+                    continue;
+                }
                 if (child_index >= parent.children.size()) {
                     return;
                 }
@@ -101,6 +108,8 @@ namespace {
                                              .previous_state_hash = revision.previous_hash,
                                              .state_hash          = revision.state_hash,
                                              .effects_hash = ExtraChain::Contracts::Codec::effect_hash(child.output.effects),
+                                             .effects_base64 =
+                        Utils::to_base64(ExtraChain::Contracts::Codec::encode_effects(child.output.effects)),
                                              .version             = version.version,
                                              .revision            = revision.revision,
                                              .checkpoint          = child.checkpoint,
@@ -233,6 +242,7 @@ ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app, s
     : is_client_application_(is_client_application)
     , is_custom_app_(is_custom_app)
     , ws_port(port) {
+    initialize_contract_resources();
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     runtime_profile_ = is_client_application_ ? RuntimeProfile::MobileLight : RuntimeProfile::FullNode;
 #else
@@ -448,8 +458,8 @@ bool ExtraChainNode::create_usernames_vector() {
 }
 
 bool ExtraChainNode::create_chat_templates() {
-    auto system_actor_id   = account_controller()->system_actor().id();
-    auto chat_template = Dfs::CollectionTemplate::create("Chat").value().use_id().add_fields(
+    auto system_actor_id = account_controller()->system_actor().id();
+    auto chat_template   = Dfs::CollectionTemplate::create("Chat").value().use_id().add_fields(
         { Dfs::Field::Json("message").not_null() });
 
     auto chat_result = dfs()->store_template(system_actor_id, chat_template);
@@ -484,17 +494,18 @@ bool ExtraChainNode::create_subscription_template() {
 
 bool ExtraChainNode::create_token_template() {
     auto network_id      = actor_index_->network_id();
-    auto tokens_template = Dfs::CollectionTemplate::create("TokensCache")
+    auto tokens_template = Dfs::CollectionTemplate::create("TokensRegistry")
                                .value()
-                               .add_fields({ Dfs::Field::ActorId("token_id").not_null().unique(),
-                                             Dfs::Field::String("name").not_null().unique().length(3, 20),
+                               .add_fields({ Dfs::Field::String("name").not_null().unique().length(3, 20),
                                              Dfs::Field::String("ticker").not_null().unique().length(2, 5),
                                              Dfs::Field::String("count").not_null(),
                                              Dfs::Field::ActorId("owner_id").not_null(),
                                              Dfs::Field::String("color").not_null(),
                                              Dfs::Field::String("smart"),
+                                             Dfs::Field::Integer("decimals").not_null().between(0, 18),
                                              Dfs::Field::String("section_id").not_null(),
                                              Dfs::Field::String("tx_hash").not_null() });
+    tokens_template.primary = Dfs::Field::ActorId("token_id").not_null().unique();
 
     auto template_res = dfs_->store_template(network_id, tokens_template);
     if (!template_res.has_value()) {
@@ -515,12 +526,13 @@ bool ExtraChainNode::create_token_vector() {
         Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
                                                                           network_id,
                                                                           Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                          "TokensCache");
+                                                                          "TokensRegistry");
     if (!search_result.has_value()) {
         return false;
     }
 
-    auto store_res = dfs_->store_vector(network_id, network_id, "TokensCache", network_id, search_result->file_id);
+    auto store_res =
+        dfs_->store_vector(network_id, network_id, "TokensRegistry", network_id, search_result.value().file_id);
     if (!store_res.has_value()) {
         eCritical("Can't create token cache database, because {}", store_res.error());
         return false;
@@ -533,10 +545,11 @@ bool ExtraChainNode::create_token_vector() {
                                   .count      = BigNumberFloat(0),
                                   .color      = "#808080",
                                   .smart      = "",
+                                  .decimals   = 8,
                                   .section_id = BigNumber(0),
                                   .tx_hash    = "" };
 
-    auto res = dfs_->add_vector_row(store_res->actor_id, store_res->file_id, tokens_row);
+    auto res = dfs_->add_vector_row(store_res.value().actor_id, store_res.value().file_id, tokens_row, network_id);
     if (!res) {
         return false;
     }
@@ -795,8 +808,11 @@ DfsFileStatus ExtraChainNode::create_channels_vector() {
         return DfsFileStatus::CantCreate;
     }
 
-    auto vec_res =
-        dfs()->store_vector(system_id, system_id, CHANNELS_VECTOR_NAME, template_res->actor_id, template_res->file_id);
+    auto vec_res = dfs()->store_vector(system_id,
+                                       system_id,
+                                       CHANNELS_VECTOR_NAME,
+                                       template_res->actor_id,
+                                       template_res->file_id);
     if (!vec_res.has_value()) {
         return DfsFileStatus::CantCreate;
     }
@@ -1112,6 +1128,19 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
+    if (tx.type() == TransactionType::Regular && token_manager_->is_contract_token(tx.token())) {
+        auto arguments = token_manager_->transfer_arguments(tx.token(), tx.receiver(), tx.amount());
+        if (!arguments.has_value()) {
+            return std::unexpected(TransactionError::Unknown);
+        }
+        auto contract_transaction = submit_contract_call(tx.token(), "transfer", arguments.value());
+        if (!contract_transaction.has_value()) {
+            eWarning("[TokenManager] Contract token transfer failed: {}", contract_transaction.error().detail);
+            return std::unexpected(TransactionError::Unknown);
+        }
+        return contract_transaction.value();
+    }
+
     eLog("Attempting to create {} from user {}", tx, actor.id().to_string());
 
     // TODO: local check tx
@@ -1184,16 +1213,19 @@ std::expected<Transaction, TransactionError> ExtraChainNode::send_contract_trans
     Transaction                                   transaction,
     const Actor<KeyPrivate>&                      signer,
     ExtraChain::Contracts::PreparedContractChange change) {
-    auto staged = contract_manager_->stage(change);
-    if (!staged.has_value()) {
-        eWarning("[Contract] Cannot stage transaction artifacts: {}", staged.error().detail);
-        return std::unexpected(TransactionError::Unknown);
-    }
     auto prepared = dag_->prepare_transaction(transaction, signer);
     if (!prepared.has_value()) {
+        eWarning("[Contract] Cannot prepare transaction: {}", prepared.error());
         return std::unexpected(prepared.error());
     }
-    if (!stage_contract_change(prepared->hash(), std::move(change))) {
+    if (!stage_contract_change(prepared->hash(), change)) {
+        eWarning("[Contract] Another pending transaction changes the same contract");
+        return std::unexpected(TransactionError::Unknown);
+    }
+    auto staged = contract_manager_->stage(change);
+    if (!staged.has_value()) {
+        finalize_contract_change(prepared->hash(), false);
+        eWarning("[Contract] Cannot stage transaction artifacts: {}", staged.error().detail);
         return std::unexpected(TransactionError::Unknown);
     }
     dag_->add_transaction_sended(*prepared);
@@ -1230,7 +1262,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
         return TransactionProveError::InvalidContractPayload;
     }
     auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
-    if (!metadata.has_value() || metadata->schema != 3 || metadata->kind.empty() || metadata->kind.size() > 64
+    if (!metadata.has_value() || metadata->schema != 4 || metadata->kind.empty() || metadata->kind.size() > 64
         || metadata->method.empty() || metadata->method.size() > 64 || metadata->module_hash.size() != 64
         || metadata->state_hash.size() != 64 || metadata->effects_hash.size() != 64 || metadata->version == 0
         || metadata->revision == 0 || metadata->transitions.size() >= ExtraChain::Contracts::ContractMaximumCalls
@@ -1238,8 +1270,8 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
                return transition.contract_id.empty() || transition.caller_contract_id.empty()
                       || transition.kind.empty() || transition.method.empty() || transition.method.size() > 64
                       || transition.module_hash.size() != 64 || transition.state_hash.size() != 64
-                      || transition.effects_hash.size() != 64 || transition.version == 0
-                      || transition.revision == 0;
+                      || transition.effects_hash.size() != 64 || transition.effects_base64.empty()
+                      || transition.version == 0 || transition.revision == 0;
            })) {
         return TransactionProveError::InvalidContractPayload;
     }
@@ -1250,8 +1282,14 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
         return TransactionProveError::InvalidContractPayload;
     }
 
-    auto arguments = Utils::from_base64<std::vector<std::uint8_t>>(metadata->arguments_base64);
-    if (!arguments.has_value() || arguments->size() > 512 * 1024) {
+    auto arguments       = Utils::from_base64<std::vector<std::uint8_t>>(metadata->arguments_base64);
+    auto encoded_effects = Utils::from_base64<std::vector<std::uint8_t>>(metadata->effects_base64);
+    if (!arguments.has_value() || arguments.value().size() > 512 * 1024 || !encoded_effects.has_value()) {
+        return TransactionProveError::InvalidContractPayload;
+    }
+    auto declared_effects = ExtraChain::Contracts::Codec::decode_effects(encoded_effects.value());
+    if (!declared_effects.has_value()
+        || ExtraChain::Contracts::Codec::effect_hash(declared_effects.value()) != metadata->effects_hash) {
         return TransactionProveError::InvalidContractPayload;
     }
 
@@ -1284,7 +1322,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
 
     auto verify_output = [&](const ExtraChain::Contracts::ContractOutput& output) -> TransactionProveError {
         if (ExtraChain::Contracts::content_hash(output.state) != metadata->state_hash
-            || ExtraChain::Contracts::Codec::effect_hash(output.effects) != metadata->effects_hash) {
+            || ExtraChain::Contracts::Codec::encode_effects(output.effects) != encoded_effects.value()) {
             return TransactionProveError::InvalidContractPayload;
         }
         if (!metadata->checkpoint) {
@@ -1386,9 +1424,9 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     if (transaction.type() != TransactionType::ContractUpgrade || metadata->method != "migrate"
         || transaction.sender().to_string() != record->owner_id || metadata->version != current.version + 1
         || metadata->revision != previous.revision + 1 || metadata->previous_state_hash != previous.state_hash
-        || record->kind == "fungible-token" || !metadata->checkpoint
-        || metadata->checkpoint_revision != metadata->revision || !metadata->transitions.empty()
-        || !metadata->verified_inputs.dag.empty() || !metadata->verified_inputs.dfs.empty()) {
+        || !metadata->checkpoint || metadata->checkpoint_revision != metadata->revision
+        || !metadata->transitions.empty() || !metadata->verified_inputs.dag.empty()
+        || !metadata->verified_inputs.dfs.empty()) {
         return TransactionProveError::InvalidContractPayload;
     }
     auto module_name = fmt::format("contract-module-v{:06}-{}.wasm",
@@ -1471,9 +1509,10 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
         .previous_state_hash = revision.previous_hash,
         .state_hash          = revision.state_hash,
         .effects_hash        = ExtraChain::Contracts::Codec::effect_hash(change->output.effects),
-        .version             = version.version,
-        .revision            = revision.revision,
-        .checkpoint          = change->checkpoint,
+        .effects_base64 = Utils::to_base64(ExtraChain::Contracts::Codec::encode_effects(change->output.effects)),
+        .version        = version.version,
+        .revision       = revision.revision,
+        .checkpoint     = change->checkpoint,
         .checkpoint_revision = revision.checkpoint_revision,
         .transitions         = contract_transitions(*change),
     };
@@ -1500,6 +1539,15 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
     std::span<const std::uint8_t>                arguments,
     const ExtraChain::Contracts::VerifiedInputs& verified_inputs) {
     auto signer = account_controller_->current_wallet();
+    return submit_contract_call(signer, contract_id, method, arguments, verified_inputs);
+}
+
+std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNode::submit_contract_call(
+    const Actor<KeyPrivate>&                     signer,
+    const ActorId&                               contract_id,
+    std::string_view                             method,
+    std::span<const std::uint8_t>                arguments,
+    const ExtraChain::Contracts::VerifiedInputs& verified_inputs) {
     if (signer.empty()) {
         return std::unexpected(ExtraChain::Contracts::ContractFailure {
             .error  = ExtraChain::Contracts::ContractError::InvalidOwner,
@@ -1537,9 +1585,10 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
         .previous_state_hash = revision.previous_hash,
         .state_hash          = revision.state_hash,
         .effects_hash        = ExtraChain::Contracts::Codec::effect_hash(change->output.effects),
-        .version             = version.version,
-        .revision            = revision.revision,
-        .checkpoint          = change->checkpoint,
+        .effects_base64 = Utils::to_base64(ExtraChain::Contracts::Codec::encode_effects(change->output.effects)),
+        .version        = version.version,
+        .revision       = revision.revision,
+        .checkpoint     = change->checkpoint,
         .checkpoint_revision = revision.checkpoint_revision,
         .transitions         = contract_transitions(*change),
         .verified_inputs     = *verified,
@@ -1572,13 +1621,6 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
             .detail = "No current wallet",
         });
     }
-    auto current = contract_manager_->inspect(contract_id.to_string());
-    if (current.has_value() && current->kind == "fungible-token") {
-        return std::unexpected(ExtraChain::Contracts::ContractFailure {
-            .error  = ExtraChain::Contracts::ContractError::UpgradeDenied,
-            .detail = "Standard token contracts cannot be upgraded",
-        });
-    }
     auto block  = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
     auto change = contract_manager_->prepare_upgrade(contract_id.to_string(),
                                                      signer.id().to_string(),
@@ -1598,9 +1640,10 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
         .previous_state_hash = revision.previous_hash,
         .state_hash          = revision.state_hash,
         .effects_hash        = ExtraChain::Contracts::Codec::effect_hash(change->output.effects),
-        .version             = version.version,
-        .revision            = revision.revision,
-        .checkpoint          = change->checkpoint,
+        .effects_base64 = Utils::to_base64(ExtraChain::Contracts::Codec::encode_effects(change->output.effects)),
+        .version        = version.version,
+        .revision       = revision.revision,
+        .checkpoint     = change->checkpoint,
         .checkpoint_revision = revision.checkpoint_revision,
         .transitions         = contract_transitions(*change),
     };
@@ -1924,6 +1967,18 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction_
 
 std::expected<Transaction, TransactionError> ExtraChainNode::send_transaction(const Transaction&       transaction,
                                                                               const Actor<KeyPrivate>& signer) {
+    if (transaction.type() == TransactionType::Regular && token_manager_->is_contract_token(transaction.token())) {
+        auto arguments =
+            token_manager_->transfer_arguments(transaction.token(), transaction.receiver(), transaction.amount());
+        if (!arguments.has_value()) {
+            return std::unexpected(TransactionError::Unknown);
+        }
+        auto result = submit_contract_call(signer, transaction.token(), "transfer", arguments.value());
+        if (!result.has_value()) {
+            return std::unexpected(TransactionError::Unknown);
+        }
+        return result.value();
+    }
     auto transaction_result = dag_->send_transaction(transaction, signer);
     return transaction_result;
 }
@@ -2149,8 +2204,8 @@ void ExtraChainNode::connect_signals() {
         dfs_->sendSizeRequestMsg(account_controller_->system_actor().id());
     });
 
-    connect(actor_index_, &ActorIndex::firstSyncEnded, [this]() {
-        chat_manager_->activate();
+    (void)connect(actor_index_, &ActorIndex::firstSyncEnded, [this]() {
+        (void)chat_manager_->activate();
 
         dag_->start_check();
 
