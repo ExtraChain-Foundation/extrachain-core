@@ -384,8 +384,15 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     }
                 }
 
+                // TEST STAND ONLY (do not commit): EXC_ALLOW_LOOPBACK_SHARE lets
+                // auto-discovery accept 127.0.0.x so a single-host mesh can grow to
+                // a realistic degree. In production loopback is always skipped.
+                static const bool allow_loopback_share =
+                    qEnvironmentVariableIsSet("EXC_ALLOW_LOOPBACK_SHARE");
                 for (const auto &[ip, identifier] : connections) {
-                    if (this->failed_ips_.contains(ip) || ip == "127.0.0.1") {
+                    const bool is_plain_loopback = (ip == "127.0.0.1");
+                    if (this->failed_ips_.contains(ip)
+                        || (is_plain_loopback && !allow_loopback_share)) {
                         continue;
                     }
 
@@ -1581,15 +1588,19 @@ void NetworkManager::message_received(const std::string &message,
         break;
     }
     case MessageType::DfsFileFragment: {
-        auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
-        if (!fragment_data_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for FragmentData", type);
-            break;
-        }
-
-        // TIMER_START(FRAG)
-        node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value(), identifier);
-        // TIMER_END(FRAG)
+        // Bulk payload off the dispatch thread: during a replication wave the
+        // MB-sized deserialize + disk write queued for seconds ahead of consensus
+        // messages and delayed transactions fell out of the accept window
+        // (TooSectionDiff). Disk writes stay serialized by m_write_file_mutex and
+        // bookkeeping is SafePtr-guarded, so pool execution is safe.
+        ThreadPoolBoost::instance_dfs()->post([this, serialized = std::string(serialized), identifier]() {
+            auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
+            if (!fragment_data_result.has_value()) {
+                eWarning("[NetworkManager] DfsFileFragment deserialization failed");
+                return;
+            }
+            node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value(), identifier);
+        });
 
         break;
     }

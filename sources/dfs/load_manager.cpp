@@ -794,8 +794,14 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                 emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
                                                   file_link_fragment.file_link.file_id,
                                                   progress);
-                // No pacing sleep: a request carries at most the requester's
-                // slot-window of fragments, so the requester already flow-controls.
+                // Light pacing (buffer hygiene, not throughput control): the
+                // requester's slot-window bounds the TOTAL in flight, but blasting
+                // the whole window into the websocket write buffer at once parks
+                // megabytes ahead of small consensus messages on the same socket —
+                // transactions arrived seconds late and fell out of the accept
+                // window (TooSectionDiff) during replication waves. 5ms per 256KB
+                // fragment caps a requester at ~50MB/s and keeps the buffer shallow.
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
             }
 
             emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
