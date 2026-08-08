@@ -18,6 +18,8 @@
 
 #include "extrachain_c_types.h"
 
+#define EXC_C_API_VERSION 2u
+
 #ifdef _WIN32
 #ifdef EXTRACHAIN_C_BUILDING
 #define EXC_API __declspec(dllexport)
@@ -62,6 +64,9 @@ EXC_API bool exc_is_initialized(void);
 
 /* Returns the library version string. Caller must NOT free the result. */
 EXC_API const char* exc_version(void);
+
+/* Returns the public C API revision used by this header and library. */
+EXC_API uint32_t exc_api_version(void);
 
 /* Configure logging. log_type maps to internal eLog levels. */
 EXC_API ExcError exc_configure_logs(int log_type);

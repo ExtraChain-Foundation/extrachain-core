@@ -53,7 +53,8 @@ int main(int argc, char* argv[]) {
     ExcError err;
 
     printf("ExtraChain C FFI Example\n");
-    printf("Library version: %s\n\n", exc_version());
+    printf("Library version: %s\n", exc_version());
+    printf("C API version: %u\n\n", (unsigned)exc_api_version());
 
     /* Register callbacks before init */
     exc_on_node_ready(on_node_ready, NULL);

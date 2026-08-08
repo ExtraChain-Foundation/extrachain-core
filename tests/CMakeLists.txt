@@ -15,13 +15,13 @@ find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Test REQUIRED)
 set(EXTRACHAIN_STATIC_BUILD true)
 include(../CMakeLists.txt)
 
-add_executable(extrachain-tests
-    test.cpp
-    )
-
-target_link_libraries(extrachain-tests
-    PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Test extrachain)
-set_property(TARGET extrachain-tests PROPERTY POSITION_INDEPENDENT_CODE 1)
+option(EXTRACHAIN_BUILD_LEGACY_TESTS "Build the obsolete monolithic test target" OFF)
+if(EXTRACHAIN_BUILD_LEGACY_TESTS)
+    add_executable(extrachain-tests test.cpp)
+    target_link_libraries(extrachain-tests
+        PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Test extrachain)
+    set_property(TARGET extrachain-tests PROPERTY POSITION_INDEPENDENT_CODE 1)
+endif()
 
 # Self-contained synchronization tests (pack-sync data path, wire-format
 # legacy/canonical round-trip, hex->decimal migration round-trip). Kept in a
@@ -85,3 +85,34 @@ set_property(TARGET extrachain-chain-compare PROPERTY POSITION_INDEPENDENT_CODE 
 add_executable(extrachain-amount-rt amount_roundtrip.cpp)
 target_link_libraries(extrachain-amount-rt PRIVATE Qt${QT_VERSION_MAJOR}::Core extrachain)
 set_property(TARGET extrachain-amount-rt PROPERTY POSITION_INDEPENDENT_CODE 1)
+
+enable_testing()
+add_test(NAME core-unit COMMAND extrachain-ci-unit)
+add_test(NAME amount-roundtrip COMMAND extrachain-amount-rt)
+add_test(NAME sync-roundtrip COMMAND extrachain-sync-tests)
+set_tests_properties(core-unit amount-roundtrip sync-roundtrip PROPERTIES
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt${QT_VERSION_MAJOR}::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:unofficial::sqlite3::sqlite3>"
+    TIMEOUT 120
+)
+
+set(EXTRACHAIN_HEADER_CHECKS
+    chain/dag.h
+    chain/pack.h
+    chain/pack_registry.h
+    contracts/contract_manager.h
+    contracts/wasm_runtime.h
+    managers/extrachain_node.h
+    network/network_manager.h
+)
+set(EXTRACHAIN_HEADER_CHECK_TARGETS)
+foreach(header IN LISTS EXTRACHAIN_HEADER_CHECKS)
+    string(REPLACE "/" "_" check_name "${header}")
+    string(REPLACE "." "_" check_name "${check_name}")
+    set(check_source "${CMAKE_CURRENT_BINARY_DIR}/header-check-${check_name}.cpp")
+    file(GENERATE OUTPUT "${check_source}" CONTENT "#include \"${header}\"\n")
+    add_library("header-check-${check_name}" OBJECT EXCLUDE_FROM_ALL "${check_source}")
+    target_link_libraries("header-check-${check_name}" PRIVATE extrachain)
+    list(APPEND EXTRACHAIN_HEADER_CHECK_TARGETS "header-check-${check_name}")
+endforeach()
+add_custom_target(extrachain-header-checks DEPENDS ${EXTRACHAIN_HEADER_CHECK_TARGETS})

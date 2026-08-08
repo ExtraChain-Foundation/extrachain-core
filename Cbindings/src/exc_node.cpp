@@ -153,6 +153,10 @@ EXC_API const char* exc_version(void) {
     return s_version;
 }
 
+EXC_API uint32_t exc_api_version(void) {
+    return EXC_C_API_VERSION;
+}
+
 EXC_API ExcError exc_configure_logs(int log_type) {
     /* Maps to internal log configuration */
     (void)log_type;
