@@ -2170,14 +2170,11 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     if (dir_row.type == Dfs::FileType::File && network_stote == Dfs::NetworkStoreFile::Broadcast) {
         emit stored(owner_id, dir_row);
 
-        auto               file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
-        auto               load_info = LoadInfo { .dir_row = dir_row };
-        LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now() };
-
-        // check real status
-        load_info.dir_row.state = Dfs::FileState::Known;
-        // load_manager_.active_downloads.insert({ file_link, load_info });
-        // TODO: what need to do here?
+        // Full nodes replicate content, not only metadata: without this the
+        // gossiped row lands as Known and the file itself is never fetched.
+        if (mode() == DfsMode::Full) {
+            request_file(owner_id, dir_row.file_id);
+        }
     }
 
     emit added(owner_id, dir_row);
@@ -2695,6 +2692,12 @@ std::vector<ActorId> DfsController::startup_sync_actors() const {
         actors.insert(actor_id);
     }
 
+    // The chat actor owns the chat list, invites and chat vectors; without it the
+    // Light-mode filter drops its dirs rows and chats never appear on a clean profile.
+    if (auto chat_actor = node->account_controller()->chat_actor(); chat_actor.has_value()) {
+        actors.insert(chat_actor->get().id());
+    }
+
     for (const auto& file_link : priority_file_link_) {
         actors.insert(file_link.owner_id);
     }
@@ -2707,11 +2710,11 @@ std::vector<ActorId> DfsController::startup_sync_actors() const {
 }
 
 void DfsController::sync(const std::string &identifier) {
-    static std::once_flag check_flag;
     ThreadPoolBoost::instance_dfs()->post([this, identifier]() {
-        std::call_once(check_flag, [this, &identifier]() {
-            check_all_files(identifier);
-        });
+        // Not once-per-process: a file left in a non-final state (peer had it only
+        // as Known when we first asked, or our queue was lost to a restart mid-
+        // download) gets re-offered on every sync until it actually lands.
+        check_all_files(identifier);
 
         if (mode() == DfsMode::Full) {
             dirs_manager_.temp_sync_all(identifier);
