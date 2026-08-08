@@ -51,6 +51,7 @@ struct LoadInfo {
     std::chrono::system_clock::time_point last_fragment_received {};
 
     bool notify_neighbours;
+    bool forced { false };
 
     std::set<std::string>                         identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
@@ -109,13 +110,14 @@ public:
     }
 
 private:
-    void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
+    void        timer_runner(const Dfs::FileLink file_link_to_proceed = {});
+    void        schedule_watchdog();
+    std::size_t max_concurrent_downloads() const;
 
     ExtraChainNode* node;
 
-    static constexpr int  MAX_ATTEMPTS             = 10;
-    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 5;
-    static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
+    static constexpr int  MAX_ATTEMPTS  = 10;
+    static constexpr auto STALL_TIMEOUT = std::chrono::seconds(30);
 
     PullMode pull_mode = PullMode::All;
 

@@ -430,7 +430,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_folder(
     auto db_instance = dirs_manager_.get_db_instance();
 
     if (parent_folder_id.has_value() && !parent_folder_id->empty()) {
-        auto is_folder_res = DfsT::DirsFile::ActorSpace::is_folder(db_instance, owner_id, parent_folder_id.value());
+        auto is_folder_res =
+            DfsT::DirsFile::ActorSpace::is_folder(db_instance, owner_id, parent_folder_id.value());
         if (!is_folder_res.has_value()) {
             return std::unexpected(Dfs::DfsError::FolderNotFound);
         }
@@ -439,8 +440,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_folder(
         }
     }
 
-    auto search_result = DfsT::DirsFile::ActorSpace::search_file_by_folder_and_name(
-        db_instance, owner_id, parent_folder_id.value_or(""), folder_name);
+    auto search_result = DfsT::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
+                                                                                    owner_id,
+                                                                                    parent_folder_id.value_or(""),
+                                                                                    folder_name);
     if (search_result.has_value()) {
         return std::unexpected(Dfs::DfsError::DirDuplicate);
     }
@@ -475,21 +478,19 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_folder(
     std::string folder_hash = Utils::calculate_hash(
         fmt::format("folder:{}:{}:{}", owner_id.to_string(), folder_name, parent_folder_id.value_or("")));
 
-    Dfs::DirRow dir_row = {
-        .actor_id      = owner_id,
-        .owner_id      = owner_id,
-        .file_id       = file_id,
-        .prev_file_id  = std::nullopt,
-        .hash          = folder_hash,
-        .folder        = parent_folder_id,
-        .name          = stored_name,
-        .size          = 0,
-        .created       = 0,
-        .last_modified = 0,
-        .type          = Dfs::FileType::Folder,
-        .encryption    = encrypted,
-        .state         = Dfs::FileState::Ready
-    };
+    Dfs::DirRow dir_row = { .actor_id      = owner_id,
+                            .owner_id      = owner_id,
+                            .file_id       = file_id,
+                            .prev_file_id  = std::nullopt,
+                            .hash          = folder_hash,
+                            .folder        = parent_folder_id,
+                            .name          = stored_name,
+                            .size          = 0,
+                            .created       = 0,
+                            .last_modified = 0,
+                            .type          = Dfs::FileType::Folder,
+                            .encryption    = encrypted,
+                            .state         = Dfs::FileState::Ready };
 
     auto res = DfsT::DirsFile::ActorSpace::add_dir_row(db_instance, owner_id, dir_row, author_actor->get());
     if (!res) {
@@ -514,7 +515,9 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> DfsController::get_folder
 std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> DfsController::get_folder_contents(
     const ActorId     &owner_id,
     const std::string &folder_file_id) {
-    return DfsT::DirsFile::ActorSpace::get_folder_contents(dirs_manager_.get_db_instance(), owner_id, folder_file_id);
+    return DfsT::DirsFile::ActorSpace::get_folder_contents(dirs_manager_.get_db_instance(),
+                                                           owner_id,
+                                                           folder_file_id);
 }
 
 std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> DfsController::get_folder_path(
@@ -545,8 +548,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::move_to_folder(
         }
 
         if (dir_row.is_folder()) {
-            auto valid =
-                DfsT::DirsFile::ActorSpace::validate_folder_hierarchy(db_instance, owner_id, file_id, new_folder_id.value());
+            auto valid = DfsT::DirsFile::ActorSpace::validate_folder_hierarchy(db_instance,
+                                                                               owner_id,
+                                                                               file_id,
+                                                                               new_folder_id.value());
             if (!valid.has_value() || !valid.value()) {
                 return std::unexpected(Dfs::DfsError::FolderCycle);
             }
@@ -720,8 +725,13 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     if (!template_result.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
-    return store_vector_impl(owner_id, author_id, visual_name, template_result->first,
-                             data_security, security_data, Dfs::FileType::Vector);
+    return store_vector_impl(owner_id,
+                             author_id,
+                             visual_name,
+                             template_result->first,
+                             data_security,
+                             security_data,
+                             Dfs::FileType::Vector);
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector_impl(
@@ -734,9 +744,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector_impl(
     Dfs::FileType                  file_type) {
     auto db_instance = dirs_manager_.get_db_instance();
 
-    const std::string &folder_template = (file_type == Dfs::FileType::Dictionary)
-                                             ? Dfs::Basic::TEMPLATE_DICTIONARY
-                                             : Dfs::Basic::TEMPLATE_VECTOR;
+    const std::string &folder_template =
+        (file_type == Dfs::FileType::Dictionary) ? Dfs::Basic::TEMPLATE_DICTIONARY : Dfs::Basic::TEMPLATE_VECTOR;
 
     if (data_security == Dfs::DataSecurity::Self) {
         auto search_result = find_file_self(owner_id, visual_name);
@@ -744,11 +753,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector_impl(
             return std::unexpected(Dfs::DfsError::DirDuplicate);
         }
     } else {
-        auto search_result =
-            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
-                                                                              owner_id,
-                                                                              folder_template,
-                                                                              visual_name);
+        auto search_result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
+                                                                                               owner_id,
+                                                                                               folder_template,
+                                                                                               visual_name);
         if (search_result.has_value()) {
             return std::unexpected(Dfs::DfsError::DirDuplicate);
         }
@@ -773,13 +781,13 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector_impl(
     }
 
     auto dfs_vector = DfsVector::create(node,
-                                         actor.value(),
-                                         owner_id,
-                                         file_id,
-                                         collection_template,
-                                         data_security,
-                                         security_data,
-                                         file_type);
+                                        actor.value(),
+                                        owner_id,
+                                        file_id,
+                                        collection_template,
+                                        data_security,
+                                        security_data,
+                                        file_type);
     if (!dfs_vector.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -831,7 +839,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector_impl(
         if (rows.error() == DfsVectorError::CollectionEmpty) {
             Dfs::Packets::DfsVectorContentPackage empty_package;
             empty_package.owner_id = owner_id;
-            empty_package.file_id = file_id;
+            empty_package.file_id  = file_id;
             node->network()->send_broadcast(empty_package, MessageType::DfsVectorCreation);
             return dir_row;
         }
@@ -909,14 +917,14 @@ bool DfsController::rebroadcast_vector_row(const ActorId     &owner_id,
     return !node->network()->send_broadcast(package, MessageType::DfsVectorAdd).empty();
 }
 
-std::optional<std::string> DfsController::add_file_id(const ActorId&      network_id,
-                                                      const ActorId&      vector_owner_id,
-                                                      const std::string&  vector_file_id,
-                                                      const ActorId&      owner_id,
-                                                      const std::string&  file_id,
-                                                      const ActorId&      signer_id,
-                                                      int                 state,
-                                                      Dfs::FileIdState    with_state) {
+std::optional<std::string> DfsController::add_file_id(const ActorId     &network_id,
+                                                      const ActorId     &vector_owner_id,
+                                                      const std::string &vector_file_id,
+                                                      const ActorId     &owner_id,
+                                                      const std::string &file_id,
+                                                      const ActorId     &signer_id,
+                                                      int                state,
+                                                      Dfs::FileIdState   with_state) {
     auto file_row = read_file_status(network_id,
                                      with_state == Dfs::FileIdState::With ? "FilesListState" : "FilesList",
                                      Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE);
@@ -1070,16 +1078,21 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_dictionary(
     Dfs::DataSecurity            data_security,
     const Dfs::DataSecurityData &security_data) {
     auto templ = Dfs::dictionary_template();
-    return store_vector_impl(owner_id, author_id, visual_name, templ, data_security, security_data,
+    return store_vector_impl(owner_id,
+                             author_id,
+                             visual_name,
+                             templ,
+                             data_security,
+                             security_data,
                              Dfs::FileType::Dictionary);
 }
 
 bool DfsController::dictionary_set_value(const ActorId               &owner_id,
-                              const std::string           &file_id,
-                              const std::string           &key,
-                              const std::string           &value,
-                              const ActorId               &author_id,
-                              const Dfs::DataSecurityData &security_data) {
+                                         const std::string           &file_id,
+                                         const std::string           &key,
+                                         const std::string           &value,
+                                         const ActorId               &author_id,
+                                         const Dfs::DataSecurityData &security_data) {
     DbRow row;
     row["id"]    = key;
     row["value"] = value;
@@ -1108,9 +1121,9 @@ std::optional<std::string> DfsController::read_dictionary(const ActorId         
 }
 
 bool DfsController::dictionary_remove_value(const ActorId     &owner_id,
-                                 const std::string &file_id,
-                                 const std::string &key,
-                                 const ActorId     &author_id) {
+                                            const std::string &file_id,
+                                            const std::string &key,
+                                            const ActorId     &author_id) {
     return remove_vector_row(owner_id, file_id, key, author_id);
 }
 
@@ -1649,13 +1662,8 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
 
     auto main_actor = node->account_controller()->current_profile().main()->get();
     auto encryption = dirRow.encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
-    auto dfs_vector = DfsVector::load(node,
-                                      main_actor,
-                                      owner_id,
-                                      file_id,
-                                      encryption,
-                                      Dfs::DataSecurityData(),
-                                      dirRow.type);
+    auto dfs_vector =
+        DfsVector::load(node, main_actor, owner_id, file_id, encryption, Dfs::DataSecurityData(), dirRow.type);
 
     if (!dfs_vector.has_value()) {
         return;
@@ -1704,19 +1712,19 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     }
 
     auto dfs_vector = !is_network ? DfsVector::load(node,
-                                                      signer_actor.value(),
-                                                      owner_id,
-                                                      file_id,
-                                                      encryption,
-                                                      security_data,
-                                                      dir_row->type)
-                                   : DfsVector::load_network(node,
-                                                             signer_actor.value(),
-                                                             owner_id,
-                                                             file_id,
-                                                             encryption,
-                                                             security_data,
-                                                             dir_row->type);
+                                                    signer_actor.value(),
+                                                    owner_id,
+                                                    file_id,
+                                                    encryption,
+                                                    security_data,
+                                                    dir_row->type)
+                                  : DfsVector::load_network(node,
+                                                            signer_actor.value(),
+                                                            owner_id,
+                                                            file_id,
+                                                            encryption,
+                                                            security_data,
+                                                            dir_row->type);
 
     if (!dfs_vector.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
@@ -1792,9 +1800,15 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
         return;
     }
 
+    auto available_state = dir_row->state;
+    if (available_state == Dfs::FileState::Ready
+        && !is_file_already_downloaded(owner_id, file_id, dir_row->hash)) {
+        available_state = Dfs::FileState::Known;
+    }
+
     auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
                                                 .file_id  = file_id,
-                                                .state    = dir_row->state,
+                                                .state    = available_state,
                                                 .hash     = dir_row->hash };
     responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
 }
@@ -1977,17 +1991,20 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     }
 
     if (dir_row.type == Dfs::FileType::Folder) {
-        auto db_instance  = dirs_manager_.get_db_instance();
-        auto dir_row2     = dir_row;
-        dir_row2.state    = Dfs::FileState::Ready;
-        DbRow dirRowDb    = Utils::to_dbrow(dir_row2);
+        auto db_instance = dirs_manager_.get_db_instance();
+        auto dir_row2    = dir_row;
+        dir_row2.state   = Dfs::FileState::Ready;
+        DbRow dirRowDb   = Utils::to_dbrow(dir_row2);
         if (auto it = dirRowDb.find("prev_file_id"); it != dirRowDb.end() && it->second.empty()) {
             dirRowDb.erase(it);
         }
-        bool  insertRes   = db_instance->replace(DfsT::DirsFile::TableNameActorsFiles, dirRowDb);
+        bool insertRes = db_instance->replace(DfsT::DirsFile::TableNameActorsFiles, dirRowDb);
 
         eLog("[addFolder] owner={}, name={}, file_id={}, result={}",
-             owner_id.to_string(), dir_row.name, dir_row.file_id, insertRes);
+             owner_id.to_string(),
+             dir_row.name,
+             dir_row.file_id,
+             insertRes);
 
         if (!insertRes) {
             eLog("[Dfs] addFolder: insert failed");
@@ -2029,16 +2046,19 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
 
     auto db_instance = dirs_manager_.get_db_instance();
 
-    auto dir_row2   = dir_row;
-    dir_row2.state  = Dfs::FileState::Known;
-    DbRow dirRowDb  = Utils::to_dbrow(dir_row2);
+    auto dir_row2  = dir_row;
+    dir_row2.state = Dfs::FileState::Known;
+    DbRow dirRowDb = Utils::to_dbrow(dir_row2);
     if (auto it = dirRowDb.find("prev_file_id"); it != dirRowDb.end() && it->second.empty()) {
         dirRowDb.erase(it);
     }
-    bool  insertRes = db_instance->replace(DfsT::DirsFile::TableNameActorsFiles, dirRowDb);
+    bool insertRes = db_instance->replace(DfsT::DirsFile::TableNameActorsFiles, dirRowDb);
 
     eLog("[addFile] owner={}, name={}, file_id={}, result={}",
-         owner_id.to_string(), dir_row.name, dir_row.file_id, insertRes);
+         owner_id.to_string(),
+         dir_row.name,
+         dir_row.file_id,
+         insertRes);
 
     if (!insertRes) {
         auto errorStr = fmt::format("[Dfs] addFile: insert failed:{} {}",
@@ -2217,8 +2237,7 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
                 return std::unexpected(ExportFileError::Unknown);
             }
 
-            auto res =
-                Cryptography::symmetric_decrypt(ByteArray(encrypted_name.value()).toBytes(), key.value());
+            auto res = Cryptography::symmetric_decrypt(ByteArray(encrypted_name.value()).toBytes(), key.value());
             if (res.has_value()) {
                 auto name = ByteArray(res.value()).toString();
                 output_path.append(name);
@@ -2596,21 +2615,22 @@ std::vector<ActorId> DfsController::startup_sync_actors() const {
     std::set<ActorId> actors;
 
     actors.insert(node->network_id());
+    actors.insert(startup_metadata_actors_.begin(), startup_metadata_actors_.end());
     actors.insert(priority_actors_.begin(), priority_actors_.end());
     {
         std::lock_guard lock(requested_sync_actors_mutex_);
         actors.insert(requested_sync_actors_.begin(), requested_sync_actors_.end());
     }
 
-    for (const auto& actor_id : node->account_controller()->accounts_ids()) {
+    for (const auto &actor_id : node->account_controller()->accounts_ids()) {
         actors.insert(actor_id);
     }
 
-    for (const auto& file_link : priority_file_link_) {
+    for (const auto &file_link : priority_file_link_) {
         actors.insert(file_link.owner_id);
     }
 
-    std::erase_if(actors, [](const ActorId& actor_id) {
+    std::erase_if(actors, [](const ActorId &actor_id) {
         return actor_id.is_zero();
     });
 
@@ -2629,13 +2649,14 @@ void DfsController::sync(const std::string &identifier) {
             return;
         }
 
-        auto actors = startup_sync_actors();
+        auto       actors           = startup_sync_actors();
         const auto responses_before = staged_startup_response_count();
 
         eLog("[Dfs] Staged startup sync: identifier={}, actors={}", identifier, actors.size());
         dirs_manager_.temp_sync_actors(identifier, actors);
 
-        QTimer::singleShot(15000, node, [this, identifier, responses_before]() {
+        constexpr auto stagedFallbackDelayMs = 5000;
+        QTimer::singleShot(stagedFallbackDelayMs, node, [this, identifier, responses_before]() {
             ThreadPoolBoost::instance_dfs()->post([this, identifier, responses_before]() {
                 if (mode() != DfsMode::Light) {
                     return;
@@ -2680,7 +2701,7 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
     }
 
     std::vector<ActorId> requestedActors(uniqueActors.begin(), uniqueActors.end());
-    const auto responses_before = staged_startup_response_count();
+    const auto           responses_before = staged_startup_response_count();
     ThreadPoolBoost::instance_dfs()->post(
         [this, identifiers = std::move(identifiers), actors = std::move(requestedActors)]() {
             for (const auto &identifier : identifiers) {
