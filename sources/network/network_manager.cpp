@@ -37,6 +37,9 @@
 #include <vector>
 
 #include <QJsonObject>
+#include <QMetaObject>
+#include <QPointer>
+#include <QThread>
 
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
@@ -132,8 +135,48 @@ NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
     clear_network_caches_timer_ = new QTimer(this);
     calculate_traffic_          = CalculateTraffic::get_instance();
 
+    reconnect_timer_->setSingleShot(true);
+    clear_network_caches_timer_->setSingleShot(true);
     connect(clear_network_caches_timer_, &QTimer::timeout, this, &NetworkManager::clear_network_caches);
-    clear_network_caches_timer_->start(20000);
+    connect(node, &ExtraChainNode::runtimeActivityChanged, this, [this](RuntimeActivity activity) {
+        if (this->node->runtime_profile() == RuntimeProfile::FullNode) {
+            return;
+        }
+
+        if (activity == RuntimeActivity::Background) {
+            std::vector<std::pair<int, QPointer<SocketService>>> active_services;
+            {
+                auto locked = *connections_;
+                for (auto *service : *locked) {
+                    if (!service || !service->is_active()) {
+                        continue;
+                    }
+
+                    int score = 0;
+                    if (service->is_constant()) {
+                        score = 1;
+                    }
+                    if (service->ip().toStdString() == first_node_) {
+                        score = 2;
+                    }
+                    active_services.emplace_back(score, service);
+                }
+            }
+
+            std::stable_sort(active_services.begin(),
+                             active_services.end(),
+                             [](const auto &left, const auto &right) {
+                                 return left.first > right.first;
+                             });
+            const auto keep_count = this->node->runtime_limits().peer_limit;
+            for (std::size_t index = keep_count; index < active_services.size(); ++index) {
+                if (active_services[index].second) {
+                    emit active_services[index].second->close();
+                }
+            }
+        }
+        schedule_reconnection(activity == RuntimeActivity::Background ? 60000 : 1000);
+    });
 
     process();
 
@@ -194,15 +237,35 @@ void NetworkManager::process() {
 #endif
 
     connect(reconnect_timer_, &QTimer::timeout, this, &NetworkManager::reconnection);
-    reconnect_timer_->start(Utils::RECONNECT_INTERVAL);
+    schedule_reconnection(Utils::RECONNECT_INTERVAL);
+}
+
+void NetworkManager::schedule_reconnection(int delay_ms) {
+    if (delay_ms < 0) {
+        return;
+    }
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, delay_ms]() {
+                schedule_reconnection(delay_ms);
+            },
+            Qt::QueuedConnection);
+        return;
+    }
+    if (!reconnect_timer_->isActive() || reconnect_timer_->remainingTime() > delay_ms) {
+        reconnect_timer_->start(delay_ms);
+    }
 }
 
 void NetworkManager::reconnection() {
     if (this->node->account_controller()->empty()) {
+        schedule_reconnection(30000);
         return;
     }
 
     if (this->failed_ips_.contains(this->first_node_)) {
+        schedule_reconnection(60000);
         return;
     }
 
@@ -255,6 +318,7 @@ void NetworkManager::reconnection() {
 
     if (!skip_first_node) {
         this->connect_network();
+        schedule_reconnection(10000);
         return;
     }
 
@@ -280,6 +344,16 @@ void NetworkManager::reconnection() {
         const int delay       = std::min(5000 * (1 << entry.attempts), max_delay_ms);
         entry.next_attempt_ms = now + delay;
     }
+
+    int next_delay_ms = node->runtime_activity() == RuntimeActivity::Background ? 60000 : 30000;
+    for (const auto &[ip, entry] : reconn_) {
+        if (!need_reconnect.contains(ip) || failed_ips_.contains(ip)) {
+            continue;
+        }
+        next_delay_ms =
+            std::min(next_delay_ms, static_cast<int>(std::max<qint64>(1000, entry.next_attempt_ms - now)));
+    }
+    schedule_reconnection(next_delay_ms);
 }
 
 void NetworkManager::setup_proxy(QNetworkProxy::ProxyType type,
@@ -337,7 +411,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                 eLog("{}", ips);
                 */
 
-                if (active_connections_count() >= Network::maxConnections) {
+                if (active_connections_count() >= max_connections()) {
                     eLog("shareConnections ignored by max connections limit");
 
                     if (init_ip != first_node_) {
@@ -492,6 +566,11 @@ void NetworkManager::check_connections_status() {
 void NetworkManager::start_network() {
     eLog("[NetworkManager] Start servers... {}", (ws_port == 17593 ? "Network" : "Else"));
 
+    if (node->runtime_profile() == RuntimeProfile::MobileLight) {
+        eLog("[NetworkManager] Inbound server is disabled for the mobile light profile");
+        return;
+    }
+
     if (!local_) {
         eLog("[NetworkManager] Can't detect local ip");
         return;
@@ -538,7 +617,7 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
         isConstant = true;
     }
 
-    if (active_connections_count() >= Network::maxConnections) {
+    if (active_connections_count() >= max_connections()) {
         if (isConstant && !remove_one_connection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
             return;
@@ -635,6 +714,25 @@ void NetworkManager::clear_network_caches() {
                 ++it;
             }
         }
+    }
+
+    if (!forwarded_messages_->empty() || !messages_->empty() || !msg_hash_list_.empty()) {
+        schedule_cache_cleanup();
+    }
+}
+
+void NetworkManager::schedule_cache_cleanup() {
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this,
+            [this]() {
+                schedule_cache_cleanup();
+            },
+            Qt::QueuedConnection);
+        return;
+    }
+    if (!clear_network_caches_timer_->isActive()) {
+        clear_network_caches_timer_->start(120000);
     }
 }
 
@@ -933,6 +1031,11 @@ void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage 
     network_forwarded_messages_locked->emplace(message_edited.message_id,
                                                std::make_pair(package_data.prev_identifier,
                                                               QDateTime::currentDateTime()));
+    const auto max_entries = node->runtime_limits().cached_transactions;
+    while (network_forwarded_messages_locked->size() > max_entries) {
+        network_forwarded_messages_locked->erase(network_forwarded_messages_locked->begin());
+    }
+    schedule_cache_cleanup();
 }
 
 void NetworkManager::save_to_cache(const std::string &serialized_message,
@@ -1071,6 +1174,11 @@ int NetworkManager::active_connections_count() {
     return count;
 }
 
+int NetworkManager::max_connections() const {
+    const auto profile_limit = node->runtime_limits().peer_limit;
+    return profile_limit == 0 ? static_cast<int>(Network::maxConnections) : static_cast<int>(profile_limit);
+}
+
 std::vector<std::string> NetworkManager::active_connection_identifiers() const {
     std::vector<std::string> identifiers;
     auto                     connectionsLocked = *connections();
@@ -1109,6 +1217,11 @@ bool NetworkManager::check_message_count(const std::string &msg) {
 
     if (it == msg_hash_list_.end()) {
         msg_hash_list_.insert(hashMsg, { 0, QDateTime::currentSecsSinceEpoch() });
+        const auto max_entries = static_cast<qsizetype>(node->runtime_limits().cached_transactions);
+        while (msg_hash_list_.size() > max_entries) {
+            msg_hash_list_.erase(msg_hash_list_.begin());
+        }
+        schedule_cache_cleanup();
     } else {
         if (connections_->empty() || it.value().first == connections_->size() - 1) {
             msg_hash_list_.erase(it);
@@ -1190,26 +1303,26 @@ void NetworkManager::message_received(const std::string &message,
         bool should_ignore = (type == MessageType::DagTransaction || type == MessageType::NewActor
                               || type == MessageType::CoinReward);
 
-        if (!should_ignore
-            && (messages_->contains(message_id)
-                || message_body.init_sender_id == node->account_controller()->system_actor().id())) {
-            // eWarning(
-            //     "Network Message ignored: already achieved such Request with messageId: {}, from: {}, type: {}",
-            //     messageId,
-            //     identifier,
-            //     type);
-            return;
-        }
+        {
+            auto messages_locked = *messages_;
+            if (!should_ignore
+                && (messages_locked->contains(message_id)
+                    || message_body.init_sender_id == node->account_controller()->system_actor().id())) {
+                return;
+            }
 
-        auto res = messages_->emplace(message_id, std::make_pair(identifier, QDateTime::currentDateTime()));
-        if (!res.second) {
-            // eWarning(
-            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type:
-            //     {}", messageId, identifier, type);
-            return;
-        } else {
-            // eInfo("MessageID emplaced: {}", messageId);
+            auto res = messages_locked->emplace(message_id,
+                                                std::make_pair(identifier, QDateTime::currentDateTime()));
+            if (!res.second) {
+                return;
+            }
+
+            const auto max_entries = node->runtime_limits().cached_transactions;
+            while (messages_locked->size() > max_entries) {
+                messages_locked->erase(messages_locked->begin());
+            }
         }
+        schedule_cache_cleanup();
     } else if (status == MessageStatus::Response) {
         auto network_forwarded_messages_locked = *forwarded_messages_;
         auto searchRes                         = network_forwarded_messages_locked->find(message_id);
@@ -1429,7 +1542,11 @@ void NetworkManager::message_received(const std::string &message,
                 break;
             }
 
-            node->actor_index()->save_actor(actor_result.value());
+            auto save_result = node->actor_index()->save_actor(actor_result.value());
+            if (!save_result.has_value() && save_result.error() != ActorSaveError::AlreadyExists) {
+                eWarning("[NetworkManager] Cannot save actor: error {}",
+                         static_cast<int>(save_result.error()));
+            }
         }
 
         break;
@@ -2112,6 +2229,7 @@ void NetworkManager::remove_socket_connection() {
         connection->deleteLater();
     }
     check_connections_status();
+    schedule_reconnection(1000);
 }
 
 void NetworkManager::socket_error(Network::SocketServiceError error,
@@ -2137,6 +2255,8 @@ void NetworkManager::socket_error(Network::SocketServiceError error,
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
         return;
     }
+
+    schedule_reconnection(5000);
 
     /*
     if (error != Network::SocketServiceError::DuplicateIdentifier
@@ -2329,7 +2449,7 @@ void NetworkManager::onNewWsConnection() {
         eFatal("[WS] Error: ws == nulltpr");
 
     bool needToDelete = false;
-    if (active_connections_count() >= Network::maxConnections) {
+    if (active_connections_count() >= max_connections()) {
         if (!remove_one_connection()) {
             eLog(
                 "[NetworkManager] Can't connect from WS server because the maximum number of "
@@ -2338,14 +2458,19 @@ void NetworkManager::onNewWsConnection() {
         }
     }
 
+    if (needToDelete) {
+        ws->close();
+        ws->deleteLater();
+        return;
+    }
+
     auto service = new WebSocketService(ws, node, this, false);
     service->set_direction(SocketDirection::Incoming);
     connectWsService(service);
-    if (!needToDelete)
-        reconnections_to_identifier_->emplace(NetworkReconnect { .ip       = service->ip(),
-                                                                 .port     = service->port(),
-                                                                 .protocol = Network::Protocol::WebSocket },
-                                              "");
+    reconnections_to_identifier_->emplace(NetworkReconnect { .ip       = service->ip(),
+                                                             .port     = service->port(),
+                                                             .protocol = Network::Protocol::WebSocket },
+                                          "");
 }
 
 bool NetworkManager::remove_one_connection() {

@@ -373,7 +373,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
 bool Dag::submit_network_transaction(const Transaction  &transaction,
                                      const Responder    &responder,
                                      AdmissionCompletion completion) {
-    if (!admission_state_ || !accepting_messages_.load()) {
+    if (!accepting_messages_.load()) {
         if (completion) {
             try {
                 completion(std::unexpected(TransactionProveError::AdmissionBusy), false);
@@ -384,6 +384,20 @@ bool Dag::submit_network_transaction(const Transaction  &transaction,
             }
         }
         return false;
+    }
+
+    if (!admission_state_) {
+        auto result = network_transaction_immediate(transaction, responder);
+        if (completion) {
+            try {
+                completion(result, result.has_value());
+            } catch (const std::exception &error) {
+                eWarning("[Dag] Admission callback failed: {}", error.what());
+            } catch (...) {
+                eWarning("[Dag] Admission callback failed");
+            }
+        }
+        return result.has_value();
     }
     return admission_state_->submit(transaction, responder, std::move(completion));
 }

@@ -83,7 +83,10 @@ bool SocketService::is_closed() {
 
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // eLog("[Socket] First message: {}", handshake);
-    eLog("[Socket] First message: {} | IP: {} | network id: {}", direction_, ip_, node->actor_index()->network_id());
+    eLog("[Socket] First message: {} | IP: {} | network id: {}",
+         direction_,
+         ip_,
+         node->actor_index()->network_id());
 
     // eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
     //      handshake,
@@ -125,7 +128,10 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
         // TODO: for user
         eInfo("Please, update client");
 
-        eLog("[Socket] {} Closing: version {} incompatible with {}", direction_, handshake.version, extrachain_version);
+        eLog("[Socket] {} Closing: version {} incompatible with {}",
+             direction_,
+             handshake.version,
+             extrachain_version);
         emit error(error_type,
                    QString::fromStdString(handshake.version),
                    ip_.toStdString(),
@@ -135,7 +141,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     // 2. Network id check
-    auto json_network_id_creation         = ActorId::create(handshake.network_id);
+    auto json_network_id_creation = ActorId::create(handshake.network_id);
     if (!json_network_id_creation.has_value()) {
         // error
         return false;
@@ -151,7 +157,10 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     if (!(something_empty || is_network_ids_contains)) {
-        eLog("[Socket] {} Closing: network id mismatch (local: {}, remote: {})", direction_, our_network_id, json_network_id);
+        eLog("[Socket] {} Closing: network id mismatch (local: {}, remote: {})",
+             direction_,
+             our_network_id,
+             json_network_id);
         emit error(Network::SocketServiceError::IncompatibleNetwork,
                    QString::fromStdString(handshake.network_id),
                    ip_.toStdString(),
@@ -216,8 +225,12 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     // 6.
-    if (node->network()->active_connections_count() >= Network::maxConnections) {
-        emit error(Network::SocketServiceError::MaxConnections, "", ip_.toStdString(), identifier_.toStdString(), direction_);
+    if (node->network()->active_connections_count() >= node->network()->max_connections()) {
+        emit error(Network::SocketServiceError::MaxConnections,
+                   "",
+                   ip_.toStdString(),
+                   identifier_.toStdString(),
+                   direction_);
         eLog("[Socket] {} Closing: maximum connections reached", direction_);
         return false;
     }
@@ -225,7 +238,11 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // 7. Checking slots availability
     if (!handshake.is_available) {
         eLog("[Socket] {} Closing: peer unavailable", direction_);
-        emit error(Network::SocketServiceError::PeerUnavailable, "", ip_.toStdString(), identifier_.toStdString(), direction_);
+        emit error(Network::SocketServiceError::PeerUnavailable,
+                   "",
+                   ip_.toStdString(),
+                   identifier_.toStdString(),
+                   direction_);
         emit shareConnections(handshake.connections);
         return false;
     }
@@ -276,7 +293,7 @@ QByteArray SocketService::generate_first_message() {
         }
     }
 
-    msg.is_available = node->network()->active_connections_count() < Network::maxConnections;
+    msg.is_available = node->network()->active_connections_count() < node->network()->max_connections();
 
     auto handshake = Json::serialize(msg);
     return QByteArray::fromStdString(handshake);

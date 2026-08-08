@@ -318,6 +318,8 @@ private:
                                   MessageStatus      status_info  = MessageStatus::NoStatus);
 
     void clear_network_caches();
+    void schedule_cache_cleanup();
+    void schedule_reconnection(int delay_ms);
 
     void add_all_services_identifiers_to_message(MessageBody& msg);
 
@@ -419,6 +421,7 @@ public:
     bool                     is_connection_exists(const std::string& identifier);
     bool                     is_active_connection_exists();
     int                      active_connections_count();
+    int                      max_connections() const;
     std::vector<std::string> active_connection_identifiers() const;
     qint64                   connection_pending_bytes(const std::string& identifier) const;
 

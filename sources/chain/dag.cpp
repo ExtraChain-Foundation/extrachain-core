@@ -39,14 +39,7 @@ static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
 
 // Pack files are shipped in fixed-size chunks so neither side holds a whole pack
 // in memory and large packs stay well under the socket buffer limit.
-static constexpr std::size_t PACK_SYNC_CHUNK  = 256 * 1024;
-static constexpr std::size_t PACK_SYNC_WINDOW = 8;
-
-// Upper bound on live transactions parked in the pending set while sync runs.
-// They are replayed once sync completes; the cap stops a flood from growing
-// memory without bound during a long sync.
-static constexpr std::size_t MAX_CACHED_TXS = 100000;
-
+static constexpr std::size_t PACK_SYNC_CHUNK = 256 * 1024;
 // The hot section database and pack registry recover exact bounds after a
 // crash. The range file is a compact startup hint, so do not replace it for
 // every accepted section.
@@ -86,16 +79,16 @@ Dag::Dag(ExtraChainNode *node)
         std::make_unique<HotSectionStore>(std::filesystem::path(ChainConst::DAG_HOT_FOLDER) / "HotSections.db");
 
     auto settings = Utils::read_settings();
-    if (settings.dag_mode.has_value()) {
-        mode_ = settings.dag_mode.value();
-    }
-
-    if (!settings.dag_mode.has_value()) {
-#ifdef IS_APP_UI_CLIENT
-        set_mode(DagMode::Light);
-#else
+    if (node->runtime_profile() != RuntimeProfile::FullNode) {
+        mode_ = DagMode::Light;
+        if (settings.dag_mode != DagMode::Light) {
+            settings.dag_mode = DagMode::Light;
+            Utils::write_settings(settings);
+        }
+    } else if (settings.dag_mode.has_value()) {
+        mode_ = *settings.dag_mode;
+    } else {
         set_mode(DagMode::Full);
-#endif
     }
 
     // ChainIndex defaults to enabled on Full nodes and disabled on Light;
@@ -218,7 +211,7 @@ Dag::Dag(ExtraChainNode *node)
         node->actor_index()->set_network_id(network_id);
     }
 
-    if (mode_ == DagMode::Light) {
+    if (mode_ == DagMode::Light && cache_.section() == SectionId(-1)) {
         clear_dag();
         cache_.reset_db();
         cache_.init_db();
@@ -231,7 +224,9 @@ Dag::Dag(ExtraChainNode *node)
     // didn't pack out-of-order completions). Sweep them on startup.
     try_pack_hot();
 
-    admission_state_ = create_admission_state(this);
+    if (node->runtime_profile() == RuntimeProfile::FullNode) {
+        admission_state_ = create_admission_state(this);
+    }
 
     // Automatically start so existing callers get the previous default lifecycle.
     // Callers that want explicit control can stop()/start() around migration etc.
@@ -449,11 +444,12 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
             // the sync path) and replay it via process_cached_transactions() once
             // sync finishes. Capped so a flood during a long sync can't grow
             // memory without bound (the per-sender rate limit above also helps).
-            if (cached_txs_size() < MAX_CACHED_TXS) {
+            const auto cache_limit = node->runtime_limits().cached_transactions;
+            if (cached_txs_size() < cache_limit) {
                 this->add_to_cached_tx(transaction);
             } else {
                 eWarning("[Dag] Pending tx cache full ({}), dropping {} during sync",
-                         MAX_CACHED_TXS,
+                         cache_limit,
                          transaction.hash());
             }
 
@@ -2653,18 +2649,18 @@ void Dag::clear_dag_folder() {
 
     // Clean up leftover from previous interrupted deletion
     if (QDir(remove_path).exists()) {
-        std::thread([path = remove_path.toStdString()]() {
+        ThreadPoolBoost::instance()->post([path = remove_path.toStdString()]() {
             QDir(QString::fromStdString(path)).removeRecursively();
-        }).detach();
+        });
     }
 
     // One-time migration: if dag exists and not yet migrated
     if (QDir(dag_path).exists() && !QFile::exists(migrated_path)) {
         (void)QFile(migrated_path).open(QFile::WriteOnly);
         QDir().rename(dag_path, remove_path);
-        std::thread([path = remove_path.toStdString()]() {
+        ThreadPoolBoost::instance()->post([path = remove_path.toStdString()]() {
             QDir(QString::fromStdString(path)).removeRecursively();
-        }).detach();
+        });
 
         QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
         QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
@@ -2945,7 +2941,8 @@ void Dag::issue_pack_window(const Responder &responder) {
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
         if (!pack_sync_in_flight_ || pack_sync_total_size_ == 0)
             return;
-        while (pack_sync_outstanding_offsets_.size() < PACK_SYNC_WINDOW
+        const auto sync_window = node->runtime_limits().pack_sync_window;
+        while (pack_sync_outstanding_offsets_.size() < sync_window
                && pack_sync_next_offset_ < pack_sync_total_size_) {
             const auto offset = pack_sync_next_offset_;
             pack_sync_next_offset_ += PACK_SYNC_CHUNK;
@@ -4058,8 +4055,13 @@ void Dag::clear_controls(const SectionId &from) {
 void Dag::clear_controls_async(const SectionId &from) {
     eLog("[Dag] Clear controls from {}...", from);
 
-    const size_t    num_threads = std::thread::hardware_concurrency();
+    if (current_section_ < from) {
+        return;
+    }
+
     const SectionId total       = current_section_ - from + 1;
+    const auto      total_count = static_cast<std::size_t>(std::max(1, total.to_int().value_or(1)));
+    const size_t    num_threads = std::min(node->runtime_limits().general_workers, total_count);
     const SectionId chunk       = total / num_threads;
 
     std::vector<std::future<void>> futures;
