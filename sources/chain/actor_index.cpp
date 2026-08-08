@@ -20,6 +20,7 @@
 #include "chain/actor_index.h"
 
 #include <QDir>
+#include <QThread>
 
 #include "network/network_manager.h"
 #include "utils/thread_pool_boost.h"

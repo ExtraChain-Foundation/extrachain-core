@@ -28,6 +28,12 @@
 #include <QSaveFile>
 #include <QStringList>
 
+#include <QDir>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QProcess>
+#include <QStringList>
+
 #include "dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
