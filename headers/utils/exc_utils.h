@@ -68,9 +68,21 @@ enum class DagMode {
     Light
 };
 
+// Three levels, differing in how much of the `.dirs` catalogue a node keeps and how
+// many payloads it stores. See docs/DIRS_SYNC.md.
+//   Full      — whole catalogue, stores payloads too (relay / server / stand node).
+//   Light     — whole catalogue, payloads only on demand. The default for a client:
+//               a complete catalogue is what lets a node tell "I don't have it" from
+//               "it doesn't exist", which every repair and audit path depends on.
+//   Selective — the catalogue itself is narrowed to explicitly chosen actors
+//               (startup_sync_actors()). Cheapest, but the node knowingly has no view
+//               of anything it did not ask for.
+// Order matters: values are serialised into settings and sent in the handshake, so new
+// modes are appended, never inserted.
 enum class DfsMode {
     Full,
-    Light
+    Light,
+    Selective
 };
 
 enum class Force {

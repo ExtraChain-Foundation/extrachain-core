@@ -270,7 +270,9 @@ void DirsManager::network_response_dir_rows(
     // actor currently has no DFS rows.
     node->dfs()->mark_startup_sync_response();
 
-    if (node->dfs()->mode() == DfsMode::Light) {
+    // Only Selective narrows the catalogue. Light keeps every dir row it is offered —
+    // it economises on payloads, not on knowing what exists.
+    if (node->dfs()->mode() == DfsMode::Selective) {
         const auto startup_actors = node->dfs()->startup_sync_actors();
         const std::set<ActorId> allowed_actors(startup_actors.begin(), startup_actors.end());
         const auto received_actor_count = response_data.size();
@@ -432,9 +434,9 @@ void DirsManager::network_request_all(const Responder& responder, const std::vec
         auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
 
         if (requested_actors.empty()) {
-            if (node->dfs()->mode() == DfsMode::Light) {
+            if (node->dfs()->mode() == DfsMode::Selective) {
                 actors = node->dfs()->startup_sync_actors();
-                eLog("[Dfs] Legacy startup sync limited for light node: actors={}", actors.size());
+                eLog("[Dfs] Legacy startup sync limited for selective node: actors={}", actors.size());
             } else {
                 actors = node->actor_index()->read_all_actors_ids();
                 std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {

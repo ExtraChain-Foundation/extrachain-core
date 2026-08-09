@@ -66,6 +66,9 @@ DfsController::DfsController(ExtraChainNode *node)
     });
 
 #ifdef IS_APP_UI_CLIENT
+    // Light, not Selective: a client keeps the full catalogue and fetches payloads on
+    // demand. Narrowing the catalogue itself is opt-in (Selective) and must not be the
+    // default — a node that never learns a vector exists cannot repair itself.
     set_mode(DfsMode::Light);
 #endif
 
@@ -2740,7 +2743,9 @@ void DfsController::sync(const std::string &identifier) {
         // download) gets re-offered on every sync until it actually lands.
         check_all_files(identifier);
 
-        if (mode() == DfsMode::Full) {
+        // Light pulls the whole catalogue exactly like Full: it saves on payloads, not
+        // on knowing what exists. Only Selective asks for a narrowed actor list.
+        if (mode() != DfsMode::Selective) {
             dirs_manager_.temp_sync_all(identifier);
             return;
         }
@@ -2756,7 +2761,7 @@ void DfsController::sync(const std::string &identifier) {
         constexpr auto stagedFallbackDelayMs = 3000;
         QTimer::singleShot(stagedFallbackDelayMs, node, [this, identifier, responses_before]() {
             ThreadPoolBoost::instance_dfs()->post([this, identifier, responses_before]() {
-                if (mode() != DfsMode::Light) {
+                if (mode() != DfsMode::Selective) {
                     return;
                 }
 
@@ -2789,7 +2794,8 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
         return false;
     }
 
-    // Otherwise the Light filter in network_response_dir_rows would drop the response to this request.
+    // Otherwise the Selective filter in network_response_dir_rows would drop the response to this
+    // request.
     bool has_new_actors = false;
     {
         std::lock_guard lock(requested_sync_actors_mutex_);
