@@ -81,6 +81,12 @@ guard stays as a safety net either way, not as the answer.
 
 ### 0.45 Vector rows are lost in transit and never re-requested
 
+> Structural fix designed in `docs/DB_POOL.md`: a bounded sqlite connection pool with LRU
+> eviction and per-file exclusivity. A long-lived connection *per file* is not viable —
+> the stand already reached 613 vector files per node, and Android/iOS cap file
+> descriptors around 1024. The busy timeout and the off-thread write stay as the layer
+> below it, not as duplicates of it.
+
 **Found 2026-08-09 on the night run. This is chat message loss.** Vectors carry chat
 history, so a row that never arrives is a message the user will not see.
 
