@@ -424,6 +424,45 @@ Minimum fix: reject a transaction whose timestamp is further ahead of local time
 small tolerance, and further behind than the acceptance window allows; keep anti-spam
 state on the receiver's own clock rather than on a value the sender supplies.
 
+### 0.9 A restarted node accepts a transaction into a section the network has closed
+
+**Found 2026-08-10 by the first chaos run after all the fixes.** This is the defect the
+clean runs could not show: with `NO_CHAOS` the divergence never appeared, and with kills
+and freezes it appeared within seven minutes and kept growing (mismatches 0 → 0 → 6 → 9).
+
+Section 49 on a six-node network:
+
+```
+d1,d3,d5,d6 sec49: 0beda1e3 27bef24e c0e503bc fb486bc7
+d2,d4       sec49: 0beda1e3 27bef24e c0e503bc fb486bc7 + fe11838f
+both groups sec50: c6c4a851            (identical — only 49 differs)
+```
+
+`fe11838f` is not missing anywhere; it is **extra** in the two nodes that had just been
+disrupted — d2 was killed at 01:25:35 and stored it at 01:25:47, d4 had been frozen at
+01:23:26. Everyone else had already moved past section 49 and placed the same transaction
+in a later section.
+
+So a node that was dead or frozen comes back, receives a transaction that is late by its
+own reckoning but still inside its acceptance window, and writes it into a section the
+rest of the network has already sealed. The section set — not just the control hash —
+stays mutable behind the network's back.
+
+Notes that matter for the fix:
+
+- **The gap-repair logic added on 2026-08-09 does not help here.** It looks for *missing*
+  sections; here the section is present with extra content. Different failure, different
+  detector.
+- Control hashes do detect it (that is how it surfaced), but the recovery path refetches
+  the interval — and a refetch merges, so an extra transaction is not removed by it.
+  Removing content is a different operation from adding it.
+- This is the concrete, reproducible form of §1 below. §1 says controls are computed over
+  mutable sections; this shows the *membership itself* is mutable after a disruption,
+  which is the stronger statement.
+
+Reproduce: `HARNESS_SEED=9110 REAL=1 DAG_NODES=6` with chaos enabled (no `NO_CHAOS`),
+~7 minutes.
+
 ### 1. Controls are computed over still-mutable sections → control chain splits
 
 **The only remaining cause of divergence after all the fixes below.** Final 3.5h run:
