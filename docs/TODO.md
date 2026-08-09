@@ -38,6 +38,16 @@ through handshake sync — and a node that was busy at the wrong moment can stay
 row indefinitely, or hold a row whose payload never follows. There is no explicit policy
 saying who is supposed to know what.
 
+**Partly answered 2026-08-09: some dir rows are simply lost on write.** The same
+`database is locked` failure that was dropping vector rows (§0.45) also hits the dirs
+catalogue — `INSERT OR REPLACE INTO ActorsFiles` failed twice on the night run, on the
+node that ended up worst off. Rare next to the 123 vector-row failures, but the same
+class: the row is dropped, nothing retries, and the node never learns the file exists.
+So "why is the row missing" has at least one concrete mechanical answer, now fixed by the
+busy timeout in `c1a05508`. The distribution-model question below still stands — a busy
+timeout reduces the loss rate, it does not give the node a way to notice a row it never
+received.
+
 **Chosen model: light by default, high-light as a priority overtake on top of it.**
 
 - **light (the default, always).** A node pulls the *whole* `.dirs` catalogue — metadata
