@@ -261,6 +261,36 @@ So the two mechanisms are complementary, not alternatives: the scan starts the s
 control decides what is actually wrong. Controls would still be the only way to catch a
 section that is present but *corrupt*, which the scan cannot see at all.
 
+### 0.475 A control that is already wrong on an old boundary is never re-checked
+
+Interval verification only fires when the cache advances onto a **new** boundary
+(`DagCache::check_and_update_cache` → `DagIntervalHash`). Nothing ever revisits a boundary
+the chain has moved past, so a control that was already wrong when we started looking
+stays wrong forever.
+
+Measured 2026-08-09: corrupt the control at boundary 20 on one node of a two-node network
+(leaving the chain itself intact, so only the control path could react), then let the chain
+grow to 89 and settle.
+
+```
+h1 sec20 control: 7b6c059b652b5ffe     correct
+h2 sec20 control: ffffffffffffffff     still corrupt
+log:              no "Control mismatch" at all — never even compared
+```
+
+`write_control` *would* overwrite it — a differing hash falls through the
+`section->control == hash` early return and is written. The gap is purely that nothing
+asks about old boundaries.
+
+**Not a problem for a chain built from scratch**: in the same run every control boundary
+(0, 20, 40, 60) matched on both nodes, including after a gap at 15-18 was detected and
+repaired — the control was recomputed correctly. This only bites data that was *already*
+damaged: a node with a corrupted store, or the residue of an earlier bug.
+
+Options when it becomes relevant: a slow background reconciliation of old boundaries, or
+checking a few random past boundaries on each handshake (faster detection, slightly more
+traffic). Neither is urgent while nodes start clean.
+
 ### 0.48 A console command during startup crashes the node (SIGSEGV)
 
 Reproduced 2026-08-09 while testing the gap fix. A node was restarted and a
