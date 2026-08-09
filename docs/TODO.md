@@ -241,6 +241,26 @@ Before switching it on, work out why it was disabled at birth — the obvious ha
 sync storm when many nodes disagree at once, or a loop when the mismatch cannot be
 resolved (the same shape as the retry budget in `1ba9fa7e`).
 
+**Measured 2026-08-09: controls alone are not enough to repair a hole.** Tempting theory —
+skip the local contiguity scan entirely and rely on control comparison, since
+`hash_interval` already hashes a missing section as empty (`dag.cpp:3126`), so an empty
+section and a lost one produce *different* interval hashes by construction. A/B within one
+build, same test (delete sections 15-18 from a node, restart, settle):
+
+| | outcome |
+|---|---|
+| gap scan on | `REPAIRED`, log shows `chain is missing section` + `gap at section` |
+| gap scan off | `NOT REPAIRED`, log shows **nothing** — no control comparison ran at all |
+
+The reason: the control check in `send_sync_request` (`last_control->control !=
+info.last_control_hash`) only runs *inside* a sync that has already started, and without
+the scan nothing starts one — `start_check` returns early. Controls detect divergence once
+you are talking; they do not initiate the conversation.
+
+So the two mechanisms are complementary, not alternatives: the scan starts the sync, the
+control decides what is actually wrong. Controls would still be the only way to catch a
+section that is present but *corrupt*, which the scan cannot see at all.
+
 ### 0.48 A console command during startup crashes the node (SIGSEGV)
 
 Reproduced 2026-08-09 while testing the gap fix. A node was restarted and a
