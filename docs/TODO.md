@@ -121,14 +121,44 @@ Supporting evidence from the logs: the two nodes that *received* the most
 `Vector content package` messages (2424 and 2837) are also among the biggest losers, so
 packets are arriving — something after receipt drops them.
 
-Two candidates worth separating first:
-- `DfsController::network_vector_add` ignores the result of `local_add` except for the UI
-  signal, so a failed write is silent (`dfs_controller.cpp:1847`);
-- `DfsVector::local_add` returns `true` when it *skips* a row as stale
-  (`dfs_vector.cpp:461`), so "skipped" and "written" are indistinguishable to the caller.
+**Cause found: the sqlite write fails with `database is locked` and nobody retries.**
 
-Neither is proven to be the cause, but both mean a dropped row leaves no trace, which is
-why this went unnoticed for the whole run.
+The node log at the exact second of a lost row:
+
+```
+05:05:46.846 [Warning] [DbConnector] ImplementationInsert: Execution failed: database is locked
+  …/5ff6b708…: INSERT OR REPLACE INTO Vector ('id','message','sign','actor','timestamp','status')
+```
+
+Matching failure counts against measured losses across the run:
+
+| Node | `INSERT INTO Vector` failures | Rows actually missing |
+|---|---|---|
+| d1 | 31 | 24 |
+| d2 | 14 | 0 (holds the complete set) |
+| d3 | 23 | 12 |
+| d4 | 22 | 16 |
+| d5 | 34 | 15 |
+| d6 | 28 | 11 |
+
+The node that hit the lock least is the only one with a complete vector. So the loss is
+not in the network at all — the packet arrives and is then dropped by a contended sqlite
+file. That also explains the bursts: lock contention comes in waves under load.
+
+The row disappears silently because nothing on the path treats a failed write as an
+event worth reacting to:
+- `DbConnector` logs a warning and returns false — no retry, no busy-timeout backoff
+  (`db_connector.cpp:673`);
+- `DfsVector::local_add` propagates that false, but also returns `true` when it *skips* a
+  row as stale (`dfs_vector.cpp:461`), so "written", "skipped" and "failed" collapse into
+  one boolean;
+- `DfsController::network_vector_add` ignores the result entirely except for the UI signal
+  (`dfs_controller.cpp:1847`).
+
+Fix direction, cheapest first: give the sqlite connection a busy timeout so a contended
+write waits instead of failing outright; then make a genuinely failed row write
+re-queue rather than vanish; and separate "skipped as stale" from "write failed" in the
+return type, because a silent boolean is what let this run for hours unnoticed.
 
 ### 0.5 A node can report "listening" while its listener accepts nothing
 
