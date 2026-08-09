@@ -1838,35 +1838,48 @@ void DfsController::network_response_content_vector(
 }
 
 void DfsController::network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
-    auto res = make_vector(owner_id, file_id);
-    if (!res.has_value()) {
-        return;
-    }
-
-    auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.local_add(row, true);
-    // load_manager_.finish_him(owner_id, dir_row);
-
-    auto hash_size = dfs_vector.data_hash_size();
-    if (hash_size.has_value()) {
-        dir_row.hash          = hash_size.value().first;
-        dir_row.size          = hash_size.value().second;
-        dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
-        Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
-                                                                owner_id,
-                                                                dir_row,
-                                                                false);
-    }
-
-    if (operation_res) {
-        // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
-        if (row.at("status") == "1") {
-            emit vectorRowAdded(owner_id, dir_row, row);
-        } else {
-            emit vectorRowRemoved(owner_id, dir_row, row);
+    // Off the dispatch thread, like network_response_content_vector next door. This path
+    // writes sqlite, and since the connection now waits for a contended write lock
+    // instead of dropping the row, doing it inline could stall message dispatch for
+    // seconds — the same starvation that used to push consensus traffic out of the
+    // acceptance window behind bulk transfers.
+    ThreadPoolBoost::instance_dfs()->post([this, owner_id, file_id, row] {
+        auto res = make_vector(owner_id, file_id);
+        if (!res.has_value()) {
+            return;
         }
-        node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
-    }
+
+        auto &[dir_row, dfs_vector] = res.value();
+        auto operation_res          = dfs_vector.local_add(row, true);
+        // load_manager_.finish_him(owner_id, dir_row);
+
+        if (!operation_res) {
+            // Was silent before: a row rejected here is a chat message the user never
+            // sees, and nothing re-requests it (docs/TODO.md 0.45).
+            eWarning("[Dfs] Vector row not stored: {} / {}", owner_id, file_id);
+        }
+
+        auto hash_size = dfs_vector.data_hash_size();
+        if (hash_size.has_value()) {
+            dir_row.hash          = hash_size.value().first;
+            dir_row.size          = hash_size.value().second;
+            dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+            Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
+                                                                    owner_id,
+                                                                    dir_row,
+                                                                    false);
+        }
+
+        if (operation_res) {
+            // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
+            if (row.at("status") == "1") {
+                emit vectorRowAdded(owner_id, dir_row, row);
+            } else {
+                emit vectorRowRemoved(owner_id, dir_row, row);
+            }
+            node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
+        }
+    });
 }
 
 void DfsController::network_request_file_state(const ActorId     &owner_id,
