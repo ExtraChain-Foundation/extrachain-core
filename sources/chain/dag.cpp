@@ -2167,6 +2167,16 @@ void Dag::handle_sync_request() {
         }
     }
 
+    // A hole in the middle never sets need_sync: that flag is derived purely from
+    // heights (`info.last_section_id > my_index`), and a gapped node sits at the same
+    // height as everyone else. Without this check start_check detects the gap, calls
+    // into the sync, and the sync immediately answers "nothing to do" — measured: the
+    // node logged `chain is missing section f` and then `BC 4`, leaving the hole
+    // permanent. See docs/TODO.md 1.1.
+    if (!need_sync && mode_ == DagMode::Full && this->find_first_gap().has_value()) {
+        need_sync = true;
+    }
+
     if (!need_sync && !need_recontrol && mode_ == DagMode::Full) {
         this->set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
