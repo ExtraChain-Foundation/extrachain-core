@@ -140,6 +140,18 @@ sealing interval, and the size *and hash* of every replicated file. Scan node lo
 failure markers the core emits. Write one line per audit to a progress log so a long run
 can be read after the fact.
 
+Two of those audits must be **presence-first**, against the union of what exists anywhere
+in the network rather than against what the node claims to hold (see trap 7):
+
+- *section gaps* — which section ids is each node missing, ignoring a small margin at the
+  live tip. This is the only check that catches lost history; heights, per-section diffs
+  and even control hashes can all look healthy while a node is missing sections outright.
+- *catalogue gaps* — which `.dirs` rows is each node missing, and for the rows it does
+  hold, whether the payload is physically on disk.
+
+Both are cheap (a directory listing and a read-only sqlite query) and both found real
+defects that every content-comparison metric had reported as clean.
+
 **Step 8 — chaos (separate mode).** Kill nodes with an uncatchable signal, freeze them with
 stop/continue, restart them, and let the harness revive whatever died. Keep this switchable:
 a clean run proves correctness, a chaos run proves recovery, and mixing them makes failures
@@ -196,6 +208,21 @@ be attributed.
 6. **Disk budget is mandatory.** N copies of large files fill a disk within an hour; one
    early run took the host to zero free space (ENOSPC). Keep a `statvfs` guard and delete
    generated sources immediately after hashing them.
+7. **A missing artifact is not a differing artifact.** Comparing sections (or dir rows)
+   across nodes only inspects what both nodes have, so a node missing history outright
+   scores as *perfect agreement*. On 2026-08-09 this produced a confident report of "276
+   sections compared, 0 transaction differences" while one node was permanently missing
+   sections 1-4. Audit **presence against the union of what exists anywhere**, then
+   compare contents — in that order. The same trap already bit the vector audit once
+   (a dir row is not a payload); it is the single most reliable way to get a false clean
+   bill of health.
+8. **A node's own bookkeeping can be the thing that is broken.** In that run the gapped
+   node's `range` file was byte-identical to the healthy ones (`first=0, last=…`): the
+   structure cannot represent a hole in the middle, so the node sincerely reported a
+   complete chain. Never audit a node using only the state it reports about itself.
+9. **The tip of the chain is not a gap.** Sections are being written while the audit
+   runs, so the newest one or two are legitimately absent on some nodes. Ignore a small
+   margin below the highest known section, or every live run reports false gaps.
 
 ---
 
