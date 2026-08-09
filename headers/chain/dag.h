@@ -609,6 +609,12 @@ private:
     bool                                         search_control_              = false;
     bool                                         light_requested_             = false;
 
+    // Interval hashes from peers for boundaries we have not sealed yet: section -> hash.
+    // Without this the claim is dropped and the verification never happens, because our
+    // control appears a little later than the peer's. Bounded to the newest few.
+    mutable std::mutex                     pending_intervals_mutex_;
+    std::map<SectionId, std::string>       pending_intervals_;
+
     // Sections a peer confirmed it does not have either. A section file only exists once
     // a transaction lands in it, so a section with no traffic legitimately has no file
     // anywhere — indistinguishable, locally, from one that was lost. Without this set a

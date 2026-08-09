@@ -660,6 +660,30 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
         return std::nullopt;
     }
 
+    // A peer may have claimed this boundary before we sealed it. Now that we have our own
+    // control, that claim is finally comparable — this is the point of remembering it.
+    {
+        std::string peer_hash;
+        {
+            std::lock_guard lock(pending_intervals_mutex_);
+            if (auto it = pending_intervals_.find(section_id); it != pending_intervals_.end()) {
+                peer_hash = it->second;
+                pending_intervals_.erase(it);
+            }
+        }
+
+        if (!peer_hash.empty()) {
+            if (peer_hash != hash) {
+                eCritical("[Dag] Control mismatch at section {}: ours {}, peer {}",
+                          section_id,
+                          hash,
+                          peer_hash);
+            } else {
+                eLog("[Dag] Deferred interval check at {}: match", section_id);
+            }
+        }
+    }
+
     return WriteResult::Write;
 }
 
@@ -2062,21 +2086,6 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    // eLog("Hash interval: {}", hash_interval);
-    auto last_control = this->find_last_control(hash_interval.to - 1);
-    if (!last_control.has_value()) {
-        eWarning("[Dag] Hash interval check: no last control");
-        // return;
-        this->start_control(Force::Active);
-
-        last_control = this->find_last_control(hash_interval.to - 1);
-        if (!last_control.has_value()) {
-            return;
-        }
-    }
-
-    // eLog("[Dag] Last control: {}", last_control);
-
     if (hash_interval.to > current_section_) {
         eLog("[Dag] Hash interval check: ignore #2");
         return;
@@ -2087,8 +2096,24 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    if (last_control->section_id != hash_interval.to) {
-        eLog("[Dag] Hash interval check: ignore #4");
+    // Read the control AT the boundary the peer is talking about. This used to call
+    // find_last_control(to - 1), which returns our *latest* control — so once we were a
+    // single interval ahead, section_id != to and the check was skipped as "ignore #4".
+    // Measured on a two-node stand: 4 of 6 interval exchanges died there, i.e. the live
+    // verification mostly did not run at all.
+    auto last_control = this->read_control(hash_interval.to);
+
+    if (!last_control.has_value()) {
+        // The peer sealed this boundary before us. Keep the claim instead of discarding
+        // it — we are Ready and only slightly behind, so the control is minutes away and
+        // the comparison becomes possible then. Bounded: only the newest few boundaries
+        // are worth holding, older ones are past the point of acting on.
+        std::lock_guard lock(pending_intervals_mutex_);
+        pending_intervals_[hash_interval.to] = hash_interval.hash;
+        while (pending_intervals_.size() > 8) {
+            pending_intervals_.erase(pending_intervals_.begin());
+        }
+        eLog("[Dag] Hash interval check: no control at {} yet — remembered", hash_interval.to);
         return;
     }
 
