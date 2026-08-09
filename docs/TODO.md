@@ -57,6 +57,13 @@ The order matters. The inverse — fetch only what is asked for, and the full ca
 learns a vector exists, for which no catch-up can help because it has nothing to
 reconcile against.
 
+The full design, including what already exists in the code and what has to be built, is
+in `docs/DIRS_SYNC.md`. Key finding from writing it: `network_request_dir_rows` — the
+handler for a *targeted* dir-row request — is disabled by an unconditional `return;`, and
+no path fetches rows incrementally (`get_dir_rows(db_, actor, 0)` always reads from zero).
+So a node literally has no way to ask for what it is missing: the only live option is a
+full dump. That is the mechanism behind this whole item.
+
 Mechanism is the second question, once the model is fixed: how `.dirs` is obtained
 efficiently (incremental deltas, digest comparison with peers, periodic reconciliation)
 so that both "row known, payload missing" and "row unknown" self-heal. The current queue
