@@ -69,6 +69,46 @@ efficiently (incremental deltas, digest comparison with peers, periodic reconcil
 so that both "row known, payload missing" and "row unknown" self-heal. The current queue
 guard stays as a safety net either way, not as the answer.
 
+### 0.45 Vector rows are lost in transit and never re-requested
+
+**Found 2026-08-09 on the night run. This is chat message loss.** Vectors carry chat
+history, so a row that never arrives is a message the user will not see.
+
+Measured on the six-node run, auditing every vector that actually holds data (the stand
+creates hundreds of vectors but only a handful are written to — the rest are empty and
+prove nothing):
+
+| Vector | Union of rows | Rows missing per node |
+|---|---|---|
+| `5b7d5346` | 265 | d1:7 d2:13 d3:8 d4:0 d5:4 d6:5 |
+| `5ff6b708` | 273 | d1:0 d2:0 d3:1 d4:4 d5:11 d6:8 |
+| `3ef29d38` | 253 | d1:0 d2:0 d3:0 d4:0 d5:1 d6:1 |
+
+Three of eight vectors with data are incomplete somewhere, and **every node loses
+something** — 4 to 16 rows each. It is not one bad node: the node holding the complete
+set differs per vector.
+
+What rules out "still in flight":
+
+- sampling the same vector 40 s and 75 s apart returns **the identical missing id list** —
+  not one row caught up in either interval, while new rows kept arriving normally;
+- `ONLY_ON_THIS_NODE = 0` everywhere: no node holds a row the others lack, so this is
+  pure loss, never divergence. Laggards are strict subsets of the union.
+
+That combination is the signature: replication delivers new rows fine, so the gap stays
+at a roughly constant size and *looks* like lag, but the rows already dropped are gone for
+good. Nothing detects or re-requests them — the same shape as the DAG section gap in §1.1,
+one level up.
+
+Note this is invisible to the existing `full_copies` metric, which only asks whether the
+vector *file* exists on each node. It was 200/200 for the whole run while rows were being
+lost. Row-level comparison against the union is what surfaces it.
+
+Not yet investigated: whether the drop is on the sender side (row appended locally,
+broadcast never sent or sent to a subset) or the receiver side (packet arrives, write
+fails silently). Start by counting `DfsVectorContent` sends against receives for one
+vector under load.
+
 ### 0.5 A node can report "listening" while its listener accepts nothing
 
 Seen once on a six-node stand (not reproducible on a rerun of the same seed, so a startup
