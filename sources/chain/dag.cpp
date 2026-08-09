@@ -1256,7 +1256,41 @@ std::optional<SectionId> Dag::find_first_gap(std::size_t limit) const {
         return std::nullopt;
     }
 
-    auto from = first_saved_section_ == SectionId(-1) ? SectionId(0) : first_saved_section_;
+    // A Full node must hold the chain from 0, so scan from 0 rather than from
+    // first_saved_section_: that field is set from whatever section happened to arrive
+    // first (live traffic can set it to 5 on a node that joined late — dag.cpp:764/792),
+    // which is exactly the case this check exists to catch. Starting at
+    // first_saved_section_ would step over the very gap we are looking for.
+    auto from = SectionId(0);
+    if (mode_ != DagMode::Full) {
+        from = first_saved_section_ == SectionId(-1) ? SectionId(0) : first_saved_section_;
+    }
+
+    // Fast path: count the section files and compare with how many the range implies.
+    // A healthy chain (the overwhelming majority of calls) costs a few directory reads
+    // instead of one stat per section — the per-section scan below is ~2.6 us/section,
+    // i.e. a quarter of a second once the chain reaches 100k sections.
+    if (limit == 0) {
+        try {
+            std::uintmax_t counted = 0;
+            for (SectionId folder = file_section(from); folder <= file_section(current_section_);
+                 folder++) {
+                auto dir = fmt::format("{}/{}", ChainConst::DAG_FOLDER, folder.to_string());
+                std::error_code ec;
+                for (const auto &entry : std::filesystem::directory_iterator(dir, ec)) {
+                    (void)entry;
+                    counted++;
+                }
+            }
+
+            if (SectionId(static_cast<long long>(counted)) >= current_section_ - from + SectionId(1)) {
+                return std::nullopt;
+            }
+        } catch (const std::exception &) {
+            // Fall through to the exact scan: a counting failure must never be read
+            // as "no gap".
+        }
+    }
 
     std::size_t seen = 0;
     for (SectionId i = from; i <= current_section_; i++) {
