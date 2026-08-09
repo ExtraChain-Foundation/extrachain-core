@@ -609,6 +609,14 @@ private:
     bool                                         search_control_              = false;
     bool                                         light_requested_             = false;
 
+    // Sections a peer confirmed it does not have either. A section file only exists once
+    // a transaction lands in it, so a section with no traffic legitimately has no file
+    // anywhere — indistinguishable, locally, from one that was lost. Without this set a
+    // contiguity scan would treat every quiet section on a real chain as a gap and keep
+    // asking the network for something nobody can send.
+    mutable std::mutex      known_empty_sections_mutex_;
+    std::set<SectionId>     known_empty_sections_;
+
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
 
     //

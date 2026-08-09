@@ -1285,7 +1285,18 @@ std::optional<SectionId> Dag::find_first_gap(std::size_t limit) const {
                 }
             }
 
-            if (SectionId(static_cast<long long>(counted)) >= current_section_ - from + SectionId(1)) {
+            // Sections known to be empty network-wide have no file anywhere, so they are
+            // not expected on disk. Only the fast "definitely no gap" answer is given
+            // here; a shortfall falls through to the exact scan rather than being
+            // reported as a gap.
+            std::size_t known_empty = 0;
+            {
+                std::lock_guard lock(known_empty_sections_mutex_);
+                known_empty = known_empty_sections_.size();
+            }
+
+            auto expected = current_section_ - from + SectionId(1) - SectionId(static_cast<long long>(known_empty));
+            if (SectionId(static_cast<long long>(counted)) >= expected) {
                 return std::nullopt;
             }
         } catch (const std::exception &) {
@@ -1294,13 +1305,19 @@ std::optional<SectionId> Dag::find_first_gap(std::size_t limit) const {
         }
     }
 
+    std::set<SectionId> empty_snapshot;
+    {
+        std::lock_guard lock(known_empty_sections_mutex_);
+        empty_snapshot = known_empty_sections_;
+    }
+
     std::size_t seen = 0;
     for (SectionId i = from; i <= current_section_; i++) {
         if (limit != 0 && seen++ >= limit) {
             break;
         }
 
-        if (!std::filesystem::exists(this->file_path(i))) {
+        if (!std::filesystem::exists(this->file_path(i)) && !empty_snapshot.contains(i)) {
             return i;
         }
     }
@@ -1807,6 +1824,25 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
 
         update_range();
+
+        // Anything at or below the answered boundary that the peer did not send, it does
+        // not have either — on a real chain that means a section with no transactions,
+        // which never gets a file anywhere. Remember those so the contiguity scan stops
+        // reporting them as gaps and the sync stops asking for them forever.
+        {
+            std::set<SectionId> delivered;
+            for (const auto &section_data : file_sync->sections) {
+                delivered.insert(section_data.section_id);
+            }
+
+            std::lock_guard lock(known_empty_sections_mutex_);
+            auto            from = first_saved_section_ == SectionId(-1) ? SectionId(0) : first_saved_section_;
+            for (SectionId i = from; i <= file_sync->to; i++) {
+                if (!delivered.contains(i) && !std::filesystem::exists(this->file_path(i))) {
+                    known_empty_sections_.insert(i);
+                }
+            }
+        }
 
         if (file_sync->last_section > sync_last_index_) {
             sync_last_index_ = file_sync->last_section;
