@@ -188,7 +188,29 @@ Supporting evidence from the logs: the two nodes that *received* the most
 `Vector content package` messages (2424 and 2837) are also among the biggest losers, so
 packets are arriving — something after receipt drops them.
 
-**Cause found: the sqlite write fails with `database is locked` and nobody retries.**
+**Second cause, found under chaos 2026-08-10: a row broadcast while a node is down is
+never resent.** The busy-timeout fix below removes the loss under clean load — a five-hour
+run measured 0 rows lost against 459 before it. With kills and freezes the loss returns,
+by a different route:
+
+```
+aa6b08b2  d3 missing 339d9f, c6662e   d4 missing 69b266
+after 90s: caught up 0 — same ids, while the vector grew 18 → 25 rows
+d3, d4 logs: 0 "database is locked", 0 "Vector row not stored", 0 "handle failed"
+chaos log:   KILL d3 01:40:23, KILL d4 01:40:55, FREEZE d4 01:43:03
+```
+
+Nothing failed on the receiving side because the row never arrived: `DfsVectorAdd` is a
+fire-and-forget broadcast, so a node that is dead or frozen at that moment simply misses
+it, and nothing reconciles rows afterwards. The vector file exists, its dir row exists,
+`full_copies` reports 200/200 — only the contents differ, which no current metric checks.
+
+This is the same shape as the DAG section gap (§1.1) one level up: the data is gone and
+the node has no record that anything is missing. A fix needs row-level reconciliation —
+compare row sets with a peer (count plus a digest) after any reconnect, and pull what is
+missing — not just a retry on write.
+
+**First cause: the sqlite write fails with `database is locked` and nobody retries.**
 
 The node log at the exact second of a lost row:
 
