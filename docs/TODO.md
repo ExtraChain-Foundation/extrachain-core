@@ -210,6 +210,13 @@ the node has no record that anything is missing. A fix needs row-level reconcili
 compare row sets with a peer (count plus a digest) after any reconnect, and pull what is
 missing — not just a retry on write.
 
+**Files do not have this problem, and the contrast points at the fix.** In the same chaos
+run, with 38 kills and freezes, every node held all 42 files — because a file has a
+catch-up path: the `.dirs` row replicates, the node sees a row it has no payload for,
+queues it and downloads it. Vector *rows* have no equivalent: they arrive by broadcast or
+not at all. Giving rows the same "I know it exists, therefore I can fetch it" property is
+what closes this, and it is why the answer is reconciliation rather than a better retry.
+
 **First cause: the sqlite write fails with `database is locked` and nobody retries.**
 
 The node log at the exact second of a lost row:
