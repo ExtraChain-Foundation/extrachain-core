@@ -1423,7 +1423,12 @@ void Dag::start_check() {
             if (!gap.has_value()) {
                 return;
             }
-            eLog("[Dag] start_check: chain has a gap at section {} — running sync", gap.value());
+            // eCritical, not eLog: this is missing history, and if no peer can supply
+            // the section it will repeat on every connection. It must be visible in a
+            // log rather than blend into routine sync chatter.
+            eCritical("[Dag] start_check: chain is missing section {} (current {}) — syncing",
+                      gap.value(),
+                      current_section_);
         } else {
             eLog("[Dag] start_check: no genesis section yet — running initial sync");
         }
@@ -1828,6 +1833,11 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 eCritical("[Dag] Gap at section {} not delivered after {} attempts — giving up this round",
                           gap.value(),
                           max_gap_retries);
+                // Clear the counter here, not on the next differing gap: leaving it
+                // spent would make every later round give up immediately on this same
+                // section, turning a loop guard into a permanent refusal to repair.
+                gap_retry_section_ = SectionId(-1);
+                gap_retry_count_   = 0;
             } else {
                 eLog("[Dag] File sync: gap still at section {}, continuing from there", gap.value());
                 emit node->dagTimerStart(15002);
