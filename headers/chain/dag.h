@@ -609,6 +609,11 @@ private:
     bool                                         search_control_              = false;
     bool                                         light_requested_             = false;
 
+    // Boundary -> when we last refetched it after a control mismatch. Several peers
+    // reporting the same disagreement must not each trigger their own refetch.
+    mutable std::mutex                       refetched_intervals_mutex_;
+    std::map<SectionId, std::uint64_t>       refetched_intervals_;
+
     // Interval hashes from peers for boundaries we have not sealed yet: section -> hash.
     // Without this the claim is dropped and the verification never happens, because our
     // control appears a little later than the peer's. Bounded to the newest few.

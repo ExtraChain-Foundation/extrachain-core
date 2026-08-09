@@ -674,7 +674,10 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
 
         if (!peer_hash.empty()) {
             if (peer_hash != hash) {
-                eCritical("[Dag] Control mismatch at section {}: ours {}, peer {}",
+                // No responder here — this runs from write_control, not a network
+                // handler, so we cannot ask that peer directly. The next interval
+                // exchange for this boundary will hit the live path and refetch.
+                eCritical("[Dag] Control mismatch at section {} (deferred): ours {}, peer {}",
                           section_id,
                           hash,
                           peer_hash);
@@ -2118,21 +2121,37 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     }
 
     if (last_control->control != hash_interval.hash) {
-        eLog("[Dag] Hash interval check: false. Hash interval: {}, last control: {}. Need sync",
-             hash_interval,
-             last_control);
+        eCritical("[Dag] Control mismatch at {}: ours {}, peer {} — refetching interval {}..{}",
+                  hash_interval.to,
+                  last_control->control,
+                  hash_interval.hash,
+                  hash_interval.from,
+                  hash_interval.to);
 
-        // this->start_sync();
-        return;
-        if (current_section_ < hash_interval.to) {
-            if (status_ != DagStatus::Ready) {
-                status_ = DagStatus::Maybe;
+        // Was `return;` since the feature was written (9608d71b), so a node has never
+        // acted on a control mismatch — it logged "Need sync" and carried on for the
+        // whole run. Only the refetch branch is enabled: the other one flips status_ to
+        // Maybe from a network handler, which is the kind of side effect that likely got
+        // this disabled in the first place. Re-fetching the interval is idempotent —
+        // write_section merges — so the worst case is redundant traffic, not corruption.
+        //
+        // Guard against a stampede: several peers reporting the same boundary would
+        // otherwise each trigger their own refetch of the same range.
+        {
+            std::lock_guard lock(refetched_intervals_mutex_);
+            const auto      now = Utils::current_date_ms();
+            if (auto it = refetched_intervals_.find(hash_interval.to);
+                it != refetched_intervals_.end() && now - it->second < 60'000) {
+                eLog("[Dag] Interval {} already refetched recently — skipping", hash_interval.to);
+                return;
             }
-
-            this->start_check(); // TODO: warning: check or sync?
-        } else {
-            this->request_file_sections(hash_interval.from, hash_interval.to, responder);
+            refetched_intervals_[hash_interval.to] = now;
+            while (refetched_intervals_.size() > 16) {
+                refetched_intervals_.erase(refetched_intervals_.begin());
+            }
         }
+
+        this->request_file_sections(hash_interval.from, hash_interval.to, responder);
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
     }
