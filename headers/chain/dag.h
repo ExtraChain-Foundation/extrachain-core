@@ -427,6 +427,19 @@ public:
     void update_range();
 
     /**
+     * @brief First section id missing from the local chain, if any
+     *
+     * `range` records only first/last, so a hole in the middle is unrepresentable and a
+     * gapped node reports a complete chain (see docs/TODO.md 1.1). This walks the section
+     * files between first_saved_section_ and current_section_ and returns the first id
+     * that is absent. Existence checks only — no section is parsed.
+     *
+     * @param limit Stop after inspecting this many ids (0 = no limit)
+     * @return std::optional<SectionId> The first missing section, or nullopt if contiguous
+     */
+    std::optional<SectionId> find_first_gap(std::size_t limit = 0) const;
+
+    /**
      * @brief Search for a transaction by its hash
      *
      * @param hash The hash to search for
@@ -584,6 +597,10 @@ private:
     DagSyncStatus                                sync_status_  = DagSyncStatus::None; // Current sync status
     DagSyncStatus                                check_status_ = DagSyncStatus::None; // Current check status
     SectionId                                    sync_last_index_;                    // Last section index to sync
+    // Gap-repair progress guard: a peer that keeps answering without ever delivering the
+    // missing section must not make us request it forever. Reset whenever the gap moves.
+    SectionId                                    gap_retry_section_ = SectionId(-1);
+    int                                          gap_retry_count_   = 0;
     int                                          requests_count_ = 0; // Number of outstanding requests
     int                                          min_req_count_  = 5;
     std::unordered_map<std::string, DagLastInfo> last_info_;  // Last chain info from peers

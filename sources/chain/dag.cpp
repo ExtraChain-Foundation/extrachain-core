@@ -1251,6 +1251,27 @@ void Dag::update_range() {
     }
 }
 
+std::optional<SectionId> Dag::find_first_gap(std::size_t limit) const {
+    if (current_section_ == SectionId(-1)) {
+        return std::nullopt;
+    }
+
+    auto from = first_saved_section_ == SectionId(-1) ? SectionId(0) : first_saved_section_;
+
+    std::size_t seen = 0;
+    for (SectionId i = from; i <= current_section_; i++) {
+        if (limit != 0 && seen++ >= limit) {
+            break;
+        }
+
+        if (!std::filesystem::exists(this->file_path(i))) {
+            return i;
+        }
+    }
+
+    return std::nullopt;
+}
+
 std::optional<Transaction> Dag::search_duplicate_by_hash(const std::string &hash, int deep) const {
     int count = 0;
 
@@ -1355,9 +1376,21 @@ void Dag::start_check() {
         }
         auto zero = this->read_section(SectionId(0));
         if (zero.has_value() && !zero->transactions.empty()) {
-            return;
+            // Holding genesis is not the same as holding the chain. A node that joined
+            // while the network was still near height 0 asks for a single section (the
+            // request range is capped by the peers' height at handshake time), declares
+            // the sync complete, and afterwards only ever accepts live traffic — leaving
+            // a permanent hole that `range` cannot even express, since it stores just
+            // first/last. Seen on a six-node run: one node missing sections 1-4 forever
+            // while reporting a range identical to the healthy nodes'. See TODO.md 1.1.
+            auto gap = this->find_first_gap();
+            if (!gap.has_value()) {
+                return;
+            }
+            eLog("[Dag] start_check: chain has a gap at section {} — running sync", gap.value());
+        } else {
+            eLog("[Dag] start_check: no genesis section yet — running initial sync");
         }
-        eLog("[Dag] start_check: no genesis section yet — running initial sync");
     }
 #endif
 
@@ -1737,6 +1770,39 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         if (file_sync->last_section > sync_last_index_) {
             sync_last_index_ = file_sync->last_section;
             emit node->dagSyncStart(current_section_, sync_last_index_);
+        }
+
+        // Reaching the target index is not the same as having a contiguous chain: the
+        // target is the peers' height from handshake time, and on a network that was
+        // near zero it is satisfied immediately (0 >= -1) without a single section
+        // being fetched. Keep pulling while a hole remains. See TODO.md 1.1.
+        if (auto gap = this->find_first_gap();
+            gap.has_value() && gap.value() <= sync_last_index_ && file_sync->to >= gap.value()) {
+            constexpr int max_gap_retries = 5;
+
+            if (gap.value() != gap_retry_section_) {
+                gap_retry_section_ = gap.value();
+                gap_retry_count_   = 0;
+            }
+
+            if (++gap_retry_count_ > max_gap_retries) {
+                // The peer answers but never delivers this section. Stop asking rather
+                // than loop: the gap stays visible to start_check, which will retry on
+                // the next sync round, possibly against a different peer.
+                eCritical("[Dag] Gap at section {} not delivered after {} attempts — giving up this round",
+                          gap.value(),
+                          max_gap_retries);
+            } else {
+                eLog("[Dag] File sync: gap still at section {}, continuing from there", gap.value());
+                emit node->dagTimerStart(15002);
+                this->request_file_sections(gap.value(),
+                                            std::min(sync_last_index_, gap.value() + SYNC_SECTIONS_BATCH),
+                                            responder);
+                return;
+            }
+        } else {
+            gap_retry_section_ = SectionId(-1);
+            gap_retry_count_   = 0;
         }
 
         if (file_sync->to >= sync_last_index_ - 1) {
@@ -2127,10 +2193,23 @@ void Dag::handle_sync_request() {
         if (!zero.has_value() || zero->transactions.empty()) {
             eLog("[Dag] handle_sync_request: genesis section missing — syncing from 0");
             sync_index = SectionId(0);
+        } else if (auto gap = this->find_first_gap(); gap.has_value()) {
+            // Resume from the hole, not from current+1: live traffic keeps advancing
+            // current_section_, so a node that skipped sections while joining would
+            // otherwise never ask for them again. Section sync merges idempotently.
+            eLog("[Dag] handle_sync_request: gap at section {} — syncing from there", gap.value());
+            sync_index = gap.value();
         }
     }
 
     sync_last_index_ = nodes_by_block.front().second;
+    // The peers' height is a snapshot from handshake time and can lag our own view;
+    // never let it shrink the sync target below what we already know exists, or the
+    // request range collapses (min(sync_last_index_, ...)) and the sync "completes"
+    // without fetching anything. See TODO.md 1.1.
+    if (current_section_exists && current_section_ > sync_last_index_) {
+        sync_last_index_ = current_section_;
+    }
 
     if (need_recontrol && mode_ == DagMode::Full) {
         if (!last_control.has_value()) {
@@ -2151,7 +2230,10 @@ void Dag::handle_sync_request() {
         }
     }
 
-    if (current_section_exists && current_section_ >= sync_last_index_) {
+    // A gap means work remains even when our height already matches the network's:
+    // being level with the tip says nothing about the middle of the chain.
+    if (current_section_exists && current_section_ >= sync_last_index_
+        && !this->find_first_gap().has_value()) {
         eLog("[Dag] Not need sync");
 
         set_status(DagStatus::Ready);
