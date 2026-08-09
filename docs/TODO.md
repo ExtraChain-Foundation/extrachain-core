@@ -199,16 +199,42 @@ So the control chain did its job exactly as designed: it detected missing histor
 every direct comparison called healthy. That is worth keeping in mind before changing
 when controls are computed (§1) — the mechanism is load-bearing.
 
-The likely origin is the same startup sequence as §1: `sync_last_index_` was `0` because
-the network genuinely had almost no height at that moment, so `file_sync->to >=
-sync_last_index_ - 1` (`0 >= -1`) declared the sync finished before sections 1-4 existed
-anywhere. The node went `Ready`, and from then on it only accepted live traffic — which
-started at section 5. **Not yet proven**: whether the node ever requested 1-4 and lost
-the answer, or never requested them at all.
+**Origin, proven from the log (not inferred).** Two separate failures compound:
+
+*First start, 02:52:10 — the node asks for exactly one section and calls it a day:*
+```
+[Dag] handle_sync_request: genesis section missing — syncing from 0
+[Dag] sync_last_index: 0x0 / 0 sections
+[Dag] Request file sections from 0 to 0      <- asks for section 0 only
+[Dag] File sync completed                     <- 5 ms later
+```
+`sync_last_index_` is the peers' height at handshake time (`nodes_by_block.front()`), which
+was genuinely 0 — the network had just started. The request range is
+`min(sync_last_index_, current + BATCH)` = 0, so only section 0 was ever requested, and
+`file_sync->to >= sync_last_index_ - 1` (`0 >= -1`) immediately declared success. Sections
+1-4 were produced by the network *after* this moment and were never asked for.
+
+*Restart, 02:54:14 — the node comes up with an empty chain and does not sync at all:*
+```
+[Dag] Loaded: 0, first: 0, last cached: -1
+[Dag] Started. Mode: DagMode::Full
+… no start_check, no handle_sync_request, no section request, ever again
+```
+The whole log contains `Started` twice but the sync sequence only once. After the restart
+the node went straight to accepting live traffic, whose first transaction was in **section
+5** — so 1-4 were skipped without a trace.
+
+Why the existing genesis guard did not catch it: `start_check` returns early when section 0
+is present and non-empty, and it *was* present (fetched on the first start). "Has genesis"
+was used as a proxy for "chain is intact", and those are different claims. A node holding
+section 0 and nothing else looks healthy to that check.
 
 What to fix, in order:
 1. **Never conclude a sync from an index that is not yet known.** "Peers report height 0"
-   must mean "nothing to compare against yet", not "we are up to date".
+   must mean "nothing to compare against yet", not "we are up to date". Equally, a node
+   that restarts with an empty (or short) chain while the network is far ahead must sync
+   again — the current `start_check` guard tests only for the presence of section 0, so
+   "I have genesis" is treated as "I have everything".
 2. **A node must be able to notice its own gaps.** `range` records only first/last, so a
    hole in the middle is unrepresentable. Either track the received set, or verify
    contiguity when crossing a control boundary.
