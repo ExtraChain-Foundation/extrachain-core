@@ -397,18 +397,27 @@ DfsVector::generate_content_package_empty() {
 }
 
 bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
-    // Dictionary uses static template, no file to write
-    // Each failure below used to return a bare false, so the caller's warning could not
-    // say which step failed — 966 rejections in three minutes with no way to tell why.
+    // Validate before touching the filesystem. A rejected package must leave nothing
+    // behind: creating the directory first meant a malformed or unsolicited answer left
+    // an empty folder (and, further down, an empty database) for a vector we never
+    // stored. Each failure below also names its step — they all used to return a bare
+    // false, so 966 rejections in three minutes gave no clue which check failed.
+    auto vector_template = dfs_vector_content.vector_template;
+    if (vector_template.fields().size() == 0) {
+        eWarning("[DfsVector] handle_package: empty template for {}", file_id_);
+        return false;
+    }
+
     // The owner's directory may not exist yet: vector content can arrive before anything
     // else has created it, and std::ofstream then fails with "Failed to open file for
     // writing" — 300 such failures on one node during seeding, each one a vector that
-    // never arrived. Creating it here is cheap and idempotent.
+    // never arrived. Idempotent, and now only reached by a package worth storing.
     if (auto parent = vector_path_.native().parent_path(); !parent.empty()) {
         std::error_code ec;
         std::filesystem::create_directories(parent, ec);
     }
 
+    // Dictionary uses static template, no file to write
     if (file_type_ != Dfs::FileType::Dictionary && !dfs_vector_content.vector_file.empty()) {
         // An empty companion file is normal for a freshly created vector and must not
         // sink the whole package: write_file_content rejects empty content outright
@@ -422,12 +431,6 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
                      dfs_vector_content.vector_file.size());
             return false;
         }
-    }
-
-    auto vector_template = dfs_vector_content.vector_template;
-    if (vector_template.fields().size() == 0) {
-        eWarning("[DfsVector] handle_package: empty template for {}", file_id_);
-        return false;
     }
 
     if (is_encrypted_) {

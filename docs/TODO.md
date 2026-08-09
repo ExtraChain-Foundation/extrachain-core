@@ -348,6 +348,18 @@ So the order is: make every creation path responsible for its own directory (sta
 with `DfsVector::create`), verify replication is unaffected, and only then drop the eager
 calls. Doing it the other way round removes the safety net before the replacement exists.
 
+**Done 2026-08-09** for vectors (`f44fba1a`, `ecdb97ce`): `DfsVector::create` now owns its
+directory, both eager calls are gone, and `handle_package` validates the package *before*
+creating anything — a rejected or unsolicited answer leaves no empty folder behind.
+Measured: owner directories per node 18 → 5, empty ones 0, replication unchanged at
+`full_copies=200/200`.
+
+**Still eager for files.** `LoadManager` creates the owner directory when a file is
+*queued* (`load_manager.cpp:567`), not when the first fragment lands. A download that is
+queued and then never completes — peer gone, file withdrawn, node restarted — leaves an
+empty directory. Moving it to the first fragment write is the same fix, but the file path
+writes fragments from several places, so it needs its own pass and its own verification.
+
 ### 0.48 A console command during startup crashes the node (SIGSEGV)
 
 Reproduced 2026-08-09 while testing the gap fix. A node was restarted and a
