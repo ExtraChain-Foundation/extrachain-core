@@ -95,6 +95,19 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
                                                            Dfs::FileType                  file_type) {
     DfsVector dfs_vector(node, main_actor, file_actor_id, file_id, data_security, security_data, file_type);
 
+    // Own the directory this vector lives in rather than relying on someone having
+    // pre-created a folder for the actor. That pre-creation exists for every *known*
+    // actor, which is what we want to stop doing — a folder should mean "we store
+    // something for this actor", not "we have heard of them" (see docs/TODO.md 0.46).
+    if (auto parent = dfs_vector.file_path_.native().parent_path(); !parent.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(parent, ec);
+        if (ec) {
+            eWarning("[DfsVector] create: cannot create {}: {}", parent.string(), ec.message());
+            return std::unexpected(DfsVectorError::Unknown);
+        }
+    }
+
     // TODO: if vector template has actor, status, timestamp or sign -> error
 
     auto from_template_result = read_template_from_variant(variant_template);
