@@ -234,6 +234,24 @@ is present and non-empty, and it *was* present (fetched on the first start). "Ha
 was used as a proxy for "chain is intact", and those are different claims. A node holding
 section 0 and nothing else looks healthy to that check.
 
+**The gap becomes a money discrepancy.** Checking `dag/cache/BalanceCache.db` across the
+six nodes on the same run: four of six actor balances differ, and the gapped node is short
+by exactly the rewards that were in the sections it never received.
+
+| Actor | Reward in the missing sections 1-4 | Shortfall in the gapped node's cache |
+|---|---|---|
+| `08180ef02c48` | +1 (section 2) | −1 |
+| `6637ac690740` | +2 (section 1) | −2 |
+| `824f8e7a4527` | +2 (section 4) | −2 |
+| `c7513ba48e57` | +1 (section 3) | −1 |
+| **total** | **6** | **−6** |
+
+Coin for coin. So the balance cache itself is not defective — it faithfully sums what the
+node holds — but it inherits the loss silently and turns it into disagreement about
+balances. Worth stating plainly because it raises the severity: a missing section is not
+only a hole in history, it is a wrong balance that no consistency check currently
+compares. `audit_balances.py` in the stand now does compare it.
+
 What to fix, in order:
 1. **Never conclude a sync from an index that is not yet known.** "Peers report height 0"
    must mean "nothing to compare against yet", not "we are up to date". Equally, a node
