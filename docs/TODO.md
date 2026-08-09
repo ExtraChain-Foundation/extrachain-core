@@ -131,6 +131,25 @@ Cost: a control appears with a delay of T (it is a seal on history — no hurry)
 Verification: a combined DAG + DFS run — the control-hash metric must stay clean for the
 whole run (see `TESTING.md`).
 
+**Isolated measurement (2026-08-09, six nodes, real rate).** Comparing every section file
+byte-for-byte between a diverged node and the majority, with the `"control"` field
+stripped out, separates the two questions cleanly:
+
+- sections compared: 276
+- sections whose **transaction payload** differs: **0**
+- sections where **only `control`** differs: 13 — and they are exactly 20, 40, 60, 80,
+  100, 120, 140, 160, 180, 200, … i.e. every control section, without exception
+
+So the data layer is not involved at all: all six nodes agree on the transaction set of
+every section. What splits is the control chain alone, and it splits deterministically at
+every `%20` boundary rather than randomly — which is what rules out a race in replication
+and points at *when* the hash is taken.
+
+The trigger in this run was a late joiner: the node was at height 0 while the others were
+at 4, reached section 20 while earlier sections were still arriving, hashed an incomplete
+base, and every later control inherited the split. Nothing repaired it for the rest of the
+run — consistent with `start_control` walking forward from the last control.
+
 ### 2. Backfill of missed sections inside the acceptance window
 
 A node that was dead or frozen does not pull the transactions it missed
