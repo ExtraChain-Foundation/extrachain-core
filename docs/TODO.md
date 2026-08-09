@@ -427,8 +427,14 @@ state on the receiver's own clock rather than on a value the sender supplies.
 ### 0.9 A restarted node accepts a transaction into a section the network has closed
 
 **Found 2026-08-10 by the first chaos run after all the fixes.** This is the defect the
-clean runs could not show: with `NO_CHAOS` the divergence never appeared, and with kills
-and freezes it appeared within seven minutes and kept growing (mismatches 0 → 0 → 6 → 9).
+clean runs could not show: with `NO_CHAOS` the divergence never appeared; with kills and
+freezes it appeared within seven minutes.
+
+Scale, measured directly (comparing transaction *sets*, ignoring the `control` field):
+**exactly one section out of 290 diverges.** The harness metric climbing 6 → 9 → 12 is
+misleading — it sha256s the whole section file, so every control boundary downstream of
+the split counts as another "mismatch" while its transactions are identical. One content
+divergence, many control consequences.
 
 Section 49 on a six-node network:
 

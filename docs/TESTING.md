@@ -223,6 +223,12 @@ be attributed.
 9. **The tip of the chain is not a gap.** Sections are being written while the audit
    runs, so the newest one or two are legitimately absent on some nodes. Ignore a small
    margin below the highest known section, or every live run reports false gaps.
+10. **Hashing a whole section file conflates content with its control.** The section file
+    contains both the transactions and the `control` field, so one genuine content
+    divergence makes every control boundary after it hash differently too. A "mismatches"
+    counter climbing 6 → 9 → 12 read as a spreading split; comparing transaction *sets*
+    with the control stripped showed exactly one section actually differed out of 290.
+    Report the two separately — they have different causes and different fixes.
 
 ---
 
