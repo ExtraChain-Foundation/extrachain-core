@@ -205,6 +205,42 @@ That is an argument for the timeout being the right first fix, not for it being 
 fix: "effectively all" is not "all", and the second layer — noticing and re-queueing a
 write that fails anyway — is what turns a reduced loss rate into no loss at all.
 
+### 0.47 The node detects a control mismatch and does nothing about it
+
+Control hashes are the one mechanism that reliably catches missing history — they folded
+the whole 1..20 interval into a single value and exposed the gap that every direct
+section-by-section comparison called healthy (§1.1). Detection works.
+
+Acting on it does not. `network_response_hash_interval` compares the peer's control with
+its own and, on a mismatch, logs `Need sync` and returns:
+
+```cpp
+if (last_control->control != hash_interval.hash) {
+    eLog("[Dag] Hash interval check: false. … Need sync", …);
+
+    // this->start_sync();
+    return;                                   // <- everything below is dead code
+    if (current_section_ < hash_interval.to) {
+        …start_check();                       // we are behind: sync
+    } else {
+        …request_file_sections(from, to);     // we differ in a known range: refetch it
+    }
+}
+```
+
+The recovery logic is fully written and unreachable. `git blame`: the `return` was
+introduced **in the same commit that implemented the feature** — `9608d71b [Core] Dag:
+implement control-based sync` (#156, 2025-08-29) — so it has never run.
+
+This matters directly for §1.1: the node that lost sections 1-4 saw its control for
+section 20 disagree with the rest of the network every time it was asked, for 6.5 hours,
+and never acted on it. Re-enabling this would have repaired the gap without any of the
+new gap-detection code.
+
+Before switching it on, work out why it was disabled at birth — the obvious hazard is a
+sync storm when many nodes disagree at once, or a loop when the mismatch cannot be
+resolved (the same shape as the retry budget in `1ba9fa7e`).
+
 ### 0.48 A console command during startup crashes the node (SIGSEGV)
 
 Reproduced 2026-08-09 while testing the gap fix. A node was restarted and a
