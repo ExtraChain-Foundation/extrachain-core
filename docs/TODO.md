@@ -140,14 +140,14 @@ stripped out, separates the two questions cleanly:
 - sections where **only `control`** differs: 13 — and they are exactly 20, 40, 60, 80,
   100, 120, 140, 160, 180, 200, … i.e. every control section, without exception
 
-So the data layer is not involved at all: all six nodes agree on the transaction set of
-every section. What splits is the control chain alone, and it splits deterministically at
-every `%20` boundary rather than randomly — which is what rules out a race in replication
-and points at *when* the hash is taken.
+That comparison covered only sections **present on both nodes**, which is exactly how it
+misled: the diverged node was missing four section files outright, and a comparison of
+what both hold cannot see a hole in one of them. See §1.1 — the control was right and the
+data was not.
 
-**The trigger, traced in the node log.** It is narrower than "controls over mutable
-sections" and worth stating exactly, because it explains why the minority is always a
-single node and always the last one to join:
+**Correction (2026-08-09, traced to the end): in the run below the control split was not
+the defect — it was the detector.** See §1.1. What follows is the trigger of that
+particular run; the mutable-section mechanism above remains a separate, real issue.
 
 ```
 02:52:10.852  [Dag] sync_last_index: 0x0 / 0 sections
@@ -174,6 +174,50 @@ So there are two distinct defects here:
 
 Fixing (1) removes this run's trigger; fixing (2) is what makes the control chain
 self-healing in general, and is the "compute only below the watermark" direction above.
+
+### 1.1 A joining node silently skips sections and reports a complete chain
+
+**This is the actual defect found on 2026-08-09, and it is a data-loss bug, not a
+hashing one.** The control mismatch above was the symptom that exposed it.
+
+On a six-node run the last node to join permanently lacks sections **1, 2, 3 and 4** —
+the files simply do not exist on disk — while holding section 0 and everything from 5
+onward. Four transactions are gone on that node and never come back.
+
+Two things make this worse than a plain gap:
+
+- **The node believes its chain is complete.** Its `range` reads
+  `{"first":"0","last":"2da","last_cached":"2bc"}` — identical to a healthy node's. There
+  is no record that 1-4 were never received, so nothing will ever go looking for them.
+- **It is invisible to a section-by-section comparison.** Diffing the sections two nodes
+  both have shows perfect agreement, because a missing file is not a differing file. The
+  gap only surfaced through the control hash, which folds *the whole interval* into one
+  value: `control(20) = hash(control(0) + hash_interval(1..20))`. Section 0 matched
+  byte-for-byte on both nodes, so the split had to come from the interval — and it did.
+
+So the control chain did its job exactly as designed: it detected missing history that
+every direct comparison called healthy. That is worth keeping in mind before changing
+when controls are computed (§1) — the mechanism is load-bearing.
+
+The likely origin is the same startup sequence as §1: `sync_last_index_` was `0` because
+the network genuinely had almost no height at that moment, so `file_sync->to >=
+sync_last_index_ - 1` (`0 >= -1`) declared the sync finished before sections 1-4 existed
+anywhere. The node went `Ready`, and from then on it only accepted live traffic — which
+started at section 5. **Not yet proven**: whether the node ever requested 1-4 and lost
+the answer, or never requested them at all.
+
+What to fix, in order:
+1. **Never conclude a sync from an index that is not yet known.** "Peers report height 0"
+   must mean "nothing to compare against yet", not "we are up to date".
+2. **A node must be able to notice its own gaps.** `range` records only first/last, so a
+   hole in the middle is unrepresentable. Either track the received set, or verify
+   contiguity when crossing a control boundary.
+3. **A detected gap must be repairable** — which is §2 (backfill), now with a concrete
+   case to test against, not a hypothetical one.
+
+Reproduction: six nodes, real rate, seed 8090 (`HARNESS_SEED=8090 REAL=1 DAG_NODES=6`),
+join the last node while the network is still near height 0. Check with:
+`for i in 1 2 3 4; do ls dagdfs/d6/dag/0/$(printf %x $i); done`.
 
 ### 2. Backfill of missed sections inside the acceptance window
 
