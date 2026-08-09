@@ -205,6 +205,31 @@ That is an argument for the timeout being the right first fix, not for it being 
 fix: "effectively all" is not "all", and the second layer — noticing and re-queueing a
 write that fails anyway — is what turns a reduced loss rate into no loss at all.
 
+### 0.48 A console command during startup crashes the node (SIGSEGV)
+
+Reproduced 2026-08-09 while testing the gap fix. A node was restarted and a
+`connect ws <ip>` line was written to its stdin before initialisation finished:
+
+```
+11:43:48.649 [Console] Input: connect ws 127.0.0.2
+11:43:48.649 [Critical] Catch signal: Segmentation fault: 11
+```
+
+The crash lands before `[Dag] Started` and before `Start listening`, i.e. the command is
+processed while the node is still constructing its managers. Starting the same node on the
+same data *without* sending a command comes up fine, so it is the early command, not the
+state on disk.
+
+Two things worth doing:
+- refuse (or queue) console input until the node reports it is started, instead of
+  dereferencing half-built state;
+- the signal handler prints only the signal name — no backtrace, so a crash in the field
+  tells us nothing. Worth printing a stack.
+
+Found via a harness bug that made this easy to hit: `wait_log` matched `Start listening`
+from the *previous* life of the process, so the harness thought the node was ready
+immediately. That is fixed in the stand, but the core should not crash regardless.
+
 ### 0.5 A node can report "listening" while its listener accepts nothing
 
 Seen once on a six-node stand (not reproducible on a rerun of the same seed, so a startup
