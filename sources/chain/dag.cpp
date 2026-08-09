@@ -1256,15 +1256,17 @@ std::optional<SectionId> Dag::find_first_gap(std::size_t limit) const {
         return std::nullopt;
     }
 
-    // A Full node must hold the chain from 0, so scan from 0 rather than from
-    // first_saved_section_: that field is set from whatever section happened to arrive
-    // first (live traffic can set it to 5 on a node that joined late — dag.cpp:764/792),
-    // which is exactly the case this check exists to catch. Starting at
-    // first_saved_section_ would step over the very gap we are looking for.
-    auto from = SectionId(0);
+    // Full nodes only: a Light node does not store section 0 at all, so a contiguity
+    // scan is meaningless for it. Every caller checks the mode; this is the backstop.
     if (mode_ != DagMode::Full) {
-        from = first_saved_section_ == SectionId(-1) ? SectionId(0) : first_saved_section_;
+        return std::nullopt;
     }
+
+    // Scan from 0, not from first_saved_section_: that field is set from whatever
+    // section happened to arrive first (live traffic can set it to 5 on a node that
+    // joined late — dag.cpp:764/792), which is exactly the case this check exists to
+    // catch. Starting there would step over the very gap we are looking for.
+    auto from = SectionId(0);
 
     // Fast path: count the section files and compare with how many the range implies.
     // A healthy chain (the overwhelming majority of calls) costs a few directory reads
@@ -2227,12 +2229,18 @@ void Dag::handle_sync_request() {
         if (!zero.has_value() || zero->transactions.empty()) {
             eLog("[Dag] handle_sync_request: genesis section missing — syncing from 0");
             sync_index = SectionId(0);
-        } else if (auto gap = this->find_first_gap(); gap.has_value()) {
-            // Resume from the hole, not from current+1: live traffic keeps advancing
-            // current_section_, so a node that skipped sections while joining would
-            // otherwise never ask for them again. Section sync merges idempotently.
-            eLog("[Dag] handle_sync_request: gap at section {} — syncing from there", gap.value());
-            sync_index = gap.value();
+        } else if (mode_ == DagMode::Full) {
+            // Full only: sync_index drives request_file_sections, which a Light node
+            // never reaches (it syncs through the light package instead), and Light
+            // deliberately does not store section 0, so a contiguity scan would report
+            // a permanent phantom gap at the very start.
+            if (auto gap = this->find_first_gap(); gap.has_value()) {
+                // Resume from the hole, not from current+1: live traffic keeps advancing
+                // current_section_, so a node that skipped sections while joining would
+                // otherwise never ask for them again. Section sync merges idempotently.
+                eLog("[Dag] handle_sync_request: gap at section {} — syncing from there", gap.value());
+                sync_index = gap.value();
+            }
         }
     }
 
@@ -2265,9 +2273,11 @@ void Dag::handle_sync_request() {
     }
 
     // A gap means work remains even when our height already matches the network's:
-    // being level with the tip says nothing about the middle of the chain.
+    // being level with the tip says nothing about the middle of the chain. Full only —
+    // a Light node stores no section 0 by design, so the scan would report a phantom
+    // gap and it could never reach Ready.
     if (current_section_exists && current_section_ >= sync_last_index_
-        && !this->find_first_gap().has_value()) {
+        && (mode_ != DagMode::Full || !this->find_first_gap().has_value())) {
         eLog("[Dag] Not need sync");
 
         set_status(DagStatus::Ready);
