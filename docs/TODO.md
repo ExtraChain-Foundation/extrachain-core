@@ -145,10 +145,35 @@ every section. What splits is the control chain alone, and it splits determinist
 every `%20` boundary rather than randomly — which is what rules out a race in replication
 and points at *when* the hash is taken.
 
-The trigger in this run was a late joiner: the node was at height 0 while the others were
-at 4, reached section 20 while earlier sections were still arriving, hashed an incomplete
-base, and every later control inherited the split. Nothing repaired it for the rest of the
-run — consistent with `start_control` walking forward from the last control.
+**The trigger, traced in the node log.** It is narrower than "controls over mutable
+sections" and worth stating exactly, because it explains why the minority is always a
+single node and always the last one to join:
+
+```
+02:52:10.852  [Dag] sync_last_index: 0x0 / 0 sections
+02:52:10.857  [Dag] File sync completed              <- 5 ms later, chain still empty
+02:52:15.480  [Dag] Current: 0 (0x0) section, status: DagStatus::Ready
+```
+
+`network_response_file_sync` treats the sync as finished via `file_sync->to >=
+sync_last_index_ - 1`, which on an empty chain is `0 >= -1` — true immediately. It then
+calls `start_control()` (note: **no** `Force::Active`, so the early return in
+`start_control` applies) over a chain of zero sections and lets the node reach
+`DagStatus::Ready` while holding nothing.
+
+From that point the guard `if (this->status_ != DagStatus::Ready)` around both
+`start_control()` calls can never fire again: the node logged `Check controls...` exactly
+once, at 02:52:10, and never again for the rest of the run. Sections then arrived through
+the normal path and controls were written at each `%20` boundary on a base nobody ever
+re-verified.
+
+So there are two distinct defects here:
+1. a node declares `Ready` and seals controls on an empty chain, because "sync completed"
+   is derived from an index that is not yet known;
+2. once `Ready`, nothing ever re-chains controls, so the initial split is permanent.
+
+Fixing (1) removes this run's trigger; fixing (2) is what makes the control chain
+self-healing in general, and is the "compute only below the watermark" direction above.
 
 ### 2. Backfill of missed sections inside the acceptance window
 
