@@ -385,15 +385,21 @@ DfsVector::generate_content_package_empty() {
 
 bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
     // Dictionary uses static template, no file to write
+    // Each failure below used to return a bare false, so the caller's warning could not
+    // say which step failed — 966 rejections in three minutes with no way to tell why.
     if (file_type_ != Dfs::FileType::Dictionary) {
         auto res_json = Utils::write_file_content(vector_path_, dfs_vector_content.vector_file);
         if (!res_json.has_value()) {
+            eWarning("[DfsVector] handle_package: cannot write {} ({} bytes)",
+                     vector_path_.string(),
+                     dfs_vector_content.vector_file.size());
             return false;
         }
     }
 
     auto vector_template = dfs_vector_content.vector_template;
     if (vector_template.fields().size() == 0) {
+        eWarning("[DfsVector] handle_package: empty template for {}", file_id_);
         return false;
     }
 
@@ -417,6 +423,7 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
 
     auto schema = vector_template.to_db_schema();
     if (!schema.has_value()) {
+        eWarning("[DfsVector] handle_package: cannot build schema for {}", file_id_);
         return false;
     }
 
