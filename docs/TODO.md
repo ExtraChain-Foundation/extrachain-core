@@ -104,10 +104,31 @@ Note this is invisible to the existing `full_copies` metric, which only asks whe
 vector *file* exists on each node. It was 200/200 for the whole run while rows were being
 lost. Row-level comparison against the union is what surfaces it.
 
-Not yet investigated: whether the drop is on the sender side (row appended locally,
-broadcast never sent or sent to a subset) or the receiver side (packet arrives, write
-fails silently). Start by counting `DfsVectorContent` sends against receives for one
-vector under load.
+**The losses come in bursts, not evenly.** Ordering the complete row set by timestamp and
+marking each node's gaps by position in that sequence:
+
+```
+d1: missing 16 at positions 302, 320, 324, 330-331, 337-338, 342-343, 347-351, 360, 364
+d5: missing 15 at positions 238, 242-243, 247, 253, 258, 262-263, 266, 270-271, 274, ...
+```
+
+Both are clustered — d1 loses everything in the last quarter of the chain, d5 in a band
+around positions 238-281 — rather than dropping every n-th row. So a node stops accepting
+for a stretch and then recovers, which points at a saturated or briefly dead socket rather
+than a per-row validation failure.
+
+Supporting evidence from the logs: the two nodes that *received* the most
+`Vector content package` messages (2424 and 2837) are also among the biggest losers, so
+packets are arriving — something after receipt drops them.
+
+Two candidates worth separating first:
+- `DfsController::network_vector_add` ignores the result of `local_add` except for the UI
+  signal, so a failed write is silent (`dfs_controller.cpp:1847`);
+- `DfsVector::local_add` returns `true` when it *skips* a row as stale
+  (`dfs_vector.cpp:461`), so "skipped" and "written" are indistinguishable to the caller.
+
+Neither is proven to be the cause, but both mean a dropped row leaves no trace, which is
+why this went unnoticed for the whole run.
 
 ### 0.5 A node can report "listening" while its listener accepts nothing
 
