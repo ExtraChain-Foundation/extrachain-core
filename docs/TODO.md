@@ -114,6 +114,25 @@ Note this is invisible to the existing `full_copies` metric, which only asks whe
 vector *file* exists on each node. It was 200/200 for the whole run while rows were being
 lost. Row-level comparison against the union is what surfaces it.
 
+**Final numbers, audited after the run ended and the nodes were stopped** — i.e. with no
+load, nothing in flight, and every chance to settle:
+
+```
+vectors with data on all 6 nodes : 24
+  still incomplete               : 4
+rows lost per node               : d1:74 d2:55 d3:79 d4:18 d5:139 d6:94
+TOTAL rows lost                  : 459
+
+  5ff6b708: union=943  missing={d1:27 d2:0  d3:15 d4:18 d5:15 d6:11}
+  8e287b0f: union=941  missing={d1:3  d2:4  d3:21 d4:0  d5:89 d6:66}
+  3ef29d38: union=906  missing={d1:37 d2:38 d3:33 d4:0  d5:30 d6:12}
+  5b7d5346: union=958  missing={d1:7  d2:13 d3:10 d4:0  d5:5  d6:5}
+```
+
+459 rows gone for good over a 6.5 h run, every node affected, worst case 89 of 941 rows
+(~9% of one chat's history) missing on a single node. This settles the question of whether
+it was lag: it was not.
+
 **The losses come in bursts, not evenly.** Ordering the complete row set by timestamp and
 marking each node's gaps by position in that sequence:
 
