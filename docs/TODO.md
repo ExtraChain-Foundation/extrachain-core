@@ -170,6 +170,16 @@ write waits instead of failing outright; then make a genuinely failed row write
 re-queue rather than vanish; and separate "skipped as stale" from "write failed" in the
 return type, because a silent boolean is what let this run for hours unnoticed.
 
+**Is 5 s enough?** Measured on the run: 172 lock failures across four nodes fall into 149
+episodes (failures within 5 s of each other grouped together). Of those, exactly **one**
+spanned more than 5 s — and that one was three separate attempts over 7 s, not a single
+long-held lock. The largest episode is 3 failures. So contention here is genuinely
+short-lived and `sqlite3_busy_timeout(5000)` in `c1a05508` covers effectively all of it.
+
+That is an argument for the timeout being the right first fix, not for it being the whole
+fix: "effectively all" is not "all", and the second layer — noticing and re-queueing a
+write that fails anyway — is what turns a reduced loss rate into no loss at all.
+
 ### 0.5 A node can report "listening" while its listener accepts nothing
 
 Seen once on a six-node stand (not reproducible on a rerun of the same seed, so a startup
