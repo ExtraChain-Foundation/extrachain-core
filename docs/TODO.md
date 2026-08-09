@@ -8,6 +8,38 @@ what we deliberately postponed.
 
 ## Open
 
+### 0.0 Existing installations carry damage the new code assumes away
+
+**Not urgent, but required before any of this reaches real users.** Everything fixed on
+2026-08-09 was verified on chains built **from scratch** in a stand. A node that has been
+running with the old code has state that the new logic quietly assumes cannot exist:
+
+| Damage already on disk | Detected by the new code? | Repaired? |
+|---|---|---|
+| Missing sections in the middle | yes — contiguity scan | yes |
+| Wrong control on a **past** boundary | **no** — only new boundaries are compared (§0.475) | no |
+| Vector rows dropped by `database is locked` | no — nothing knows they existed (§0.45) | no |
+| Dir rows lost the same way | no (§0.4) | no |
+| Balances derived from an incomplete chain | no — the cache faithfully sums what it has (§1.1) | only after the chain is repaired |
+
+The sections case is the lucky one: it self-heals now. The rest do not, because the
+node has no record that anything is missing — a lost vector row leaves no trace, and an
+old control is never re-read.
+
+Concretely, before shipping:
+
+1. **Decide the policy per damage class** — repair in place, refetch from peers, or
+   rebuild from genesis. These are very different costs and only the first two are viable
+   on a phone.
+2. **A one-time verification pass on upgrade**: re-verify all control boundaries (not just
+   the newest), and reconcile vector row sets against peers. Expensive, but it runs once.
+3. **Decide what a node does when it cannot repair itself.** Right now it would keep
+   serving wrong data with full confidence — `range` reports a complete chain, the balance
+   cache reports a balance. Failing loudly beats being quietly wrong about money.
+
+Until this exists, the fixes stop the bleeding for **new** chains and do nothing for the
+damage already accumulated.
+
 ### 0. Vectors and dictionaries are not covered by load testing
 
 Stand runs so far exercised plain files only: a typical run replicated ~235 files
