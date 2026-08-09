@@ -48,12 +48,9 @@ DfsController::DfsController(ExtraChainNode *node)
     // loadBytesLimit();
     eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
 
-    // Deliberately not creating a folder per saved actor. A node knows hundreds of
-    // actors and stores files for a handful of them, so this made an empty directory
-    // for almost every one. Directories are now created where content actually lands
-    // (see handle_package / the load manager), so an empty actor leaves no trace on
-    // disk — which is also what makes "does this actor have data" answerable by
-    // looking at the filesystem.
+    connect(node->actor_index(), &ActorIndex::actorSaved, [this](ActorId actor_id) {
+        Dfs::initialize_actor_folder(actor_id);
+    });
 
     connect(this, &DfsController::downloaded, [this](const ActorId &owner_id, const Dfs::DirRow &dir_row) {
         if (files_waiting_.empty()) {

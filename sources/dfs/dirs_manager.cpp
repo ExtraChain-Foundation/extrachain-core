@@ -296,9 +296,7 @@ void DirsManager::network_response_dir_rows(
             // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
             // TODO: add merge for sync dir file
 
-            // No folder here either: knowing an actor's dir rows says nothing about
-            // whether we will ever download any of them. The folder is created when the
-            // first payload is written.
+            Dfs::initialize_actor_folder(owner_id);
             std::vector<Dfs::DirRow> dir_rows_todo;
 
             /*
