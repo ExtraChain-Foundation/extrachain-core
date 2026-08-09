@@ -151,7 +151,13 @@ int main(int argc, char *argv[]) {
         deadline->setSingleShot(true);
         deadline->start(240000); // 4 min
 
-        return app.exec();
+        const int exit_code = app.exec();
+        // Destroy the node while Qt can still process queued shutdown work.
+        // If the wrapper stays parented to QCoreApplication, child destruction
+        // starts after the event dispatcher is gone. Active network timers can
+        // then access invalid Qt state during a normal test exit.
+        delete wrapper;
+        return exit_code;
     }
 
     std::printf("[node-run] unknown mode '%s'\n", mode.c_str());

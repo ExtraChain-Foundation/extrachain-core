@@ -177,7 +177,10 @@ protected:
     std::queue<QByteArray> low_queue_;
     std::atomic<qint64>    queued_bytes_ = 0;
 
-    static constexpr qint64 MAX_BUFFER_SIZE       = 10 * 1024 * 1024; // 10MB
+    // Keep the socket buffer short so a queued DAG sync or control message does
+    // not wait behind several megabytes of DFS fragments. Bulk transfers remain
+    // bounded by their own high/low water marks in LoadManager.
+    static constexpr qint64 MAX_BUFFER_SIZE       = 1024 * 1024;
     bool                    waiting_buffer_space_ = false;
 
     KeyPrivate priv_   = KeyPrivate();

@@ -124,12 +124,15 @@ private:
         }
     }
 
-    void send_result(const Transaction &transaction, TransactionProveError result) const {
-        owner->node->network()->send_broadcast(TransactionResult { .section_id = transaction.section(),
-                                                                   .hash       = transaction.hash(),
-                                                                   .result     = result },
-                                               MessageType::DagTransactionResult,
-                                               MessageStatus::NoStatus);
+    void send_result(const Request &request, TransactionProveError result) const {
+        if (request.responder.empty())
+            return;
+        request.responder.send_response(TransactionResult { .section_id = request.transaction.section(),
+                                                            .hash       = request.transaction.hash(),
+                                                            .result     = result },
+                                        MessageType::DagTransactionResult,
+                                        SendMode::Focused,
+                                        MessageStatus::Response);
     }
 
     bool can_batch(const Request &request) const {
@@ -167,7 +170,7 @@ private:
     }
 
     void reject(const std::shared_ptr<Request> &request, TransactionProveError result) {
-        send_result(request->transaction, result);
+        send_result(*request, result);
         complete(request->completion, std::unexpected(result), false);
     }
 
@@ -269,7 +272,7 @@ private:
         owner->update_range();
         owner->try_pack_hot();
         for (const auto &request : accepted) {
-            send_result(request->transaction, TransactionProveError::NoError);
+            send_result(*request, TransactionProveError::NoError);
             owner->check_self(request->transaction);
             complete(request->completion, {}, true);
         }

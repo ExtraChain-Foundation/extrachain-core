@@ -122,10 +122,13 @@ private:
     bool compute_vectors_waiting();
     // Instant (coalesced) scheduler wakeup — without it new queue items waited for the next
     // 5-second timer tick.
-    void kick();
+    void kick(const Dfs::FileLink& file_link_to_proceed = {});
 
-    std::atomic_bool kick_pending_ { false };
-    std::atomic_int  vector_gate_state_ { -1 };
+    std::atomic_bool                 kick_pending_ { false };
+    std::atomic_int                  vector_gate_state_ { -1 };
+    std::mutex                       pending_kicks_mutex_;
+    bool                             full_kick_pending_ { false };
+    std::unordered_set<Dfs::FileLink> pending_file_kicks_;
 
     void        schedule_watchdog();
     std::size_t max_concurrent_downloads() const;

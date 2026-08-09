@@ -71,7 +71,12 @@ class Logger {
     static std::string create_log_filename() {
         auto    now   = std::chrono::system_clock::now();
         auto    timer = std::chrono::system_clock::to_time_t(now);
-        std::tm bt    = *std::localtime(&timer);
+        std::tm bt {};
+#ifdef _WIN32
+        localtime_s(&bt, &timer);
+#else
+        localtime_r(&timer, &bt);
+#endif
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
         return fmt::format("{}-{:04d}.{:02d}.{:02d}_{:02d}-{:02d}-{:02d}.log",
@@ -293,7 +298,12 @@ namespace detail {
         auto    now   = std::chrono::system_clock::now();
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
         auto    timer = std::chrono::system_clock::to_time_t(now);
-        std::tm bt    = *std::localtime(&timer);
+        std::tm bt {};
+#ifdef _WIN32
+        localtime_s(&bt, &timer);
+#else
+        localtime_r(&timer, &bt);
+#endif
 
         return fmt::format("{:02d}:{:02d}:{:02d}.{:03d}", bt.tm_hour, bt.tm_min, bt.tm_sec, ms.count());
     }
@@ -302,7 +312,12 @@ namespace detail {
         auto    now   = std::chrono::system_clock::now();
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
         auto    timer = std::chrono::system_clock::to_time_t(now);
-        std::tm bt    = *std::localtime(&timer);
+        std::tm bt {};
+#ifdef _WIN32
+        localtime_s(&bt, &timer);
+#else
+        localtime_r(&timer, &bt);
+#endif
 
         return fmt::format("{:04d}.{:02d}.{:02d} {:02d}:{:02d}:{:02d}.{:03d}",
                            bt.tm_year + 1900,
@@ -318,7 +333,12 @@ namespace detail {
         auto    now   = std::chrono::system_clock::now();
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
         auto    timer = std::chrono::system_clock::to_time_t(now);
-        std::tm bt    = *std::localtime(&timer);
+        std::tm bt {};
+#ifdef _WIN32
+        localtime_s(&bt, &timer);
+#else
+        localtime_r(&timer, &bt);
+#endif
 
         return fmt::format("{:04d}.{:02d}.{:02d}", bt.tm_year + 1900, bt.tm_mon + 1, bt.tm_mday);
     }
@@ -402,11 +422,10 @@ namespace detail {
         if (!should_log_console && !should_log_file)
             return;
 
-        thread_local fmt::memory_buffer log_buffer;
-        thread_local fmt::memory_buffer msg_buffer;
-
-        log_buffer.clear();
-        msg_buffer.clear();
+        // A log call can re-enter the logger while an argument is formatted.
+        // Per-call buffers keep the outer formatter valid in that case.
+        fmt::memory_buffer log_buffer;
+        fmt::memory_buffer msg_buffer;
 
         // Format message
         fmt::format_to(std::back_inserter(msg_buffer), format_str, std::forward<Args>(args)...);
@@ -472,8 +491,7 @@ namespace detail {
         if (should_log_file) {
             auto log_view = fmt::string_view(log_buffer.data(), log_buffer.size());
 
-            thread_local fmt::memory_buffer file_buffer;
-            file_buffer.clear();
+            fmt::memory_buffer file_buffer;
             fmt::format_to(std::back_inserter(file_buffer), "{} {}\n", get_date_time(), log_view);
             Logger::instance().write_to_file(std::string_view(file_buffer.data(), file_buffer.size()));
         }

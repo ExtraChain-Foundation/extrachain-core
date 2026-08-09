@@ -86,18 +86,55 @@ void LoadManager::schedule_watchdog() {
     }
 }
 
-void LoadManager::kick() {
+void LoadManager::kick(const Dfs::FileLink& file_link_to_proceed) {
+    {
+        std::lock_guard lock(pending_kicks_mutex_);
+        if (file_link_to_proceed.file_id.empty()) {
+            full_kick_pending_ = true;
+            pending_file_kicks_.clear();
+        } else if (!full_kick_pending_) {
+            pending_file_kicks_.insert(file_link_to_proceed);
+        }
+    }
+
     if (kick_pending_.exchange(true)) {
         return;
     }
     QMetaObject::invokeMethod(
         this,
         [this] {
+            bool                         run_full = false;
+            std::optional<Dfs::FileLink> targeted;
+            {
+                std::lock_guard lock(pending_kicks_mutex_);
+                run_full = full_kick_pending_ || pending_file_kicks_.size() != 1;
+                if (!run_full) {
+                    targeted = *pending_file_kicks_.begin();
+                }
+                full_kick_pending_ = false;
+                pending_file_kicks_.clear();
+            }
             kick_pending_.store(false);
             if (!m_timer->isActive()) {
                 m_timer->start(5000);
             }
-            timer_runner();
+            if (run_full) {
+                timer_runner();
+            } else {
+                timer_runner(*targeted);
+            }
+
+            // A producer can enqueue work after the pending set was drained
+            // but before kick_pending_ became false. Recheck after the pass so
+            // that this narrow race cannot leave a refill without a Qt event.
+            bool rerun = false;
+            {
+                std::lock_guard lock(pending_kicks_mutex_);
+                rerun = full_kick_pending_ || !pending_file_kicks_.empty();
+            }
+            if (rerun && !kick_pending_.load()) {
+                kick();
+            }
         },
         Qt::QueuedConnection);
 }
@@ -131,6 +168,18 @@ bool LoadManager::compute_vectors_waiting() {
 }
 
 void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
+    // The scheduler owns both download pools and sometimes inspects one while
+    // it holds the other. Network and DFS workers can ask for an immediate
+    // refill, but they must not run the scheduler in parallel: two callers can
+    // otherwise take the priority and regular pool locks in opposite order.
+    // Keep all scheduling on this QObject's thread. The queued calls preserve
+    // the targeted refill without blocking the worker that stored a fragment.
+    // kick() also merges a burst of requests into one queued scheduler pass.
+    if (QThread::currentThread() != thread()) {
+        kick(file_link_to_proceed);
+        return;
+    }
+
     const auto download_limit = max_concurrent_downloads();
     if (download_limit == 0 || node->runtime_activity() == RuntimeActivity::Background) {
         return;

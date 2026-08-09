@@ -15,6 +15,7 @@
  */
 #include <QCoreApplication>
 #include <QDir>
+#include <algorithm>
 #include <cstdio>
 
 #include "chain/actor_index.h"
@@ -60,6 +61,7 @@ int main(int argc, char *argv[]) {
 
     SectionId first = dag->first_saved_section();
     SectionId cur   = dag->current_section();
+    SectionId closed_tip = std::min(cur, dag->cache().section());
     if (first < SectionId(0)) first = SectionId(0);
     std::printf("=== DAG audit: sections [%s..%s] ===\n",
                 first.to_string().c_str(), cur.to_string().c_str());
@@ -125,7 +127,7 @@ int main(int argc, char *argv[]) {
         }
     }
     // chained intervals: start = 1, 21, 41, ... end = start+19 (the %20 boundary)
-    for (SectionId start(1); start + SectionId(CTRL_MOD - 1) <= cur; start += CTRL_MOD) {
+    for (SectionId start(1); start + SectionId(CTRL_MOD - 1) <= closed_tip; start += CTRL_MOD) {
         SectionId end = start + SectionId(CTRL_MOD - 1); // a multiple of 20
         auto ih = interval_hash(dag, start, end);
         last_hash = Utils::calculate_hash(last_hash + ih);
@@ -141,11 +143,11 @@ int main(int argc, char *argv[]) {
     }
     std::printf("[3] control chain: checked=%lld mismatch=%lld missing=%lld\n",
                 ctrl_checked, ctrl_mismatch, ctrl_missing);
-    total_fail += ctrl_mismatch;
+    total_fail += ctrl_mismatch + ctrl_missing;
 
     // 4. Control index vs sections -------------------------------------------
     long long ci_checked = 0, ci_mismatch = 0;
-    for (SectionId i(0); i <= cur; i += CTRL_MOD) {
+    for (SectionId i(0); i <= closed_tip; i += CTRL_MOD) {
         auto sec = dag->read_section(i);
         std::optional<std::string> from_sec;
         if (sec.has_value() && sec->control.has_value()) from_sec = sec->control.value();

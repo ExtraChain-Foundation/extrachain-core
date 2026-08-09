@@ -1026,9 +1026,17 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         priority = SocketService::Priority::Low;
     }
 
+    const bool high_priority_dag_request =
+        status_info == MessageStatus::Request
+        && (message_type == MessageType::DagSections || message_type == MessageType::DagLightData
+            || message_type == MessageType::DagFileSections);
     if (message_type == MessageType::Custom || message_type == MessageType::NewActor
-        || message_type == MessageType::DagLightData
-        || message_type == MessageType::DagSyncLastInfo) { // if client
+        || message_type == MessageType::DagTransactionResult || message_type == MessageType::DagIntervalHash
+        || message_type == MessageType::DagSyncLastInfo
+        || message_type == MessageType::DagControlRangeRequest
+        || message_type == MessageType::DagControlRangeResponse
+        || message_type == MessageType::DagPackList || message_type == MessageType::DagPackRequest
+        || message_type == MessageType::DagCacheSnapshotRequest || high_priority_dag_request) {
         priority = SocketService::Priority::High;
     }
 

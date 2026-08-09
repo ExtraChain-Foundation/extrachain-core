@@ -20,6 +20,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -772,7 +773,13 @@ private:
     SectionId                        next_pack_index_ = SectionId(0);
     std::mutex                       pack_mutex_;
     std::mutex                       pack_hot_cache_mutex_;
+    std::mutex                       pack_hot_completion_mutex_;
+    std::condition_variable          pack_hot_completion_;
+    std::atomic_bool                 pack_hot_running_ = false;
+    std::atomic_uint64_t             pack_hot_generation_ = 0;
     std::map<SectionId, std::string> pack_hot_cache_;
+    std::mutex                       file_sync_response_mutex_;
+    std::recursive_mutex             sync_last_info_mutex_;
 
     // Persistent tx index (by hash / sender / receiver / token / time).
     // Full mode: every tx. Light mode: only tx involving local wallets.
@@ -805,6 +812,10 @@ private:
     // Pack hot sections into an immutable pack when enough have accumulated.
     // Called from write_section when the hot range crosses a pack boundary.
     void try_pack_hot();
+    void pack_hot_sections(const SectionId    &max_pack_index,
+                           const SectionId    &first_saved_section,
+                           const std::uint64_t  generation);
+    void finish_pack_hot();
 
     // Pack-sync state. One pack is installed at a time, with a bounded window
     // of chunk requests to avoid one network round trip per 256 KiB.

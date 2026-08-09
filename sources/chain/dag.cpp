@@ -40,6 +40,7 @@
 
 static constexpr int SYNC_SECTIONS_BATCH   = 2100;
 static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
+static constexpr int SYNC_LAST_INFO_COLLECTION_MS = 250;
 
 // Pack files are shipped in fixed-size chunks so neither side holds a whole pack
 // in memory and large packs stay well under the socket buffer limit.
@@ -277,6 +278,12 @@ void Dag::stop() {
     }
 
     flush_admission();
+
+    pack_hot_generation_.fetch_add(1);
+    {
+        std::unique_lock completion_lock(pack_hot_completion_mutex_);
+        pack_hot_completion_.wait(completion_lock, [this]() { return !pack_hot_running_.load(); });
+    }
 
     if (chain_index_enabled_ && chain_index_)
         chain_index_->flush();
@@ -563,10 +570,12 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
         }
     }
 
-    // send broadcast to network with tx result
-    node->network()->send_broadcast(transaction_result,
-                                    MessageType::DagTransactionResult,
-                                    MessageStatus::NoStatus);
+    if (!responder.empty()) {
+        responder.send_response(transaction_result,
+                                MessageType::DagTransactionResult,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    }
 
     if (res != TransactionProveError::NoError) {
         return std::unexpected(res);
@@ -1677,24 +1686,34 @@ std::optional<std::pair<SectionId, std::string>> Dag::search_duplicate_by_sender
 //
 
 void Dag::start_sync() {
-    // start timer, after end -> again request
+    std::lock_guard sync_lock(sync_last_info_mutex_);
     if (status_ == DagStatus::Sync) {
-        // eLog("BC 11 start_sync return");
         return;
     }
+
+    // Cancel a background pack sweep before waiting for its storage lock. The
+    // worker checks this generation between packs, so the Qt event thread waits
+    // for at most the pack currently being sealed instead of the whole history.
+    pack_hot_generation_.fetch_add(1);
+
+    // start timer, after end -> again request
+    {
+        std::lock_guard pack_lock(pack_mutex_);
+        if (status_ == DagStatus::Sync) {
+            return;
+        }
+        status_ = DagStatus::Sync;
+    }
+    emit node->dagStatus(DagStatus::Sync);
 
     // if (mode_ == DagMode::Light) {
     emit node->dagTimerStart(15001);
     // eLog("Timer start");
     // }
 
-    if (status_ != DagStatus::Sync) {
-        this->set_status(DagStatus::Sync);
-    }
-
     last_info_.clear();
     set_sync_status(DagSyncStatus::LastInfo);
-    requests_count_ = 1; // std::max(1, node->network()->active_connections_count() - 1);
+    requests_count_ = std::max(1, std::min(node->network()->active_connections_count(), min_req_count_));
     node->network()->send_message(true,
                                   MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
@@ -1702,6 +1721,7 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
+    std::lock_guard sync_lock(sync_last_info_mutex_);
 #ifndef IS_APP_CLIENT
     if (status_ == DagStatus::Ready) {
         // Section 0 is the sync base and must exist on every FULL node (the
@@ -1733,7 +1753,7 @@ void Dag::start_check() {
 
     last_info_.clear();
     check_status_   = DagSyncStatus::LastInfo;
-    requests_count_ = 1; // std::max(1, node->network()->active_connections_count() - 1);
+    requests_count_ = std::max(1, std::min(node->network()->active_connections_count(), min_req_count_));
     node->network()->send_message(true,
                                   MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
@@ -1781,7 +1801,8 @@ void Dag::network_status_sync_request(const Responder &responder) {
 }
 
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
-    if (responder.luminance() < 2) {
+    std::lock_guard sync_lock(sync_last_info_mutex_);
+    if (responder.identifiers().empty() || responder.luminance() < 2) {
         return;
     }
 
@@ -1803,22 +1824,36 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
         // this->clear_dag();
     }
 
-    int count = 1; // std::min(requests_count_, min_req_count_);
-
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
-    if (sync_status_ == DagSyncStatus::LastInfo && last_info_.size() >= count) {
-        set_sync_status(DagSyncStatus::Sections);
-        check_status_ = DagSyncStatus::None;
-        eLog("BC 6 sync status");
-        this->handle_sync_request();
-        return;
-    }
+    const auto continue_with_collected_info = [this]() {
+        if (last_info_.empty())
+            return;
+        if (sync_status_ == DagSyncStatus::LastInfo) {
+            set_sync_status(DagSyncStatus::Sections);
+            check_status_ = DagSyncStatus::None;
+            eLog("BC 6 sync status");
+            this->handle_sync_request();
+            return;
+        }
+        if (check_status_ == DagSyncStatus::LastInfo) {
+            check_status_ = DagSyncStatus::Sections;
+            eLog("BC 7 check status");
+            this->handle_sync_request();
+        }
+    };
 
-    if (check_status_ == DagSyncStatus::LastInfo && last_info_.size() >= count) {
-        check_status_ = DagSyncStatus::Sections;
-        eLog("BC 7 check status");
-        this->handle_sync_request();
+    // A dense network must not synchronize from whichever peer answers first.
+    // Give the other active peers a short bounded window, then let
+    // handle_sync_request() select the responder with the highest section.
+    if (last_info_.size() == 1) {
+        QTimer::singleShot(SYNC_LAST_INFO_COLLECTION_MS, node, [this, continue_with_collected_info]() {
+            std::lock_guard timer_lock(sync_last_info_mutex_);
+            continue_with_collected_info();
+        });
+    }
+    if (last_info_.size() >= static_cast<std::size_t>(requests_count_)) {
+        continue_with_collected_info();
     }
 }
 
@@ -2077,6 +2112,10 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
     bool peer_legacy = meta->is_legacy_dag();
 
     ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder, peer_legacy]() {
+        // Dense paths can deliver the same response more than once. Serialize
+        // state mutation so two workers cannot write sections and finish the
+        // same sync at the same time.
+        std::lock_guard response_lock(file_sync_response_mutex_);
         if (mode_ == DagMode::Light) {
             eLog("[Dag] Skip file sections response: light mode");
             return;
@@ -2096,6 +2135,10 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         if (!file_sync.has_value()) {
             eLog("[Dag] File sections sync: failed to deserialize");
+            return;
+        }
+
+        if (file_sync->to <= current_section_) {
             return;
         }
 
@@ -2561,6 +2604,7 @@ void Dag::handle_sync_request() {
         this->set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
         this->process_cached_transactions();
+        this->try_pack_hot();
         // timer_sync->stop();
 
         // emit syncEnd();
@@ -2585,6 +2629,7 @@ void Dag::handle_sync_request() {
         this->set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
         this->process_cached_transactions();
+        this->try_pack_hot();
         // timer_sync->stop();
 
         // emit syncEnd();
@@ -2660,6 +2705,7 @@ void Dag::handle_sync_request() {
         // then go Ready (process_cached_transactions sets Ready + sync None).
         check_status_ = DagSyncStatus::None;
         this->process_cached_transactions();
+        this->try_pack_hot();
         // start_check();
         return;
     }
@@ -2736,6 +2782,8 @@ void Dag::clear_dag_folder() {
 void Dag::clear_dag() {
 #ifdef IS_APP_CLIENT
     eLog("[Dag] Clearing...");
+    pack_hot_generation_.fetch_add(1);
+    std::lock_guard pack_lock(pack_mutex_);
     auto max_section = file_section(current_section_);
 
     QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
@@ -3204,7 +3252,8 @@ bool Dag::validate_received_pack(Pack::PackId id, const Pack::Reader &reader) co
     if (rows.size() != Pack::SECTIONS_PER_PACK)
         return reject("incomplete section range");
 
-    std::map<SectionId, Section> sections;
+    std::map<SectionId, Section>                      sections;
+    std::unordered_map<std::string, Actor<KeyPublic>> actor_cache;
 
     const auto valid_control = [](const std::optional<std::string> &control) {
         if (!control.has_value())
@@ -3235,10 +3284,20 @@ bool Dag::validate_received_pack(Pack::PackId id, const Pack::Reader &reader) co
             if (tx.signature().empty())
                 return reject("missing transaction signature");
 
-            const auto sender = node->actor_index()->read_actor_old(tx.sender());
-            if (sender.empty())
-                return reject("unknown transaction sender");
-            if (!tx.verify(sender))
+            const auto sender_id = tx.sender().to_string();
+            auto       sender    = actor_cache.find(sender_id);
+            if (sender == actor_cache.end()) {
+                auto loaded = node->actor_index()->read_actor_old(tx.sender());
+                if (loaded.empty())
+                    return reject("unknown transaction sender");
+                sender = actor_cache.emplace(sender_id, std::move(loaded)).first;
+            }
+
+            // The content hash was checked above. Verify the signature against
+            // that exact stored hash, instead of recalculating and checking both
+            // canonical and legacy preimages for every transaction.
+            const auto signature_valid = sender->second.key().verify(tx.hash(), tx.signature());
+            if (!signature_valid.has_value() || !signature_valid.value())
                 return reject("invalid transaction signature");
         }
         sections.emplace(section_id, std::move(*section));
@@ -3308,7 +3367,6 @@ void Dag::request_cache_snapshot(const Responder &responder) {
 void Dag::try_pack_hot() {
     if (!pack_registry_)
         return;
-    std::lock_guard pack_lock(pack_mutex_);
 
     // Sealing a pack is irreversible. Never do it while a sync is in flight:
     // set_current_section() only moves forward, so a high section arriving first
@@ -3332,11 +3390,61 @@ void Dag::try_pack_hot() {
     if (max_pack_idx < SectionId(0))
         return;
 
+    const auto first_saved = first_saved_section_;
+    const auto generation  = pack_hot_generation_.load();
+    if (!started_.load()) {
+        pack_hot_sections(max_pack_idx, first_saved, generation);
+        return;
+    }
+
+    bool expected = false;
+    if (!pack_hot_running_.compare_exchange_strong(expected, true))
+        return;
+
+    try {
+        ThreadPoolBoost::instance_dag_sync()->post([this, max_pack_idx, first_saved, generation]() {
+            try {
+                pack_hot_sections(max_pack_idx, first_saved, generation);
+            } catch (const std::exception &error) {
+                eWarning("[Dag] Pack worker failed: {}", error.what());
+            } catch (...) {
+                eWarning("[Dag] Pack worker failed");
+            }
+            finish_pack_hot();
+        });
+    } catch (const std::exception &error) {
+        finish_pack_hot();
+        eWarning("[Dag] Failed to schedule pack worker: {}", error.what());
+    } catch (...) {
+        finish_pack_hot();
+        eWarning("[Dag] Failed to schedule pack worker");
+    }
+}
+
+void Dag::finish_pack_hot() {
+    {
+        std::lock_guard completion_lock(pack_hot_completion_mutex_);
+        pack_hot_running_.store(false);
+    }
+    pack_hot_completion_.notify_all();
+}
+
+void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
+                            const SectionId    &first_saved_section,
+                            const std::uint64_t  generation) {
+    std::lock_guard pack_lock(pack_mutex_);
+    if (generation != pack_hot_generation_.load() || status_ == DagStatus::Sync)
+        return;
+    const auto section_size = Config::DataStorage::SECTION_SIZE;
+
     // On-disk pack payloads are canonical (decimal) — the empty placeholder and
     // any re-read content must not pick up an ambient wire (hex) scope.
     WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
 
     while (next_pack_index_ <= max_pack_idx) {
+        if (generation != pack_hot_generation_.load() || status_ == DagStatus::Sync)
+            return;
+
         const auto pack_idx   = next_pack_index_;
         SectionId  pack_first = pack_idx * section_size;
 
@@ -3355,7 +3463,7 @@ void Dag::try_pack_hot() {
         // We only treat absence as "empty" for ranges that sit entirely above
         // first_saved_section_ (i.e. fully within our synced history). A range
         // that dips below first_saved_section_ is incompletely synced; skip it.
-        if (first_saved_section_ != SectionId(-1) && pack_first < first_saved_section_) {
+        if (first_saved_section != SectionId(-1) && pack_first < first_saved_section) {
             next_pack_index_ += 1;
             continue;
         }
@@ -3441,6 +3549,8 @@ void Dag::remove_sections(const SectionId &from) {
 #ifndef IS_APP_CLIENT
     return;
 #endif
+    pack_hot_generation_.fetch_add(1);
+    std::lock_guard pack_lock(pack_mutex_);
 
     cache_.set_section(align_down20(from), Force::Active);
     auto to           = current_section_;
@@ -4065,28 +4175,36 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
         return result;
     };
 
-    std::string last_hash = "";
+    std::string last_hash;
+    SectionId   current_start = start;
 
     if (start > SectionId(0)) {
         auto last_control = this->find_last_control(start - SectionId(1));
-        // eLog("LL 1 {}", last_control);
         if (last_control.has_value()) {
-            last_hash = last_control.value().control;
+            last_hash              = last_control.value().control;
+            const auto resume_from = last_control.value().section_id + SectionId(1);
+            if (resume_from < current_start) {
+                // A previous control pass can be skipped when another pass is
+                // still active. The balance cache can advance meanwhile. Resume
+                // after the last control that is actually stored, so no interval
+                // is omitted from the control chain.
+                current_start = resume_from;
+            }
         } else {
-            return finish(std::nullopt);
+            current_start = SectionId(0);
         }
     }
 
-    if (/*full_generation || */ start == SectionId(0)) {
+    if (current_start == SectionId(0)) {
         if (!this->generate_hash_for_interval(SectionId(0), last_hash).has_value()) {
             return finish(std::nullopt);
         }
         if (full_generation == Force::None) {
             return finish(last_hash);
         }
+        current_start = SectionId(1);
     }
 
-    SectionId current_start = start == SectionId(0) ? SectionId(1) : start;
     for (; control_interval_is_closed(current_start, current_section_, cache_.section());
          current_start += CONTROL_INTERVAL) {
         if (!this->generate_hash_for_interval(current_start, last_hash).has_value()) {
