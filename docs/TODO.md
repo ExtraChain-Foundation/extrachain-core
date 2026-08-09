@@ -323,6 +323,31 @@ Options when it becomes relevant: a slow background reconciliation of old bounda
 checking a few random past boundaries on each handshake (faster detection, slightly more
 traffic). Neither is urgent while nodes start clean.
 
+### 0.46 An actor folder is created for every known actor, not for actors we store
+
+`Dfs::initialize_actor_folder` is called on every saved actor
+(`dfs_controller.cpp`, `ActorIndex::actorSaved`) and for every owner in a dirs sync
+(`dirs_manager.cpp`). A node knows hundreds of actors and stores content for a handful,
+so the disk fills with empty directories and "does this actor have data" stops being
+answerable by looking at the filesystem.
+
+The right rule: **a folder appears when content lands, and never for an empty actor.**
+
+Removing the two eager calls is not enough on its own — tried 2026-08-09 and it broke
+replication (`full_copies` 200/200 → 0/200, owner dirs 18 → 4), reverted in `97a6e25b`.
+The creation paths do not all make their own directory:
+
+| Path | Creates its own dir? |
+|---|---|
+| file download (`load_manager.cpp:567`) | yes |
+| incoming vector content (`handle_package`) | yes, since `5ff722a6` |
+| adding a local file (`dfs_controller.cpp:206`) | yes |
+| **`DfsVector::create`** — writes `.vector` and opens the db | **no** — relied on the eager call |
+
+So the order is: make every creation path responsible for its own directory (starting
+with `DfsVector::create`), verify replication is unaffected, and only then drop the eager
+calls. Doing it the other way round removes the safety net before the replacement exists.
+
 ### 0.48 A console command during startup crashes the node (SIGSEGV)
 
 Reproduced 2026-08-09 while testing the gap fix. A node was restarted and a
