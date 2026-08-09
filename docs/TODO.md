@@ -214,15 +214,20 @@ was genuinely 0 — the network had just started. The request range is
 `file_sync->to >= sync_last_index_ - 1` (`0 >= -1`) immediately declared success. Sections
 1-4 were produced by the network *after* this moment and were never asked for.
 
-*Restart, 02:54:14 — the node comes up with an empty chain and does not sync at all:*
+*Restart, 02:54:14 — the node comes up holding only section 0 and never syncs again:*
 ```
-[Dag] Loaded: 0, first: 0, last cached: -1
+[Dag] Loaded: 0, first: 0, last cached: -1     <- current_section_ = 0: just the genesis
 [Dag] Started. Mode: DagMode::Full
-… no start_check, no handle_sync_request, no section request, ever again
+[WS] Start listening: 127.0.0.7:17593
+[WS] Start sync...                              <- x5, one per peer connection
+[ActorIndex] Diff size: 0, need: 18, local: 18  <- actor sync fine, so start_check() ran
+… and yet: no handle_sync_request, no section request, ever again
 ```
-The whole log contains `Started` twice but the sync sequence only once. After the restart
-the node went straight to accepting live traffic, whose first transaction was in **section
-5** — so 1-4 were skipped without a trace.
+This is the decisive part. The connection handler **did** reach `start_check()` — it fired
+once per peer — but `start_check` returned immediately, because section 0 was present and
+that is the only thing it checks. A node holding exactly one section, with five live peers
+and a network 1900 sections ahead, decided it had nothing to do. It then accepted live
+traffic starting at **section 5**, so 1-4 were skipped without a trace.
 
 Why the existing genesis guard did not catch it: `start_check` returns early when section 0
 is present and non-empty, and it *was* present (fetched on the first start). "Has genesis"
