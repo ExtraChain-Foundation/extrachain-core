@@ -387,7 +387,21 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
     // Dictionary uses static template, no file to write
     // Each failure below used to return a bare false, so the caller's warning could not
     // say which step failed — 966 rejections in three minutes with no way to tell why.
-    if (file_type_ != Dfs::FileType::Dictionary) {
+    // The owner's directory may not exist yet: vector content can arrive before anything
+    // else has created it, and std::ofstream then fails with "Failed to open file for
+    // writing" — 300 such failures on one node during seeding, each one a vector that
+    // never arrived. Creating it here is cheap and idempotent.
+    if (auto parent = vector_path_.native().parent_path(); !parent.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(parent, ec);
+    }
+
+    if (file_type_ != Dfs::FileType::Dictionary && !dfs_vector_content.vector_file.empty()) {
+        // An empty companion file is normal for a freshly created vector and must not
+        // sink the whole package: write_file_content rejects empty content outright
+        // (ContentError::EmptyContent), which made every answer about a new vector
+        // undeliverable — 2081 rejections in one minute of seeding, and the receiving
+        // node never got the vector at all.
         auto res_json = Utils::write_file_content(vector_path_, dfs_vector_content.vector_file);
         if (!res_json.has_value()) {
             eWarning("[DfsVector] handle_package: cannot write {} ({} bytes)",
