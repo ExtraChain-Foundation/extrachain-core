@@ -357,6 +357,32 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
                                                        rows.has_value() ? rows.value() : std::vector<DbRow> {} };
 }
 
+std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError>
+DfsVector::generate_content_package_empty() {
+    // Same payload as generate_content_package minus the rows: a vector with no rows yet
+    // still has a template and a .vector file, and the receiver needs both — without the
+    // template handle_package rejects the package outright.
+    auto vector_template = read_template();
+    if (!vector_template.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    std::string vector_file_content;
+    if (file_type_ != Dfs::FileType::Dictionary) {
+        auto res = Utils::read_file_content(vector_path_);
+        if (!res.has_value()) {
+            return std::unexpected(DfsVectorError::Unknown);
+        }
+        vector_file_content = ByteArray(res.value()).toString();
+    }
+
+    return Dfs::Packets::DfsVectorContentPackage { .owner_id        = file_actor_id_,
+                                                   .file_id         = file_id_,
+                                                   .vector_template = vector_template.value(),
+                                                   .vector_file     = vector_file_content,
+                                                   .content         = std::vector<DbRow> {} };
+}
+
 bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
     // Dictionary uses static template, no file to write
     if (file_type_ != Dfs::FileType::Dictionary) {

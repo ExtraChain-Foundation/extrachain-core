@@ -1741,15 +1741,23 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
 
     // An empty vector still has to be answered: staying silent left the requester
     // without the vector files forever (the dir row replicates, the payload never
-    // does, and nothing retries). Freshly created vectors are exactly this case —
-    // on a stand only a third of them ever reached every node, while plain files
-    // were always at 100%. Send an empty package, same as vector creation does.
+    // does, and nothing retries). Freshly created vectors are exactly this case.
+    //
+    // The answer must carry the template even when there are no rows. A package with
+    // only owner_id/file_id set is undeliverable: handle_package rejects it at
+    // `vector_template.fields().size() == 0` and the receiver drops it — 952 such
+    // rejections in the first three minutes of a run. Rebuild the package with an
+    // explicitly empty row set instead of hand-rolling a stub.
     Dfs::Packets::DfsVectorContentPackage package;
     if (rows.has_value()) {
         package = rows.value();
     } else {
-        package.owner_id = owner_id;
-        package.file_id  = file_id;
+        auto empty = dfs_vector->generate_content_package_empty();
+        if (!empty.has_value()) {
+            eWarning("[DfsCollection] Can't build empty package for {} / {}", owner_id, file_id);
+            return;
+        }
+        package = empty.value();
     }
 
     responder.send_response(package,
