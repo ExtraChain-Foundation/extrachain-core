@@ -2046,6 +2046,21 @@ void ExtraChainNode::timer_info_print() {
          dag_->cache().section().to_printable_string());
 
 #ifndef IS_APP_CLIENT
+    // Periodically re-check where we stand against the network. Until now start_check
+    // ran only when a peer connected (or when the actor first-sync ended), so a node
+    // that fell behind *after* the mesh had formed never asked again — nothing else
+    // triggers it. Measured on a six-node stand: four nodes sat at section 1 while two
+    // reached 129, with the last start_check three minutes in the past.
+    //
+    // Cheap when there is nothing to do: with every peer level, handle_sync_request
+    // logs "Not need sync" and returns. Only while Ready — a node already syncing is
+    // driven by its own state machine and must not be restarted under itself.
+    if (dag_->status() == DagStatus::Ready) {
+        dag_->start_check();
+    }
+#endif
+
+#ifndef IS_APP_CLIENT
     #ifdef Q_OS_LINUX
     {
         std::ifstream statm("/proc/self/statm");

@@ -992,6 +992,35 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
 
     if (control_index_)
         control_index_->put(section_id, hash);
+
+    // A peer may have claimed this boundary before we sealed it. Now that we have our
+    // own control, that claim is finally comparable — this is the point of having
+    // remembered it in network_hash_interval.
+    {
+        std::string peer_hash;
+        {
+            std::lock_guard lock(pending_intervals_mutex_);
+            if (auto it = pending_intervals_.find(section_id); it != pending_intervals_.end()) {
+                peer_hash = it->second;
+                pending_intervals_.erase(it);
+            }
+        }
+
+        if (!peer_hash.empty()) {
+            if (peer_hash != hash) {
+                // No responder here — this runs from write_control, not a network
+                // handler, so we cannot ask that peer directly. The next interval
+                // exchange for this boundary hits the live path and refetches.
+                eCritical("[Dag] Control mismatch at section {} (deferred): ours {}, peer {}",
+                          section_id,
+                          hash,
+                          peer_hash);
+            } else {
+                eLog("[Dag] Deferred interval check at {}: match", section_id);
+            }
+        }
+    }
+
     return WriteResult::Write;
 }
 
@@ -1789,9 +1818,29 @@ void Dag::start_check() {
         }
         auto zero = this->read_section(SectionId(0));
         if (zero.has_value() && !zero->transactions.empty()) {
-            return;
+            // Holding genesis is not the same as being level with the network. This
+            // used to return unconditionally, so a Ready node that owned section 0 —
+            // which includes the node that created it — never reached
+            // handle_sync_request at all: `last_info_` stayed empty, no peer height was
+            // ever compared, and the node sat at its own current_section_ forever.
+            // Measured on a six-node stand: the seed node stopped at section 0 while
+            // the network reached 141, still reporting DagStatus::Ready.
+            //
+            // The height cannot be checked here: `last_info_` is only ever filled by
+            // network_status_sync_response, which answers a request that start_sync
+            // sends — so returning early is what keeps it empty. Reading it before
+            // asking is a closed loop.
+            //
+            // So ask. start_sync collects peer heights, and handle_sync_request decides
+            // from them whether anything needs fetching: with everyone level it logs
+            // "Not need sync" and goes straight back to Ready, which is the same
+            // outcome this early return produced, only now it is a decision rather than
+            // an assumption. See docs/TODO.md 1.1 and 0.75.
+            eLog("[Dag] start_check: at section {}, asking peers whether we are behind",
+                 current_section_);
+        } else {
+            eLog("[Dag] start_check: no genesis section yet — running initial sync");
         }
-        eLog("[Dag] start_check: no genesis section yet — running initial sync");
     }
 #endif
 
@@ -1856,6 +1905,9 @@ void Dag::network_status_sync_request(const Responder &responder) {
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
     std::lock_guard sync_lock(sync_last_info_mutex_);
     if (responder.identifiers().empty() || responder.luminance() < 2) {
+        eLog("[Dag] Sync responce dropped: identifiers={}, luminance={}",
+             responder.identifiers().size(),
+             responder.luminance());
         return;
     }
 
@@ -2522,21 +2574,6 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    // eLog("Hash interval: {}", hash_interval);
-    auto last_control = this->find_last_control(hash_interval.to - 1);
-    if (!last_control.has_value()) {
-        eWarning("[Dag] Hash interval check: no last control");
-        // return;
-        this->start_control(Force::Active);
-
-        last_control = this->find_last_control(hash_interval.to - 1);
-        if (!last_control.has_value()) {
-            return;
-        }
-    }
-
-    // eLog("[Dag] Last control: {}", last_control);
-
     if (hash_interval.to > current_section_) {
         eLog("[Dag] Hash interval check: ignore #2");
         return;
@@ -2547,27 +2584,59 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    if (last_control->section_id != hash_interval.to) {
-        eLog("[Dag] Hash interval check: ignore #4");
+    // Read the control AT the boundary the peer names. This used to call
+    // find_last_control(to - 1), which returns our *latest* control, then compare its
+    // section_id with `to` — so the moment we were one interval ahead the check bailed
+    // out as "ignore #4". Measured on a six-node stand: half of all interval exchanges
+    // died there (6 of 12), i.e. the live verification mostly did not run.
+    // With ControlIndex this lookup is O(1), so there is no cost argument for the walk.
+    auto last_control = this->read_control(hash_interval.to);
+
+    if (!last_control.has_value()) {
+        // The peer sealed this boundary before us. Keep the claim instead of discarding
+        // it — we are Ready and only slightly behind, so our control is minutes away
+        // and the comparison becomes possible then. Bounded to the newest few.
+        std::lock_guard lock(pending_intervals_mutex_);
+        pending_intervals_[hash_interval.to] = hash_interval.hash;
+        while (pending_intervals_.size() > 8) {
+            pending_intervals_.erase(pending_intervals_.begin());
+        }
+        eLog("[Dag] Hash interval check: no control at {} yet — remembered", hash_interval.to);
         return;
     }
 
     if (last_control->control != hash_interval.hash) {
-        eLog("[Dag] Hash interval check: false. Hash interval: {}, last control: {}. Need sync",
-             hash_interval,
-             last_control);
+        eCritical("[Dag] Control mismatch at {}: ours {}, peer {} — refetching interval {}..{}",
+                  hash_interval.to,
+                  last_control->control,
+                  hash_interval.hash,
+                  hash_interval.from,
+                  hash_interval.to);
 
-        // this->start_sync();
-        return;
-        if (current_section_ < hash_interval.to) {
-            if (status_ != DagStatus::Ready) {
-                status_ = DagStatus::Maybe;
+        // Was `return;` since the feature was written, so a node has never acted on a
+        // control mismatch — it logged "Need sync" and carried on. Only the refetch
+        // branch is enabled: the other one flips status_ to Maybe from a network
+        // handler, which is the kind of side effect that likely got this disabled in
+        // the first place. Re-fetching is idempotent (write_section merges), so the
+        // worst case is redundant traffic, not corruption.
+        //
+        // Guard against a stampede: several peers reporting the same boundary would
+        // otherwise each trigger their own refetch of the same range.
+        {
+            std::lock_guard lock(refetched_intervals_mutex_);
+            const auto      now = Utils::current_date_ms();
+            if (auto it = refetched_intervals_.find(hash_interval.to);
+                it != refetched_intervals_.end() && now - it->second < 60'000) {
+                eLog("[Dag] Interval {} already refetched recently — skipping", hash_interval.to);
+                return;
             }
-
-            this->start_check(); // TODO: warning: check or sync?
-        } else {
-            this->request_file_sections(hash_interval.from, hash_interval.to, responder);
+            refetched_intervals_[hash_interval.to] = now;
+            while (refetched_intervals_.size() > 16) {
+                refetched_intervals_.erase(refetched_intervals_.begin());
+            }
         }
+
+        this->request_file_sections(hash_interval.from, hash_interval.to, responder);
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
     }
@@ -2631,7 +2700,24 @@ void Dag::handle_sync_request() {
         // TODO: better cons
         for (const auto &[_, info] : last_info_) {
             if (info.last_section_id > my_index) {
-                if (info.last_control_section_id < SectionId(0)) {
+                // Falling behind by more than the acceptance window is a missing-section
+                // problem, not a control problem. `need_recontrol` alone ends in
+                // request_control_section() followed by `return` — no section is ever
+                // fetched — so a node that came back from a restart 65 sections behind
+                // kept drifting (measured: 65 -> 137 in two minutes) while rejecting
+                // every incoming transaction as TooSectionDiff: 606 rejections against
+                // ~130 on healthy peers. See docs/TODO.md 0.75.
+                //
+                // The hot-tail gap scan above does not cover this: it walks up to
+                // `current_section_`, this node's *own* height, and a node that is
+                // merely behind has no hole below it — its chain is contiguous, just
+                // short. Only a comparison against the peers' height sees it.
+                //
+                // 15 = the acceptance window enforced in prove_transaction. Beyond it we
+                // are not merely lagging, we are rejecting live traffic.
+                if (info.last_section_id > my_index + SectionId(15)) {
+                    need_sync = true;
+                } else if (info.last_control_section_id < SectionId(0)) {
                     need_sync = true;
                 } else {
                     need_recontrol = true;
