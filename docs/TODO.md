@@ -492,11 +492,25 @@ a rate that tracks how often nodes go down.
 Roughly 30 transactions lost on one node in 80 minutes of chaos, against ~2000 sections
 built in the same window.
 
-What is missing is an answer to rejection. Options, roughly in order of cost: have the
-sender re-stamp and re-send on `TooSectionDiff` (it knows the current section from the
-rejection); or have a node refuse to emit transactions until it has re-synced after a
-disruption; or acknowledge acceptance so the sender can tell the difference between
-"delivered" and "dropped". Today there is no feedback path at all.
+**The feedback path already exists — only the last step is missing.** Tracing it:
+
+- the receiver rejects and there is even a placeholder for reacting, left empty:
+  `if (tx.section() < this->current_section()) { // need sync? }` (`dag.cpp:352`);
+- the sender *does* learn about it: `network_transaction_result` sees
+  `TooSectionDiff`, moves the transaction into `failed_transactions_`, and emits
+  `dagTxNotApproved` (`dag.cpp:397-407`);
+- and there it stops. `failed_transactions_` is only ever inserted into and counted for a
+  log line (`extrachain_node.cpp:1218`); nothing reads it back. `dagTxNotApproved` has no
+  subscriber anywhere in the codebase.
+
+So the transaction is carefully filed under "did not make it" and the drawer is never
+opened. The fix is correspondingly small: re-stamp entries in `failed_transactions_` with
+the current section and re-send, with a bounded attempt count so a permanently invalid
+transaction does not loop. The rejection reply already carries what is needed to decide.
+
+Worth pairing with: a node that has just restarted or resumed should not emit
+transactions until it has re-synced — that removes the cause rather than repairing the
+symptom.
 
 ### 0.9 A restarted node accepts a transaction into a section the network has closed
 
