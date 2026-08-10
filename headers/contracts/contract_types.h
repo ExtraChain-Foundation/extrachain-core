@@ -147,6 +147,7 @@ namespace ExtraChain::Contracts {
         std::string                  contract_id;
         std::string                  owner_id;
         std::string                  kind;
+        std::string                  language;
         std::uint32_t                active_version = 1;
         std::vector<ContractVersion> versions;
     };
@@ -155,6 +156,7 @@ namespace ExtraChain::Contracts {
         std::string   contract_id;
         std::string   owner_id;
         std::string   kind;
+        std::string   language;
         std::uint32_t version  = 1;
         std::uint64_t revision = 1;
         std::string   module_hash;
@@ -174,6 +176,7 @@ namespace ExtraChain::Contracts {
                           (contract_id,
                            owner_id,
                            kind,
+                           language,
                            version,
                            revision,
                            module_hash,

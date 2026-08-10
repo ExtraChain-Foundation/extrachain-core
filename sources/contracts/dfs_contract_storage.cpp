@@ -60,17 +60,27 @@ namespace ExtraChain::Contracts {
         };
 
         struct ContractHeadCache {
-            std::uint32_t                 schema = 2;
+            std::uint32_t                 schema = 3;
             std::string                   contract_id;
             std::string                   owner_id;
             std::string                   kind;
+            std::string                   language;
             std::uint32_t                 active_version = 1;
             std::vector<VersionReference> versions;
             RevisionReference             head;
             RevisionReference             checkpoint;
             std::vector<std::uint8_t>     state;
 
-            MSGPACK_DEFINE(schema, contract_id, owner_id, kind, active_version, versions, head, checkpoint, state)
+            MSGPACK_DEFINE(schema,
+                           contract_id,
+                           owner_id,
+                           kind,
+                           language,
+                           active_version,
+                           versions,
+                           head,
+                           checkpoint,
+                           state)
         };
 
         ContractFailure failure(ContractError error, std::string detail) {
@@ -175,6 +185,7 @@ namespace ExtraChain::Contracts {
                 .contract_id    = record.contract_id,
                 .owner_id       = record.owner_id,
                 .kind           = record.kind,
+                .language       = record.language,
                 .active_version = record.active_version,
                 .head =
                     RevisionReference {
@@ -281,7 +292,7 @@ namespace ExtraChain::Contracts {
             try {
                 auto object = msgpack::unpack(bytes.constData(), static_cast<std::size_t>(bytes.size()));
                 auto cache  = object.get().as<ContractHeadCache>();
-                if (cache.schema != 2 || cache.contract_id != contract_id.to_string() || cache.owner_id.empty()
+                if (cache.schema != 3 || cache.contract_id != contract_id.to_string() || cache.owner_id.empty()
                     || cache.kind.empty() || cache.active_version == 0
                     || cache.active_version != cache.versions.size() || cache.head.version != cache.active_version
                     || cache.checkpoint.version != cache.active_version || cache.head.revision == 0
@@ -320,6 +331,7 @@ namespace ExtraChain::Contracts {
                          && metadata->state_hash == cache.head.state_hash
                          && metadata->previous_state_hash == cache.head.previous_hash
                          && metadata->version == cache.active_version && metadata->kind == cache.kind
+                         && metadata->language == cache.language
                          && metadata->module_hash == cache.versions.back().module_hash
                          && metadata->checkpoint_revision == cache.checkpoint.revision)
                         || (!root_head && head_transition != metadata->transitions.end()
@@ -327,7 +339,7 @@ namespace ExtraChain::Contracts {
                             && head_transition->state_hash == cache.head.state_hash
                             && head_transition->previous_state_hash == cache.head.previous_hash
                             && head_transition->version == cache.active_version
-                            && head_transition->kind == cache.kind
+                            && head_transition->kind == cache.kind && head_transition->language == cache.language
                             && head_transition->module_hash == cache.versions.back().module_hash
                             && head_transition->checkpoint_revision == cache.checkpoint.revision));
                 if (!head_matches) {
@@ -357,14 +369,16 @@ namespace ExtraChain::Contracts {
                          && checkpoint_metadata->state_hash == cache.checkpoint.state_hash
                          && checkpoint_metadata->version == cache.checkpoint.version
                          && checkpoint_metadata->module_hash == cache.versions.back().module_hash
-                         && checkpoint_metadata->kind == cache.kind)
+                         && checkpoint_metadata->kind == cache.kind
+                         && checkpoint_metadata->language == cache.language)
                         || (!root_checkpoint && checkpoint_transition != checkpoint_metadata->transitions.end()
                             && checkpoint_transition->checkpoint
                             && checkpoint_transition->revision == cache.checkpoint.revision
                             && checkpoint_transition->state_hash == cache.checkpoint.state_hash
                             && checkpoint_transition->version == cache.checkpoint.version
                             && checkpoint_transition->module_hash == cache.versions.back().module_hash
-                            && checkpoint_transition->kind == cache.kind));
+                            && checkpoint_transition->kind == cache.kind
+                            && checkpoint_transition->language == cache.language));
                 if (!checkpoint_matches) {
                     return std::unexpected(failure(ContractError::StorageError,
                                                    "Contract checkpoint does not match the approved chain"));
@@ -380,6 +394,7 @@ namespace ExtraChain::Contracts {
                     .contract_id    = cache.contract_id,
                     .owner_id       = cache.owner_id,
                     .kind           = cache.kind,
+                    .language       = cache.language,
                     .active_version = cache.active_version,
                 };
                 record.versions.reserve(cache.versions.size());
@@ -473,6 +488,7 @@ namespace ExtraChain::Contracts {
                                                         .contract_id         = record.contract_id,
                                                         .caller_contract_id  = transaction.sender().to_string(),
                                                         .kind                = metadata->kind,
+                                                        .language            = metadata->language,
                                                         .method              = metadata->method,
                                                         .arguments_base64    = metadata->arguments_base64,
                                                         .module_hash         = metadata->module_hash,
@@ -500,6 +516,8 @@ namespace ExtraChain::Contracts {
                                                 }
                                                 if (invocation.revision != current.revision + 1
                                                     || invocation.version != version.version
+                                                    || invocation.kind != record.kind
+                                                    || invocation.language != record.language
                                                     || invocation.module_hash != version.module_hash
                                                     || invocation.previous_state_hash != current.state_hash) {
                                                     return failure(ContractError::StorageError,
@@ -574,6 +592,7 @@ namespace ExtraChain::Contracts {
             }
             std::string                      owner_id;
             std::string                      kind;
+            std::string                      language;
             std::vector<VersionReference>    versions;
             std::optional<RevisionReference> checkpoint;
             const auto                       first = dag->first_saved_section();
@@ -581,81 +600,77 @@ namespace ExtraChain::Contracts {
             if (first < SectionId(0) || last < first) {
                 return std::unexpected(failure(ContractError::NotFound, "Contract checkpoint does not exist"));
             }
-            const auto scan_error =
-                visit_contract_sections(dag,
-                                        contract_id,
-                                        first,
-                                        last,
-                                        [&](const SectionId &section_id) -> std::optional<ContractFailure> {
-                                            const auto section = dag->read_section(section_id);
-                                            if (!section.has_value()) {
-                                                return std::nullopt;
-                                            }
-                                            for (const auto &transaction : section->transactions) {
-                                                if (!transaction.meta().has_value()) {
-                                                    continue;
-                                                }
-                                                const auto metadata = Json::deserialize<ContractTransactionData>(
-                                                    *transaction.meta());
-                                                if (!metadata.has_value() || metadata->schema != 4) {
-                                                    continue;
-                                                }
-                                                const bool root_transaction =
-                                                    transaction.receiver() == contract_id;
-                                                const auto nested =
-                                                    std::ranges::find(metadata->transitions,
-                                                                      contract_id.to_string(),
-                                                                      &ContractTransitionData::contract_id);
-                                                if (!root_transaction && nested == metadata->transitions.end()) {
-                                                    continue;
-                                                }
-                                                if (root_transaction
-                                                    && transaction.type() == TransactionType::ContractDeploy) {
-                                                    owner_id = transaction.sender().to_string();
-                                                    kind     = metadata->kind;
-                                                    versions.clear();
-                                                    versions.push_back(VersionReference {
-                                                        .version     = 1,
-                                                        .module_hash = metadata->module_hash,
-                                                    });
-                                                } else if (root_transaction
-                                                           && transaction.type()
-                                                                  == TransactionType::ContractUpgrade) {
-                                                    if (versions.size() + 1 != metadata->version) {
-                                                        return failure(ContractError::StorageError,
-                                                                       "Contract module history is invalid");
-                                                    }
-                                                    versions.push_back(VersionReference {
-                                                        .version              = metadata->version,
-                                                        .module_hash          = metadata->module_hash,
-                                                        .previous_module_hash = versions.back().module_hash,
-                                                    });
-                                                }
-                                                const auto checkpoint_enabled =
-                                                    root_transaction ? metadata->checkpoint : nested->checkpoint;
-                                                const auto checkpoint_revision =
-                                                    root_transaction ? metadata->revision : nested->revision;
-                                                if (checkpoint_enabled
-                                                    && (!checkpoint.has_value()
-                                                        || checkpoint_revision > checkpoint->revision)) {
-                                                    checkpoint = RevisionReference {
-                                                        .version =
-                                                            root_transaction ? metadata->version : nested->version,
-                                                        .revision = checkpoint_revision,
-                                                        .block    = static_cast<std::uint64_t>(
-                                                            section_id.to_int().value_or(0)),
-                                                        .previous_hash    = root_transaction
-                                                                                ? metadata->previous_state_hash
-                                                                                : nested->previous_state_hash,
-                                                        .state_hash       = root_transaction ? metadata->state_hash
-                                                                                             : nested->state_hash,
-                                                        .transaction_hash = transaction.hash(),
-                                                        .author_id        = transaction.sender().to_string(),
-                                                    };
-                                                }
-                                            }
-                                            return std::nullopt;
-                                        });
+            const auto scan_error = visit_contract_sections(
+                dag,
+                contract_id,
+                first,
+                last,
+                [&](const SectionId &section_id) -> std::optional<ContractFailure> {
+                    const auto section = dag->read_section(section_id);
+                    if (!section.has_value()) {
+                        return std::nullopt;
+                    }
+                    for (const auto &transaction : section->transactions) {
+                        if (!transaction.meta().has_value()) {
+                            continue;
+                        }
+                        const auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
+                        if (!metadata.has_value() || metadata->schema != 4) {
+                            continue;
+                        }
+                        const bool root_transaction = transaction.receiver() == contract_id;
+                        const auto nested           = std::ranges::find(metadata->transitions,
+                                                              contract_id.to_string(),
+                                                              &ContractTransitionData::contract_id);
+                        if (!root_transaction && nested == metadata->transitions.end()) {
+                            continue;
+                        }
+                        if (root_transaction && transaction.type() == TransactionType::ContractDeploy) {
+                            owner_id = transaction.sender().to_string();
+                            kind     = metadata->kind;
+                            language = metadata->language;
+                            versions.clear();
+                            versions.push_back(VersionReference {
+                                .version     = 1,
+                                .module_hash = metadata->module_hash,
+                            });
+                        } else if (root_transaction && transaction.type() == TransactionType::ContractUpgrade) {
+                            if (metadata->kind != kind || metadata->language != language
+                                || versions.size() + 1 != metadata->version) {
+                                return failure(ContractError::StorageError, "Contract module history is invalid");
+                            }
+                            versions.push_back(VersionReference {
+                                .version              = metadata->version,
+                                .module_hash          = metadata->module_hash,
+                                .previous_module_hash = versions.back().module_hash,
+                            });
+                        }
+                        const auto &transaction_kind = root_transaction ? metadata->kind : nested->kind;
+                        const auto &transaction_language =
+                            root_transaction ? metadata->language : nested->language;
+                        if (!kind.empty() && (transaction_kind != kind || transaction_language != language)) {
+                            return failure(ContractError::StorageError,
+                                           "Contract identity changed in the approved chain");
+                        }
+                        const auto checkpoint_enabled =
+                            root_transaction ? metadata->checkpoint : nested->checkpoint;
+                        const auto checkpoint_revision = root_transaction ? metadata->revision : nested->revision;
+                        if (checkpoint_enabled
+                            && (!checkpoint.has_value() || checkpoint_revision > checkpoint->revision)) {
+                            checkpoint = RevisionReference {
+                                .version  = root_transaction ? metadata->version : nested->version,
+                                .revision = checkpoint_revision,
+                                .block    = static_cast<std::uint64_t>(section_id.to_int().value_or(0)),
+                                .previous_hash =
+                                    root_transaction ? metadata->previous_state_hash : nested->previous_state_hash,
+                                .state_hash       = root_transaction ? metadata->state_hash : nested->state_hash,
+                                .transaction_hash = transaction.hash(),
+                                .author_id        = transaction.sender().to_string(),
+                            };
+                        }
+                    }
+                    return std::nullopt;
+                });
             if (scan_error.has_value()) {
                 return std::unexpected(*scan_error);
             }
@@ -700,6 +715,7 @@ namespace ExtraChain::Contracts {
                 .contract_id    = contract_id.to_string(),
                 .owner_id       = owner_id,
                 .kind           = kind,
+                .language       = language,
                 .active_version = active_version,
             };
             record.versions.reserve(versions.size());

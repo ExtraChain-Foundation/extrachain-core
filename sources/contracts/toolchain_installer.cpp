@@ -17,6 +17,7 @@
 #include <unordered_set>
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -218,6 +219,8 @@ namespace ExtraChain::Contracts {
 #endif
                 const QFileInfo node(directory.filePath(NodeName));
                 const QFileInfo compiler(directory.filePath("compiler/asc.js"));
+                const QFileInfo marker(directory.filePath("compiler/mark-wasm.mjs"));
+                const QFileInfo amount_library(directory.filePath("dependencies/as-bignum/package.json"));
                 const QFileInfo sdk(directory.filePath("sdk/index.ts"));
                 const QFileInfo components(directory.filePath("components/index.ts"));
                 const QFileInfo catalog(directory.filePath("catalog/components.json"));
@@ -232,10 +235,10 @@ namespace ExtraChain::Contracts {
                 const auto catalog_document  = QJsonDocument::fromJson(catalog_file.readAll());
                 const auto metadata_document = QJsonDocument::fromJson(metadata_file.readAll());
                 const auto runtime_version   = run_process(node.absoluteFilePath(), { "--version" }, 5000);
-                return node.isFile() && node.isExecutable() && compiler.isFile() && sdk.isFile()
-                       && components.isFile() && catalog.isFile() && template_file.isFile()
-                       && generated_file.isFile() && entry_file.isFile() && catalog_document.isObject()
-                       && catalog_document.object().value("schema").toInt() == 1
+                return node.isFile() && node.isExecutable() && compiler.isFile() && marker.isFile()
+                       && amount_library.isFile() && sdk.isFile() && components.isFile() && catalog.isFile()
+                       && template_file.isFile() && generated_file.isFile() && entry_file.isFile()
+                       && catalog_document.isObject() && catalog_document.object().value("schema").toInt() == 1
                        && catalog_document.object().value("version").toString() == SupportedCatalogVersion
                        && catalog_document.object().value("language").toString() == "assemblyscript"
                        && catalog_document.object().value("components").isArray() && metadata_document.isObject()
@@ -298,6 +301,31 @@ namespace ExtraChain::Contracts {
             }
             QFile::remove(target);
             return QFile::copy(source, target);
+        }
+
+        bool copy_directory(const QString& source, const QString& target) {
+            if (!QDir(source).exists() || !QDir().mkpath(target)) {
+                return false;
+            }
+            QDirIterator entries(source,
+                                 QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot,
+                                 QDirIterator::Subdirectories);
+            while (entries.hasNext()) {
+                const auto source_path = entries.next();
+                const auto relative    = QDir(source).relativeFilePath(source_path);
+                const auto target_path = QDir(target).filePath(relative);
+                if (entries.fileInfo().isDir()) {
+                    if (!QDir().mkpath(target_path)) {
+                        return false;
+                    }
+                } else {
+                    if (!QDir().mkpath(QFileInfo(target_path).absolutePath())
+                        || !copy_file(source_path, target_path)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
     } // namespace
 
@@ -482,12 +510,15 @@ namespace ExtraChain::Contracts {
             const QDir release(installation->path);
             QDir       build(project.path());
             if (!build.mkpath("sdk") || !build.mkpath("components") || !build.mkpath("build")
+                || !build.mkpath("node_modules")
                 || !copy_file(release.filePath("sdk/index.ts"), build.filePath("sdk/index.ts"))
                 || !copy_file(release.filePath("components/index.ts"), build.filePath("components/index.ts"))
                 || !copy_file(release.filePath("templates/basic/assembly/generated.ts"),
                               build.filePath("assembly/generated.ts"))
                 || !copy_file(release.filePath("templates/basic/assembly/index.ts"),
-                              build.filePath("assembly/index.ts"))) {
+                              build.filePath("assembly/index.ts"))
+                || !copy_directory(release.filePath("dependencies/as-bignum"),
+                                   build.filePath("node_modules/as-bignum"))) {
                 return std::unexpected(
                     failure(ToolchainError::StorageError, "Cannot create the AssemblyScript project"));
             }
@@ -526,6 +557,13 @@ namespace ExtraChain::Contracts {
             if (!QFile::exists(artifact)) {
                 return std::unexpected(
                     failure(ToolchainError::StorageError, "AssemblyScript did not produce a WebAssembly module"));
+            }
+            auto marked = run_process(node_program,
+                                      { release.filePath("compiler/mark-wasm.mjs"), artifact, "assemblyscript" },
+                                      10000,
+                                      project.path());
+            if (!marked.has_value()) {
+                return std::unexpected(marked.error());
             }
             const auto output = QDir(root_path_).filePath(QString("artifacts/%1.wasm").arg(safe_name));
             if (!QDir(root_path_).mkpath("artifacts")) {

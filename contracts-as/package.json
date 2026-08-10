@@ -5,9 +5,14 @@
   "description": "Independent AssemblyScript SDK and components for ExtraChain contracts.",
   "scripts": {
     "build:basic": "asc assembly/index.ts --outFile build/basic.wasm --runtime stub --disable bulk-memory --use abort=assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1",
-    "check": "asc assembly/index.ts --outFile build/basic.wasm --runtime stub --disable bulk-memory --use abort=assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && asc examples/dfs-binding/assembly/index.ts --outFile build/dfs-binding.wasm --runtime stub --disable bulk-memory --use abort=examples/dfs-binding/assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1"
+    "build:fungible": "asc fungible-token/assembly/index.ts --outFile build/fungible-token.wasm --runtime stub --disable bulk-memory --use abort=fungible-token/assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && node scripts/mark-wasm.mjs build/fungible-token.wasm assemblyscript",
+    "build:nft": "asc non-fungible-token/assembly/index.ts --outFile build/non-fungible-token.wasm --runtime stub --disable bulk-memory --use abort=non-fungible-token/assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && node scripts/mark-wasm.mjs build/non-fungible-token.wasm assemblyscript",
+    "check": "asc assembly/index.ts --outFile build/basic.wasm --runtime stub --disable bulk-memory --use abort=assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && asc examples/dfs-binding/assembly/index.ts --outFile build/dfs-binding.wasm --runtime stub --disable bulk-memory --use abort=examples/dfs-binding/assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && npm run build:fungible && npm run build:nft"
   },
   "devDependencies": {
     "assemblyscript": "0.28.20"
+  },
+  "dependencies": {
+    "as-bignum": "0.3.1"
   }
 }

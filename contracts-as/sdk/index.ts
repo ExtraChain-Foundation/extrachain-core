@@ -1,5 +1,44 @@
+import { u128 } from "as-bignum/assembly/integer/u128";
+
 export const ABI_VERSION: u64 = 3;
 export const MAX_PROOFS: i32 = 64;
+export const MAX_U128_DECIMAL = "340282366920938463463374607431768211455";
+
+export class Amount {
+  private constructor(public value: u128) {}
+
+  static zero(): Amount { return new Amount(u128.Zero); }
+  static one(): Amount { return new Amount(u128.One); }
+  static fromU64(value: u64): Amount { return new Amount(u128.fromU64(value)); }
+
+  static parse(value: string): Amount | null {
+    if (value.length == 0 || value.length > MAX_U128_DECIMAL.length) return null;
+    if (value.length > 1 && value.charCodeAt(0) == 48) return null;
+    for (let index = 0; index < value.length; ++index) {
+      const digit = value.charCodeAt(index);
+      if (digit < 48 || digit > 57) return null;
+    }
+    if (value.length == MAX_U128_DECIMAL.length && value > MAX_U128_DECIMAL) return null;
+    return new Amount(u128.fromString(value));
+  }
+
+  clone(): Amount { return new Amount(this.value.clone()); }
+  isZero(): bool { return this.value.isZero(); }
+  equals(other: Amount): bool { return this.value == other.value; }
+  lessThan(other: Amount): bool { return this.value < other.value; }
+  greaterThan(other: Amount): bool { return this.value > other.value; }
+
+  checkedAdd(other: Amount): Amount | null {
+    const value = this.value + other.value;
+    return value < this.value ? null : new Amount(value);
+  }
+
+  checkedSub(other: Amount): Amount | null {
+    return this.value < other.value ? null : new Amount(this.value - other.value);
+  }
+
+  toString(): string { return this.value.toString(); }
+}
 
 export class Decoder {
   private source: Uint8Array;
@@ -16,6 +55,14 @@ export class Decoder {
       return 0;
     }
     return this.source[this.offset++];
+  }
+
+  private peek(): u8 {
+    if (this.offset >= this.source.length) {
+      this.valid = false;
+      return 0;
+    }
+    return this.source[this.offset];
   }
 
   private readBigEndian(length: i32): u64 {
@@ -60,6 +107,17 @@ export class Decoder {
     if (marker == 0xcf) return this.readBigEndian(8);
     this.valid = false;
     return 0;
+  }
+
+  amount(): Amount | null {
+    const marker = this.peek();
+    if (!this.valid) return null;
+    if ((marker & 0xe0) == 0xa0 || marker == 0xd9 || marker == 0xda || marker == 0xdb) {
+      const value = this.string();
+      return this.valid ? Amount.parse(value) : null;
+    }
+    const value = this.u64();
+    return this.valid ? Amount.fromU64(value) : null;
   }
 
   private length(marker: u8, fixedMask: u8, fixedValue: u8): i32 {
@@ -144,21 +202,12 @@ export class Encoder {
   }
 
   u64(value: u64): void {
-    if (value <= 0x7f) {
-      this.byte(<u8>value);
-    } else if (value <= 0xff) {
-      this.byte(0xcc);
-      this.bigEndian(value, 1);
-    } else if (value <= 0xffff) {
-      this.byte(0xcd);
-      this.bigEndian(value, 2);
-    } else if (value <= 0xffffffff) {
-      this.byte(0xce);
-      this.bigEndian(value, 4);
-    } else {
-      this.byte(0xcf);
-      this.bigEndian(value, 8);
-    }
+    this.byte(0xcf);
+    this.bigEndian(value, 8);
+  }
+
+  amount(value: Amount): void {
+    this.string(value.toString());
   }
 
   string(value: string): void {

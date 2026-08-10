@@ -303,6 +303,7 @@ CREATE TABLE IF NOT EXISTS contract_catalog (
     contract_id TEXT PRIMARY KEY NOT NULL,
     owner_id TEXT NOT NULL,
     kind TEXT NOT NULL,
+    language TEXT NOT NULL,
     version INTEGER NOT NULL,
     revision INTEGER NOT NULL,
     module_hash TEXT NOT NULL,

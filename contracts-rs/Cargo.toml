@@ -1,5 +1,5 @@
 [workspace]
-members = ["sdk", "components", "fungible-token", "message-claim"]
+members = ["sdk", "components", "fungible-token", "non-fungible-token", "message-claim"]
 resolver = "3"
 
 [workspace.package]

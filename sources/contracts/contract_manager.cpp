@@ -17,6 +17,8 @@
 
 #include "contracts/contract_codec.h"
 #include "contracts/contract_hash.h"
+#include "contracts/contract_module.h"
+#include "contracts/standard_token.h"
 
 namespace ExtraChain::Contracts {
     namespace {
@@ -77,6 +79,38 @@ namespace ExtraChain::Contracts {
                 const auto transfer_valid =
                     effect.operation != "transfer" || std::get<1>(entries.front()) == std::get<1>(entries.back());
                 return entries_valid && transfer_valid;
+            } catch (const std::exception &) {
+                return false;
+            }
+        }
+
+        bool valid_nft_delta(const ContractEffect &effect) {
+            try {
+                std::size_t offset = 0;
+                auto        handle = msgpack::unpack(reinterpret_cast<const char *>(effect.arguments.data()),
+                                              effect.arguments.size(),
+                                              offset);
+                if (offset != effect.arguments.size()) {
+                    return false;
+                }
+                std::vector<std::string> values;
+                handle.get().convert(values);
+                const auto expected_size = effect.operation == "nft_transfer" ? 3U : 2U;
+                if ((effect.operation != "nft_mint" && effect.operation != "nft_transfer"
+                     && effect.operation != "nft_burn")
+                    || values.size() != expected_size || values.front().empty() || values.front().size() > 39
+                    || !std::ranges::all_of(values.front(),
+                                            [](char digit) {
+                                                return digit >= '0' && digit <= '9';
+                                            })
+                    || (values.front().size() > 1 && values.front().front() == '0')
+                    || (values.front().size() == 39
+                        && values.front() > "340282366920938463463374607431768211455")) {
+                    return false;
+                }
+                return std::all_of(values.begin() + 1, values.end(), [](const std::string &actor) {
+                    return !actor.empty();
+                });
             } catch (const std::exception &) {
                 return false;
             }
@@ -151,7 +185,9 @@ namespace ExtraChain::Contracts {
                     return true;
                 }
                 if (effect.kind == ContractEffectKind::TokenDelta) {
-                    return kind == "fungible-token" && effect.target == contract_id && valid_token_delta(effect);
+                    return effect.target == contract_id
+                           && ((kind == "fungible-token" && valid_token_delta(effect))
+                               || (kind == "non-fungible-token" && valid_nft_delta(effect)));
                 }
                 return effect.kind == ContractEffectKind::DfsWrite
                        && valid_dfs_write(effect, contract_id, sender_id, verified);
@@ -359,6 +395,10 @@ namespace ExtraChain::Contracts {
             || init_arguments.size() > 512 * 1024) {
             return std::unexpected(failure(ContractError::InvalidArguments, "Invalid contract identity"));
         }
+        auto language = module_language(module);
+        if (is_system_token_kind(kind) && !language.has_value()) {
+            return std::unexpected(failure(ContractError::InvalidModule, language.error()));
+        }
         auto output = evaluate(module, owner_id, "init", init_arguments, {}, block, contract_id);
         if (!output.has_value()) {
             return std::unexpected(output.error());
@@ -380,6 +420,7 @@ namespace ExtraChain::Contracts {
             .contract_id    = std::move(contract_id),
             .owner_id       = std::move(owner_id),
             .kind           = std::move(kind),
+            .language       = language.value_or(std::string()),
             .active_version = 1,
             .versions       = { ContractVersion {
                       .version              = 1,
@@ -603,6 +644,13 @@ namespace ExtraChain::Contracts {
         if (record.owner_id != sender_id) {
             return std::unexpected(failure(ContractError::InvalidOwner, "Only the contract owner can upgrade"));
         }
+        if (is_system_token_kind(record.kind)) {
+            auto language = module_language(module);
+            if (!language.has_value() || *language != record.language) {
+                return std::unexpected(
+                    failure(ContractError::UpgradeDenied, "A token update must use its original language"));
+            }
+        }
         auto      &current                 = active_version(record);
         const auto previous                = latest_revision(current);
         const auto new_module_hash         = content_hash(module);
@@ -630,7 +678,6 @@ namespace ExtraChain::Contracts {
             return std::unexpected(
                 failure(ContractError::InvalidResponse, "Contract migration cannot emit effects"));
         }
-
         StateRevision migrated {
             .revision             = previous.revision + 1,
             .block                = block,

@@ -29,6 +29,7 @@ const staging = join(dirname(output), `.extrachain-as-toolchain-${process.pid}`)
 await rm(staging, { recursive: true, force: true });
 await mkdir(join(staging, "bin"), { recursive: true });
 await mkdir(join(staging, "compiler", "node_modules"), { recursive: true });
+await mkdir(join(staging, "dependencies"), { recursive: true });
 await cp(nodeSource, join(staging, "bin", platform() === "win32" ? "node.exe" : "node"));
 for (const dependency of ["assemblyscript", "binaryen", "long"]) {
   await cp(join(root, "node_modules", dependency), join(staging, "compiler", "node_modules", dependency), {
@@ -40,6 +41,11 @@ await writeFile(
   join(staging, "compiler", "asc.js"),
   'import "./node_modules/assemblyscript/bin/asc.js";\n',
 );
+await cp(join(root, "scripts", "mark-wasm.mjs"), join(staging, "compiler", "mark-wasm.mjs"));
+await cp(join(root, "node_modules", "as-bignum"), join(staging, "dependencies", "as-bignum"), {
+  recursive: true,
+  dereference: true,
+});
 for (const directory of ["sdk", "components", "catalog", "templates"]) {
   await cp(join(root, directory), join(staging, directory), { recursive: true, dereference: true });
 }

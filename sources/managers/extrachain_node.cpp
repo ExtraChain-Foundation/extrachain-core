@@ -57,6 +57,8 @@
 #include "contracts/contract_manager.h"
 #include "contracts/contract_codec.h"
 #include "contracts/contract_hash.h"
+#include "contracts/contract_module.h"
+#include "contracts/standard_token.h"
 #include "contracts/contract_transaction.h"
 #include "contracts/dfs_contract_storage.h"
 #include "contracts/toolchain_registry.h"
@@ -71,16 +73,6 @@ static void initialize_contract_resources() {
 namespace {
     std::string contract_hash_prefix(std::string_view value) {
         return std::string(value.substr(0, std::min<std::size_t>(value.size(), 12)));
-    }
-
-    std::optional<std::string> standard_fungible_module_hash() {
-        QFile module_file(":/contracts/fungible_token.wasm");
-        if (!module_file.open(QIODevice::ReadOnly)) {
-            return std::nullopt;
-        }
-        auto module = module_file.readAll();
-        auto begin  = reinterpret_cast<const std::uint8_t*>(module.constData());
-        return ExtraChain::Contracts::content_hash(std::span(begin, static_cast<std::size_t>(module.size())));
     }
 
     std::vector<ContractTransitionData> contract_transitions(
@@ -103,6 +95,7 @@ namespace {
                                              .contract_id         = child.record.contract_id,
                                              .caller_contract_id  = parent.record.contract_id,
                                              .kind                = child.record.kind,
+                                             .language            = child.record.language,
                                              .method              = effect.operation,
                                              .arguments_base64    = Utils::to_base64(effect.arguments),
                                              .module_hash         = version.module_hash,
@@ -1407,9 +1400,13 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
         if (ExtraChain::Contracts::content_hash(*module) != metadata->module_hash) {
             return TransactionProveError::InvalidContractPayload;
         }
-        if (metadata->kind == "fungible-token") {
-            auto standard_hash = standard_fungible_module_hash();
-            if (!standard_hash.has_value() || *standard_hash != metadata->module_hash) {
+        const auto language = ExtraChain::Contracts::module_language(*module);
+        if ((metadata->kind == "fungible-token" || metadata->kind == "non-fungible-token")
+            && (!language.has_value() || *language != metadata->language)) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        if (ExtraChain::Contracts::is_system_token_kind(metadata->kind)) {
+            if (!ExtraChain::Contracts::is_standard_token_module(metadata->kind, metadata->module_hash)) {
                 return TransactionProveError::InvalidContractPayload;
             }
         }
@@ -1433,7 +1430,8 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     }
 
     auto record = contract_manager_->inspect(contract_id.to_string());
-    if (!record.has_value() || record->kind != metadata->kind || record->versions.empty()) {
+    if (!record.has_value() || record->kind != metadata->kind || record->language != metadata->language
+        || record->versions.empty()) {
         return TransactionProveError::ContractDependencyMissing;
     }
     const auto& current  = record->versions.at(record->active_version - 1);
@@ -1527,10 +1525,10 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
             .detail = "No current wallet",
         });
     }
-    if (kind == "fungible-token") {
+    if (ExtraChain::Contracts::is_system_token_kind(kind)) {
         return std::unexpected(ExtraChain::Contracts::ContractFailure {
             .error  = ExtraChain::Contracts::ContractError::InvalidArguments,
-            .detail = "The fungible-token kind is reserved for the standard token contract",
+            .detail = "The token kind is reserved for a standard token contract",
         });
     }
     auto block = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
@@ -1553,6 +1551,7 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
     const auto&             revision = version.revisions.back();
     ContractTransactionData metadata {
         .kind                = change->record.kind,
+        .language            = change->record.language,
         .method              = "init",
         .arguments_base64    = Utils::to_base64(init_arguments),
         .module_hash         = version.module_hash,
@@ -1635,6 +1634,7 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
     const auto&             revision = version.revisions.back();
     ContractTransactionData metadata {
         .kind                = change->record.kind,
+        .language            = change->record.language,
         .method              = std::string(method),
         .arguments_base64    = Utils::to_base64(arguments),
         .module_hash         = version.module_hash,
@@ -1690,6 +1690,7 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
     const auto&             revision = version.revisions.back();
     ContractTransactionData metadata {
         .kind                = change->record.kind,
+        .language            = change->record.language,
         .method              = "migrate",
         .arguments_base64    = Utils::to_base64(migration_arguments),
         .module_hash         = version.module_hash,

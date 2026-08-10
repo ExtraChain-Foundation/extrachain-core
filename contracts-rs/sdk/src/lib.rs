@@ -74,10 +74,14 @@ impl<'a> Decoder<'a> {
             .copied()
             .ok_or(CodecError::InvalidData)?;
         if marker & 0xe0 == 0xa0 || matches!(marker, 0xd9 | 0xda | 0xdb) {
-            return self
-                .string()?
-                .parse::<u128>()
-                .map_err(|_| CodecError::InvalidData);
+            let value = self.string()?;
+            if value.is_empty()
+                || (value.len() > 1 && value.starts_with('0'))
+                || !value.bytes().all(|byte| byte.is_ascii_digit())
+            {
+                return Err(CodecError::InvalidData);
+            }
+            return value.parse::<u128>().map_err(|_| CodecError::InvalidData);
         }
         self.u64().map(u128::from)
     }
@@ -426,6 +430,10 @@ macro_rules! export_contract {
 
             static RESULT_LENGTH: AtomicU32 = AtomicU32::new(0);
 
+            #[used]
+            #[unsafe(link_section = "extrachain.language")]
+            static CONTRACT_LANGUAGE: [u8; 4] = *b"rust";
+
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn exc_invoke(pointer: u32, length: u32) -> u32 {
                 let input =
@@ -491,6 +499,15 @@ mod tests {
         let mut decoder = Decoder::new(&encoded);
         assert_eq!(decoder.amount(), Ok(u128::MAX));
         assert!(decoder.is_empty());
+    }
+
+    #[test]
+    fn amount_rejects_non_canonical_decimal_text() {
+        let mut encoder = Encoder::new();
+        encoder.string("01");
+        let encoded = encoder.finish();
+        let mut decoder = Decoder::new(&encoded);
+        assert_eq!(decoder.amount(), Err(CodecError::InvalidData));
     }
 
     #[test]
