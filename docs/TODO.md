@@ -462,6 +462,37 @@ Minimum fix: reject a transaction whose timestamp is further ahead of local time
 small tolerance, and further behind than the acceptance window allows; keep anti-spam
 state on the receiver's own clock rather than on a value the sender supplies.
 
+### 0.75 A node that falls behind never catches up — it only rejects
+
+**Found 2026-08-10 under chaos, and it is the most damaging of the chaos findings.**
+A node that was killed and frozen repeatedly came back 65 sections behind, and the gap
+kept *growing* (65 → 137 within two minutes). It never synced.
+
+```
+d2 log, whole life of the process after restart:
+  [Dag] Loaded: 8d0, first: 0, last cached: 8ac      <- 2256, network at 2393
+  [WS] Start sync...                                  <- connection handler ran
+  [ActorIndex] Diff size: 0, need: 18, local: 18      <- actors fine
+  … and that is all: no start_check output, no handle_sync_request, no section request
+```
+
+`start_check` *was* called — the handler reached it — and returned immediately: the node
+is `Ready`, section 0 is present, and the contiguity scan finds no gap because its chain
+really is contiguous, 0…2256. It is simply **behind**, and nothing tests for that.
+
+Meanwhile every live transaction arrives stamped with a section from its future, so it
+rejects all of them: `toosecdiff` climbed 28 → 133 → **299** on that node while its peers
+sat around 90. Those rejections are correct, but they mean the node contributes nothing
+and diverges further with every second.
+
+This is the hole left by the 2026-08-09 fixes: they cover *missing genesis* and *a gap in
+the middle*, not *a shorter chain than everyone else*. The check needed is the simplest of
+the three — compare our height with what peers report (`DagLastInfo.last_section_id` is
+already in the handshake) and sync when we are behind by more than the acceptance window.
+
+Note the interaction with §0.8: a node in this state is also the one emitting transactions
+with stale section numbers, so fixing this removes much of that loss at the source.
+
 ### 0.8 A transaction rejected as too old is lost by the whole network
 
 **Found 2026-08-10 under chaos.** A node that was frozen keeps emitting transactions
