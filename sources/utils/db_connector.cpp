@@ -118,6 +118,14 @@ bool DbConnector::open(bool create_if_missing) {
             return false;
         }
 
+        // Without this sqlite returns SQLITE_BUSY the instant another connection holds
+        // the write lock, and every caller here treats that as a plain failure: the row
+        // is dropped, nothing retries, nothing is re-requested. On a six-node stand that
+        // silently lost 11-24 vector rows per node — chat messages — while the network
+        // layer was healthy and delivering (see docs/TODO.md 0.45). Waiting is free
+        // compared with losing data; contention here is short-lived by nature.
+        sqlite3_busy_timeout(db, 5000);
+
         m_open = true;
         return true;
     }
