@@ -71,6 +71,31 @@ Items from the 2026-08-09/10 stabilization sessions, carried over from the
 section above: `0.x`/`1.x` here are not the `0`-`4` items above.
 
 
+### 0.01 Migration leaves the hot tail as files, not in HotSections.db
+
+Found while verifying the migration on real data (see the fix in `8b7fd670`). The
+migration writes each converted section as a file `dag/hot/<decimal>`, but the mutable
+tail is now a single sqlite database, `dag/hot/HotSections.db`, which the migration
+never creates.
+
+A migrated node still reads its history: `Dag::read_section` tries the hot store, then
+falls back to "section files written by earlier storage code", then packs. So this is
+not data loss — but it means that immediately after migrating, the whole tail sits in a
+form the new store cannot see, and only the fallback keeps it reachable.
+
+Two things to establish, neither of which is answered by reading the code:
+
+- Is this deliberate (lazy adoption: sections move into the db as they are rewritten)
+  or a second place where the storage change outran the migration, like the validation
+  bug was? If deliberate, the migration should say so in a comment, because the two
+  halves currently look inconsistent.
+- What happens to those files once packing starts? `try_pack_hot` seals ranges out of
+  the hot store; a section that exists only as a leftover file may never be packed, and
+  `find_first_gap`-style scans over the store would not see it either.
+
+Reproduce with `stand/dagdump/migrate_test <dir>` plus the two fingerprint scripts —
+they compare section sets, transaction sets and reward sums across the migration.
+
 ### 0.0 Existing installations carry damage the new code assumes away
 
 **Not urgent, but required before any of this reaches real users.** Everything fixed on
