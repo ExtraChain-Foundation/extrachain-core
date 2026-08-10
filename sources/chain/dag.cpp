@@ -266,6 +266,36 @@ void Dag::start() {
     this->set_status(DagStatus::Ready);
 #endif
 
+#ifndef IS_APP_CLIENT
+    // Heartbeat that does not depend on the Qt event loop.
+    //
+    // start_check() otherwise runs only when a peer connects or when the actor
+    // first-sync ends. Both are startup events, so a node that falls behind after the
+    // mesh has formed never asks again — and asking is the only way it learns, because
+    // `last_info_` is filled by answers to a request this node sends.
+    //
+    // The obvious home for this is the node's 10s status timer, and it is hooked there
+    // too. It is not enough: measured on a six-node stand, that timer stopped firing
+    // after ~30 seconds on four of six nodes while every other part of the process kept
+    // running — network, console and DAG threads all alive and logging. Those four then
+    // sat at section 1 while the other two reached 177, and four minutes later their
+    // socket queues filled with transactions stamped for a section the network had long
+    // passed. A plain thread with a sleep cannot be silenced the same way.
+    watchdog_ = std::jthread([this](std::stop_token token) {
+        while (!token.stop_requested()) {
+            for (int slept = 0; slept < 15 && !token.stop_requested(); ++slept) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
+            if (token.stop_requested() || !started_.load()) {
+                return;
+            }
+            if (status_ == DagStatus::Ready && mode_ == DagMode::Full) {
+                this->start_check();
+            }
+        }
+    });
+#endif
+
     eLog("[Dag] start: mode {}, current {}", mode_, current_section_);
 }
 
@@ -275,6 +305,13 @@ void Dag::stop() {
     bool was_started = started_.exchange(false);
     accepting_messages_.store(false);
     set_admission_accepting(false);
+
+    // Before anything else it might touch: the watchdog calls start_check().
+    if (watchdog_.joinable()) {
+        watchdog_.request_stop();
+        watchdog_.join();
+    }
+
     if (!was_started) {
         return;
     }
@@ -1869,6 +1906,8 @@ void Dag::network_status_sync_request(const Responder &responder) {
     return;
 #endif
 
+    eLog("[Dag] Peer asked for our height; we are at {}", current_section_.to_string());
+
     if (mode_ == DagMode::Light) {
         return;
     }
@@ -2766,6 +2805,13 @@ void Dag::handle_sync_request() {
     }
 
     if (!need_sync && !need_recontrol && mode_ == DagMode::Full) {
+        std::string peers;
+        for (const auto &[id, info] : last_info_) {
+            peers += fmt::format("{}={} ", id.substr(0, 6), info.last_section_id.to_string());
+        }
+        eLog("[Dag] Sync decision: nothing to do at section {} (peers: {})",
+             current_section_.to_string(),
+             peers.empty() ? "none" : peers);
         this->set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
         this->process_cached_transactions();

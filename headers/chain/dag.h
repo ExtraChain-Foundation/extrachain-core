@@ -25,6 +25,7 @@
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -803,6 +804,10 @@ private:
     std::mutex                                     file_sync_response_mutex_;
     std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;
     std::recursive_mutex                           sync_last_info_mutex_;
+
+    // Periodic "am I behind?" check that survives a stalled Qt event loop. See the
+    // rationale where it is started, in Dag::start().
+    std::jthread watchdog_;
 
     // Boundary -> when we last refetched it after a control mismatch. Several peers
     // reporting the same disagreement must not each trigger their own refetch.
