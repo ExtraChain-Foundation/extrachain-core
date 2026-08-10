@@ -25,6 +25,12 @@ Five-hour clean run, six nodes, same seed as the failing run before the fixes:
 Under chaos (48-60 kills/freezes): DFS files never lost a single file (42/42), vectors
 never lost a *file*, dictionaries never diverged.
 
+**Read this as narrower than it looks.** All of it was measured on Full nodes, on chains
+built from zero. Two things it therefore says nothing about: existing installations, which
+carry damage the new code cannot see (§0.0 in TODO.md), and `DfsMode::Selective`, which
+has never been run at all (§0.44) — it is the only mode with an incomplete catalogue, and
+a complete catalogue is what every repair path here assumes.
+
 ---
 
 ## Open defects

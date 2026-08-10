@@ -111,6 +111,40 @@ efficiently (incremental deltas, digest comparison with peers, periodic reconcil
 so that both "row known, payload missing" and "row unknown" self-heal. The current queue
 guard stays as a safety net either way, not as the answer.
 
+### 0.44 `DfsMode::Selective` has never been run
+
+Untested, in the plain sense: not "lightly covered" but never executed once. Every stand
+node runs Full, and the client default is Light — the branch that added Selective
+(`11ca042a`) split it out of the old Light behaviour, so the *code* it runs is not new,
+but nothing has exercised it since it became a separate mode, and no run before that
+covered it either.
+
+What makes it its own risk rather than a subset of Light: Selective is the only mode
+whose *catalogue* is incomplete. Every repair, audit and reconciliation path in this
+document assumes a node can distinguish "I don't have it" from "it doesn't exist", and
+that distinction is exactly what a narrowed `.dirs` gives up. A Selective node holds rows
+only for `startup_sync_actors()`, so for everything else it cannot know it is missing
+anything — the gap logic in §0.4 and the row reconciliation in §0.45 have no ground truth
+to work against.
+
+Concretely, what needs a run:
+
+- The filter in `network_response_dir_rows` drops rows for actors outside the set. If the
+  set is populated late — `refresh_actors()` runs after `read_chats` — a response that
+  arrived first is dropped and, since nothing re-requests dir rows (§0.4), never returns.
+  This is a startup race, so it needs a node that is restarted, not just started.
+- A chat joined *after* startup adds an actor to the set. Is a dir-row request issued for
+  it, or does the node stay blind to that actor until the next restart?
+- The 3-second staged fallback in `sync()` is Selective-only and has never fired in a run.
+- `data_mining_manager` now refuses rewards for Selective as well as Light. Intended, but
+  unverified against a node that actually mines.
+
+Test shape: a stand where one of the six nodes is Selective with an explicit actor list,
+carrying a chat with an actor inside the list and one outside. Expected: the in-list chat
+replicates completely; the out-of-list one is absent rather than half-present; and the
+node survives a restart without losing the in-list catalogue. Worth doing after the
+incoming patch, not before — it is a new mode with no regression baseline to protect.
+
 ### 0.45 Vector rows are lost in transit and never re-requested
 
 > Structural fix designed in `docs/DB_POOL.md`: a bounded sqlite connection pool with LRU
