@@ -217,6 +217,15 @@ queues it and downloads it. Vector *rows* have no equivalent: they arrive by bro
 not at all. Giving rows the same "I know it exists, therefore I can fetch it" property is
 what closes this, and it is why the answer is reconciliation rather than a better retry.
 
+**Rate, measured after 47 minutes and 60 chaos events:** 13 rows lost out of 304, spread
+evenly across all six nodes (2-3 each), 5 of 7 written vectors incomplete. Roughly one
+lost row per 4-5 node disruptions — steady, not a burst.
+
+For priority: the write-lock cause (below) cost 459 rows in 6.5 h of *clean* load and is
+fixed; this one costs single rows per disruption. Serious because it is silent and
+permanent, but an order of magnitude slower, and it only bites nodes that actually go
+down.
+
 **First cause: the sqlite write fails with `database is locked` and nobody retries.**
 
 The node log at the exact second of a lost row:
