@@ -172,6 +172,19 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
                                                            Dfs::FileType                  file_type) {
     DfsVector dfs_vector(node, main_actor, file_actor_id, file_id, data_security, security_data, file_type);
 
+    // Own the directory this vector lives in rather than relying on someone having
+    // pre-created a folder for the actor. That pre-creation exists for every *known*
+    // actor, which is what we want to stop doing — a folder should mean "we store
+    // something for this actor", not "we have heard of them" (see docs/TODO.md 0.46).
+    if (auto parent = dfs_vector.file_path_.native().parent_path(); !parent.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(parent, ec);
+        if (ec) {
+            eWarning("[DfsVector] create: cannot create {}: {}", parent.string(), ec.message());
+            return std::unexpected(DfsVectorError::Unknown);
+        }
+    }
+
     // TODO: if vector template has actor, status, timestamp or sign -> error
 
     auto from_template_result = read_template_from_variant(variant_template);
@@ -434,6 +447,32 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
                                                        rows.has_value() ? rows.value() : std::vector<DbRow> {} };
 }
 
+std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError>
+DfsVector::generate_content_package_empty() {
+    // Same payload as generate_content_package minus the rows: a vector with no rows yet
+    // still has a template and a .vector file, and the receiver needs both — without the
+    // template handle_package rejects the package outright.
+    auto vector_template = read_template();
+    if (!vector_template.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    std::string vector_file_content;
+    if (file_type_ != Dfs::FileType::Dictionary) {
+        auto res = Utils::read_file_content(vector_path_);
+        if (!res.has_value()) {
+            return std::unexpected(DfsVectorError::Unknown);
+        }
+        vector_file_content = ByteArray(res.value()).toString();
+    }
+
+    return Dfs::Packets::DfsVectorContentPackage { .owner_id        = file_actor_id_,
+                                                   .file_id         = file_id_,
+                                                   .vector_template = vector_template.value(),
+                                                   .vector_file     = vector_file_content,
+                                                   .content         = std::vector<DbRow> {} };
+}
+
 bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
     if (dfs_vector_content.owner_id != file_actor_id_ || dfs_vector_content.file_id != file_id_
         || !package_size_is_valid(dfs_vector_content.content)) {
@@ -498,6 +537,17 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
 
     schema->set_table_name("Vector");
 
+    // The owner's directory may not exist yet: vector content can arrive before anything
+    // else has created it, and sqlite then fails to open the file — 300 such failures on
+    // one node during seeding, each one a vector that never arrived. This used to be
+    // masked by a folder being pre-created for every known actor; that is gone now, so
+    // the write path owns its directory. Placed after validation, so a rejected package
+    // still leaves nothing behind.
+    if (auto parent = file_path_.native().parent_path(); !parent.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(parent, ec);
+    }
+
     DbConnector db(file_path_);
     if (!db.open()) {
         eWarning("[DfsVector] Can't open vector db {}, package will be retried", file_path_.string());
@@ -526,9 +576,16 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
     }
 
     // Write the companion template only after the complete database package is valid.
-    if (file_type_ != Dfs::FileType::Dictionary) {
+    // An empty companion file is normal for a freshly created vector and must not sink
+    // the package: write_file_content rejects empty content outright (EmptyContent),
+    // which made every answer about a new vector undeliverable — 2081 rejections in one
+    // minute of seeding, and the receiving node never got the vector at all.
+    if (file_type_ != Dfs::FileType::Dictionary && !dfs_vector_content.vector_file.empty()) {
         auto res_json = Utils::write_file_content(vector_path_, dfs_vector_content.vector_file);
         if (!res_json.has_value()) {
+            eWarning("[DfsVector] handle_package: cannot write {} ({} bytes)",
+                     vector_path_.string(),
+                     dfs_vector_content.vector_file.size());
             return false;
         }
     }
