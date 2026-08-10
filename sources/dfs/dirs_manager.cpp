@@ -293,7 +293,9 @@ void DirsManager::network_response_dir_rows(
             // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
             // TODO: add merge for sync dir file
 
-            Dfs::initialize_actor_folder(owner_id);
+            // No folder here either: knowing an actor's dir rows says nothing about
+            // whether we will ever download any of them. The folder is created when the
+            // first payload is written.
             std::vector<Dfs::DirRow> dir_rows_todo;
 
             /*
@@ -324,9 +326,15 @@ void DirsManager::network_response_dir_rows(
                 if ((row.type == Dfs::FileType::Vector || row.type == Dfs::FileType::Dictionary)
                     && row.state == Dfs::FileState::Ready) {
                     auto local = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
-                    if (local.has_value()
-                        && (local->state != Dfs::FileState::Ready || row.last_modified > local->last_modified
-                            || !node->dfs()->is_file_already_downloaded(owner_id, row.file_id, row.hash))) {
+                    // Also queue when there is no local row at all. Requiring one meant a
+                    // vector first seen through a sync was never queued: the row
+                    // replicated, the payload did not, and no later sync corrected it —
+                    // a node that missed the creation broadcast stayed permanently
+                    // without that vector. Files do not have this hole because they test
+                    // the file's presence on disk.
+                    if (!local.has_value() || !file_path->exists()
+                        || local->state != Dfs::FileState::Ready || row.last_modified > local->last_modified
+                        || !node->dfs()->is_file_already_downloaded(owner_id, row.file_id, row.hash)) {
                         dir_rows_todo.push_back(row);
                     }
                 }
