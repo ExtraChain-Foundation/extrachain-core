@@ -2204,8 +2204,20 @@ void Dag::handle_sync_request() {
         // TODO: better cons
         for (const auto &[_, info] : last_info_) {
             if (info.last_section_id > my_index) {
-                // need_sync = true;
-                need_recontrol = true;
+                // Falling behind by more than the acceptance window is not a control
+                // problem, it is a missing-sections problem: `need_recontrol` alone sends
+                // us to compare control hashes and return, so a node that came back from a
+                // restart 65 sections behind never fetched anything and drifted further
+                // (measured: 65 → 137 in two minutes, while it rejected every incoming
+                // transaction as TooSectionDiff — 467 rejections against ~120 on healthy
+                // peers). See docs/TODO.md 0.75.
+                // 15 = the acceptance window enforced in prove_transaction (dag.cpp:987).
+                // Beyond it we are not merely lagging, we are rejecting live traffic.
+                if (info.last_section_id > my_index + SectionId(15)) {
+                    need_sync = true;
+                } else {
+                    need_recontrol = true;
+                }
                 break;
             }
 
