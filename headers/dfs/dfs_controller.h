@@ -137,7 +137,7 @@ public:
     std::set<ActorId>       startup_metadata_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
     std::set<Dfs::FileLink> priority_file_link_;
     // Actors whose dirs were explicitly requested via refresh_actors() (e.g. chat owner-actors
-    // after read_chats). Feeds startup_sync_actors(): without it the Light filter in
+    // after read_chats). Feeds startup_sync_actors(): without it the Selective filter in
     // network_response_dir_rows drops the response. Mutex-guarded: written from the node
     // thread, read from the DFS pool.
     mutable std::mutex requested_sync_actors_mutex_;
