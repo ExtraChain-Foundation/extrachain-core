@@ -482,11 +482,15 @@ anywhere**, and each hash appears exactly once in the log, so no retry was ever 
 This is worse than the two findings below because it is a *transaction* — money — and the
 loss is total rather than per-node. The sender believes it sent; the network never had it.
 
-**Frequency: bursty, not continuous.** 8 rejections on d1 in 90 minutes of chaos, all
-from a single episode around 02:31 when four kills landed within 70 seconds
-(`KILL d6`, `KILL d5`, `KILL d6`, `KILL d2`). The counter did not move afterwards. So it
-takes a dense cluster of disruptions, not one — which lowers the odds in normal operation
-but does nothing for the severity when it happens.
+**Frequency: proportional to disruption, and it keeps climbing.** An early reading of 8
+rejections looked like a one-off burst; ten minutes and 16 more chaos events later it was
+**30 on d1** (25-30 across the other nodes). Spot-checking five of the newest rejected
+hashes against every section file: none of them are in the chain either. So this is not a
+single unlucky episode — every dense cluster of disruptions destroys more transactions, at
+a rate that tracks how often nodes go down.
+
+Roughly 30 transactions lost on one node in 80 minutes of chaos, against ~2000 sections
+built in the same window.
 
 What is missing is an answer to rejection. Options, roughly in order of cost: have the
 sender re-stamp and re-send on `TooSectionDiff` (it knows the current section from the
