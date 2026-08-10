@@ -23,10 +23,13 @@
 
 namespace {
 
-    constexpr std::size_t AdmissionBatchSize  = 64;
-    constexpr std::size_t AdmissionQueueLimit = 4096;
-    constexpr std::size_t AdmissionPeerLimit  = 256;
-    constexpr auto        AdmissionDelay      = std::chrono::milliseconds(5);
+    constexpr std::size_t AdmissionBatchSize           = 64;
+    constexpr std::size_t AdmissionQueueLimit          = 4096;
+    constexpr std::size_t AdmissionPeerLimit           = 256;
+    constexpr auto        AdmissionDelay               = std::chrono::milliseconds(5);
+    constexpr auto        AdmissionCacheIdleDelay      = std::chrono::milliseconds(500);
+    constexpr int         AdmissionCacheUpdateInterval = 160;
+    static_assert(AdmissionCacheUpdateInterval + CACHE_LAG_SECTIONS < HOT_PACK_LAG);
 
     thread_local bool IsAdmissionWorker = false;
 
@@ -49,11 +52,26 @@ struct Dag::AdmissionState {
         std::chrono::steady_clock::time_point queued_at;
     };
 
+    struct DerivedBatch {
+        std::map<SectionId, Section> sections;
+        std::vector<Transaction>     local_transactions;
+    };
+
     explicit AdmissionState(Dag *owner_value)
-        : owner(owner_value)
-        , worker([this](std::stop_token token) {
+        : owner(owner_value) {
+        const auto worker_count = owner->node->runtime_limits().admission_prevalidation_workers;
+        prevalidation_workers.reserve(worker_count);
+        for (std::size_t index = 0; index < worker_count; ++index) {
+            prevalidation_workers.emplace_back([this](std::stop_token token) {
+                run_prevalidation(token);
+            });
+        }
+        worker         = std::jthread([this](std::stop_token token) {
             run(token);
-        }) {
+        });
+        derived_worker = std::jthread([this](std::stop_token token) {
+            run_derived(token);
+        });
     }
 
     ~AdmissionState() {
@@ -65,6 +83,25 @@ struct Dag::AdmissionState {
         condition.notify_all();
         if (worker.joinable())
             worker.join();
+        {
+            std::lock_guard lock(prevalidation_mutex);
+            prevalidation_stopping = true;
+        }
+        for (auto &prevalidation_worker : prevalidation_workers)
+            prevalidation_worker.request_stop();
+        prevalidation_condition.notify_all();
+        for (auto &prevalidation_worker : prevalidation_workers) {
+            if (prevalidation_worker.joinable())
+                prevalidation_worker.join();
+        }
+        {
+            std::lock_guard lock(derived_mutex);
+            derived_stopping = true;
+        }
+        derived_worker.request_stop();
+        derived_condition.notify_all();
+        if (derived_worker.joinable())
+            derived_worker.join();
     }
 
     bool submit(const Transaction &transaction, const Responder &responder, AdmissionCompletion completion) {
@@ -105,7 +142,12 @@ struct Dag::AdmissionState {
             return;
         std::unique_lock lock(mutex);
         condition.wait(lock, [this] {
-            return queue.empty() && !processing;
+            return queue.empty() && !processing && !cache_catchup_pending;
+        });
+        lock.unlock();
+        std::unique_lock derived_lock(derived_mutex);
+        derived_condition.wait(derived_lock, [this] {
+            return derived_queue.empty() && !derived_processing;
         });
     }
 
@@ -174,14 +216,128 @@ private:
         complete(request->completion, std::unexpected(result), false);
     }
 
+    void enqueue_derived(DerivedBatch batch) {
+        const auto       section_count = batch.sections.size();
+        const auto       limit = std::max(AdmissionBatchSize, owner->node->runtime_limits().derived_sections);
+        std::unique_lock lock(derived_mutex);
+        derived_condition.wait(lock, [&] {
+            return derived_stopping || derived_section_count + section_count <= limit;
+        });
+        if (derived_stopping)
+            return;
+        derived_section_count += section_count;
+        derived_queue.push_back(std::move(batch));
+        lock.unlock();
+        derived_condition.notify_one();
+    }
+
+    void process_derived(const DerivedBatch &batch) {
+        if (owner->chain_index_enabled_ && owner->chain_index_) {
+            for (const auto &entry : batch.sections)
+                owner->chain_index_->on_section_written(entry.second);
+        }
+        for (const auto &transaction : batch.local_transactions)
+            owner->check_self(transaction);
+    }
+
+    void run_prevalidation(std::stop_token token) {
+        while (true) {
+            std::function<void()> job;
+            {
+                std::unique_lock lock(prevalidation_mutex);
+                prevalidation_condition.wait(lock, [&] {
+                    return prevalidation_stopping || token.stop_requested() || !prevalidation_jobs.empty();
+                });
+                if ((prevalidation_stopping || token.stop_requested()) && prevalidation_jobs.empty())
+                    return;
+                job = std::move(prevalidation_jobs.front());
+                prevalidation_jobs.pop_front();
+            }
+            job();
+        }
+    }
+
+    std::vector<TransactionValidationFacts> prevalidate(const std::vector<std::shared_ptr<Request>> &requests) {
+        std::unordered_map<ActorId, Actor<KeyPublic>> actors;
+        actors.reserve(requests.size() * 2);
+        for (const auto &request : requests) {
+            const auto &transaction = request->transaction;
+            if (!transaction.sender().is_zero() && !actors.contains(transaction.sender()))
+                actors.emplace(transaction.sender(),
+                               owner->node->actor_index()->read_actor_old(transaction.sender()));
+            if (transaction.type() != TransactionType::Burn && !transaction.receiver().is_zero()
+                && !actors.contains(transaction.receiver())) {
+                actors.emplace(transaction.receiver(),
+                               owner->node->actor_index()->read_actor_old(transaction.receiver()));
+            }
+        }
+
+        std::vector<TransactionValidationFacts> facts(requests.size());
+        const auto                              prevalidate_range = [&](std::size_t first, std::size_t last) {
+            for (auto index = first; index < last; ++index) {
+                const auto &transaction = requests[index]->transaction;
+                auto       &result      = facts[index];
+                const auto  stored_hash = transaction.hash();
+                result.hash_valid =
+                    stored_hash == transaction.calculate_hash_hex() || stored_hash == transaction.calculate_hash();
+
+                const auto sender = actors.find(transaction.sender());
+                result.sender_exists = sender != actors.end() && !sender->second.empty();
+                if (result.sender_exists.value() && !transaction.signature().empty()) {
+                    const auto signature = sender->second.key().verify(stored_hash, transaction.signature());
+                    result.signature_valid = signature.has_value() && signature.value();
+                } else {
+                    result.signature_valid = false;
+                }
+
+                if (transaction.type() != TransactionType::Burn && !transaction.receiver().is_zero()) {
+                    const auto receiver = actors.find(transaction.receiver());
+                    result.receiver_exists = receiver != actors.end() && !receiver->second.empty();
+                }
+            }
+        };
+
+        if (prevalidation_workers.empty() || requests.size() < 2) {
+            prevalidate_range(0, requests.size());
+            return facts;
+        }
+
+        const auto                     worker_count = std::min(prevalidation_workers.size(), requests.size());
+        std::vector<std::future<void>> completed;
+        completed.reserve(worker_count);
+        {
+            std::lock_guard lock(prevalidation_mutex);
+            for (std::size_t worker_index = 0; worker_index < worker_count; ++worker_index) {
+                auto promise = std::make_shared<std::promise<void>>();
+                completed.push_back(promise->get_future());
+                const auto first = requests.size() * worker_index / worker_count;
+                const auto last  = requests.size() * (worker_index + 1) / worker_count;
+                prevalidation_jobs.emplace_back([&, first, last, promise] {
+                    try {
+                        prevalidate_range(first, last);
+                        promise->set_value();
+                    } catch (...) {
+                        promise->set_exception(std::current_exception());
+                    }
+                });
+            }
+        }
+        prevalidation_condition.notify_all();
+        for (auto &future : completed)
+            future.get();
+        return facts;
+    }
+
     void process_batch(const std::vector<std::shared_ptr<Request>> &requests) {
+        const auto                                prevalidated = prevalidate(requests);
         std::map<SectionId, Section>              sections;
         std::set<Transaction>                     pending;
         std::unordered_map<NodeId, std::uint64_t> reservations;
         std::vector<std::shared_ptr<Request>>     accepted;
         auto                                      validation_frontier = owner->current_section_;
 
-        for (const auto &request : requests) {
+        for (std::size_t request_index = 0; request_index < requests.size(); ++request_index) {
+            const auto &request     = requests[request_index];
             const auto &transaction = request->transaction;
 
             auto section = sections.find(transaction.section());
@@ -194,10 +350,11 @@ private:
 
             auto result = rate_limit(transaction, reservations);
             if (result == TransactionProveError::NoError)
-                result = owner->prove_transaction(transaction,
-                                                  section->second.transactions,
-                                                  &pending,
-                                                  &validation_frontier);
+                result = owner->prove_transaction_with_facts(transaction,
+                                                             section->second.transactions,
+                                                             &pending,
+                                                             &validation_frontier,
+                                                             &prevalidated[request_index]);
             if (result != TransactionProveError::NoError) {
                 reject(request, result);
                 continue;
@@ -244,25 +401,16 @@ private:
 
         owner->first_saved_section_ = first;
         owner->current_section_     = last;
-        {
-            std::lock_guard lock(owner->pack_hot_cache_mutex_);
-            for (const auto &[id, payload] : payloads)
-                owner->pack_hot_cache_.insert_or_assign(id, payload);
-            while (owner->pack_hot_cache_.size() > PACK_HOT_CACHE_LIMIT)
-                owner->pack_hot_cache_.erase(std::prev(owner->pack_hot_cache_.end()));
-        }
 
-        owner->cache_.check_and_update_cache_thread(last);
-        for (const auto &[id, section] : sections) {
-            if (!payloads.contains(id))
-                continue;
-            if (owner->chain_index_enabled_ && owner->chain_index_)
-                owner->chain_index_->on_section_written(section);
-            if (owner->control_index_ && is_aligned20(id) && !section.control.has_value())
-                owner->control_index_->erase(id);
+        const auto cached_section = owner->cache_.section();
+        if (cached_section == SectionId(-1) || last - cached_section >= SectionId(AdmissionCacheUpdateInterval)) {
+            owner->cache_.check_and_update_cache_thread(last);
         }
+        std::vector<Transaction> accepted_transactions;
+        accepted_transactions.reserve(accepted.size());
         for (const auto &request : accepted)
-            owner->cache_.apply_live_transaction(request->transaction);
+            accepted_transactions.push_back(request->transaction);
+        owner->cache_.apply_live_transactions(accepted_transactions);
         {
             std::lock_guard lock(owner->last_txs_mutex_);
             for (const auto &[sender, timestamp] : reservations)
@@ -271,11 +419,65 @@ private:
 
         owner->update_range();
         owner->try_pack_hot();
+        std::erase_if(sections, [&](const auto &entry) {
+            return !payloads.contains(entry.first);
+        });
+        const auto               local_actor_ids = owner->node->account_controller()->accounts_ids();
+        std::vector<Transaction> local_transactions;
+        for (const auto &transaction : accepted_transactions) {
+            const auto local = std::ranges::any_of(local_actor_ids, [&](const ActorId &actor_id) {
+                return transaction.sender() == actor_id || transaction.receiver() == actor_id;
+            });
+            if (local)
+                local_transactions.push_back(transaction);
+        }
+        enqueue_derived(
+            DerivedBatch { .sections = std::move(sections), .local_transactions = std::move(local_transactions) });
+        {
+            std::lock_guard lock(mutex);
+            cache_catchup_pending = true;
+            cache_catchup_due     = std::chrono::steady_clock::now() + AdmissionCacheIdleDelay;
+        }
+        condition.notify_all();
         for (const auto &request : accepted) {
             send_result(*request, TransactionProveError::NoError);
-            owner->check_self(request->transaction);
             complete(request->completion, {}, true);
         }
+    }
+
+    void run_derived(std::stop_token token) {
+        while (true) {
+            DerivedBatch batch;
+            {
+                std::unique_lock lock(derived_mutex);
+                derived_condition.wait(lock, [&] {
+                    return derived_stopping || token.stop_requested() || !derived_queue.empty();
+                });
+                if ((derived_stopping || token.stop_requested()) && derived_queue.empty())
+                    break;
+                derived_processing = true;
+                batch              = std::move(derived_queue.front());
+                derived_queue.pop_front();
+            }
+
+            try {
+                process_derived(batch);
+            } catch (const std::exception &error) {
+                eWarning("[Dag] Derived processing failed: {}", error.what());
+            } catch (...) {
+                eWarning("[Dag] Derived processing failed");
+            }
+
+            {
+                std::lock_guard lock(derived_mutex);
+                derived_section_count -= batch.sections.size();
+                derived_processing = false;
+            }
+            derived_condition.notify_all();
+        }
+        std::lock_guard lock(derived_mutex);
+        derived_processing = false;
+        derived_condition.notify_all();
     }
 
     void run(std::stop_token token) {
@@ -285,9 +487,32 @@ private:
             bool                                  batch = false;
             {
                 std::unique_lock lock(mutex);
-                condition.wait(lock, [&] {
-                    return stopping || token.stop_requested() || !queue.empty();
-                });
+                while (queue.empty() && !stopping && !token.stop_requested()) {
+                    if (!cache_catchup_pending) {
+                        condition.wait(lock, [&] {
+                            return stopping || token.stop_requested() || !queue.empty() || cache_catchup_pending;
+                        });
+                        continue;
+                    }
+                    const bool interrupted = condition.wait_until(lock, cache_catchup_due, [&] {
+                        return stopping || token.stop_requested() || !queue.empty();
+                    });
+                    if (interrupted)
+                        continue;
+                    cache_catchup_pending = false;
+                    processing            = true;
+                    lock.unlock();
+                    try {
+                        owner->cache_.check_and_update_cache_thread(owner->current_section_);
+                    } catch (const std::exception &error) {
+                        eWarning("[Dag] Admission cache catch-up failed: {}", error.what());
+                    } catch (...) {
+                        eWarning("[Dag] Admission cache catch-up failed");
+                    }
+                    lock.lock();
+                    processing = false;
+                    condition.notify_all();
+                }
                 if ((stopping || token.stop_requested()) && queue.empty())
                     break;
 
@@ -339,10 +564,24 @@ private:
     std::condition_variable                      condition;
     std::deque<std::shared_ptr<Request>>         queue;
     std::unordered_map<std::string, std::size_t> peer_counts;
-    bool                                         processing = false;
-    bool                                         accepting  = false;
-    bool                                         stopping   = false;
+    bool                                         processing            = false;
+    bool                                         accepting             = false;
+    bool                                         stopping              = false;
+    bool                                         cache_catchup_pending = false;
+    std::chrono::steady_clock::time_point        cache_catchup_due;
+    std::mutex                                   derived_mutex;
+    std::condition_variable                      derived_condition;
+    std::deque<DerivedBatch>                     derived_queue;
+    std::size_t                                  derived_section_count = 0;
+    bool                                         derived_processing    = false;
+    bool                                         derived_stopping      = false;
     std::jthread                                 worker;
+    std::jthread                                 derived_worker;
+    std::mutex                                   prevalidation_mutex;
+    std::condition_variable                      prevalidation_condition;
+    std::deque<std::function<void()>>            prevalidation_jobs;
+    std::vector<std::jthread>                    prevalidation_workers;
+    bool                                         prevalidation_stopping = false;
 };
 
 std::shared_ptr<Dag::AdmissionState> Dag::create_admission_state(Dag *owner) {

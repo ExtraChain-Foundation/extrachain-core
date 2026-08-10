@@ -56,6 +56,7 @@ enum class MessageType {
 
     DagCacheSnapshotRequest = 46, // empty req -> prebuilt balance-cache snapshot
     DagCacheSnapshotData    = 47, // resp: { section, balances } (skips local rebuild)
+    DagTransactionBatch     = 48, // negotiated live relay batch
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now

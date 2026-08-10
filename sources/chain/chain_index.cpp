@@ -209,8 +209,10 @@ struct ChainIndex::Impl {
         finalize(stmt_actor_blob_by_id);
         finalize(stmt_token_blob_by_id);
         finalize(stmt_count_actor_type_since);
-        if (db)
+        if (db) {
+            sqlite3_wal_checkpoint_v2(db, nullptr, SQLITE_CHECKPOINT_TRUNCATE, nullptr, nullptr);
             sqlite3_close(db);
+        }
     }
 
     bool exec(const char *sql) {
@@ -291,6 +293,9 @@ struct ChainIndex::Impl {
         exec("PRAGMA synchronous = NORMAL");
         exec("PRAGMA temp_store = MEMORY");
         exec("PRAGMA cache_size = -32000");
+        const auto full_node = node == nullptr || node->runtime_profile() == RuntimeProfile::FullNode;
+        sqlite3_wal_autocheckpoint(db, full_node ? 4096 : 1024);
+        exec(full_node ? "PRAGMA journal_size_limit = 67108864" : "PRAGMA journal_size_limit = 16777216");
 
         if (!exec(SCHEMA_SQL)) {
             return false;
@@ -427,8 +432,8 @@ struct ChainIndex::Impl {
         if (!dag || dag->mode() == DagMode::Full)
             return true;
         auto *ac = node->account_controller();
-        if (!ac)
-            return true;
+        if (!ac || ac->empty())
+            return false;
         auto actors = ac->accounts_ids();
         for (const auto &a : actors) {
             if (tx.sender() == a || tx.receiver() == a)
@@ -449,9 +454,11 @@ struct ChainIndex::Impl {
         sqlite3_bind_blob(select, 1, blob.data(), static_cast<int>(blob.size()), SQLITE_TRANSIENT);
         if (sqlite3_step(select) == SQLITE_ROW) {
             sqlite3_int64 id = sqlite3_column_int64(select, 0);
+            sqlite3_reset(select);
             cache.map.emplace(blob, id);
             return id;
         }
+        sqlite3_reset(select);
 
         sqlite3_reset(insert);
         sqlite3_bind_blob(insert, 1, blob.data(), static_cast<int>(blob.size()), SQLITE_TRANSIENT);
@@ -562,8 +569,12 @@ struct ChainIndex::Impl {
         auto find_id = [this](sqlite3_stmt *select, const std::vector<std::uint8_t> &blob) -> sqlite3_int64 {
             sqlite3_reset(select);
             sqlite3_bind_blob(select, 1, blob.data(), static_cast<int>(blob.size()), SQLITE_TRANSIENT);
-            if (sqlite3_step(select) == SQLITE_ROW)
-                return sqlite3_column_int64(select, 0);
+            if (sqlite3_step(select) == SQLITE_ROW) {
+                const auto id = sqlite3_column_int64(select, 0);
+                sqlite3_reset(select);
+                return id;
+            }
+            sqlite3_reset(select);
             return -1;
         };
 
@@ -598,6 +609,7 @@ struct ChainIndex::Impl {
         while (sqlite3_step(s) == SQLITE_ROW) {
             out.push_back(row_to_entry(s));
         }
+        sqlite3_reset(s);
         return out;
     }
 };
@@ -687,6 +699,7 @@ std::vector<SectionId> ChainIndex::find_contract_sections(const std::string &con
     while (sqlite3_step(statement) == SQLITE_ROW) {
         sections.emplace_back(static_cast<long long>(sqlite3_column_int64(statement, 0)));
     }
+    sqlite3_reset(statement);
     return sections;
 }
 
@@ -762,9 +775,12 @@ std::uint64_t ChainIndex::count_for_actor_by_type_since(const std::string &actor
                       actor_blob.data(),
                       static_cast<int>(actor_blob.size()),
                       SQLITE_TRANSIENT);
-    if (sqlite3_step(impl_->stmt_actor_select) != SQLITE_ROW)
+    if (sqlite3_step(impl_->stmt_actor_select) != SQLITE_ROW) {
+        sqlite3_reset(impl_->stmt_actor_select);
         return 0;
+    }
     const auto actor_id = sqlite3_column_int64(impl_->stmt_actor_select, 0);
+    sqlite3_reset(impl_->stmt_actor_select);
 
     auto *statement = impl_->stmt_count_actor_type_since;
     sqlite3_reset(statement);
@@ -773,8 +789,10 @@ std::uint64_t ChainIndex::count_for_actor_by_type_since(const std::string &actor
     sqlite3_bind_int64(statement, 2, static_cast<sqlite3_int64>(since_timestamp));
     sqlite3_bind_int64(statement, 3, actor_id);
     sqlite3_bind_int64(statement, 4, actor_id);
-    return sqlite3_step(statement) == SQLITE_ROW ? static_cast<std::uint64_t>(sqlite3_column_int64(statement, 0))
-                                                 : 0;
+    const auto result =
+        sqlite3_step(statement) == SQLITE_ROW ? static_cast<std::uint64_t>(sqlite3_column_int64(statement, 0)) : 0;
+    sqlite3_reset(statement);
+    return result;
 }
 
 void ChainIndex::rebuild_from_disk() {
@@ -883,6 +901,7 @@ std::uint64_t ChainIndex::row_count() const {
         sqlite3_reset(s);
         return rows;
     }
+    sqlite3_reset(s);
     return 0;
 }
 
@@ -897,5 +916,6 @@ SectionId ChainIndex::last_indexed_section() const {
         sqlite3_reset(s);
         return section;
     }
+    sqlite3_reset(s);
     return SectionId(-1);
 }

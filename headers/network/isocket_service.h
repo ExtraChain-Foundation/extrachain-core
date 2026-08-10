@@ -75,7 +75,8 @@ public:
         std::optional<int> dag_version;
         // Real release version (e.g. "0.26.0"). Optional so pre-0.26 peers parse
         // cleanly; not version-checked, only a signal that the peer is >= 0.26.
-        std::optional<std::string> node_version;
+        std::optional<std::string>           node_version;
+        std::optional<std::set<std::string>> capabilities;
     };
 
     enum class Priority {
@@ -98,7 +99,7 @@ public:
     int                       bytes_incoming() const;
     bool                      is_constant() const;
     void                      set_constant(bool isConstant);
-    SocketMode                mode() {
+    SocketMode                mode() const {
         return mode_;
     }
     SocketDirection direction() const {
@@ -200,7 +201,8 @@ BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
                        is_available,
                        socket_mode,
                        dag_version,
-                       node_version))
+                       node_version,
+                       capabilities))
 
 BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
 

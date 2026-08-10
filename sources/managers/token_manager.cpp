@@ -402,6 +402,7 @@ std::vector<TokenData> TokenManager::legacy_tokens() const {
 
 std::expected<TokenData, CreateTokenError> TokenManager::migrate_legacy_token(const TokenId &token_id) {
     if (!registry_file_id().has_value()) {
+        eWarning("[TokenManager] Legacy token migration requires a ready TokensRegistry vector");
         return std::unexpected(CreateTokenError::InvalidTx);
     }
     auto legacy = legacy_tokens();

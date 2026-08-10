@@ -206,6 +206,11 @@ struct HashInterval {
 };
 BOOST_DESCRIBE_STRUCT(HashInterval, (), (from, to, hash))
 
+struct DagTransactionBatch {
+    std::vector<Transaction> transactions;
+};
+BOOST_DESCRIBE_STRUCT(DagTransactionBatch, (), (transactions))
+
 // Pack-sync messages (between dag_version >= 100 peers).
 struct PackInfo {
     std::uint64_t pack_id;
@@ -694,6 +699,7 @@ public:
         auto g = cached_txs_.lock();
         return g->size();
     }
+    bool should_queue_network_transaction();
 
     /**
      * @brief Begin accepting sync and network messages; start sync timers.
@@ -719,6 +725,17 @@ public:
 
 private:
     struct AdmissionState;
+    struct TransactionValidationFacts {
+        bool                hash_valid = false;
+        std::optional<bool> sender_exists;
+        std::optional<bool> receiver_exists;
+        std::optional<bool> signature_valid;
+    };
+    struct DeferredContractTransaction {
+        Transaction                transaction;
+        std::shared_ptr<Responder> responder;
+    };
+    using DeferredContractMap = std::unordered_map<std::string, DeferredContractTransaction>;
     std::shared_ptr<AdmissionState> admission_state_;
 
     static std::shared_ptr<AdmissionState> create_admission_state(Dag *owner);
@@ -727,6 +744,11 @@ private:
 
     std::expected<void, TransactionProveError> network_transaction_immediate(const Transaction &transaction,
                                                                              const Responder   &responder);
+    TransactionProveError                      prove_transaction_with_facts(const Transaction                &tx,
+                                                                            const std::set<Transaction>      &transactions,
+                                                                            const std::set<Transaction>      *pending_transactions,
+                                                                            const SectionId                  *validation_frontier,
+                                                                            const TransactionValidationFacts *facts);
 
     ExtraChainNode                                       *node;               // Parent node reference
     TransactionCache                                      transaction_cache_; // Transaction cache for fast lookups
@@ -764,8 +786,8 @@ private:
 
     rustex::mutex<std::set<Transaction>>         cached_txs_; // Transactions cached during synchronization
     static constexpr std::size_t                 MaxDeferredContractTransactions = 1024;
-    std::mutex                                   deferred_contracts_mutex_;
-    std::unordered_map<std::string, Transaction> deferred_contracts_;
+    std::mutex          deferred_contracts_mutex_;
+    DeferredContractMap deferred_contracts_;
 
     // Immutable packed storage for cold sections (10k per pack)
     std::unique_ptr<Pack::Registry>  pack_registry_;
@@ -777,9 +799,10 @@ private:
     std::condition_variable          pack_hot_completion_;
     std::atomic_bool                 pack_hot_running_ = false;
     std::atomic_uint64_t             pack_hot_generation_ = 0;
-    std::map<SectionId, std::string> pack_hot_cache_;
-    std::mutex                       file_sync_response_mutex_;
-    std::recursive_mutex             sync_last_info_mutex_;
+    std::map<SectionId, std::string>               pack_hot_cache_;
+    std::mutex                                     file_sync_response_mutex_;
+    std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;
+    std::recursive_mutex                           sync_last_info_mutex_;
 
     // Persistent tx index (by hash / sender / receiver / token / time).
     // Full mode: every tx. Light mode: only tx involving local wallets.
@@ -792,7 +815,7 @@ private:
     // Set once the control index has been populated for the loaded chain, so the
     // one-time lazy rebuild (first control lookup on a cold index) runs only once.
     std::atomic_bool control_index_ready_ = false;
-    std::atomic_bool controls_generating_ = false;
+    std::mutex       controls_generation_mutex_;
 
     // Populate the control index from disk on first use if it is cold. Idempotent
     // and cheap once warm. Called from control lookups so it is independent of
@@ -809,12 +832,14 @@ private:
     //
     void add_to_cached_tx(const Transaction &transaction);
 
+    std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
+
     // Pack hot sections into an immutable pack when enough have accumulated.
     // Called from write_section when the hot range crosses a pack boundary.
     void try_pack_hot();
     void pack_hot_sections(const SectionId    &max_pack_index,
                            const SectionId    &first_saved_section,
-                           const std::uint64_t  generation);
+                           const std::uint64_t generation);
     void finish_pack_hot();
 
     // Pack-sync state. One pack is installed at a time, with a bounded window
@@ -835,6 +860,7 @@ private:
     // Called after each pack is received (or after PackList arrives).
     void issue_next_pack_request(const Responder &responder);
     void issue_pack_window(const Responder &responder);
+    bool validate_pack_controls(Pack::PackId id, const std::map<SectionId, Section> &sections) const;
     bool validate_received_pack(Pack::PackId id, const Pack::Reader &reader) const;
 
     std::optional<BigNumberFloat> frozen_token_allocation(const ActorId &actor, const TokenId &token);

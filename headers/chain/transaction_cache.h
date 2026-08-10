@@ -45,7 +45,6 @@ private slots:
 
 private:
     ExtraChainNode *node;
-    bool            is_exists = false;
 
     friend class Dag;
 };

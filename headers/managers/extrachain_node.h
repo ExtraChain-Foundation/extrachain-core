@@ -119,6 +119,9 @@ struct RuntimeLimits {
     std::size_t dfs_downloads;
     std::size_t pack_sync_window;
     std::size_t cached_transactions;
+    std::size_t sync_transactions;
+    std::size_t derived_sections;
+    std::size_t admission_prevalidation_workers;
     std::size_t wasm_concurrency;
     std::size_t wasm_cache_bytes_per_thread;
 };

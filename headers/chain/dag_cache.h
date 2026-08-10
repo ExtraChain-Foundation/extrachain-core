@@ -154,6 +154,7 @@ public:
     // Derived live view. It avoids reading the mutable section tail for each
     // transaction from an active actor.
     void apply_live_transaction(const Transaction& transaction);
+    void apply_live_transactions(const std::vector<Transaction>& transactions);
     void apply_transaction_delta(const Transaction& transaction, Balances& balances);
     void invalidate_live_balances();
 

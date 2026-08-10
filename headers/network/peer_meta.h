@@ -20,7 +20,11 @@
 #pragma once
 
 #include <optional>
+#include <set>
 #include <string>
+#include <string_view>
+
+inline constexpr std::string_view DAG_TX_BATCH_CAPABILITY = "dag_tx_batch_v1";
 
 #include "utils/exc_utils.h"
 
@@ -37,6 +41,7 @@ struct PeerMeta {
     std::optional<std::string> node_version; // real release version, e.g. "0.26.0"; nullopt = pre-0.26 peer
     std::optional<int>         dag_version;  // storage schema; nullopt = pre-versioning peer
     std::optional<int>         dfs_version;  // placeholder, filled once DFS adds the field
+    std::set<std::string>      capabilities;
     DfsMode                    dfs_mode = DfsMode::Full;
     // socket_mode lives on SocketService itself — not duplicated here to avoid
     // dragging the Qt-heavy isocket_service.h into every handler that reads PeerMeta.
@@ -58,5 +63,9 @@ struct PeerMeta {
     // Peer advertised a real release version (>= 0.26); pre-0.26 peers omit it.
     bool is_new_node() const {
         return node_version.has_value();
+    }
+
+    bool supports_dag_tx_batch() const {
+        return capabilities.contains(std::string(DAG_TX_BATCH_CAPABILITY));
     }
 };

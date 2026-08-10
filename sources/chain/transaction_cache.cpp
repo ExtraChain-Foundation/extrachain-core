@@ -19,10 +19,9 @@
 
 #include "chain/transaction_cache.h"
 
-#include <QDir>
-
+#include "chain/chain_index.h"
+#include "chain/dag.h"
 #include "managers/extrachain_node.h"
-#include "utils/db_connector.h"
 
 TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
     : node(node) {
@@ -34,68 +33,17 @@ TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
 }
 
 void TransactionCache::make_files() {
-    QDir().mkdir(QString::fromStdString(ChainConst::DAG_FOLDER));
-    QDir().mkdir(QString::fromStdString(ChainConst::DAG_CACHE_FOLDER));
-
-    is_exists = QFile(Config::DataStorage::TX_CACHE_CREATE.c_str()).size() != 0;
-    if (is_exists) {
-        return;
-    }
-
-    DbConnector db(ChainConst::TRANSACTION_CACHE);
-    db.open();
-    db.create_table(Config::DataStorage::TX_CACHE_CREATE);
-    db.close();
 }
 
 void TransactionCache::cache() {
-    if (is_exists) {
-        return;
-    }
-
-#ifndef IS_APP_CLIENT
-    return;
-#endif
-
-    // eLog("[TransactionCache] Start first cache");
-
-    // TODO
-    // auto ids = node->accountController()->accountsIds();
-    // auto txs = node->blockchain()
-    //                ->getBlockIndex()
-    //                .getTxsBySenderOrReceiverInRow(ids,
-    //                                               BigNumber(-1),
-    //                                               50,
-    //                                               ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"));
-
-    // for (const auto &[actor_id, tx_infos] : txs) {
-    //     for (const auto &info : tx_infos) {
-    //         adding(info.block_id, info.block_date, info.transaction);
-    //     }
-    // }
-
-    // eLog("[TransactionCache] Finish first cache");
 }
 
 void TransactionCache::adding(const Transaction &transaction) {
-    // TODO: remove
-    if (transaction.token() != ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d")) {
+    static const auto exc_token = ActorId::create("468faf2f1be6504a9a26f7f027f7e43380b0d77d");
+    if (!exc_token.has_value() || transaction.token() != exc_token.value()) {
         return;
     }
-
-    make_files();
-
-    auto map = Utils::to_dbrow(transaction);
-    map.erase("prev_hashs");
-
-    DbConnector db(ChainConst::TRANSACTION_CACHE);
-    db.open();
-    bool res = db.insert(Config::DataStorage::TX_CACHE_TABLE, map);
-    db.close();
-
-    if (res) {
-        emit node->selfTxAdded(transaction, StatusTrx::StatusTrxType::Approved);
-    }
+    emit node->selfTxAdded(transaction, StatusTrx::StatusTrxType::Approved);
 }
 
 void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidden, std::uint64_t from_time) {
@@ -105,56 +53,52 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
 
     eLog("[TransactionCache] Prepare for {} with from time: {}", actor_id, from_time);
 
-    std::string adding_query;
-    if (reward_hidden) {
-        adding_query = fmt::format("AND type != '{}'", int(TransactionType::Conversion));
-        adding_query += " ";
-        adding_query += fmt::format("AND type != '{}'", int(TransactionType::Reward));
-    }
-
-    if (from_time == 0) {
-        from_time = std::numeric_limits<std::uint64_t>::max();
-    }
-
-    DbConnector db(ChainConst::TRANSACTION_CACHE);
-    db.open();
-
-    const auto query = fmt::format(
-        "SELECT * FROM {} WHERE (sender = '{}' OR receiver = '{}') AND token = '{}' AND timestamp < '{}' {} ORDER "
-        "by "
-        "timestamp DESC LIMIT 50;",
-        Config::DataStorage::TX_CACHE_TABLE,
-        actor_id.to_string(),
-        actor_id.to_string(),
-        token.to_string(),
-        from_time,
-        adding_query);
-
-    const auto selected = db.select(query, Config::DataStorage::TX_CACHE_TABLE);
-    db.close();
-
     std::vector<TransactionInfo> transactions;
-    for (const auto &map : selected) {
-        auto tx = Utils::from_dbrow<Transaction>(map);
-        if (!tx.has_value()) {
+    auto                        *dag   = node->dag();
+    auto                        *index = dag != nullptr ? dag->chain_index() : nullptr;
+    if (index == nullptr) {
+        emit this->response(actor_id, token, 0, transactions);
+        return;
+    }
+
+    const auto before = from_time == 0 ? std::numeric_limits<std::uint64_t>::max() : from_time;
+    const auto entries =
+        index->find_for_actor(actor_id.to_string(), token.to_string(), before, reward_hidden ? 200 : 50);
+    std::set<std::string> selected_hashes;
+    for (const auto &entry : entries) {
+        auto section = dag->read_section(entry.section_id);
+        if (!section.has_value()) {
             continue;
         }
 
-        TransactionAmountOperation operation = TransactionAmountOperation::Plus;
-        if (actor_id == tx->sender()
-            && (tx->type() == TransactionType::Regular || tx->type() == TransactionType::Repeatable)) {
-            operation = TransactionAmountOperation::Minus;
+        auto matching = std::ranges::find_if(section.value().transactions, [&](const Transaction &transaction) {
+            return !selected_hashes.contains(transaction.hash())
+                   && transaction.sender().to_string() == entry.sender
+                   && transaction.receiver().to_string() == entry.receiver
+                   && transaction.token().to_string() == entry.token
+                   && static_cast<int>(transaction.type()) == entry.type
+                   && transaction.timestamp() == entry.timestamp
+                   && transaction.amount().to_string() == entry.amount;
+        });
+        if (matching == section.value().transactions.end()) {
+            continue;
+        }
+        if (reward_hidden
+            && (matching->type() == TransactionType::Conversion || matching->type() == TransactionType::Reward)) {
+            continue;
         }
 
-        std::string hash;
-        try {
-            hash = map.at("hash");
-        } catch (const std::out_of_range &e) {
+        selected_hashes.insert(matching->hash());
+        const auto operation = actor_id == matching->sender()
+                                       && (matching->type() == TransactionType::Regular
+                                           || matching->type() == TransactionType::Repeatable)
+                                   ? TransactionAmountOperation::Minus
+                                   : TransactionAmountOperation::Plus;
+        transactions.push_back(
+            TransactionInfo { .operation = operation, .transaction = *matching, .hash = matching->hash() });
+        if (transactions.size() == 50) {
+            break;
         }
-
-        auto transaction_info =
-            TransactionInfo { .operation = operation, .transaction = tx.value(), .hash = hash };
-        transactions.push_back(transaction_info);
     }
 
     emit this->response(actor_id, token, 0, transactions);

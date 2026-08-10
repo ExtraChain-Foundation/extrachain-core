@@ -41,6 +41,14 @@
 #include <QPointer>
 #include <QThread>
 
+namespace {
+constexpr qint64 LIVE_DAG_QUEUE_MAX_BYTES    = 256 * 1024;
+constexpr long   LIVE_DAG_QUEUE_MAX_MESSAGES = 256;
+constexpr std::size_t LIVE_DAG_BATCH_MAX_TRANSACTIONS = 64;
+constexpr std::size_t LIVE_DAG_BATCH_MAX_BYTES        = 128 * 1024;
+constexpr int         LIVE_DAG_BATCH_DELAY_MS         = 5;
+} // namespace
+
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
 SafePtr<std::set<SocketService *>> NetworkManager::connections() const {
@@ -133,11 +141,14 @@ NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
 
     reconnect_timer_            = new QTimer(this);
     clear_network_caches_timer_ = new QTimer(this);
+    live_dag_batch_timer_       = new QTimer(this);
     calculate_traffic_          = CalculateTraffic::get_instance();
 
     reconnect_timer_->setSingleShot(true);
     clear_network_caches_timer_->setSingleShot(true);
+    live_dag_batch_timer_->setSingleShot(true);
     connect(clear_network_caches_timer_, &QTimer::timeout, this, &NetworkManager::clear_network_caches);
+    connect(live_dag_batch_timer_, &QTimer::timeout, this, &NetworkManager::flush_live_dag_batches);
     connect(node, &ExtraChainNode::runtimeActivityChanged, this, [this](RuntimeActivity activity) {
         if (this->node->runtime_profile() == RuntimeProfile::FullNode) {
             return;
@@ -263,6 +274,8 @@ void NetworkManager::schedule_reconnection(int delay_ms) {
 void NetworkManager::go_offline() {
     offline_ = true;
     reconnect_timer_->stop();
+    live_dag_batch_timer_->stop();
+    live_dag_peer_queues_.clear();
     {
         auto reconnectionsLocked = *reconnections_to_identifier_;
         reconnectionsLocked->clear();
@@ -610,6 +623,11 @@ bool NetworkManager::check_port_sync(const QString    &ip,
 
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", connections_->size());
+
+    reconnect_timer_->stop();
+    clear_network_caches_timer_->stop();
+    live_dag_batch_timer_->stop();
+    live_dag_peer_queues_.clear();
 
     std::set<SocketService *> copied;
     {
@@ -984,7 +1002,8 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               SendMode           send_mode,
                                               const std::string &receiver_identifier,
                                               MessageType        message_type,
-                                              MessageStatus      status_info) {
+                                              MessageStatus      status_info,
+                                              PeerSelection      peer_selection) {
     if (!is_active_connection_exists()) {
         // Cache canonical payload — if connection later comes back, peer version is unknown.
         save_to_cache(serialized_message, send_mode, receiver_identifier);
@@ -1026,17 +1045,16 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         priority = SocketService::Priority::Low;
     }
 
-    const bool high_priority_dag_request =
-        status_info == MessageStatus::Request
-        && (message_type == MessageType::DagSections || message_type == MessageType::DagLightData
-            || message_type == MessageType::DagFileSections);
+    const bool high_priority_dag_sync =
+        message_type == MessageType::DagSections || message_type == MessageType::DagLightData
+        || message_type == MessageType::DagFileSections || message_type == MessageType::DagPackData
+        || message_type == MessageType::DagCacheSnapshotData;
     if (message_type == MessageType::Custom || message_type == MessageType::NewActor
         || message_type == MessageType::DagTransactionResult || message_type == MessageType::DagIntervalHash
-        || message_type == MessageType::DagSyncLastInfo
-        || message_type == MessageType::DagControlRangeRequest
-        || message_type == MessageType::DagControlRangeResponse
-        || message_type == MessageType::DagPackList || message_type == MessageType::DagPackRequest
-        || message_type == MessageType::DagCacheSnapshotRequest || high_priority_dag_request) {
+        || message_type == MessageType::DagSyncLastInfo || message_type == MessageType::DagControlRangeRequest
+        || message_type == MessageType::DagControlRangeResponse || message_type == MessageType::DagPackList
+        || message_type == MessageType::DagPackRequest || message_type == MessageType::DagCacheSnapshotRequest
+        || high_priority_dag_sync) {
         priority = SocketService::Priority::High;
     }
 
@@ -1077,6 +1095,10 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     TIMER_START(kkk)
 
+    const bool apply_live_dag_backpressure =
+        (message_type == MessageType::DagTransaction || message_type == MessageType::DagTransactionBatch)
+        && send_mode != SendMode::Focused;
+
     for (const auto &service : *connections_locked) {
         if (!service->is_active()) {
             continue;
@@ -1086,12 +1108,27 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
             continue;
         }
 
+        if (peer_selection == PeerSelection::LegacyDag && !service->peer_meta().is_legacy_dag()) {
+            continue;
+        }
+
         bool send_checked = is_send_check(send_mode,
                                           receiver_identifier,
                                           service->identifier().toStdString(),
                                           non_serialized_message);
+        if (send_mode == SendMode::Broadcast && !receiver_identifier.empty()) {
+            send_checked = send_checked && service->identifier().toStdString() == receiver_identifier;
+        }
 
         if (send_checked) {
+            // A peer can recover a skipped live transaction through verified DAG sync.
+            // Keep its socket queue available for control messages and sync data.
+            if (apply_live_dag_backpressure
+                && (service->pending_bytes() >= LIVE_DAG_QUEUE_MAX_BYTES
+                    || service->queue_size() >= LIVE_DAG_QUEUE_MAX_MESSAGES)) {
+                continue;
+            }
+
             const std::string &payload = payload_for(service);
             calculate_traffic_->add_bytes_sent(service->ip().toStdString(), payload.size());
             service->send_message(QByteArray::fromStdString(payload), priority);
@@ -1107,7 +1144,194 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 }
 
-void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage &package_data) {
+bool NetworkManager::remember_live_dag_hash(const std::string &hash) {
+    std::lock_guard lock(recent_dag_hashes_mutex_);
+    if (!recent_dag_hashes_.insert(hash).second)
+        return false;
+    recent_dag_hash_order_.push_back(hash);
+    const auto limit = node->runtime_limits().cached_transactions;
+    while (recent_dag_hash_order_.size() > limit) {
+        recent_dag_hashes_.erase(recent_dag_hash_order_.front());
+        recent_dag_hash_order_.pop_front();
+    }
+    return true;
+}
+
+void NetworkManager::forget_live_dag_hash(const std::string &hash) {
+    std::lock_guard lock(recent_dag_hashes_mutex_);
+    recent_dag_hashes_.erase(hash);
+    std::erase(recent_dag_hash_order_, hash);
+}
+
+void NetworkManager::queue_live_dag_transaction(const Transaction                     &transaction,
+                                                const std::string                     &source_identifier,
+                                                const std::unordered_set<std::string> &ignored_identifiers) {
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, transaction, source_identifier, ignored_identifiers] {
+                queue_live_dag_transaction(transaction, source_identifier, ignored_identifiers);
+            },
+            Qt::QueuedConnection);
+        return;
+    }
+
+    std::size_t serialized_size = 0;
+    {
+        WireFormat::Scope scope(WireFormat::Mode::Canonical);
+        serialized_size = MessagePack::serialize(transaction).size();
+    }
+    if (serialized_size > LIVE_DAG_BATCH_MAX_BYTES)
+        return;
+
+    bool flush_now = false;
+    {
+        auto connections_locked = *connections_;
+        for (const auto *service : *connections_locked) {
+            if (service == nullptr || !service->is_active() || service->mode() == SocketMode::Light
+                || !service->peer_meta().supports_dag_tx_batch()) {
+                continue;
+            }
+            const auto identifier = service->identifier().toStdString();
+            if (identifier.empty() || identifier == source_identifier || ignored_identifiers.contains(identifier))
+                continue;
+
+            auto &queue = live_dag_peer_queues_[identifier];
+            if (queue.entries.size() >= static_cast<std::size_t>(LIVE_DAG_QUEUE_MAX_MESSAGES)
+                || queue.bytes + serialized_size > static_cast<std::size_t>(LIVE_DAG_QUEUE_MAX_BYTES)) {
+                continue;
+            }
+            queue.entries.push_back(LiveDagQueueEntry { transaction, serialized_size });
+            queue.bytes += serialized_size;
+            flush_now = flush_now || queue.entries.size() >= LIVE_DAG_BATCH_MAX_TRANSACTIONS;
+        }
+    }
+
+    if (flush_now) {
+        flush_live_dag_batches();
+    } else if (!live_dag_peer_queues_.empty() && !live_dag_batch_timer_->isActive()) {
+        live_dag_batch_timer_->start(LIVE_DAG_BATCH_DELAY_MS);
+    }
+}
+
+void NetworkManager::flush_live_dag_batches() {
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(this, &NetworkManager::flush_live_dag_batches, Qt::QueuedConnection);
+        return;
+    }
+
+    std::vector<std::pair<std::string, DagTransactionBatch>> batches;
+    for (auto queue = live_dag_peer_queues_.begin(); queue != live_dag_peer_queues_.end();) {
+        auto meta = peer_meta_for(queue->first);
+        if (!meta.has_value() || !meta.value().supports_dag_tx_batch()) {
+            queue = live_dag_peer_queues_.erase(queue);
+            continue;
+        }
+
+        DagTransactionBatch batch;
+        std::size_t         bytes = 0;
+        while (!queue->second.entries.empty() && batch.transactions.size() < LIVE_DAG_BATCH_MAX_TRANSACTIONS) {
+            const auto &entry = queue->second.entries.front();
+            if (!batch.transactions.empty() && bytes + entry.serialized_size > LIVE_DAG_BATCH_MAX_BYTES - 1024) {
+                break;
+            }
+            bytes += entry.serialized_size;
+            queue->second.bytes -= entry.serialized_size;
+            batch.transactions.push_back(std::move(queue->second.entries.front().transaction));
+            queue->second.entries.pop_front();
+        }
+        if (!batch.transactions.empty())
+            batches.emplace_back(queue->first, std::move(batch));
+        if (queue->second.entries.empty()) {
+            queue = live_dag_peer_queues_.erase(queue);
+        } else {
+            ++queue;
+        }
+    }
+
+    for (auto &[identifier, batch] : batches)
+        send_live_dag_batch(identifier, std::move(batch));
+    if (!live_dag_peer_queues_.empty())
+        live_dag_batch_timer_->start(LIVE_DAG_BATCH_DELAY_MS);
+}
+
+void NetworkManager::send_live_dag_batch(const std::string &peer_identifier, DagTransactionBatch batch) {
+    std::string serialized;
+    {
+        WireFormat::Scope scope(WireFormat::Mode::Canonical);
+        serialized = MessagePack::serialize(batch);
+    }
+    if (serialized.empty() || serialized.size() > LIVE_DAG_BATCH_MAX_BYTES)
+        return;
+
+    auto &main_actor = node->account_controller()->system_actor();
+    auto  message    = make_init_message(serialized,
+                                     SendMode::Broadcast,
+                                     MessageType::DagTransactionBatch,
+                                     MessageStatus::NoStatus,
+                                     main_actor.id(),
+                                     "",
+                                     node->node_identifier());
+    add_all_services_identifiers_to_message(message);
+    const auto message_hash = message.calculate_hash();
+    auto       signature    = main_actor.key().sign(ByteArray(message_hash).toBytes());
+    if (!signature.has_value())
+        return;
+    const auto blob = message.serialize() + ByteArray(signature.value()).toString();
+    send_message_connections(blob,
+                             blob,
+                             message,
+                             SendMode::Broadcast,
+                             peer_identifier,
+                             MessageType::DagTransactionBatch,
+                             MessageStatus::NoStatus);
+}
+
+void NetworkManager::send_live_dag_transaction_to_legacy(const Transaction &transaction) {
+    std::string canonical;
+    std::string legacy;
+    {
+        WireFormat::Scope scope(WireFormat::Mode::Canonical);
+        canonical = MessagePack::serialize(transaction);
+    }
+    {
+        WireFormat::Scope scope(WireFormat::Mode::Legacy);
+        legacy = MessagePack::serialize(transaction);
+    }
+
+    auto &main_actor = node->account_controller()->system_actor();
+    auto  message    = make_init_message(canonical,
+                                     SendMode::Broadcast,
+                                     MessageType::DagTransaction,
+                                     MessageStatus::NoStatus,
+                                     main_actor.id(),
+                                     "",
+                                     node->node_identifier());
+    add_all_services_identifiers_to_message(message);
+    auto legacy_message = message;
+    legacy_message.data = legacy;
+    const auto sign     = [&](MessageBody &body) -> std::optional<std::string> {
+        auto signature = main_actor.key().sign(ByteArray(body.calculate_hash()).toBytes());
+        if (!signature.has_value())
+            return std::nullopt;
+        return body.serialize() + ByteArray(signature.value()).toString();
+    };
+    auto canonical_blob = sign(message);
+    auto legacy_blob    = sign(legacy_message);
+    if (!canonical_blob.has_value() || !legacy_blob.has_value())
+        return;
+    send_message_connections(canonical_blob.value(),
+                             legacy_blob.value(),
+                             message,
+                             SendMode::Broadcast,
+                             "",
+                             MessageType::DagTransaction,
+                             MessageStatus::NoStatus,
+                             PeerSelection::LegacyDag);
+}
+
+void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage &package_data,
+                                                    bool                         legacy_dag_only) {
     if (package_data.msg_body.send_type != SendMode::Broadcast) {
         eWarning("Send Broadcast Message error - wrong network send type: {}", package_data.msg_body.send_type);
         return;
@@ -1129,7 +1353,14 @@ void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage 
 
     auto serialized = message_edited.serialize();
     auto full_blob  = serialized + package_data.sign;
-    send_message_connections(full_blob, full_blob, message_edited, SendMode::Broadcast, "");
+    send_message_connections(full_blob,
+                             full_blob,
+                             message_edited,
+                             SendMode::Broadcast,
+                             "",
+                             message_edited.message_type,
+                             message_edited.status,
+                             legacy_dag_only ? PeerSelection::LegacyDag : PeerSelection::All);
 
     // eTemp("Message forwarded with messageId: {}", package_data.msg_body.message_id);
 
@@ -1494,13 +1725,13 @@ void NetworkManager::message_received(const std::string &message,
     // forces its own scope, so leaving this active across the switch is safe.
     WireFormat::Scope wire_scope(WireFormat::wire());
 
-    // Lifecycle gate: drop Dag network traffic (types 30..47) while the Dag is
+    // Lifecycle gate: drop Dag network traffic (types 30..48) while the Dag is
     // stopped, so handlers don't race against shutdown/migration. Enforced once
     // here at the dispatch layer instead of per-handler.
     {
         auto type_val = std::to_underlying(type);
         if (type_val >= std::to_underlying(MessageType::DagTransaction)
-            && type_val <= std::to_underlying(MessageType::DagCacheSnapshotData)) {
+            && type_val <= std::to_underlying(MessageType::DagTransactionBatch)) {
             auto *dag = node->dag();
             if (dag && !dag->is_accepting_messages()) {
                 return;
@@ -2040,22 +2271,90 @@ void NetworkManager::message_received(const std::string &message,
          */
 
     case MessageType::DagTransaction: {
+        if (!node->dag()->should_queue_network_transaction()) {
+            break;
+        }
         auto transaction_result = MessagePack::deserialize<Transaction>(serialized);
         if (!transaction_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for transaction", type);
             break;
         }
 
-        node->dag()->submit_network_transaction(transaction_result.value(),
+        const auto transaction         = transaction_result.value();
+        auto       ignored_identifiers = package_data.msg_body.nodes_identifiers_to_ignore;
+        ignored_identifiers.insert(package_data.msg_body.nodes_identifiers_to_ignore_later.begin(),
+                                   package_data.msg_body.nodes_identifiers_to_ignore_later.end());
+        ignored_identifiers.insert(package_data.prev_identifier);
+        node->dag()->submit_network_transaction(transaction,
                                                 responder,
                                                 [this,
+                                                 transaction,
+                                                 identifier,
+                                                 ignored_identifiers,
                                                  package_data](std::expected<void, TransactionProveError> result,
                                                                bool should_forward) {
                                                     // A committed transaction is forwarded once. Invalid traffic,
                                                     // queue overflow, and idempotent replays stop at this node.
-                                                    if (result.has_value() && should_forward)
-                                                        send_broadcast_message_further(package_data);
+                                                    if (result.has_value() && should_forward) {
+                                                        remember_live_dag_hash(transaction.hash());
+                                                        queue_live_dag_transaction(transaction,
+                                                                                   identifier,
+                                                                                   ignored_identifiers);
+                                                        send_broadcast_message_further(package_data, true);
+                                                    }
                                                 });
+        break;
+    }
+
+    case MessageType::DagTransactionBatch: {
+        if (!node->dag()->should_queue_network_transaction() || serialized.size() > LIVE_DAG_BATCH_MAX_BYTES) {
+            break;
+        }
+        const auto meta = peer_meta_for(identifier);
+        if (!meta.has_value() || !meta.value().supports_dag_tx_batch()) {
+            eWarning("[NetworkManager] DAG batch from a peer without negotiated support");
+            break;
+        }
+        auto batch_result = MessagePack::deserialize<DagTransactionBatch>(serialized);
+        if (!batch_result.has_value() || batch_result.value().transactions.empty()
+            || batch_result.value().transactions.size() > LIVE_DAG_BATCH_MAX_TRANSACTIONS) {
+            eWarning("[NetworkManager] Invalid DAG transaction batch");
+            break;
+        }
+
+        auto ignored_identifiers = package_data.msg_body.nodes_identifiers_to_ignore;
+        ignored_identifiers.insert(package_data.msg_body.nodes_identifiers_to_ignore_later.begin(),
+                                   package_data.msg_body.nodes_identifiers_to_ignore_later.end());
+        ignored_identifiers.insert(package_data.prev_identifier);
+        for (const auto &transaction : batch_result.value().transactions) {
+            if (is_contract_transaction(transaction.type()) || transaction.type() == TransactionType::Genesis
+                || transaction.type() == TransactionType::Balance) {
+                continue;
+            }
+            const auto hash = transaction.hash();
+            if (hash.empty() || !remember_live_dag_hash(hash))
+                continue;
+
+            Responder batch_responder;
+            batch_responder.set_ip(identifier);
+            node->dag()->submit_network_transaction(transaction,
+                                                    batch_responder,
+                                                    [this,
+                                                     transaction,
+                                                     identifier,
+                                                     ignored_identifiers,
+                                                     hash](std::expected<void, TransactionProveError> result,
+                                                           bool should_forward) {
+                                                        if (!result.has_value() || !should_forward) {
+                                                            forget_live_dag_hash(hash);
+                                                            return;
+                                                        }
+                                                        queue_live_dag_transaction(transaction,
+                                                                                   identifier,
+                                                                                   ignored_identifiers);
+                                                        send_live_dag_transaction_to_legacy(transaction);
+                                                    });
+        }
         break;
     }
 

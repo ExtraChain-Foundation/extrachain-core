@@ -380,31 +380,36 @@ void WebSocketService::tryDequeueMessage() {
     waiting_buffer_space_ = false;
     QMutexLocker locker(&queue_mutex_);
 
-    QByteArray data;
-    if (!high_queue_.empty()) {
-        data = high_queue_.front();
-        high_queue_.pop();
-    } else if (!normal_queue_.empty()) {
-        data = normal_queue_.front();
-        normal_queue_.pop();
-    } else if (!low_queue_.empty()) {
-        data = low_queue_.front();
-        low_queue_.pop();
+    constexpr std::size_t   DrainMessageLimit = 32;
+    constexpr qsizetype     DrainByteLimit    = 128 * 1024;
+    std::vector<QByteArray> messages;
+    qsizetype               drained_bytes = 0;
+    while (messages.size() < DrainMessageLimit && drained_bytes < DrainByteLimit) {
+        QByteArray data;
+        if (!high_queue_.empty()) {
+            data = std::move(high_queue_.front());
+            high_queue_.pop();
+        } else if (!normal_queue_.empty()) {
+            data = std::move(normal_queue_.front());
+            normal_queue_.pop();
+        } else if (!low_queue_.empty()) {
+            data = std::move(low_queue_.front());
+            low_queue_.pop();
+        } else {
+            break;
+        }
+        drained_bytes += data.size();
+        messages.push_back(std::move(data));
     }
     const bool has_more = !high_queue_.empty() || !normal_queue_.empty() || !low_queue_.empty();
-    if (!data.isEmpty()) {
-        queued_bytes_.fetch_sub(data.size(), std::memory_order_relaxed);
-    }
+    queued_bytes_.fetch_sub(drained_bytes, std::memory_order_relaxed);
 
     locker.unlock();
 
-    if (!data.isEmpty()) {
-        emit sendMessageInternal(data);
-
-        if (has_more) {
-            emit needToTryDequeue();
-        }
-    }
+    for (const auto &message : messages)
+        emit sendMessageInternal(message);
+    if (has_more)
+        emit needToTryDequeue();
 }
 
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {

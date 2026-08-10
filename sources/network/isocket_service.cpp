@@ -101,6 +101,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
         .node_version = handshake.node_version,
         .dag_version  = handshake.dag_version,
         .dfs_version  = std::nullopt,
+        .capabilities = handshake.capabilities.value_or(std::set<std::string> {}),
         .dfs_mode     = handshake.dfs_mode,
     };
 
@@ -278,7 +279,8 @@ QByteArray SocketService::generate_first_message() {
                            .socket_mode  = mode_,
                            .dfs_mode     = node->dfs()->mode(),
                            .dag_version  = CURRENT_DAG_VERSION,
-                           .node_version = extrachain_node_version };
+                           .node_version = extrachain_node_version,
+                           .capabilities = std::set<std::string> { std::string(DAG_TX_BATCH_CAPABILITY) } };
 
     {
         auto connections_locked = *node->network()->connections();

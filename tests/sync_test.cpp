@@ -110,6 +110,48 @@ private slots:
         QCOMPARE(DfsVector::compare_row_revisions(same_a, same_a_reordered), 0);
     }
 
+    void dagBatchCapabilityIsOptional() {
+        SocketService::HandshakeMessage current {
+            .network_id   = "network",
+            .version      = "0.25.0",
+            .identifier   = "node-a",
+            .dag_version  = CURRENT_DAG_VERSION,
+            .node_version = "0.26.0",
+            .capabilities = std::set<std::string> { std::string(DAG_TX_BATCH_CAPABILITY) },
+        };
+        auto encoded = Json::serialize(current);
+        auto decoded = Json::deserialize<SocketService::HandshakeMessage>(encoded);
+        QVERIFY(decoded.has_value());
+        QVERIFY(decoded.value().capabilities.has_value());
+        QVERIFY(decoded.value().capabilities.value().contains(std::string(DAG_TX_BATCH_CAPABILITY)));
+
+        current.capabilities = std::nullopt;
+        encoded              = Json::serialize(current);
+        decoded              = Json::deserialize<SocketService::HandshakeMessage>(encoded);
+        QVERIFY(decoded.has_value());
+        QVERIFY(!decoded.value().capabilities.has_value());
+    }
+
+    void dagTransactionBatchRoundTrips() {
+        Transaction first;
+        first.set_section(SectionId(21));
+        first.set_amount(BigNumberFloat("1"));
+        first.set_type(TransactionType::Reward);
+
+        Transaction second;
+        second.set_section(SectionId(22));
+        second.set_amount(BigNumberFloat("2"));
+        second.set_type(TransactionType::Reward);
+
+        const DagTransactionBatch batch { .transactions = { first, second } };
+        const auto                encoded = MessagePack::serialize(batch);
+        const auto                decoded = MessagePack::deserialize<DagTransactionBatch>(encoded);
+        QVERIFY(decoded.has_value());
+        QCOMPARE(decoded.value().transactions.size(), std::size_t(2));
+        QCOMPARE(decoded.value().transactions[0].section(), SectionId(21));
+        QCOMPARE(decoded.value().transactions[1].section(), SectionId(22));
+    }
+
     // ----- Pack-sync data path ------------------------------------------------
 
     // The exact transfer a syncing node performs: server serialises each pack

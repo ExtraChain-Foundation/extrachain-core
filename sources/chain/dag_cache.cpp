@@ -464,6 +464,27 @@ void DagCache::apply_live_transaction(const Transaction& transaction) {
     live_balance_section_ = transaction.section();
 }
 
+void DagCache::apply_live_transactions(const std::vector<Transaction>& transactions) {
+    if (transactions.empty())
+        return;
+
+    std::lock_guard lock(live_balance_mutex_);
+    if (live_balance_actors_.empty())
+        return;
+
+    for (const auto& transaction : transactions) {
+        if (live_balance_section_ > transaction.section()
+            || live_balance_section_ + BigNumber(1) < transaction.section()) {
+            live_balances_.clear();
+            live_balance_actors_.clear();
+            live_balance_section_ = SectionId(-1);
+            return;
+        }
+        process_transaction(transaction, live_balances_);
+        live_balance_section_ = transaction.section();
+    }
+}
+
 void DagCache::apply_transaction_delta(const Transaction& transaction, Balances& balances) {
     process_transaction(transaction, balances);
 }
@@ -656,6 +677,8 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         start_section = first_saved_section;
     }
 
+    auto hot_sections = dag->read_hot_sections(start_section, genesis_section);
+
     std::set<std::pair<ActorId, TokenId>> actor_token_set;
 
     // Start a transaction for efficiency
@@ -671,7 +694,9 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
-        auto section = read_section_callback(i);
+        auto hot = hot_sections.find(i);
+        auto section =
+            hot != hot_sections.end() ? std::optional<Section>(std::move(hot->second)) : read_section_callback(i);
         if (!section.has_value()) {
             continue;
         }

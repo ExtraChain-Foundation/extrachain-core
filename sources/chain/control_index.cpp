@@ -76,8 +76,10 @@ struct ControlIndex::Impl {
         finalize(stmt_get);
         finalize(stmt_last);
         finalize(stmt_count);
-        if (db)
+        if (db) {
+            sqlite3_wal_checkpoint_v2(db, nullptr, SQLITE_CHECKPOINT_TRUNCATE, nullptr, nullptr);
             sqlite3_close(db);
+        }
     }
 
     bool exec(const char *sql) {
@@ -124,6 +126,9 @@ struct ControlIndex::Impl {
         exec("PRAGMA journal_mode = WAL");
         exec("PRAGMA synchronous = NORMAL");
         exec("PRAGMA temp_store = MEMORY");
+        const auto full_node = node == nullptr || node->runtime_profile() == RuntimeProfile::FullNode;
+        sqlite3_wal_autocheckpoint(db, full_node ? 4096 : 1024);
+        exec(full_node ? "PRAGMA journal_size_limit = 67108864" : "PRAGMA journal_size_limit = 16777216");
 
         if (!exec(SCHEMA_SQL))
             return false;
@@ -174,12 +179,18 @@ std::optional<std::string> ControlIndex::get(const SectionId &section_id) const 
     std::lock_guard lock(impl_->mutex);
     sqlite3_reset(impl_->stmt_get);
     sqlite3_bind_int64(impl_->stmt_get, 1, static_cast<sqlite3_int64>(section_to_u64(section_id)));
-    if (sqlite3_step(impl_->stmt_get) != SQLITE_ROW)
+    if (sqlite3_step(impl_->stmt_get) != SQLITE_ROW) {
+        sqlite3_reset(impl_->stmt_get);
         return std::nullopt;
+    }
     auto *txt = reinterpret_cast<const char *>(sqlite3_column_text(impl_->stmt_get, 0));
-    if (!txt)
+    if (!txt) {
+        sqlite3_reset(impl_->stmt_get);
         return std::nullopt;
-    return std::string(txt);
+    }
+    std::string result(txt);
+    sqlite3_reset(impl_->stmt_get);
+    return result;
 }
 
 std::optional<std::pair<SectionId, std::string>> ControlIndex::last_at_or_below(const SectionId &from) const {
@@ -192,13 +203,19 @@ std::optional<std::pair<SectionId, std::string>> ControlIndex::last_at_or_below(
     bool          is_top = !fi.has_value() || *fi < 0;
     std::uint64_t bound  = is_top ? static_cast<std::uint64_t>(INT64_MAX) : section_to_u64(from);
     sqlite3_bind_int64(impl_->stmt_last, 1, static_cast<sqlite3_int64>(bound));
-    if (sqlite3_step(impl_->stmt_last) != SQLITE_ROW)
+    if (sqlite3_step(impl_->stmt_last) != SQLITE_ROW) {
+        sqlite3_reset(impl_->stmt_last);
         return std::nullopt;
+    }
     auto  sec = static_cast<std::uint64_t>(sqlite3_column_int64(impl_->stmt_last, 0));
     auto *txt = reinterpret_cast<const char *>(sqlite3_column_text(impl_->stmt_last, 1));
-    if (!txt)
+    if (!txt) {
+        sqlite3_reset(impl_->stmt_last);
         return std::nullopt;
-    return std::pair { SectionId(static_cast<long long>(sec)), std::string(txt) };
+    }
+    std::pair result { SectionId(static_cast<long long>(sec)), std::string(txt) };
+    sqlite3_reset(impl_->stmt_last);
+    return result;
 }
 
 void ControlIndex::clear() {
@@ -213,9 +230,13 @@ std::uint64_t ControlIndex::row_count() const {
         return 0;
     std::lock_guard lock(impl_->mutex);
     sqlite3_reset(impl_->stmt_count);
-    if (sqlite3_step(impl_->stmt_count) != SQLITE_ROW)
+    if (sqlite3_step(impl_->stmt_count) != SQLITE_ROW) {
+        sqlite3_reset(impl_->stmt_count);
         return 0;
-    return static_cast<std::uint64_t>(sqlite3_column_int64(impl_->stmt_count, 0));
+    }
+    const auto result = static_cast<std::uint64_t>(sqlite3_column_int64(impl_->stmt_count, 0));
+    sqlite3_reset(impl_->stmt_count);
+    return result;
 }
 
 void ControlIndex::rebuild_from_dag() {

@@ -26,8 +26,12 @@
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
-#include <string>
+#include <deque>
+#include <mutex>
 #include <shared_mutex>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "managers/account_controller.h"
@@ -249,6 +253,21 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
 
 private:
+    enum class PeerSelection {
+        All,
+        LegacyDag
+    };
+
+    struct LiveDagQueueEntry {
+        Transaction transaction;
+        std::size_t serialized_size = 0;
+    };
+
+    struct LiveDagPeerQueue {
+        std::deque<LiveDagQueueEntry> entries;
+        std::size_t                   bytes = 0;
+    };
+
     bool                                      active_ = false;
     std::set<std::string>                     failed_ips_;
     std::unique_ptr<UPNPConnection>           upnp_dis_;
@@ -276,8 +295,13 @@ private:
     QTimer*                                                                     reconnect_timer_;
     std::atomic_bool                                                            offline_ { false };
     QTimer*                                                                     clear_network_caches_timer_;
+    QTimer*                                                                     live_dag_batch_timer_;
     CalculateTraffic*                                                           calculate_traffic_;
     SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> forwarded_messages_;
+    std::unordered_map<std::string, LiveDagPeerQueue>                           live_dag_peer_queues_;
+    std::mutex                                                                  recent_dag_hashes_mutex_;
+    std::unordered_set<std::string>                                             recent_dag_hashes_;
+    std::deque<std::string>                                                     recent_dag_hash_order_;
 
     std::string              public_ip_;
     std::vector<std::string> first_nodes_ =
@@ -315,8 +339,18 @@ private:
                                   const MessageBody& non_serialized_message,
                                   SendMode           send_mode,
                                   const std::string& receiver_identifier,
-                                  MessageType        message_type = MessageType::Unknown,
-                                  MessageStatus      status_info  = MessageStatus::NoStatus);
+                                  MessageType        message_type   = MessageType::Unknown,
+                                  MessageStatus      status_info    = MessageStatus::NoStatus,
+                                  PeerSelection      peer_selection = PeerSelection::All);
+
+    void queue_live_dag_transaction(const Transaction&                     transaction,
+                                    const std::string&                     source_identifier,
+                                    const std::unordered_set<std::string>& ignored_identifiers);
+    void flush_live_dag_batches();
+    void send_live_dag_batch(const std::string& peer_identifier, DagTransactionBatch batch);
+    void send_live_dag_transaction_to_legacy(const Transaction& transaction);
+    bool remember_live_dag_hash(const std::string& hash);
+    void forget_live_dag_hash(const std::string& hash);
 
     void clear_network_caches();
     void schedule_cache_cleanup();
@@ -423,7 +457,7 @@ public:
     std::string first_node();
     bool        save_first_node(const std::string_view first_node);
 
-    void send_broadcast_message_further(const NetworkPackageStorage& package_data);
+    void send_broadcast_message_further(const NetworkPackageStorage& package_data, bool legacy_dag_only = false);
 
     void                     save_to_cache(const std::string& serialized_message,
                                            SendMode           send_mode,
