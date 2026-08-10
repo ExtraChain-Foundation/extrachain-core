@@ -68,6 +68,12 @@ bool LuminanceManager::init_db() {
 void LuminanceManager::reset_db() {
     db_initialized_ = false;
 
+    {
+        std::lock_guard lock(cache_mutex_);
+        luminance_cache_.clear();
+        cache_loaded_ = false;
+    }
+
     if (db_initialized_) {
         luminance_db_->close();
         QFile::remove(QString::fromStdString(Luminance::DATABASE));
@@ -76,27 +82,36 @@ void LuminanceManager::reset_db() {
     luminance_db_.reset();
 }
 
+void LuminanceManager::load_cache() {
+    // Caller holds cache_mutex_.
+    luminance_cache_.clear();
+
+    auto rows = luminance_db_->select(fmt::format("SELECT * FROM {}", Config::DataStorage::LUMINANCE_TABLE));
+    for (auto &row : rows) {
+        try {
+            luminance_cache_[row["node_id"]] = std::stoi(row["luminance"]);
+        } catch (const std::exception &) {
+            // A malformed row is worth ignoring, not worth failing the whole load over.
+        }
+    }
+
+    cache_loaded_ = true;
+}
+
 int LuminanceManager::read_luminance(const NodeId &node_id) {
-    // TODO: memory cache result
-    // eTemp("[LuminanceManager] Read {}", node_id);
-
+    // Served from memory: this runs on every inbound network message, and going to
+    // sqlite here took the process-wide db mutex often enough to starve the Qt event
+    // loop — periodic timers stopped firing and nodes stopped syncing. See the note on
+    // luminance_cache_ in the header.
     auto node_id_str = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
-    int  luminance   = -1;
 
-    auto rows = luminance_db_->select(
-        fmt::format("SELECT * FROM {} WHERE node_id = '{}'", Config::DataStorage::LUMINANCE_TABLE, node_id_str));
-
-    if (rows.empty() || rows.size() > 1) {
-        return luminance;
+    std::lock_guard lock(cache_mutex_);
+    if (!cache_loaded_) {
+        load_cache();
     }
 
-    try {
-        luminance = std::stoi(rows[0]["luminance"]);
-    } catch (const std::exception &) {
-        return luminance;
-    }
-
-    return luminance;
+    auto it = luminance_cache_.find(node_id_str);
+    return it == luminance_cache_.end() ? -1 : it->second;
 }
 
 void LuminanceManager::increment(const NodeId &node_id) {
@@ -116,6 +131,13 @@ void LuminanceManager::remove_old() {
     auto now       = Utils::current_date_ms();
     auto threshold = now - Luminance::AUTOREMOVE_MS;
     luminance_db_->query(fmt::format("DELETE FROM luminance WHERE timestamp < {}", threshold));
+
+    // Which rows the DELETE actually removed depends on timestamps the cache does not
+    // track, so reload rather than guess. This runs rarely, unlike read/increment.
+    std::lock_guard lock(cache_mutex_);
+    if (cache_loaded_) {
+        load_cache();
+    }
 }
 
 void LuminanceManager::update_luminance(const NodeId &node_id, Operation op, int value) {
@@ -150,4 +172,29 @@ void LuminanceManager::update_luminance(const NodeId &node_id, Operation op, int
                     now,
                     update_expr,
                     now));
+
+    // Mirror the same arithmetic into the cache rather than invalidating it: dropping
+    // the cache here would send the next read straight back to sqlite, which is the
+    // cost this cache exists to avoid — and writes happen on every broadcast.
+    {
+        std::lock_guard lock(cache_mutex_);
+        if (cache_loaded_) {
+            auto it = luminance_cache_.find(node_id_str);
+            if (it == luminance_cache_.end()) {
+                luminance_cache_[node_id_str] = initial_value;
+            } else {
+                switch (op) {
+                case Operation::Increment:
+                    it->second += 1;
+                    break;
+                case Operation::Decrement:
+                    it->second = std::max(0, it->second - 1);
+                    break;
+                case Operation::Set:
+                    it->second = std::max(0, value);
+                    break;
+                }
+            }
+        }
+    }
 }

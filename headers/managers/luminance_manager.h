@@ -19,6 +19,11 @@
 
 #pragma once
 
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+
 #include <boost/describe/class.hpp>
 
 class ExtraChainNode;
@@ -52,6 +57,22 @@ private:
 private:
     std::unique_ptr<DbConnector> luminance_db_;
     bool                         db_initialized_ = false; // Whether db is initialized
+
+    // In-memory mirror of the table (the "TODO: memory cache result" in read_luminance).
+    // Every inbound network message calls read_luminance, and broadcasts also call
+    // increment — two sqlite round trips per message, each taking the global db mutex
+    // that serialises every database in the process. Under a normal transaction flow
+    // that starved the Qt event loop outright: on a six-node stand the 10-second status
+    // timer stopped firing altogether while the node kept accepting console input, so
+    // no periodic work ran and nodes silently stopped syncing.
+    //
+    // The cache is authoritative once loaded: this table is only ever written through
+    // this class, so nothing else can change it behind our back.
+    mutable std::mutex                cache_mutex_;
+    std::unordered_map<std::string, int> luminance_cache_;
+    bool                                 cache_loaded_ = false;
+
+    void load_cache();
 
     ExtraChainNode *node;
 };
