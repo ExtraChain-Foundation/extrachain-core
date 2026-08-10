@@ -22,6 +22,7 @@ struct ContractTransitionData {
     std::string   contract_id;
     std::string   caller_contract_id;
     std::string   kind;
+    std::string   language;
     std::string   method;
     std::string   arguments_base64;
     std::string   module_hash;
@@ -39,6 +40,7 @@ BOOST_DESCRIBE_STRUCT(ContractTransitionData,
                       (contract_id,
                        caller_contract_id,
                        kind,
+                       language,
                        method,
                        arguments_base64,
                        module_hash,
@@ -54,6 +56,7 @@ BOOST_DESCRIBE_STRUCT(ContractTransitionData,
 struct ContractTransactionData {
     std::uint32_t                         schema = 4;
     std::string                           kind;
+    std::string                           language;
     std::string                           method;
     std::string                           arguments_base64;
     std::string                           module_hash;
@@ -72,6 +75,7 @@ BOOST_DESCRIBE_STRUCT(ContractTransactionData,
                       (),
                       (schema,
                        kind,
+                       language,
                        method,
                        arguments_base64,
                        module_hash,

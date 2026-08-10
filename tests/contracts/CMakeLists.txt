@@ -15,6 +15,8 @@ add_executable(extrachain-contract-tests
     contract_runtime_test.cpp
     ../../sources/contracts/contract_codec.cpp
     ../../sources/contracts/contract_manager.cpp
+    ../../sources/contracts/contract_module.cpp
+    ../../sources/contracts/standard_token.cpp
     ../../sources/contracts/wasm_policy.cpp
     ../../sources/contracts/wasm_runtime.cpp)
 target_include_directories(extrachain-contract-tests PRIVATE
@@ -29,5 +31,10 @@ endif()
 enable_testing()
 add_test(NAME contract-runtime
     COMMAND extrachain-contract-tests
-        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/fungible_token.wasm
-        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/message_claim.wasm)
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/fungible_token_rust.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/fungible_token_assemblyscript.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/non_fungible_token_rust.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/non_fungible_token_assemblyscript.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/message_claim.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/assemblyscript_basic.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/assemblyscript_dfs_binding.wasm)

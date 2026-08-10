@@ -30,6 +30,7 @@
 #include "contracts/contract_manager.h"
 #include "contracts/contract_codec.h"
 #include "contracts/contract_transaction.h"
+#include "contracts/standard_token.h"
 
 #include <QFile>
 #include <msgpack.hpp>
@@ -73,22 +74,24 @@ namespace {
 
         msgpack::sbuffer buffer;
         msgpack::packer  packer(buffer);
-        packer.pack_array(4);
+        packer.pack_array(5);
         packer.pack(name);
         packer.pack(ticker);
         packer.pack(decimals);
         packer.pack(supply.value());
+        packer.pack_array(0);
         auto *begin = reinterpret_cast<const std::uint8_t *>(buffer.data());
         return std::vector<std::uint8_t>(begin, begin + buffer.size());
     }
 
-    std::expected<std::vector<std::uint8_t>, CreateTokenError> standard_token_module() {
-        QFile module_file(":/contracts/fungible_token.wasm");
-        if (!module_file.open(QIODevice::ReadOnly)) {
-            return std::unexpected(CreateTokenError::InvalidTx);
-        }
-        auto module = module_file.readAll();
-        return std::vector<std::uint8_t>(module.begin(), module.end());
+    std::vector<std::uint8_t> collection_init_arguments(const std::string &name, const std::string &symbol) {
+        msgpack::sbuffer buffer;
+        msgpack::packer  packer(buffer);
+        packer.pack_array(2);
+        packer.pack(name);
+        packer.pack(symbol);
+        auto *begin = reinterpret_cast<const std::uint8_t *>(buffer.data());
+        return { begin, begin + buffer.size() };
     }
 
     std::uint8_t decimal_places(const BigNumberFloat &amount) {
@@ -164,6 +167,25 @@ namespace {
         }
     }
 
+    std::optional<std::pair<std::string, std::string>> decode_collection_init(
+        std::span<const std::uint8_t> arguments) {
+        try {
+            std::size_t offset = 0;
+            auto        handle =
+                msgpack::unpack(reinterpret_cast<const char *>(arguments.data()), arguments.size(), offset);
+            const auto &root = handle.get();
+            if (offset != arguments.size() || root.type != msgpack::type::ARRAY || root.via.array.size != 2) {
+                return std::nullopt;
+            }
+            std::pair<std::string, std::string> result;
+            root.via.array.ptr[0].convert(result.first);
+            root.via.array.ptr[1].convert(result.second);
+            return result;
+        } catch (const std::exception &) {
+            return std::nullopt;
+        }
+    }
+
 } // namespace
 
 TokenManager::TokenManager(ExtraChainNode *node)
@@ -196,8 +218,10 @@ std::optional<std::string> TokenManager::registry_file_id() const {
     return file.value().file_id;
 }
 
-bool TokenManager::registry_row_valid(const TokenData &token_data) const {
+bool TokenManager::registry_row_valid(TokenData &token_data) const {
     if (token_data.token_id.is_zero()) {
+        token_data.kind = "native-token";
+        token_data.language.clear();
         return token_data.owner_id == node->network_id() && token_data.name == "ExtraCoin"
                && Utils::str_to_upper(token_data.ticker) == "EXC" && token_data.smart.empty()
                && token_data.decimals == 8;
@@ -213,22 +237,28 @@ bool TokenManager::registry_row_valid(const TokenData &token_data) const {
         return false;
     }
     auto metadata = Json::deserialize<ContractTransactionData>(transaction.value().meta().value());
-    if (!metadata.has_value() || metadata.value().schema != 4 || metadata.value().kind != "fungible-token"
-        || metadata.value().method != "init") {
+    if (!metadata.has_value() || metadata.value().schema != 4 || metadata.value().method != "init"
+        || !ExtraChain::Contracts::is_system_token_kind(metadata.value().kind)) {
         return false;
     }
-    auto arguments = Utils::from_base64<std::vector<std::uint8_t>>(metadata.value().arguments_base64);
+    token_data.kind     = metadata->kind;
+    token_data.language = metadata->language;
+    auto arguments      = Utils::from_base64<std::vector<std::uint8_t>>(metadata.value().arguments_base64);
     if (!arguments.has_value()) {
         return false;
     }
-    auto init  = decode_token_init(arguments.value());
-    auto count = base_units(token_data.count, token_data.decimals);
-    if (!init.has_value() || !count.has_value() || init.value().name != token_data.name
-        || Utils::str_to_upper(init.value().ticker) != Utils::str_to_upper(token_data.ticker)
-        || init.value().decimals != token_data.decimals || init.value().supply != count.value()) {
-        return false;
+    if (token_data.kind == ExtraChain::Contracts::FungibleTokenKind) {
+        auto init  = decode_token_init(arguments.value());
+        auto count = base_units(token_data.count, token_data.decimals);
+        return init.has_value() && count.has_value() && init.value().name == token_data.name
+               && Utils::str_to_upper(init.value().ticker) == Utils::str_to_upper(token_data.ticker)
+               && init.value().decimals == token_data.decimals && init.value().supply == count.value();
     }
-    return true;
+    auto init = decode_collection_init(arguments.value());
+    return token_data.kind == ExtraChain::Contracts::NonFungibleTokenKind && init.has_value()
+           && init->first == token_data.name
+           && Utils::str_to_upper(init->second) == Utils::str_to_upper(token_data.ticker) && token_data.count == 0
+           && token_data.decimals == 0;
 }
 
 std::vector<TokenData> TokenManager::read_registry() const {
@@ -244,12 +274,16 @@ std::vector<TokenData> TokenManager::read_registry() const {
     result.reserve(rows.value().size());
     WireFormat::Scope storage_format(WireFormat::Mode::Canonical);
     for (const auto &row : rows.value()) {
-        auto token_data = Utils::from_dbrow<TokenData>(row);
+        auto storage_row = row;
+        storage_row.insert_or_assign("kind", "");
+        storage_row.insert_or_assign("language", "");
+        auto token_data = Utils::from_dbrow<TokenData>(storage_row);
         auto signer     = row.find("actor");
         auto status     = row.find("status");
-        if (!token_data.has_value() || signer == row.end() || status == row.end() || status->second != "1"
-            || signer->second != token_data.value().owner_id.to_string()
-            || !registry_row_valid(token_data.value())) {
+        if (!token_data.has_value() || signer == row.end() || status == row.end() || status->second != "1") {
+            continue;
+        }
+        if (signer->second != token_data->owner_id.to_string() || !registry_row_valid(*token_data)) {
             continue;
         }
         result.push_back(std::move(token_data.value()));
@@ -261,7 +295,10 @@ std::vector<TokenData> TokenManager::read_registry() const {
 }
 
 std::vector<TokenData> TokenManager::list_tokens() const {
-    auto result            = read_registry();
+    auto result = read_registry();
+    std::erase_if(result, [](const TokenData &value) {
+        return value.kind == ExtraChain::Contracts::NonFungibleTokenKind;
+    });
     auto append_if_missing = [&](TokenData token_data) {
         if (std::ranges::find(result, token_data.token_id, &TokenData::token_id) == result.end()) {
             result.push_back(std::move(token_data));
@@ -275,6 +312,8 @@ std::vector<TokenData> TokenManager::list_tokens() const {
         .count    = BigNumberFloat(0),
         .color    = "#808080",
         .smart    = "",
+        .kind     = "native-token",
+        .language = "",
         .decimals = 8,
     });
     for (auto &legacy : legacy_tokens()) {
@@ -282,6 +321,14 @@ std::vector<TokenData> TokenManager::list_tokens() const {
     }
     std::ranges::sort(result, {}, [](const TokenData &value) {
         return std::pair { Utils::str_to_upper(value.ticker), value.token_id.to_string() };
+    });
+    return result;
+}
+
+std::vector<TokenData> TokenManager::list_nft_collections() const {
+    auto result = read_registry();
+    std::erase_if(result, [](const TokenData &value) {
+        return value.kind != ExtraChain::Contracts::NonFungibleTokenKind;
     });
     return result;
 }
@@ -304,7 +351,7 @@ bool TokenManager::is_contract_token(const TokenId &token_id) const {
         return false;
     }
     auto contract = node->contract_manager()->inspect(token_id.to_string());
-    return contract.has_value() && contract.value().kind == "fungible-token";
+    return contract.has_value() && contract.value().kind == ExtraChain::Contracts::FungibleTokenKind;
 }
 
 std::expected<std::vector<std::uint8_t>, CreateTokenError> TokenManager::transfer_arguments(
@@ -312,7 +359,8 @@ std::expected<std::vector<std::uint8_t>, CreateTokenError> TokenManager::transfe
     const ActorId        &receiver,
     const BigNumberFloat &amount) const {
     auto token_data = token(token_id);
-    if (!token_data.has_value() || receiver.is_zero() || token_data.value().decimals > 18) {
+    if (!token_data.has_value() || token_data->kind != ExtraChain::Contracts::FungibleTokenKind
+        || receiver.is_zero() || token_data.value().decimals > 18) {
         return std::unexpected(CreateTokenError::InvalidTx);
     }
     auto units = base_units(amount, token_data.value().decimals);
@@ -369,6 +417,8 @@ std::vector<TokenData> TokenManager::legacy_tokens() const {
                                                 .count      = transaction.amount(),
                                                 .color      = metadata.value().color,
                                                 .smart      = "",
+                                                .kind       = "legacy-token",
+                                                .language   = "",
                                                 .decimals   = 0,
                                                 .section_id = transaction.section(),
                                                 .tx_hash    = transaction.hash() });
@@ -383,6 +433,8 @@ std::vector<TokenData> TokenManager::legacy_tokens() const {
                                    .count    = BigNumberFloat(0),
                                    .color    = "#FA5448",
                                    .smart    = "",
+                                   .kind     = "legacy-token",
+                                   .language = "",
                                    .decimals = decimals[rocc] });
     }
 
@@ -400,7 +452,9 @@ std::vector<TokenData> TokenManager::legacy_tokens() const {
     return legacy_cache_;
 }
 
-std::expected<TokenData, CreateTokenError> TokenManager::migrate_legacy_token(const TokenId &token_id) {
+std::expected<TokenData, CreateTokenError> TokenManager::migrate_legacy_token(
+    const TokenId                           &token_id,
+    ExtraChain::Contracts::ToolchainLanguage language) {
     if (!registry_file_id().has_value()) {
         eWarning("[TokenManager] Legacy token migration requires a ready TokensRegistry vector");
         return std::unexpected(CreateTokenError::InvalidTx);
@@ -432,10 +486,10 @@ std::expected<TokenData, CreateTokenError> TokenManager::migrate_legacy_token(co
         return std::unexpected(CreateTokenError::InvalidAmount);
     }
 
-    auto module    = standard_token_module();
+    auto module = ExtraChain::Contracts::standard_token_module(ExtraChain::Contracts::FungibleTokenKind, language);
     auto arguments = token_migration_arguments(*found, balances);
     if (!module.has_value() || !arguments.has_value()) {
-        return std::unexpected(module.has_value() ? arguments.error() : module.error());
+        return std::unexpected(module.has_value() ? arguments.error() : CreateTokenError::InvalidTx);
     }
     auto deployment =
         node->contract_manager()->prepare_deploy(token_id.to_string(),
@@ -455,6 +509,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::migrate_legacy_token(co
     const auto             &revision = version.revisions.back();
     ContractTransactionData contract_data {
         .kind                = "fungible-token",
+        .language            = record.language,
         .method              = "init",
         .arguments_base64    = Utils::to_base64(arguments.value()),
         .module_hash         = version.module_hash,
@@ -479,10 +534,12 @@ std::expected<TokenData, CreateTokenError> TokenManager::migrate_legacy_token(co
     if (!sent.has_value()) {
         return std::unexpected(CreateTokenError::InvalidTx);
     }
-    auto migrated  = *found;
-    migrated.count = migrated_supply;
-    migrated.smart = token_id.to_string();
-    cache_creation_.insert_or_assign(sent.value().hash(), migrated);
+    auto migrated     = *found;
+    migrated.count    = migrated_supply;
+    migrated.smart    = token_id.to_string();
+    migrated.kind     = std::string(ExtraChain::Contracts::FungibleTokenKind);
+    migrated.language = std::string(ExtraChain::Contracts::toolchain_language_name(language));
+    track_token_creation(sent.value(), migrated);
     {
         std::scoped_lock cache_lock(legacy_cache_mutex_);
         legacy_cache_section_.reset();
@@ -501,6 +558,7 @@ bool TokenManager::token_exists(const std::string &name, const std::string &tick
         })) {
         return true;
     }
+    std::scoped_lock cache_lock(cache_creation_mutex_);
     return std::ranges::any_of(cache_creation_, [&](const auto &entry) {
         return Utils::str_to_upper(entry.second.name) == normalized_name
                || Utils::str_to_upper(entry.second.ticker) == normalized_ticker;
@@ -521,13 +579,15 @@ bool TokenManager::ticker_exists(const std::string &ticker) {
     });
 }
 
-std::expected<TokenData, CreateTokenError> TokenManager::create_token(const ActorId        &owner_id,
-                                                                      const std::string    &token_name,
-                                                                      const std::string    &ticker,
-                                                                      const BigNumberFloat &token_count,
-                                                                      const std::string    &color,
-                                                                      const std::string    &predefine_token_id,
-                                                                      std::uint8_t          decimals) {
+std::expected<TokenData, CreateTokenError> TokenManager::create_token(
+    const ActorId                           &owner_id,
+    const std::string                       &token_name,
+    const std::string                       &ticker,
+    const BigNumberFloat                    &token_count,
+    const std::string                       &color,
+    const std::string                       &predefine_token_id,
+    std::uint8_t                             decimals,
+    ExtraChain::Contracts::ToolchainLanguage language) {
     if (!registry_file_id().has_value()) {
         eWarning("[TokenManager] Token registry is not ready");
         return std::unexpected(CreateTokenError::InvalidTx);
@@ -573,11 +633,11 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
         return std::unexpected(CreateTokenError::ExistToken);
     }
 
-    auto module    = standard_token_module();
+    auto module = ExtraChain::Contracts::standard_token_module(ExtraChain::Contracts::FungibleTokenKind, language);
     auto arguments = token_init_arguments(token_name, tickerSymbol, decimals, token_count);
     if (!module.has_value() || !arguments.has_value()) {
         eWarning("[TokenManager] Standard token module or initialization arguments are invalid");
-        return std::unexpected(module.has_value() ? arguments.error() : module.error());
+        return std::unexpected(module.has_value() ? arguments.error() : CreateTokenError::InvalidTx);
     }
 
     Actor<KeyPrivate> token_actor;
@@ -593,14 +653,17 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
         return std::unexpected(CreateTokenError::InvalidOwnerId);
     }
 
-    auto token_data = TokenData { .token_id = token_actor.id(),
-                                  .owner_id = owner_id,
-                                  .name     = token_name,
-                                  .ticker   = ticker,
-                                  .count    = token_count,
-                                  .color    = color,
-                                  .smart    = token_actor.id().to_string(),
-                                  .decimals = decimals };
+    auto token_data =
+        TokenData { .token_id = token_actor.id(),
+                    .owner_id = owner_id,
+                    .name     = token_name,
+                    .ticker   = ticker,
+                    .count    = token_count,
+                    .color    = color,
+                    .smart    = token_actor.id().to_string(),
+                    .kind     = std::string(ExtraChain::Contracts::FungibleTokenKind),
+                    .language = std::string(ExtraChain::Contracts::toolchain_language_name(language)),
+                    .decimals = decimals };
     auto deployment =
         node->contract_manager()->prepare_deploy(token_actor.id().to_string(),
                                                  owner_id.to_string(),
@@ -620,6 +683,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
 
     ContractTransactionData contract_data {
         .kind                = "fungible-token",
+        .language            = record.language,
         .method              = "init",
         .arguments_base64    = Utils::to_base64(arguments.value()),
         .module_hash         = version.module_hash,
@@ -647,18 +711,126 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
         eWarning("[TokenManager] Contract deployment transaction failed: {}", tx_res.error());
         return std::unexpected(CreateTokenError::InvalidTx);
     }
-    cache_creation_.insert({ tx_res.value().hash(), token_data });
+    track_token_creation(tx_res.value(), token_data);
     return token_data;
+}
+
+std::expected<TokenData, CreateTokenError> TokenManager::create_nft_collection(
+    const ActorId                           &owner_id,
+    const std::string                       &collection_name,
+    const std::string                       &symbol,
+    const std::string                       &color,
+    ExtraChain::Contracts::ToolchainLanguage language) {
+    if (!registry_file_id().has_value()) {
+        eWarning("[TokenManager] Token registry is not ready");
+        return std::unexpected(CreateTokenError::InvalidTx);
+    }
+    if (!node->network()->is_active_connection_exists()) {
+        return std::unexpected(CreateTokenError::NoConnections);
+    }
+    if (!is_valid_token_name(collection_name) || !id_valid_token_ticker(symbol)) {
+        return std::unexpected(CreateTokenError::InvalidName);
+    }
+    if (Utils::str_to_upper(collection_name) == "EXTRACOIN" || Utils::str_to_upper(symbol) == "EXC"
+        || token_exists(collection_name, symbol)) {
+        return std::unexpected(CreateTokenError::ExistToken);
+    }
+    auto module =
+        ExtraChain::Contracts::standard_token_module(ExtraChain::Contracts::NonFungibleTokenKind, language);
+    if (!module.has_value()) {
+        return std::unexpected(CreateTokenError::InvalidTx);
+    }
+    auto owner_actor = node->account_controller()->current_profile().get_actor(owner_id);
+    if (!owner_actor.has_value()) {
+        return std::unexpected(CreateTokenError::InvalidOwnerId);
+    }
+    auto collection_actor = node->account_controller()->create_service();
+    auto arguments        = collection_init_arguments(collection_name, Utils::str_to_upper(symbol));
+    auto deployment =
+        node->contract_manager()->prepare_deploy(collection_actor.id().to_string(),
+                                                 owner_id.to_string(),
+                                                 std::string(ExtraChain::Contracts::NonFungibleTokenKind),
+                                                 *module,
+                                                 arguments,
+                                                 static_cast<std::uint64_t>(
+                                                     node->dag()->current_section().to_int().value_or(0))
+                                                     + 1);
+    if (!deployment.has_value()) {
+        eWarning("[TokenManager] NFT collection preparation failed: {}", deployment.error().detail);
+        return std::unexpected(CreateTokenError::InvalidTx);
+    }
+
+    const auto             &record   = deployment->record;
+    const auto             &version  = record.versions.back();
+    const auto             &revision = version.revisions.back();
+    ContractTransactionData contract_data {
+        .kind                = record.kind,
+        .language            = record.language,
+        .method              = "init",
+        .arguments_base64    = Utils::to_base64(arguments),
+        .module_hash         = version.module_hash,
+        .previous_state_hash = revision.previous_hash,
+        .state_hash          = revision.state_hash,
+        .effects_hash        = ExtraChain::Contracts::Codec::effect_hash(deployment->output.effects),
+        .effects_base64 =
+            Utils::to_base64(ExtraChain::Contracts::Codec::encode_effects(deployment->output.effects)),
+        .version             = version.version,
+        .revision            = revision.revision,
+        .checkpoint          = true,
+        .checkpoint_revision = revision.revision,
+    };
+    Transaction transaction;
+    transaction.set_sender(owner_id);
+    transaction.set_receiver(collection_actor.id());
+    transaction.set_amount(BigNumberFloat(0));
+    transaction.set_token(TokenId());
+    transaction.set_type(TransactionType::ContractDeploy);
+    transaction.set_meta(Json::serialize(contract_data));
+    auto sent = node->send_contract_transaction(transaction, *owner_actor, std::move(*deployment));
+    if (!sent.has_value()) {
+        return std::unexpected(CreateTokenError::InvalidTx);
+    }
+
+    TokenData collection {
+        .token_id = collection_actor.id(),
+        .owner_id = owner_id,
+        .name     = collection_name,
+        .ticker   = Utils::str_to_upper(symbol),
+        .count    = BigNumberFloat(0),
+        .color    = color,
+        .smart    = collection_actor.id().to_string(),
+        .kind     = std::string(ExtraChain::Contracts::NonFungibleTokenKind),
+        .language = std::string(ExtraChain::Contracts::toolchain_language_name(language)),
+        .decimals = 0,
+    };
+    track_token_creation(*sent, collection);
+    return collection;
+}
+
+void TokenManager::track_token_creation(const Transaction &transaction, TokenData token_data) {
+    {
+        std::scoped_lock cache_lock(cache_creation_mutex_);
+        cache_creation_.insert_or_assign(transaction.hash(), std::move(token_data));
+    }
+    const auto committed = node->dag()->find_transaction(transaction.section(), transaction.hash());
+    if (committed.has_value()) {
+        final_token_creation(*committed);
+    }
 }
 
 void TokenManager::final_token_creation(const Transaction &transaction) {
     const auto transaction_hash = transaction.hash();
-    const auto cache_entry      = cache_creation_.find(transaction_hash);
-    if (cache_entry == cache_creation_.end()) {
-        return;
+    TokenData  token_data;
+    {
+        std::scoped_lock cache_lock(cache_creation_mutex_);
+        const auto       cache_entry = cache_creation_.find(transaction_hash);
+        if (cache_entry == cache_creation_.end()) {
+            return;
+        }
+        token_data = cache_entry->second;
+        cache_creation_.erase(cache_entry);
     }
 
-    auto &token_data      = cache_entry->second;
     token_data.section_id = transaction.section();
     token_data.tx_hash    = transaction_hash;
     auto       json       = Json::serialize(token_data);
@@ -673,23 +845,29 @@ void TokenManager::final_token_creation(const Transaction &transaction) {
                                                Dfs::DataSecurity::Public);
 
     if (!res.has_value()) {
+        std::scoped_lock cache_lock(cache_creation_mutex_);
+        cache_creation_.insert_or_assign(transaction_hash, std::move(token_data));
         eLog("[TokenManager] Error save file to dfs");
         return;
     }
 
-    auto              registry_id = registry_file_id();
     WireFormat::Scope storage_format(WireFormat::Mode::Canonical);
+    auto              registry_row = Utils::to_dbrow(token_data);
+    registry_row.erase("kind");
+    registry_row.erase("language");
+    auto registry_id = registry_file_id();
     if (!registry_id.has_value()
         || !node->dfs()->add_vector_row(node->network_id(),
                                         registry_id.value(),
-                                        token_data,
+                                        std::move(registry_row),
                                         token_data.owner_id)) {
+        std::scoped_lock cache_lock(cache_creation_mutex_);
+        cache_creation_.insert_or_assign(transaction_hash, std::move(token_data));
         eWarning("[TokenManager] Token contract is stored, but its registry row was not published");
         return;
     }
 
     emit added(owner_id, token_id);
-    cache_creation_.erase(transaction_hash);
 }
 
 bool TokenManager::is_valid_token_name(const std::string &name) {

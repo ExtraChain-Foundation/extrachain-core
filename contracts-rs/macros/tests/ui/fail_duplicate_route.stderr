@@ -1,0 +1,15 @@
+error: a contract method needs exactly one route attribute
+  --> tests/ui/fail_duplicate_route.rs:15:5
+   |
+15 | /     fn get(&mut self) -> ContractResult<u64> {
+16 | |         Ok(self.value)
+17 | |     }
+   | |_____^
+
+warning: unused import: `ContractResult`
+ --> tests/ui/fail_duplicate_route.rs:3:31
+  |
+3 | use extrachain_contract_sdk::{ContractResult, ContractState, contract};
+  |                               ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

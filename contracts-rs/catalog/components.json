@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "components": [
     { "id": "ownership", "name": "Ownership", "description": "Restrict operations to one owner.", "category": "Access", "rust_import": "Ownership", "dependencies": [] },
     { "id": "roles", "name": "Roles", "description": "Assign named roles to approved addresses.", "category": "Access", "rust_import": "Roles", "dependencies": [] },
@@ -13,6 +13,7 @@
     { "id": "escrow", "name": "Fungible escrow", "description": "Hold a fungible amount until release.", "category": "Finance", "rust_import": "Escrow", "dependencies": [] },
     { "id": "multisig", "name": "Multisig", "description": "Require approvals from several addresses.", "category": "Access", "rust_import": "Multisig", "dependencies": [] },
     { "id": "dfs-proof", "name": "DFS proof", "description": "Require a verified DFS file reference and content hash.", "category": "Storage", "rust_import": "dfs", "dependencies": [] },
+    { "id": "dfs-storage", "name": "DFS storage", "description": "Bind logical contract keys to verified DFS files.", "category": "Storage", "rust_import": "DfsBindings", "dependencies": ["dfs-proof"] },
     { "id": "dag-proof", "name": "DAG proof", "description": "Require a verified and confirmed DAG transaction.", "category": "Chain", "rust_import": "dag", "dependencies": [] }
   ]
 }

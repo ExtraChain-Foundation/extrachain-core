@@ -24,7 +24,7 @@ namespace ExtraChain::Contracts::Codec {
                                                            std::span<const std::uint8_t> state,
                                                            const VerifiedInputs         &verified = {});
 
-    [[nodiscard]] std::vector<std::uint8_t> encode_string(std::string_view value);
+    [[nodiscard]] std::vector<std::uint8_t> encode_string_argument(std::string_view value);
 
     [[nodiscard]] std::expected<std::vector<std::uint8_t>, ContractFailure> encode_json(std::string_view json);
 

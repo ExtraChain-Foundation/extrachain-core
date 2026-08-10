@@ -1,6 +1,9 @@
 <RCC>
     <qresource prefix="/contracts">
-        <file alias="fungible_token.wasm">standard/fungible_token.wasm</file>
+        <file alias="fungible_token_rust.wasm">standard/fungible_token_rust.wasm</file>
+        <file alias="fungible_token_assemblyscript.wasm">standard/fungible_token_assemblyscript.wasm</file>
+        <file alias="non_fungible_token_rust.wasm">standard/non_fungible_token_rust.wasm</file>
+        <file alias="non_fungible_token_assemblyscript.wasm">standard/non_fungible_token_assemblyscript.wasm</file>
         <file alias="message_claim.wasm">standard/message_claim.wasm</file>
     </qresource>
 </RCC>

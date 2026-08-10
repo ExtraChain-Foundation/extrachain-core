@@ -24,6 +24,7 @@
 #include <QObject>
 
 #include "chain/actor.h"
+#include "contracts/toolchain_registry.h"
 
 class ExtraChainNode;
 class Transaction;
@@ -36,6 +37,8 @@ struct TokenData {
     BigNumberFloat             count;
     std::string                color;
     std::string                smart;
+    std::string                kind;
+    std::string                language;
     std::uint32_t              decimals = 0;
     std::optional<SectionId>   section_id;
     std::optional<std::string> tx_hash;
@@ -43,7 +46,7 @@ struct TokenData {
     bool operator==(const TokenData &other) const {
         return token_id == other.token_id && owner_id == other.owner_id && count == other.count
                && name == other.name && ticker == other.ticker && color == other.color && smart == other.smart
-               && decimals == other.decimals;
+               && kind == other.kind && language == other.language && decimals == other.decimals;
     }
 
     // Overload the inequality operator
@@ -51,9 +54,10 @@ struct TokenData {
         return !(*this == other);
     }
 };
-BOOST_DESCRIBE_STRUCT(TokenData,
-                      (),
-                      (token_id, owner_id, count, name, ticker, color, smart, decimals, section_id, tx_hash))
+BOOST_DESCRIBE_STRUCT(
+    TokenData,
+    (),
+    (token_id, owner_id, count, name, ticker, color, smart, kind, language, decimals, section_id, tx_hash))
 
 struct TokenDataShort { // for data in transaction
     std::string                name;
@@ -86,6 +90,7 @@ public:
     static std::unordered_map<ActorId, std::string>            read_tokens();
     std::vector<TokenData>                                     read_registry() const;
     std::vector<TokenData>                                     list_tokens() const;
+    std::vector<TokenData>                                     list_nft_collections() const;
     std::optional<TokenData>                                   token(const TokenId &token_id) const;
     bool                                                       is_contract_token(const TokenId &token_id) const;
     std::expected<std::vector<std::uint8_t>, CreateTokenError> transfer_arguments(
@@ -93,15 +98,29 @@ public:
         const ActorId        &receiver,
         const BigNumberFloat &amount) const;
     std::vector<TokenData>                     legacy_tokens() const;
-    std::expected<TokenData, CreateTokenError> migrate_legacy_token(const TokenId &token_id);
+    std::expected<TokenData, CreateTokenError> migrate_legacy_token(
+        const TokenId                           &token_id,
+        ExtraChain::Contracts::ToolchainLanguage language =
+            ExtraChain::Contracts::ToolchainLanguage::AssemblyScript);
 
-    std::expected<TokenData, CreateTokenError> create_token(const ActorId        &owner_id,
-                                                            const std::string    &token_name,
-                                                            const std::string    &symbol,
-                                                            const BigNumberFloat &token_count,
-                                                            const std::string    &color,
-                                                            const std::string    &predefine_token_id = "",
-                                                            std::uint8_t          decimals           = 8);
+    std::expected<TokenData, CreateTokenError> create_token(
+        const ActorId                           &owner_id,
+        const std::string                       &token_name,
+        const std::string                       &symbol,
+        const BigNumberFloat                    &token_count,
+        const std::string                       &color,
+        const std::string                       &predefine_token_id = "",
+        std::uint8_t                             decimals           = 8,
+        ExtraChain::Contracts::ToolchainLanguage language =
+            ExtraChain::Contracts::ToolchainLanguage::AssemblyScript);
+
+    std::expected<TokenData, CreateTokenError> create_nft_collection(
+        const ActorId                           &owner_id,
+        const std::string                       &collection_name,
+        const std::string                       &symbol,
+        const std::string                       &color,
+        ExtraChain::Contracts::ToolchainLanguage language =
+            ExtraChain::Contracts::ToolchainLanguage::AssemblyScript);
 
     void final_token_creation(const Transaction &transaction);
 
@@ -110,9 +129,11 @@ public:
 
 private:
     std::optional<std::string> registry_file_id() const;
-    bool                       registry_row_valid(const TokenData &token_data) const;
+    bool                       registry_row_valid(TokenData &token_data) const;
+    void                       track_token_creation(const Transaction &transaction, TokenData token_data);
 
     ExtraChainNode                            *node;
+    mutable std::mutex                         cache_creation_mutex_;
     std::unordered_map<std::string, TokenData> cache_creation_; // TODO: also save to temp file
     mutable std::mutex                         legacy_cache_mutex_;
     mutable std::optional<SectionId>           legacy_cache_section_;

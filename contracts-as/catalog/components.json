@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "version": "0.2.0",
+  "language": "assemblyscript",
+  "components": [
+    { "id": "ownership", "name": "Ownership", "description": "Restrict operations to one owner.", "category": "Access", "source_import": "Ownership", "dependencies": [] },
+    { "id": "roles", "name": "Roles", "description": "Assign named roles to approved addresses.", "category": "Access", "source_import": "Roles", "dependencies": [] },
+    { "id": "pause", "name": "Pause", "description": "Stop state-changing operations and resume them later.", "category": "Safety", "source_import": "Pausable", "dependencies": ["ownership"] },
+    { "id": "upgrade", "name": "Upgrade policy", "description": "Permit an owner-approved contract upgrade.", "category": "Lifecycle", "source_import": "UpgradePolicy", "dependencies": ["ownership"] },
+    { "id": "replay-guard", "name": "Replay guard", "description": "Reject an operation ID that was already used.", "category": "Safety", "source_import": "ReplayGuard", "dependencies": [] },
+    { "id": "section-timelock", "name": "Section timelock", "description": "Delay an operation until a DAG section.", "category": "Safety", "source_import": "SectionTimelock", "dependencies": [] },
+    { "id": "fungible", "name": "Fungible token", "description": "Manage supply, balances, burns, and transfers.", "category": "Assets", "source_import": "FungibleLedger", "dependencies": ["ownership"] },
+    { "id": "nft", "name": "NFT", "description": "Manage unique token ownership and transfers.", "category": "Assets", "source_import": "NftLedger", "dependencies": ["ownership"] },
+    { "id": "escrow", "name": "Fungible escrow", "description": "Hold a fungible amount until release.", "category": "Finance", "source_import": "Escrow", "dependencies": [] },
+    { "id": "multisig", "name": "Multisig", "description": "Require approvals from several addresses.", "category": "Access", "source_import": "Multisig", "dependencies": [] },
+    { "id": "dfs-proof", "name": "DFS proof", "description": "Require a verified DFS file reference and content hash.", "category": "Storage", "source_import": "requireDfsFile", "dependencies": [] },
+    { "id": "dfs-storage", "name": "DFS storage", "description": "Bind a logical key to a verified immutable DFS file.", "category": "Storage", "source_import": "DfsBindings", "dependencies": ["dfs-proof"] },
+    { "id": "dag-proof", "name": "DAG proof", "description": "Require a verified and confirmed DAG transaction.", "category": "Chain", "source_import": "requireDagTransaction", "dependencies": [] }
+  ]
+}

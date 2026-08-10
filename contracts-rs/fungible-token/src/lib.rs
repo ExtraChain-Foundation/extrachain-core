@@ -5,538 +5,285 @@ extern crate alloc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use extrachain_contract_components::Ownership;
 use extrachain_contract_sdk::{
-    Contract, Decoder, Effect, Encoder, Event, InvokeRequest, InvokeResponse, export_contract,
+    ActorId, BoundedString, Context, ContractResult, ContractState, NonZeroAmount, StateMap,
+    contract, require,
 };
 
-const MAX_NAME_BYTES: usize = 64;
-const MAX_SYMBOL_BYTES: usize = 12;
-const MAX_STATE_ENTRIES: u32 = 16_384;
+const MAX_STATE_ENTRIES: usize = 16_384;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct TokenState {
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContractState)]
+#[state(version = 1)]
+pub struct FungibleToken {
     name: String,
     symbol: String,
     decimals: u8,
+    #[owner]
     owner: String,
     mint_enabled: bool,
     total_supply: u128,
-    balances: Vec<(String, u128)>,
-    allowances: Vec<(String, String, u128)>,
+    balances: StateMap<String, u128, MAX_STATE_ENTRIES>,
+    allowances: StateMap<(String, String), u128, MAX_STATE_ENTRIES>,
     freeze_last_enabled: bool,
-    locked: Vec<(String, u128)>,
+    locked: StateMap<String, u128, MAX_STATE_ENTRIES>,
 }
 
-impl TokenState {
-    fn decode(source: &[u8]) -> Result<Self, &'static str> {
-        if source.is_empty() {
-            return Ok(Self::default());
-        }
-
-        let mut decoder = Decoder::new(source);
-        let state_fields = decoder.array().map_err(|_| "Invalid token state")?;
-        if !matches!(state_fields, 8 | 10) {
-            return Err("Invalid token state");
-        }
-        let name = decoder.string().map_err(|_| "Invalid token name")?;
-        let symbol = decoder.string().map_err(|_| "Invalid token symbol")?;
-        let decimals_raw = decoder.u64().map_err(|_| "Invalid token decimals")?;
-        let decimals = u8::try_from(decimals_raw).map_err(|_| "Invalid token decimals")?;
-        let owner = decoder.string().map_err(|_| "Invalid token owner")?;
-        let mint_enabled = decoder.boolean().map_err(|_| "Invalid mint state")?;
-        let total_supply = decoder.amount().map_err(|_| "Invalid token supply")?;
-
-        let balance_count = decoder.array().map_err(|_| "Invalid balances")?;
-        if balance_count > MAX_STATE_ENTRIES {
-            return Err("Too many balances");
-        }
-        let mut balances = Vec::with_capacity(balance_count as usize);
-        for _ in 0..balance_count {
-            if decoder.array().map_err(|_| "Invalid balance")? != 2 {
-                return Err("Invalid balance");
-            }
-            balances.push((
-                decoder.string().map_err(|_| "Invalid balance owner")?,
-                decoder.amount().map_err(|_| "Invalid balance amount")?,
-            ));
-        }
-
-        let allowance_count = decoder.array().map_err(|_| "Invalid allowances")?;
-        if allowance_count > MAX_STATE_ENTRIES {
-            return Err("Too many allowances");
-        }
-        let mut allowances = Vec::with_capacity(allowance_count as usize);
-        for _ in 0..allowance_count {
-            if decoder.array().map_err(|_| "Invalid allowance")? != 3 {
-                return Err("Invalid allowance");
-            }
-            allowances.push((
-                decoder.string().map_err(|_| "Invalid allowance owner")?,
-                decoder.string().map_err(|_| "Invalid allowance spender")?,
-                decoder.amount().map_err(|_| "Invalid allowance amount")?,
-            ));
-        }
-        let freeze_last_enabled = if state_fields == 10 {
-            decoder.boolean().map_err(|_| "Invalid freeze policy")?
-        } else {
-            false
-        };
-        let mut locked = Vec::new();
-        if state_fields == 10 {
-            let locked_count = decoder.array().map_err(|_| "Invalid locked balances")?;
-            if locked_count > MAX_STATE_ENTRIES {
-                return Err("Too many locked balances");
-            }
-            locked.reserve(locked_count as usize);
-            for _ in 0..locked_count {
-                if decoder.array().map_err(|_| "Invalid locked balance")? != 2 {
-                    return Err("Invalid locked balance");
-                }
-                locked.push((
-                    decoder.string().map_err(|_| "Invalid locked owner")?,
-                    decoder.amount().map_err(|_| "Invalid locked amount")?,
-                ));
-            }
-        }
-        if !decoder.is_empty() {
-            return Err("Invalid trailing token state");
-        }
-
-        Ok(Self {
-            name,
-            symbol,
-            decimals,
-            owner,
-            mint_enabled,
-            total_supply,
-            balances,
-            allowances,
-            freeze_last_enabled,
-            locked,
-        })
-    }
-
-    fn encode(&self) -> Vec<u8> {
-        let mut encoder = Encoder::new();
-        encoder.array(10);
-        encoder.string(&self.name);
-        encoder.string(&self.symbol);
-        encoder.u64(u64::from(self.decimals));
-        encoder.string(&self.owner);
-        encoder.boolean(self.mint_enabled);
-        encoder.amount(self.total_supply);
-        encoder.array(self.balances.len() as u32);
-        for (owner, amount) in &self.balances {
-            encoder.array(2);
-            encoder.string(owner);
-            encoder.amount(*amount);
-        }
-        encoder.array(self.allowances.len() as u32);
-        for (owner, spender, amount) in &self.allowances {
-            encoder.array(3);
-            encoder.string(owner);
-            encoder.string(spender);
-            encoder.amount(*amount);
-        }
-        encoder.boolean(self.freeze_last_enabled);
-        encoder.array(self.locked.len() as u32);
-        for (owner, amount) in &self.locked {
-            encoder.array(2);
-            encoder.string(owner);
-            encoder.amount(*amount);
-        }
-        encoder.finish()
-    }
-
+#[contract]
+impl FungibleToken {
     fn balance(&self, owner: &str) -> u128 {
-        self.balances
-            .iter()
-            .find(|(candidate, _)| candidate == owner)
-            .map_or(0, |(_, amount)| *amount)
+        self.balances.get(&owner.to_string()).copied().unwrap_or(0)
     }
 
-    fn set_balance(&mut self, owner: &str, amount: u128) {
-        if let Some((_, current)) = self
-            .balances
-            .iter_mut()
-            .find(|(candidate, _)| candidate == owner)
-        {
-            *current = amount;
-        } else if amount != 0 {
-            self.balances.push((owner.to_string(), amount));
+    fn set_balance(&mut self, owner: &str, amount: u128) -> ContractResult<()> {
+        let owner = owner.to_string();
+        if amount == 0 {
+            self.balances.remove(&owner);
+        } else {
+            self.balances.insert(owner, amount)?;
         }
-        self.balances.retain(|(_, value)| *value != 0);
+        Ok(())
     }
 
-    fn allowance(&self, owner: &str, spender: &str) -> u128 {
+    fn allowance_value(&self, owner: &str, spender: &str) -> u128 {
         self.allowances
-            .iter()
-            .find(|(candidate_owner, candidate_spender, _)| {
-                candidate_owner == owner && candidate_spender == spender
-            })
-            .map_or(0, |(_, _, amount)| *amount)
+            .get(&(owner.to_string(), spender.to_string()))
+            .copied()
+            .unwrap_or(0)
     }
 
-    fn set_allowance(&mut self, owner: &str, spender: &str, amount: u128) {
-        if let Some((_, _, current)) =
-            self.allowances
-                .iter_mut()
-                .find(|(candidate_owner, candidate_spender, _)| {
-                    candidate_owner == owner && candidate_spender == spender
-                })
-        {
-            *current = amount;
-        } else if amount != 0 {
-            self.allowances
-                .push((owner.to_string(), spender.to_string(), amount));
+    fn set_allowance(&mut self, owner: &str, spender: &str, amount: u128) -> ContractResult<()> {
+        let key = (owner.to_string(), spender.to_string());
+        if amount == 0 {
+            self.allowances.remove(&key);
+        } else {
+            self.allowances.insert(key, amount)?;
         }
-        self.allowances.retain(|(_, _, value)| *value != 0);
+        Ok(())
     }
 
     fn locked_balance(&self, owner: &str) -> u128 {
-        self.locked
-            .iter()
-            .find(|(candidate, _)| candidate == owner)
-            .map_or(0, |(_, amount)| *amount)
+        self.locked.get(&owner.to_string()).copied().unwrap_or(0)
     }
 
-    fn set_locked_balance(&mut self, owner: &str, amount: u128) {
-        if let Some((_, current)) = self
-            .locked
-            .iter_mut()
-            .find(|(candidate, _)| candidate == owner)
-        {
-            *current = amount;
-        } else if amount != 0 {
-            self.locked.push((owner.to_string(), amount));
+    fn set_locked_balance(&mut self, owner: &str, amount: u128) -> ContractResult<()> {
+        let owner = owner.to_string();
+        if amount == 0 {
+            self.locked.remove(&owner);
+        } else {
+            self.locked.insert(owner, amount)?;
         }
-        self.locked.retain(|(_, value)| *value != 0);
+        Ok(())
     }
 
     fn spendable_balance(&self, owner: &str) -> u128 {
         self.balance(owner)
             .saturating_sub(self.locked_balance(owner))
     }
-}
 
-pub struct FungibleToken;
-
-impl FungibleToken {
-    fn event(topic: &str, fields: &[(&str, u128)]) -> Event {
-        let mut encoder = Encoder::new();
-        encoder.array(fields.len() as u32);
-        for (address, amount) in fields {
-            encoder.array(2);
-            encoder.string(address);
-            encoder.amount(*amount);
-        }
-        Event {
-            topic: topic.to_string(),
-            data: encoder.finish(),
-        }
-    }
-
-    fn success(
-        contract_id: &str,
-        state: &TokenState,
-        data: Vec<u8>,
-        events: Vec<Event>,
-    ) -> InvokeResponse {
-        let effects = events
-            .iter()
-            .filter(|event| matches!(event.topic.as_str(), "mint" | "transfer" | "burn" | "lock"))
-            .map(|event| Effect::TokenDelta {
-                token_id: contract_id.to_string(),
-                operation: event.topic.clone(),
-                arguments: event.data.clone(),
-            })
-            .collect();
-        InvokeResponse::success(state.encode(), data, events).with_effects(effects)
-    }
-
-    fn amount_data(amount: u128) -> Vec<u8> {
-        let mut encoder = Encoder::new();
-        encoder.amount(amount);
-        encoder.finish()
-    }
-
-    fn parse_pair(arguments: &[u8]) -> Result<(String, u128), &'static str> {
-        let mut decoder = Decoder::new(arguments);
-        if decoder.array().map_err(|_| "Invalid arguments")? != 2 {
-            return Err("Invalid arguments");
-        }
-        let address = decoder.string().map_err(|_| "Invalid address")?;
-        let amount = decoder.amount().map_err(|_| "Invalid amount")?;
-        if address.is_empty() || !decoder.is_empty() {
-            return Err("Invalid arguments");
-        }
-        Ok((address, amount))
-    }
-
-    fn transfer(
-        state: &mut TokenState,
-        from: &str,
-        to: &str,
-        amount: u128,
-    ) -> Result<bool, &'static str> {
-        if amount == 0 || from == to || state.spendable_balance(from) < amount {
-            return Err("Transfer is not allowed");
-        }
-        let receiver_balance = state
+    fn move_balance(&mut self, from: &str, to: &str, amount: u128) -> ContractResult<bool> {
+        require!(from != to, "Self transfer is not allowed");
+        require!(
+            self.spendable_balance(from) >= amount,
+            "Balance is too small"
+        );
+        let receiver_balance = self
             .balance(to)
             .checked_add(amount)
             .ok_or("Balance overflow")?;
-        state.set_balance(from, state.balance(from) - amount);
-        state.set_balance(to, receiver_balance);
+        self.set_balance(from, self.balance(from) - amount)?;
+        self.set_balance(to, receiver_balance)?;
+
         let unit = 10_u128
-            .checked_pow(u32::from(state.decimals))
+            .checked_pow(u32::from(self.decimals))
             .ok_or("Invalid decimals")?;
-        let freeze = state.freeze_last_enabled
-            && state.balance(from) == unit
-            && state.locked_balance(from) == 0;
+        let freeze = self.freeze_last_enabled
+            && self.balance(from) == unit
+            && self.locked_balance(from) == 0;
         if freeze {
-            state.set_locked_balance(from, unit);
+            self.set_locked_balance(from, unit)?;
         }
         Ok(freeze)
     }
 
-    fn handle(
-        request: &InvokeRequest,
-        state: &mut TokenState,
-    ) -> Result<(Vec<u8>, Vec<Event>), &'static str> {
-        match request.method.as_str() {
-            "init" => {
-                if !state.owner.is_empty() {
-                    return Err("Token is already initialized");
-                }
-                let mut decoder = Decoder::new(&request.arguments);
-                let init_fields = decoder.array().map_err(|_| "Invalid init arguments")?;
-                if !matches!(init_fields, 4 | 5) {
-                    return Err("Invalid init arguments");
-                }
-                let name = decoder.string().map_err(|_| "Invalid token name")?;
-                let symbol = decoder.string().map_err(|_| "Invalid token symbol")?;
-                let decimals = u8::try_from(decoder.u64().map_err(|_| "Invalid decimals")?)
-                    .map_err(|_| "Invalid decimals")?;
-                let supply = decoder.amount().map_err(|_| "Invalid supply")?;
-                if name.is_empty()
-                    || name.len() > MAX_NAME_BYTES
-                    || symbol.is_empty()
-                    || symbol.len() > MAX_SYMBOL_BYTES
-                    || decimals > 18
-                    || request.caller.is_empty()
-                {
-                    return Err("Invalid token metadata");
-                }
-                state.name = name;
-                state.symbol = symbol;
-                state.decimals = decimals;
-                state.owner = request.caller.clone();
-                state.mint_enabled = true;
-                state.total_supply = supply;
-                if init_fields == 5 {
-                    let balance_count =
-                        decoder.array().map_err(|_| "Invalid migration balances")?;
-                    if balance_count == 0 || balance_count > MAX_STATE_ENTRIES {
-                        return Err("Invalid migration balances");
-                    }
-                    let mut migrated_supply = 0_u128;
-                    for _ in 0..balance_count {
-                        if decoder.array().map_err(|_| "Invalid migration balance")? != 2 {
-                            return Err("Invalid migration balance");
-                        }
-                        let actor = decoder.string().map_err(|_| "Invalid migration owner")?;
-                        let amount = decoder.amount().map_err(|_| "Invalid migration amount")?;
-                        if actor.is_empty() || amount == 0 || state.balance(&actor) != 0 {
-                            return Err("Invalid migration balance");
-                        }
-                        migrated_supply = migrated_supply
-                            .checked_add(amount)
-                            .ok_or("Migration supply overflow")?;
-                        state.set_balance(&actor, amount);
-                    }
-                    if migrated_supply != supply || !decoder.is_empty() {
-                        return Err("Migration supply does not match balances");
-                    }
-                    Ok((
-                        Self::amount_data(supply),
-                        alloc::vec![Self::event("migrated", &[])],
-                    ))
-                } else {
-                    if !decoder.is_empty() {
-                        return Err("Invalid init arguments");
-                    }
-                    state.set_balance(&request.caller, supply);
-                    Ok((
-                        Self::amount_data(supply),
-                        alloc::vec![Self::event("mint", &[(&request.caller, supply)])],
-                    ))
-                }
-            }
-            "transfer" => {
-                let (to, amount) = Self::parse_pair(&request.arguments)?;
-                let freeze = Self::transfer(state, &request.caller, &to, amount)?;
-                let mut events = alloc::vec![Self::event(
-                    "transfer",
-                    &[(&request.caller, amount), (&to, amount)],
-                )];
-                if freeze {
-                    events.push(Self::event(
-                        "lock",
-                        &[(&request.caller, state.locked_balance(&request.caller))],
-                    ));
-                }
-                Ok((Vec::new(), events))
-            }
-            "approve" => {
-                let (spender, amount) = Self::parse_pair(&request.arguments)?;
-                if spender == request.caller {
-                    return Err("Self approval is not allowed");
-                }
-                state.set_allowance(&request.caller, &spender, amount);
-                Ok((
-                    Vec::new(),
-                    alloc::vec![Self::event("approval", &[(&spender, amount)])],
-                ))
-            }
-            "transfer_from" => {
-                let mut decoder = Decoder::new(&request.arguments);
-                if decoder.array().map_err(|_| "Invalid arguments")? != 3 {
-                    return Err("Invalid arguments");
-                }
-                let owner = decoder.string().map_err(|_| "Invalid owner")?;
-                let to = decoder.string().map_err(|_| "Invalid receiver")?;
-                let amount = decoder.amount().map_err(|_| "Invalid amount")?;
-                if !decoder.is_empty() || state.allowance(&owner, &request.caller) < amount {
-                    return Err("Allowance is too small");
-                }
-                let freeze = Self::transfer(state, &owner, &to, amount)?;
-                state.set_allowance(
-                    &owner,
-                    &request.caller,
-                    state.allowance(&owner, &request.caller) - amount,
-                );
-                let mut events =
-                    alloc::vec![Self::event("transfer", &[(&owner, amount), (&to, amount)])];
-                if freeze {
-                    events.push(Self::event(
-                        "lock",
-                        &[(&owner, state.locked_balance(&owner))],
-                    ));
-                }
-                Ok((Vec::new(), events))
-            }
-            "mint" => {
-                let (to, amount) = Self::parse_pair(&request.arguments)?;
-                if Ownership::new(&state.owner)
-                    .require_owner(&request.caller)
-                    .is_err()
-                    || !state.mint_enabled
-                    || amount == 0
-                {
-                    return Err("Mint is not allowed");
-                }
-                state.total_supply = state
-                    .total_supply
-                    .checked_add(amount)
-                    .ok_or("Supply overflow")?;
-                state.set_balance(
-                    &to,
-                    state
-                        .balance(&to)
-                        .checked_add(amount)
-                        .ok_or("Balance overflow")?,
-                );
-                Ok((
-                    Self::amount_data(state.total_supply),
-                    alloc::vec![Self::event("mint", &[(&to, amount)])],
-                ))
-            }
-            "revoke_mint" => {
-                if Ownership::new(&state.owner)
-                    .require_owner(&request.caller)
-                    .is_err()
-                    || !state.mint_enabled
-                {
-                    return Err("Mint control is not available");
-                }
-                state.mint_enabled = false;
-                Ok((Vec::new(), alloc::vec![Self::event("mint_revoked", &[])]))
-            }
-            "burn" => {
-                let mut decoder = Decoder::new(&request.arguments);
-                let amount = decoder.amount().map_err(|_| "Invalid amount")?;
-                if amount == 0
-                    || !decoder.is_empty()
-                    || state.spendable_balance(&request.caller) < amount
-                {
-                    return Err("Burn is not allowed");
-                }
-                state.set_balance(&request.caller, state.balance(&request.caller) - amount);
-                state.total_supply -= amount;
-                Ok((
-                    Self::amount_data(state.total_supply),
-                    alloc::vec![Self::event("burn", &[(&request.caller, amount)])],
-                ))
-            }
-            "balance_of" => {
-                let mut decoder = Decoder::new(&request.arguments);
-                let owner = decoder.string().map_err(|_| "Invalid owner")?;
-                if !decoder.is_empty() {
-                    return Err("Invalid arguments");
-                }
-                Ok((Self::amount_data(state.balance(&owner)), Vec::new()))
-            }
-            "allowance" => {
-                let mut decoder = Decoder::new(&request.arguments);
-                if decoder.array().map_err(|_| "Invalid arguments")? != 2 {
-                    return Err("Invalid arguments");
-                }
-                let owner = decoder.string().map_err(|_| "Invalid owner")?;
-                let spender = decoder.string().map_err(|_| "Invalid spender")?;
-                if !decoder.is_empty() {
-                    return Err("Invalid arguments");
-                }
-                Ok((
-                    Self::amount_data(state.allowance(&owner, &spender)),
-                    Vec::new(),
-                ))
-            }
-            "authorize_upgrade" => {
-                Ownership::new(&state.owner).require_owner(&request.caller)?;
-                Ok((Vec::new(), Vec::new()))
-            }
-            "migrate" => {
-                Ownership::new(&state.owner).require_owner(&request.caller)?;
-                let mut decoder = Decoder::new(&request.arguments);
-                state.freeze_last_enabled = if decoder.is_empty() {
-                    true
-                } else {
-                    let enabled = decoder.boolean().map_err(|_| "Invalid freeze policy")?;
-                    if !decoder.is_empty() {
-                        return Err("Invalid freeze policy");
-                    }
-                    enabled
-                };
-                Ok((Vec::new(), Vec::new()))
-            }
-            _ => Err("Unknown token method"),
+    fn emit_transfer(ctx: &mut Context<'_>, from: &str, to: &str, amount: u128) {
+        ctx.token_event(
+            "transfer",
+            &alloc::vec![(from.to_string(), amount), (to.to_string(), amount)],
+        );
+    }
+
+    #[init]
+    fn init(
+        &mut self,
+        ctx: &mut Context<'_>,
+        name: BoundedString<64>,
+        symbol: BoundedString<12>,
+        decimals: u8,
+        supply: u128,
+        initial_balances: Vec<(ActorId, u128)>,
+    ) -> ContractResult<u128> {
+        require!(decimals <= 18, "Token decimals are out of range");
+        self.name = name.into_string();
+        self.symbol = symbol.into_string();
+        self.decimals = decimals;
+        self.owner = ctx.caller().to_string();
+        self.mint_enabled = true;
+        self.total_supply = supply;
+
+        if initial_balances.is_empty() {
+            self.set_balance(ctx.caller(), supply)?;
+            ctx.token_event("mint", &alloc::vec![(ctx.caller().to_string(), supply)]);
+            return Ok(supply);
         }
+
+        let mut migrated_supply = 0_u128;
+        for (actor, amount) in initial_balances {
+            require!(amount != 0, "Migration balance is zero");
+            let actor = actor.into_string();
+            require!(self.balance(&actor) == 0, "Migration actor is duplicated");
+            migrated_supply = migrated_supply
+                .checked_add(amount)
+                .ok_or("Migration supply overflow")?;
+            self.set_balance(&actor, amount)?;
+        }
+        require!(
+            migrated_supply == supply,
+            "Migration supply does not match balances"
+        );
+        ctx.emit("migrated", &());
+        Ok(supply)
+    }
+
+    #[call]
+    fn transfer(
+        &mut self,
+        ctx: &mut Context<'_>,
+        to: ActorId,
+        amount: NonZeroAmount,
+    ) -> ContractResult<()> {
+        let to = to.into_string();
+        let amount = amount.get();
+        let caller = ctx.caller().to_string();
+        let freeze = self.move_balance(&caller, &to, amount)?;
+        Self::emit_transfer(ctx, &caller, &to, amount);
+        if freeze {
+            ctx.token_event(
+                "lock",
+                &alloc::vec![(caller.clone(), self.locked_balance(&caller))],
+            );
+        }
+        Ok(())
+    }
+
+    #[call]
+    fn approve(
+        &mut self,
+        ctx: &mut Context<'_>,
+        spender: ActorId,
+        amount: u128,
+    ) -> ContractResult<()> {
+        let spender = spender.into_string();
+        require!(spender != ctx.caller(), "Self approval is not allowed");
+        self.set_allowance(ctx.caller(), &spender, amount)?;
+        ctx.emit("approval", &alloc::vec![(spender, amount)]);
+        Ok(())
+    }
+
+    #[call]
+    fn transfer_from(
+        &mut self,
+        ctx: &mut Context<'_>,
+        owner: ActorId,
+        to: ActorId,
+        amount: NonZeroAmount,
+    ) -> ContractResult<()> {
+        let owner = owner.into_string();
+        let to = to.into_string();
+        let amount = amount.get();
+        let allowance = self.allowance_value(&owner, ctx.caller());
+        require!(allowance >= amount, "Allowance is too small");
+        let freeze = self.move_balance(&owner, &to, amount)?;
+        self.set_allowance(&owner, ctx.caller(), allowance - amount)?;
+        Self::emit_transfer(ctx, &owner, &to, amount);
+        if freeze {
+            ctx.token_event(
+                "lock",
+                &alloc::vec![(owner.clone(), self.locked_balance(&owner))],
+            );
+        }
+        Ok(())
+    }
+
+    #[call]
+    #[owner_only]
+    fn mint(
+        &mut self,
+        ctx: &mut Context<'_>,
+        to: ActorId,
+        amount: NonZeroAmount,
+    ) -> ContractResult<u128> {
+        require!(self.mint_enabled, "Mint is disabled");
+        let to = to.into_string();
+        let amount = amount.get();
+        self.total_supply = self
+            .total_supply
+            .checked_add(amount)
+            .ok_or("Supply overflow")?;
+        let next = self
+            .balance(&to)
+            .checked_add(amount)
+            .ok_or("Balance overflow")?;
+        self.set_balance(&to, next)?;
+        ctx.token_event("mint", &alloc::vec![(to, amount)]);
+        Ok(self.total_supply)
+    }
+
+    #[call]
+    #[owner_only]
+    fn revoke_mint(&mut self, ctx: &mut Context<'_>) -> ContractResult<()> {
+        require!(self.mint_enabled, "Mint control is not available");
+        self.mint_enabled = false;
+        ctx.emit("mint_revoked", &());
+        Ok(())
+    }
+
+    #[call]
+    fn burn(&mut self, ctx: &mut Context<'_>, amount: NonZeroAmount) -> ContractResult<u128> {
+        let amount = amount.get();
+        require!(
+            self.spendable_balance(ctx.caller()) >= amount,
+            "Balance is too small"
+        );
+        self.set_balance(ctx.caller(), self.balance(ctx.caller()) - amount)?;
+        self.total_supply -= amount;
+        ctx.token_event("burn", &alloc::vec![(ctx.caller().to_string(), amount)]);
+        Ok(self.total_supply)
+    }
+
+    #[query]
+    fn balance_of(&self, owner: ActorId) -> ContractResult<u128> {
+        Ok(self.balance(owner.as_str()))
+    }
+
+    #[query]
+    fn allowance(&self, owner: ActorId, spender: ActorId) -> ContractResult<u128> {
+        Ok(self.allowance_value(owner.as_str(), spender.as_str()))
+    }
+
+    #[authorize_upgrade]
+    #[owner_only]
+    fn authorize_upgrade(
+        &self,
+        _ctx: &Context<'_>,
+        _module_hash: BoundedString<64>,
+    ) -> ContractResult<()> {
+        Ok(())
+    }
+
+    #[migrate]
+    #[owner_only]
+    fn migrate(&mut self, _ctx: &Context<'_>) -> ContractResult<()> {
+        self.freeze_last_enabled = true;
+        Ok(())
     }
 }
-
-impl Contract for FungibleToken {
-    fn invoke(request: InvokeRequest) -> InvokeResponse {
-        let mut state = match TokenState::decode(&request.state) {
-            Ok(state) => state,
-            Err(error) => return InvokeResponse::failure(request.state, error),
-        };
-        match Self::handle(&request, &mut state) {
-            Ok((data, events)) => Self::success(&request.contract_id, &state, data, events),
-            Err(error) => InvokeResponse::failure(request.state, error),
-        }
-    }
-}
-
-export_contract!(FungibleToken);

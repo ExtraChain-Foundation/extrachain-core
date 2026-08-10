@@ -12,12 +12,16 @@
 #include "contracts/contract_manager.h"
 #include "contracts/contract_codec.h"
 #include "contracts/contract_hash.h"
+#include "contracts/contract_module.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <numeric>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -27,6 +31,13 @@
 namespace {
 
     using Bytes = std::vector<std::uint8_t>;
+
+    constexpr char Alice[]          = "1111111111111111111111111111111111111111";
+    constexpr char Bob[]            = "2222222222222222222222222222222222222222";
+    constexpr char Carol[]          = "3333333333333333333333333333333333333333";
+    constexpr char Dave[]           = "4444444444444444444444444444444444444444";
+    constexpr char ClaimContract[]  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    constexpr char TargetContract[] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     void append_length(Bytes &output, std::uint8_t code8, std::uint8_t code16, std::size_t length) {
         if (length <= 0xff) {
@@ -80,13 +91,21 @@ namespace {
 
     Bytes string_argument(std::string_view value) {
         Bytes result;
+        append_array(result, 1);
         append_string(result, value);
         return result;
     }
 
     Bytes unsigned_argument(std::uint64_t value) {
         Bytes result;
+        append_array(result, 1);
         append_unsigned(result, value);
+        return result;
+    }
+
+    Bytes empty_arguments() {
+        Bytes result;
+        append_array(result, 0);
         return result;
     }
 
@@ -106,6 +125,19 @@ namespace {
         return result;
     }
 
+    Bytes dfs_binding_argument(std::string_view logical_key,
+                               std::string_view file_id,
+                               std::string_view content_hash,
+                               std::string_view previous_content_hash) {
+        Bytes result;
+        append_array(result, 4);
+        append_string(result, logical_key);
+        append_string(result, file_id);
+        append_string(result, content_hash);
+        append_string(result, previous_content_hash);
+        return result;
+    }
+
     Bytes transfer_from_argument(std::string_view owner, std::string_view receiver, std::uint64_t amount) {
         Bytes result;
         append_array(result, 3);
@@ -117,11 +149,23 @@ namespace {
 
     Bytes token_init_argument() {
         Bytes result;
-        append_array(result, 4);
+        append_array(result, 5);
         append_string(result, "Example Token");
         append_string(result, "EXT");
         append_unsigned(result, 0);
         append_unsigned(result, 1'000);
+        append_array(result, 0);
+        return result;
+    }
+
+    Bytes token_init_argument(std::string_view supply) {
+        Bytes result;
+        append_array(result, 5);
+        append_string(result, "Example Token");
+        append_string(result, "EXT");
+        append_unsigned(result, 0);
+        append_string(result, supply);
+        append_array(result, 0);
         return result;
     }
 
@@ -134,18 +178,19 @@ namespace {
         append_string(result, "1000");
         append_array(result, 2);
         append_array(result, 2);
-        append_string(result, "alice");
+        append_string(result, Alice);
         append_string(result, "700");
         append_array(result, 2);
-        append_string(result, "bob");
+        append_string(result, Bob);
         append_string(result, "300");
         return result;
     }
 
-    Bytes request(std::string_view              sender,
-                  std::string_view              method,
-                  std::span<const std::uint8_t> arguments,
-                  std::span<const std::uint8_t> state) {
+    Bytes request(std::string_view                       sender,
+                  std::string_view                       method,
+                  std::span<const std::uint8_t>          arguments,
+                  std::span<const std::uint8_t>          state,
+                  const ExtraChain::Contracts::DfsProof *dfs_proof = nullptr) {
         Bytes result;
         append_array(result, 6);
         append_array(result, 5);
@@ -159,7 +204,13 @@ namespace {
         append_binary(result, state);
         append_array(result, 2);
         append_array(result, 0);
-        append_array(result, 0);
+        append_array(result, dfs_proof == nullptr ? 0 : 1);
+        if (dfs_proof != nullptr) {
+            append_array(result, 3);
+            append_string(result, dfs_proof->file_id);
+            append_string(result, dfs_proof->owner_id);
+            append_string(result, dfs_proof->content_hash);
+        }
         append_unsigned(result, ExtraChain::Contracts::ContractAbiVersion);
         return result;
     }
@@ -225,12 +276,16 @@ namespace {
             return { value.begin(), value.end() };
         }
 
-        void optional_string() {
+        std::optional<std::string> optional_string() {
             if (peek() == 0xc0) {
                 byte();
-            } else {
-                static_cast<void>(string());
+                return std::nullopt;
             }
+            return string();
+        }
+
+        bool empty() const {
+            return source_.empty();
         }
 
     private:
@@ -272,9 +327,10 @@ namespace {
     };
 
     struct Response {
-        bool  ok;
-        Bytes state;
-        Bytes data;
+        bool                       ok;
+        Bytes                      state;
+        Bytes                      data;
+        std::optional<std::string> error;
     };
 
     Response response(std::span<const std::uint8_t> source) {
@@ -301,7 +357,7 @@ namespace {
             static_cast<void>(reader.string());
             static_cast<void>(reader.binary());
         }
-        reader.optional_string();
+        result.error = reader.optional_string();
         return result;
     }
 
@@ -324,6 +380,21 @@ namespace {
                     const Bytes                        &arguments,
                     const Bytes                        &state) {
         auto input  = request(sender, method, arguments, state);
+        auto result = runtime.invoke(module, input);
+        if (!result.has_value()) {
+            throw std::runtime_error(result.error().detail);
+        }
+        return response(result->output);
+    }
+
+    Response invoke_with_dfs(ExtraChain::Contracts::WasmRuntime    &runtime,
+                             const Bytes                           &module,
+                             std::string_view                       sender,
+                             std::string_view                       method,
+                             const Bytes                           &arguments,
+                             const Bytes                           &state,
+                             const ExtraChain::Contracts::DfsProof &proof) {
+        auto input  = request(sender, method, arguments, state, &proof);
         auto result = runtime.invoke(module, input);
         if (!result.has_value()) {
             throw std::runtime_error(result.error().detail);
@@ -390,39 +461,138 @@ namespace {
         std::unordered_map<std::string, ExtraChain::Contracts::ContractRecord> records_;
     };
 
-    void test_fungible(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
-        Bytes state;
-        auto  result = invoke(runtime, module, "alice", "init", token_init_argument(), state);
-        require(result.ok, "Token init failed");
+    Bytes test_fungible(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
+        Bytes      state;
+        auto       result     = invoke(runtime, module, Alice, "init", token_init_argument(), state);
+        const auto init_error = "Token init failed: " + result.error.value_or(std::string("no error detail"));
+        require(result.ok, init_error);
         state = result.state;
 
-        result = invoke(runtime, module, "alice", "transfer", pair_argument("bob", 250), state);
+        result = invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 250), state);
         require(result.ok, "Token transfer failed");
         state = result.state;
 
-        result = invoke(runtime, module, "alice", "approve", pair_argument("carol", 100), state);
+        result = invoke(runtime, module, Alice, "approve", pair_argument(Carol, 100), state);
         require(result.ok, "Token approval failed");
         state = result.state;
 
-        result =
-            invoke(runtime, module, "carol", "transfer_from", transfer_from_argument("alice", "dave", 75), state);
+        result = invoke(runtime, module, Carol, "transfer_from", transfer_from_argument(Alice, Dave, 75), state);
         require(result.ok, "Approved token transfer failed");
         state = result.state;
 
-        result = invoke(runtime, module, "dave", "burn", unsigned_argument(25), state);
+        result = invoke(runtime, module, Dave, "burn", unsigned_argument(25), state);
         require(result.ok, "Token burn failed");
         state = result.state;
 
-        result = invoke(runtime, module, "alice", "mint", pair_argument("bob", 50), state);
+        result = invoke(runtime, module, Alice, "mint", pair_argument(Bob, 50), state);
         require(result.ok, "Owner mint failed");
         state = result.state;
 
-        result = invoke(runtime, module, "alice", "revoke_mint", {}, state);
+        result = invoke(runtime, module, Alice, "revoke_mint", empty_arguments(), state);
         require(result.ok, "Mint revoke failed");
         state = result.state;
 
-        result = invoke(runtime, module, "alice", "mint", pair_argument("bob", 1), state);
+        result = invoke(runtime, module, Alice, "mint", pair_argument(Bob, 1), state);
         require(!result.ok && result.state == state, "Mint worked after permanent revoke");
+        return state;
+    }
+
+    void test_u128_boundaries(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
+        constexpr std::string_view Maximum = "340282366920938463463374607431768211455";
+        auto maximum = invoke(runtime, module, Alice, "init", token_init_argument(Maximum), {});
+        require(maximum.ok, "Token rejected the maximum u128 supply");
+        auto overflow = invoke(runtime, module, Alice, "mint", pair_argument(Alice, 1), maximum.state);
+        require(!overflow.ok && overflow.state == maximum.state, "Token accepted a u128 supply overflow");
+        auto leading_zero = invoke(runtime, module, Alice, "init", token_init_argument("01"), {});
+        require(!leading_zero.ok, "Token accepted a non-canonical amount");
+        auto too_large = invoke(runtime,
+                                module,
+                                Alice,
+                                "init",
+                                token_init_argument("340282366920938463463374607431768211456"),
+                                {});
+        require(!too_large.ok, "Token accepted an amount above u128");
+    }
+
+    Bytes nft_init_argument() {
+        Bytes result;
+        append_array(result, 2);
+        append_string(result, "Example Collection");
+        append_string(result, "ENFT");
+        return result;
+    }
+
+    Bytes nft_mint_argument(std::string_view                       id,
+                            std::string_view                       receiver,
+                            const ExtraChain::Contracts::DfsProof &proof) {
+        Bytes result;
+        append_array(result, 5);
+        append_string(result, id);
+        append_string(result, receiver);
+        append_string(result, proof.owner_id);
+        append_string(result, proof.file_id);
+        append_string(result, proof.content_hash);
+        return result;
+    }
+
+    Bytes nft_pair_argument(std::string_view id, std::string_view actor) {
+        Bytes result;
+        append_array(result, 2);
+        append_string(result, id);
+        append_string(result, actor);
+        return result;
+    }
+
+    Bytes nft_transfer_from_argument(std::string_view id, std::string_view owner, std::string_view receiver) {
+        Bytes result;
+        append_array(result, 3);
+        append_string(result, id);
+        append_string(result, owner);
+        append_string(result, receiver);
+        return result;
+    }
+
+    Bytes test_nft(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
+        const ExtraChain::Contracts::DfsProof proof {
+            .file_id      = "metadata-file",
+            .owner_id     = Alice,
+            .content_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        };
+        const std::string item_id = "18446744073709551616";
+        Bytes             state;
+        auto              result = invoke(runtime, module, Alice, "init", nft_init_argument(), state);
+        require(result.ok, "NFT collection init failed");
+        state  = result.state;
+        result = invoke_with_dfs(runtime,
+                                 module,
+                                 Alice,
+                                 "mint",
+                                 nft_mint_argument(item_id, Alice, proof),
+                                 state,
+                                 proof);
+        require(result.ok, "NFT mint with a u128 item ID failed");
+        state  = result.state;
+        result = invoke(runtime, module, Alice, "owner_of", string_argument(item_id), state);
+        require(result.ok && Reader(result.data).string() == Alice, "NFT owner query failed");
+        result = invoke(runtime, module, Alice, "approve", nft_pair_argument(item_id, Carol), state);
+        require(result.ok, "NFT approval failed");
+        state  = result.state;
+        result = invoke(runtime,
+                        module,
+                        Carol,
+                        "transfer_from",
+                        nft_transfer_from_argument(item_id, Alice, Bob),
+                        state);
+        require(result.ok, "Approved NFT transfer failed");
+        state  = result.state;
+        result = invoke(runtime, module, Bob, "metadata_of", string_argument(item_id), state);
+        require(result.ok, "NFT metadata query failed");
+        result = invoke(runtime, module, Bob, "burn", string_argument(item_id), state);
+        require(result.ok, "NFT burn failed");
+        state  = result.state;
+        result = invoke(runtime, module, Bob, "owner_of", string_argument(item_id), state);
+        require(!result.ok && result.state == state, "Burned NFT is still available");
+        return state;
     }
 
     void test_runtime_limits(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
@@ -489,11 +659,11 @@ namespace {
 
     void test_message_claim(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
         Bytes state;
-        auto  result = invoke(runtime, module, "alice", "init", {}, state);
+        auto  result = invoke(runtime, module, Alice, "init", empty_arguments(), state);
         require(result.ok, "Message contract init failed");
         state = result.state;
 
-        result = invoke(runtime, module, "alice", "store", string_argument("hello"), state);
+        result = invoke(runtime, module, Alice, "store", string_argument("hello"), state);
         require(result.ok, "Message store failed");
         Reader token_reader(result.data);
         require(token_reader.unsigned_value() == 1, "Message token ID is invalid");
@@ -502,35 +672,106 @@ namespace {
         Bytes transfer_arguments;
         append_array(transfer_arguments, 2);
         append_unsigned(transfer_arguments, 1);
-        append_string(transfer_arguments, "bob");
-        result = invoke(runtime, module, "alice", "transfer", transfer_arguments, state);
+        append_string(transfer_arguments, Bob);
+        result = invoke(runtime, module, Alice, "transfer", transfer_arguments, state);
         require(result.ok, "Message token transfer failed");
         state = result.state;
 
-        result = invoke(runtime, module, "alice", "redeem", unsigned_argument(1), state);
+        result = invoke(runtime, module, Alice, "redeem", unsigned_argument(1), state);
         require(!result.ok && result.state == state, "Previous owner redeemed the message token");
 
-        result = invoke(runtime, module, "bob", "redeem", unsigned_argument(1), state);
+        result = invoke(runtime, module, Bob, "redeem", unsigned_argument(1), state);
         require(result.ok, "Current owner could not redeem the message token");
         Reader message_reader(result.data);
         require(message_reader.string() == "hello", "Redeemed message is invalid");
         state = result.state;
 
-        result = invoke(runtime, module, "bob", "redeem", unsigned_argument(1), state);
+        result = invoke(runtime, module, Bob, "redeem", unsigned_argument(1), state);
         require(!result.ok && result.state == state, "Message token was redeemed twice");
-        result = invoke(runtime, module, "bob", "owner_of", unsigned_argument(1), state);
+        result = invoke(runtime, module, Bob, "owner_of", unsigned_argument(1), state);
         require(!result.ok && result.state == state, "Redeemed message token still has an owner");
+    }
+
+    void test_assemblyscript(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
+        const auto initialized = invoke(runtime, module, Alice, "init", empty_arguments(), {});
+        require(initialized.ok && !initialized.state.empty(),
+                "AssemblyScript contract did not execute ABI 4 initialization");
+        const auto unknown = invoke(runtime, module, Alice, "unknown", empty_arguments(), initialized.state);
+        require(!unknown.ok && unknown.state == initialized.state,
+                "AssemblyScript contract did not preserve state after an unknown method");
+        const auto added = invoke(runtime, module, Alice, "add", unsigned_argument(5), initialized.state);
+        require(added.ok && added.state != initialized.state,
+                "AssemblyScript contract did not save an owner-approved change");
+        const auto denied = invoke(runtime, module, Bob, "add", unsigned_argument(1), added.state);
+        require(!denied.ok && denied.state == added.state,
+                "AssemblyScript ownership component accepted another caller");
+    }
+
+    void test_assemblyscript_upgrade(const Bytes &module) {
+        ExtraChain::Contracts::ContractManager manager;
+        auto deployed = manager.deploy("as-basic", Alice, "generic", module, empty_arguments(), 1);
+        require(deployed.has_value(), "AssemblyScript router deployment failed");
+        auto upgraded = manager.upgrade("as-basic", Alice, module, empty_arguments(), 2);
+        if (!upgraded.has_value()) {
+            throw std::runtime_error("AssemblyScript router update failed: " + upgraded.error().detail);
+        }
+        require(upgraded->version == 2, "AssemblyScript router update version is invalid");
+    }
+
+    void test_assemblyscript_dfs_binding(const Bytes &module) {
+        ExtraChain::Contracts::ContractManager manager;
+        auto deployed = manager.deploy("dfs-contract", "alice", "storage", module, empty_arguments(), 1);
+        if (!deployed.has_value()) {
+            throw std::runtime_error("AssemblyScript DFS contract deployment failed: " + deployed.error().detail);
+        }
+        const std::string hash(64, 'a');
+        const auto        arguments = dfs_binding_argument("profile/avatar", "file-1", hash, "");
+        require(!manager.prepare_call("dfs-contract", "alice", "bind", arguments, 2).has_value(),
+                "DFS binding was accepted without a verified file");
+        ExtraChain::Contracts::VerifiedInputs verified {
+            .dfs = { ExtraChain::Contracts::DfsProof { .file_id      = "file-1",
+                                                       .owner_id     = "dfs-contract",
+                                                       .content_hash = hash } },
+        };
+        require(!manager
+                     .prepare_call("dfs-contract",
+                                   "alice",
+                                   "bind",
+                                   dfs_binding_argument("../avatar", "file-1", hash, ""),
+                                   2,
+                                   verified)
+                     .has_value(),
+                "DFS binding accepted an unsafe logical key");
+        auto binding = manager.prepare_call("dfs-contract", "alice", "bind", arguments, 2, verified);
+        require(binding.has_value() && manager.commit(std::move(binding.value()), "bind-transaction").has_value(),
+                "Verified DFS binding was rejected");
+        auto lookup = manager.query("dfs-contract", "alice", "binding", string_argument("profile/avatar"), 2);
+        require(lookup.has_value(), "Stored DFS binding could not be read");
+        Reader binding_reader(lookup->data);
+        require(binding_reader.array() == 2 && binding_reader.string() == "file-1"
+                    && binding_reader.string() == hash && binding_reader.empty(),
+                "Stored DFS binding changed during state encoding");
+        auto tombstone = manager.prepare_call("dfs-contract",
+                                              "alice",
+                                              "tombstone",
+                                              dfs_binding_argument("profile/avatar", "", "", hash),
+                                              3);
+        require(tombstone.has_value()
+                    && manager.commit(std::move(tombstone.value()), "tombstone-transaction").has_value(),
+                "DFS binding tombstone was rejected");
+        auto removed = manager.query("dfs-contract", "alice", "binding", string_argument("profile/avatar"), 3);
+        require(removed.has_value() && removed->data.empty(), "DFS binding remained visible after a tombstone");
     }
 
     void test_worker_thread(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
         auto invocation = std::async(std::launch::async, [&runtime, &module]() {
             Bytes state;
-            auto  first = invoke(runtime, module, "alice", "init", {}, state);
+            auto  first = invoke(runtime, module, "alice", "init", empty_arguments(), state);
             if (!first.ok) {
                 return first;
             }
             state.clear();
-            return invoke(runtime, module, "alice", "init", {}, state);
+            return invoke(runtime, module, "alice", "init", empty_arguments(), state);
         });
         require(invocation.get().ok, "Repeated WAMR execution failed on a worker thread");
     }
@@ -544,7 +785,7 @@ namespace {
             workers.push_back(std::async(std::launch::async, [&runtime, &module]() {
                 for (int call = 0; call < CallsPerWorker; ++call) {
                     Bytes state;
-                    if (!invoke(runtime, module, "alice", "init", {}, state).ok)
+                    if (!invoke(runtime, module, Alice, "init", empty_arguments(), state).ok)
                         return false;
                 }
                 return true;
@@ -559,29 +800,29 @@ namespace {
         ExtraChain::Contracts::ContractManager manager;
 
         auto token =
-            manager.deploy("token-contract", "alice", "fungible-token", fungible_module, token_init_argument(), 1);
+            manager.deploy("token-contract", Alice, "fungible-token", fungible_module, token_init_argument(), 1);
         require(token.has_value(), "ContractManager token deploy failed");
-        auto transfer = manager.call("token-contract", "alice", "transfer", pair_argument("bob", 200), 2);
+        auto transfer = manager.call("token-contract", Alice, "transfer", pair_argument(Bob, 200), 2);
         if (!transfer.has_value()) {
             throw std::runtime_error("ContractManager token transfer failed: " + transfer.error().detail);
         }
         require(transfer.value().revision == 2, "ContractManager token transfer revision is invalid");
-        auto balance = manager.query("token-contract", "alice", "balance_of", string_argument("bob"), 2);
+        auto balance = manager.query("token-contract", Alice, "balance_of", string_argument(Bob), 2);
         require(balance.has_value() && balance->revision == 2, "ContractManager read-only token query failed");
         Reader balance_reader(balance->data);
         require(balance_reader.string() == "200", "ContractManager returned an invalid token balance");
-        auto upgrade = manager.upgrade("token-contract", "alice", fungible_module, {}, 3);
+        auto upgrade = manager.upgrade("token-contract", Alice, fungible_module, empty_arguments(), 3);
         require(upgrade.has_value() && upgrade->version == 2, "ContractManager token upgrade failed");
         auto token_record = manager.inspect("token-contract");
         require(token_record.has_value() && token_record->versions.size() == 2,
                 "ContractManager did not retain the immutable token version chain");
-        auto frozen = manager.call("token-contract", "alice", "transfer", pair_argument("bob", 799), 4);
+        auto frozen = manager.call("token-contract", Alice, "transfer", pair_argument(Bob, 799), 4);
         require(frozen.has_value(), "Upgraded token did not enter the one-token freeze state");
-        auto denied_frozen = manager.call("token-contract", "alice", "transfer", pair_argument("bob", 1), 5);
+        auto denied_frozen = manager.call("token-contract", Alice, "transfer", pair_argument(Bob, 1), 5);
         require(!denied_frozen.has_value(), "Upgraded token allowed transfer of the frozen reserve");
 
         auto legacy = manager.prepare_deploy("legacy-token",
-                                             "alice",
+                                             Alice,
                                              "fungible-token",
                                              fungible_module,
                                              token_migration_argument(),
@@ -590,16 +831,18 @@ namespace {
                 "Legacy token migration emitted a second balance delta");
         require(manager.stage(*legacy).has_value(), "Legacy token migration could not be staged");
         require(manager.commit(std::move(*legacy)).has_value(), "Legacy token migration could not be committed");
-        auto legacy_balance = manager.query("legacy-token", "alice", "balance_of", string_argument("bob"), 1);
+        auto legacy_balance = manager.query("legacy-token", Alice, "balance_of", string_argument(Bob), 1);
         require(legacy_balance.has_value(), "Migrated token balance query failed");
         Reader legacy_balance_reader(legacy_balance->data);
         require(legacy_balance_reader.string() == "300", "Migrated token balance changed");
 
-        auto claim = manager.deploy("claim-contract", "alice", "message-claim", message_module, {}, 1);
+        auto claim = manager.deploy(ClaimContract, Alice, "message-claim", message_module, empty_arguments(), 1);
         require(claim.has_value(), "ContractManager claim deploy failed");
-        auto stored = manager.call("claim-contract", "alice", "store", string_argument("decentralized"), 2);
-        require(stored.has_value(), "ContractManager message store failed");
-        auto stored_record = manager.inspect("claim-contract");
+        auto stored = manager.call(ClaimContract, Alice, "store", string_argument("decentralized"), 2);
+        if (!stored.has_value()) {
+            throw std::runtime_error("ContractManager message store failed: " + stored.error().detail);
+        }
+        auto stored_record = manager.inspect(ClaimContract);
         require(stored_record.has_value()
                     && contains_text(stored_record->versions.back().revisions.back().state, "decentralized"),
                 "ContractManager did not persist the message in contract state");
@@ -607,50 +850,99 @@ namespace {
         Bytes transfer_arguments;
         append_array(transfer_arguments, 2);
         append_unsigned(transfer_arguments, 1);
-        append_string(transfer_arguments, "bob");
-        auto transferred = manager.call("claim-contract", "alice", "transfer", transfer_arguments, 3);
+        append_string(transfer_arguments, Bob);
+        auto transferred = manager.call(ClaimContract, Alice, "transfer", transfer_arguments, 3);
         require(transferred.has_value(), "ContractManager message token transfer failed");
-        auto denied = manager.call("claim-contract", "alice", "redeem", unsigned_argument(1), 4);
+        auto denied = manager.call(ClaimContract, Alice, "redeem", unsigned_argument(1), 4);
         require(!denied.has_value(), "ContractManager allowed the previous owner to redeem");
-        auto redeemed = manager.call("claim-contract", "bob", "redeem", unsigned_argument(1), 4);
+        auto redeemed = manager.call(ClaimContract, Bob, "redeem", unsigned_argument(1), 4);
         require(redeemed.has_value(), "ContractManager current owner redeem failed");
         Reader message_reader(redeemed->data);
         require(message_reader.string() == "decentralized", "ContractManager returned an invalid message");
-        auto redeemed_record = manager.inspect("claim-contract");
+        auto redeemed_record = manager.inspect(ClaimContract);
         require(redeemed_record.has_value()
                     && !contains_text(redeemed_record->versions.back().revisions.back().state, "decentralized"),
                 "ContractManager did not remove the redeemed message from contract state");
-        auto replay = manager.call("claim-contract", "bob", "redeem", unsigned_argument(1), 5);
+        auto replay = manager.call(ClaimContract, Bob, "redeem", unsigned_argument(1), 5);
         require(!replay.has_value(), "ContractManager allowed a second redeem");
 
-        auto target = manager.deploy("target-contract", "alice", "message-claim", message_module, {}, 6);
+        auto target = manager.deploy(TargetContract, Alice, "message-claim", message_module, empty_arguments(), 6);
         require(target.has_value(), "ContractManager target deploy failed");
-        auto forwarded = manager.call("claim-contract",
-                                      "alice",
-                                      "forward_store",
-                                      string_pair_argument("target-contract", "atomic"),
-                                      7);
-        require(forwarded.has_value(), "ContractManager cross-contract call failed");
-        const auto root_record   = manager.inspect("claim-contract");
-        const auto target_record = manager.inspect("target-contract");
+        auto forwarded =
+            manager.call(ClaimContract, Alice, "forward_store", string_pair_argument(TargetContract, "atomic"), 7);
+        if (!forwarded.has_value()) {
+            throw std::runtime_error("ContractManager cross-contract call failed: " + forwarded.error().detail);
+        }
+        const auto root_record   = manager.inspect(ClaimContract);
+        const auto target_record = manager.inspect(TargetContract);
         require(root_record.has_value() && target_record.has_value()
                     && root_record->versions.back().revisions.back().revision == 5
                     && target_record->versions.back().revisions.back().revision == 2
                     && contains_text(root_record->versions.back().revisions.back().state, "atomic")
                     && contains_text(target_record->versions.back().revisions.back().state, "atomic"),
                 "ContractManager did not commit the complete call graph");
-        const auto forwarded_owner =
-            manager.query("target-contract", "alice", "owner_of", unsigned_argument(1), 7);
+        const auto forwarded_owner = manager.query(TargetContract, Alice, "owner_of", unsigned_argument(1), 7);
         require(forwarded_owner.has_value(), "Cross-contract token owner query failed");
         Reader forwarded_owner_reader(forwarded_owner->data);
-        require(forwarded_owner_reader.string() == "claim-contract",
+        require(forwarded_owner_reader.string() == ClaimContract,
                 "Cross-contract call used the original sender as direct authority");
-        auto cycle = manager.call("claim-contract",
-                                  "alice",
-                                  "forward_store",
-                                  string_pair_argument("claim-contract", "cycle"),
-                                  8);
+        auto cycle =
+            manager.call(ClaimContract, Alice, "forward_store", string_pair_argument(ClaimContract, "cycle"), 8);
         require(!cycle.has_value(), "ContractManager accepted a contract call cycle");
+    }
+
+    void test_language_lock(const Bytes &rust_module, const Bytes &assemblyscript_module) {
+        ExtraChain::Contracts::ContractManager rust_manager;
+        require(rust_manager.deploy("rust-token", Alice, "fungible-token", rust_module, token_init_argument(), 1)
+                    .has_value(),
+                "Rust token deployment failed before the language lock test");
+        const auto rust_to_as =
+            rust_manager.prepare_upgrade("rust-token", Alice, assemblyscript_module, empty_arguments(), 2);
+        require(!rust_to_as.has_value()
+                    && rust_to_as.error().error == ExtraChain::Contracts::ContractError::UpgradeDenied,
+                "A Rust token accepted an AssemblyScript upgrade");
+
+        ExtraChain::Contracts::ContractManager assemblyscript_manager;
+        require(assemblyscript_manager
+                    .deploy("as-token", Alice, "fungible-token", assemblyscript_module, token_init_argument(), 1)
+                    .has_value(),
+                "AssemblyScript token deployment failed before the language lock test");
+        const auto as_to_rust =
+            assemblyscript_manager.prepare_upgrade("as-token", Alice, rust_module, empty_arguments(), 2);
+        require(!as_to_rust.has_value()
+                    && as_to_rust.error().error == ExtraChain::Contracts::ContractError::UpgradeDenied,
+                "An AssemblyScript token accepted a Rust upgrade");
+    }
+
+    void benchmark_token_x(ExtraChain::Contracts::WasmRuntime &runtime,
+                           const Bytes                        &module,
+                           std::string_view                    language) {
+        constexpr std::size_t      Samples = 500;
+        std::vector<std::uint64_t> samples;
+        samples.reserve(Samples);
+        for (std::size_t index = 0; index < Samples; ++index) {
+            const auto started     = std::chrono::steady_clock::now();
+            auto       initialized = invoke(runtime, module, Alice, "init", token_init_argument(), {});
+            require(initialized.ok, "Token X benchmark initialization failed");
+            auto migrated = invoke(runtime, module, Alice, "migrate", empty_arguments(), initialized.state);
+            require(migrated.ok, "Token X benchmark migration failed");
+            auto frozen = invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 999), migrated.state);
+            require(frozen.ok, "Token X benchmark freeze transfer failed");
+            auto denied = invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 1), frozen.state);
+            require(!denied.ok && denied.state == frozen.state, "Token X benchmark freeze rule failed");
+            const auto elapsed =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started);
+            samples.push_back(static_cast<std::uint64_t>(elapsed.count()));
+        }
+        std::ranges::sort(samples);
+        const auto percentile = [&](std::size_t numerator) {
+            const auto position = std::min(samples.size() - 1, (samples.size() * numerator + 99) / 100 - 1);
+            return samples[position];
+        };
+        const auto total = std::accumulate(samples.begin(), samples.end(), std::uint64_t { 0 });
+        std::cout << "BENCHMARK {\"language\":\"" << language << "\",\"samples\":" << Samples
+                  << ",\"mean_ns\":" << total / Samples << ",\"p50_ns\":" << percentile(50)
+                  << ",\"p95_ns\":" << percentile(95) << ",\"p99_ns\":" << percentile(99) << "}\n";
     }
 
     void test_checkpoint_schedule(const Bytes &fungible_module) {
@@ -660,7 +952,7 @@ namespace {
         for (int node_index = 0; node_index < 2; ++node_index) {
             ExtraChain::Contracts::ContractManager manager;
             auto                                   deploy = manager.prepare_deploy("checkpoint-contract",
-                                                 "alice",
+                                                 Alice,
                                                  "fungible-token",
                                                  fungible_module,
                                                  token_init_argument(),
@@ -678,9 +970,9 @@ namespace {
             for (std::uint64_t call_index = 1; call_index <= ExtraChain::Contracts::ContractCheckpointInterval;
                  ++call_index) {
                 auto call = manager.prepare_call("checkpoint-contract",
-                                                 "alice",
+                                                 Alice,
                                                  "approve",
-                                                 pair_argument("bob", call_index),
+                                                 pair_argument(Bob, call_index),
                                                  call_index + 1);
                 require(call.has_value(), "Checkpoint schedule call failed");
                 const auto call_hash = call->record.versions.back().revisions.back().state_hash;
@@ -711,7 +1003,12 @@ namespace {
         auto                                  *tracker = storage.get();
         ExtraChain::Contracts::ContractManager manager(std::move(storage));
 
-        auto deploy = manager.prepare_deploy("staged-contract", "alice", "message-claim", message_module, {}, 1);
+        auto deploy = manager.prepare_deploy("staged-contract",
+                                             Alice,
+                                             "message-claim",
+                                             message_module,
+                                             empty_arguments(),
+                                             1);
         require(deploy.has_value(), "Contract preparation failed");
         require(tracker->stage_count == 0, "Contract preparation published artifacts");
         require(manager.stage(*deploy).has_value() && tracker->stage_count == 1, "Contract artifact stage failed");
@@ -779,24 +1076,57 @@ namespace {
 
 int main(int argc, char **argv) {
     try {
-        if (argc != 3) {
-            throw std::runtime_error("Expected fungible and message contract module paths");
+        if (argc != 8) {
+            throw std::runtime_error(
+                "Expected Rust and AssemblyScript token modules, message, and AssemblyScript fixture paths");
         }
         ExtraChain::Contracts::WasmRuntime runtime;
         require(runtime.available(), "WAMR is unavailable");
-        auto fungible_module = read_file(argv[1]);
-        auto message_module  = read_file(argv[2]);
-        test_runtime_limits(runtime, fungible_module);
+        auto rust_fungible_module = read_file(argv[1]);
+        auto as_fungible_module   = read_file(argv[2]);
+        auto rust_nft_module      = read_file(argv[3]);
+        auto as_nft_module        = read_file(argv[4]);
+        auto message_module       = read_file(argv[5]);
+        require(ExtraChain::Contracts::module_language(rust_fungible_module).value_or("") == "rust",
+                "Rust token language marker is invalid");
+        require(ExtraChain::Contracts::module_language(as_fungible_module).value_or("") == "assemblyscript",
+                "AssemblyScript token language marker is invalid");
+        require(ExtraChain::Contracts::module_language(rust_nft_module).value_or("") == "rust",
+                "Rust NFT language marker is invalid");
+        require(ExtraChain::Contracts::module_language(as_nft_module).value_or("") == "assemblyscript",
+                "AssemblyScript NFT language marker is invalid");
+        test_runtime_limits(runtime, rust_fungible_module);
         test_worker_thread(runtime, message_module);
         test_parallel_worker_threads(runtime, message_module);
         test_contract_hash();
         test_effect_codec();
         test_json_codec();
-        test_fungible(runtime, fungible_module);
+        const auto rust_fungible_state = test_fungible(runtime, rust_fungible_module);
+        const auto as_fungible_state   = test_fungible(runtime, as_fungible_module);
+        const auto fungible_difference = "Rust and AssemblyScript fungible state encodings differ: rust="
+                                         + ExtraChain::Contracts::content_hash(rust_fungible_state)
+                                         + " as=" + ExtraChain::Contracts::content_hash(as_fungible_state)
+                                         + " sizes=" + std::to_string(rust_fungible_state.size()) + "/"
+                                         + std::to_string(as_fungible_state.size());
+        require(rust_fungible_state == as_fungible_state, fungible_difference);
+        test_u128_boundaries(runtime, rust_fungible_module);
+        test_u128_boundaries(runtime, as_fungible_module);
+        const auto rust_nft_state = test_nft(runtime, rust_nft_module);
+        const auto as_nft_state   = test_nft(runtime, as_nft_module);
+        require(rust_nft_state == as_nft_state, "Rust and AssemblyScript NFT state encodings differ");
         test_message_claim(runtime, message_module);
-        test_contract_manager(fungible_module, message_module);
-        test_checkpoint_schedule(fungible_module);
+        test_contract_manager(rust_fungible_module, message_module);
+        test_contract_manager(as_fungible_module, message_module);
+        test_language_lock(rust_fungible_module, as_fungible_module);
+        benchmark_token_x(runtime, rust_fungible_module, "rust");
+        benchmark_token_x(runtime, as_fungible_module, "assemblyscript");
+        test_checkpoint_schedule(rust_fungible_module);
+        test_checkpoint_schedule(as_fungible_module);
         test_prepare_and_artifact_stage_are_separate(message_module);
+        const auto assemblyscript_basic = read_file(argv[6]);
+        test_assemblyscript(runtime, assemblyscript_basic);
+        test_assemblyscript_upgrade(assemblyscript_basic);
+        test_assemblyscript_dfs_binding(read_file(argv[7]));
         std::cout << "Contract runtime tests passed\n";
         return 0;
     } catch (const std::exception &error) {

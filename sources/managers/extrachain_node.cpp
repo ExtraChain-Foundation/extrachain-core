@@ -29,6 +29,7 @@
 #include <QJsonObject>
 #include <QFile>
 #include <QThread>
+#include <msgpack.hpp>
 #include <sodium/core.h>
 
 #include "chain/dag.h"
@@ -56,6 +57,8 @@
 #include "contracts/contract_manager.h"
 #include "contracts/contract_codec.h"
 #include "contracts/contract_hash.h"
+#include "contracts/contract_module.h"
+#include "contracts/standard_token.h"
 #include "contracts/contract_transaction.h"
 #include "contracts/dfs_contract_storage.h"
 #include "contracts/toolchain_registry.h"
@@ -70,16 +73,6 @@ static void initialize_contract_resources() {
 namespace {
     std::string contract_hash_prefix(std::string_view value) {
         return std::string(value.substr(0, std::min<std::size_t>(value.size(), 12)));
-    }
-
-    std::optional<std::string> standard_fungible_module_hash() {
-        QFile module_file(":/contracts/fungible_token.wasm");
-        if (!module_file.open(QIODevice::ReadOnly)) {
-            return std::nullopt;
-        }
-        auto module = module_file.readAll();
-        auto begin  = reinterpret_cast<const std::uint8_t*>(module.constData());
-        return ExtraChain::Contracts::content_hash(std::span(begin, static_cast<std::size_t>(module.size())));
     }
 
     std::vector<ContractTransitionData> contract_transitions(
@@ -102,6 +95,7 @@ namespace {
                                              .contract_id         = child.record.contract_id,
                                              .caller_contract_id  = parent.record.contract_id,
                                              .kind                = child.record.kind,
+                                             .language            = child.record.language,
                                              .method              = effect.operation,
                                              .arguments_base64    = Utils::to_base64(effect.arguments),
                                              .module_hash         = version.module_hash,
@@ -185,6 +179,45 @@ namespace {
             });
         }
         return result;
+    }
+
+    bool verify_dfs_effect_authors(DfsController*                                       dfs,
+                                   const ExtraChain::Contracts::PreparedContractChange& change,
+                                   const ActorId&                                       sender) {
+        for (const auto& effect : change.output.effects) {
+            if (effect.kind != ExtraChain::Contracts::ContractEffectKind::DfsWrite
+                || effect.operation == "tombstone") {
+                continue;
+            }
+            try {
+                if (dfs == nullptr) {
+                    return false;
+                }
+                std::size_t offset = 0;
+                auto        handle = msgpack::unpack(reinterpret_cast<const char*>(effect.arguments.data()),
+                                              effect.arguments.size(),
+                                              offset);
+                std::tuple<std::string, std::string, std::string, std::string> binding;
+                handle.get().convert(binding);
+                const auto  owner   = ActorId::create(effect.target);
+                const auto& file_id = std::get<1>(binding);
+                if (!owner.has_value()) {
+                    return false;
+                }
+                const auto row =
+                    Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dfs->get_db_instance(), owner.value(), file_id);
+                if (offset != effect.arguments.size() || !row.has_value() || row->actor_id != sender
+                    || row->owner_id != owner.value() || row->state != Dfs::FileState::Ready
+                    || row->hash != std::get<2>(binding)) {
+                    return false;
+                }
+            } catch (const std::exception&) {
+                return false;
+            }
+        }
+        return std::ranges::all_of(change.children, [&](const auto& child) {
+            return verify_dfs_effect_authors(dfs, child, sender);
+        });
     }
 } // namespace
 
@@ -1367,9 +1400,13 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
         if (ExtraChain::Contracts::content_hash(*module) != metadata->module_hash) {
             return TransactionProveError::InvalidContractPayload;
         }
-        if (metadata->kind == "fungible-token") {
-            auto standard_hash = standard_fungible_module_hash();
-            if (!standard_hash.has_value() || *standard_hash != metadata->module_hash) {
+        const auto language = ExtraChain::Contracts::module_language(*module);
+        if ((metadata->kind == "fungible-token" || metadata->kind == "non-fungible-token")
+            && (!language.has_value() || *language != metadata->language)) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        if (ExtraChain::Contracts::is_system_token_kind(metadata->kind)) {
+            if (!ExtraChain::Contracts::is_standard_token_module(metadata->kind, metadata->module_hash)) {
                 return TransactionProveError::InvalidContractPayload;
             }
         }
@@ -1393,7 +1430,8 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     }
 
     auto record = contract_manager_->inspect(contract_id.to_string());
-    if (!record.has_value() || record->kind != metadata->kind || record->versions.empty()) {
+    if (!record.has_value() || record->kind != metadata->kind || record->language != metadata->language
+        || record->versions.empty()) {
         return TransactionProveError::ContractDependencyMissing;
     }
     const auto& current  = record->versions.at(record->active_version - 1);
@@ -1417,6 +1455,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
                                                       block,
                                                       *verified_inputs);
         if (!change.has_value() || change->kind == ExtraChain::Contracts::ContractChangeKind::ReadOnly
+            || !verify_dfs_effect_authors(dfs_, *change, transaction.sender())
             || change->checkpoint != metadata->checkpoint
             || Json::serialize(contract_transitions(*change)) != Json::serialize(metadata->transitions)) {
             return TransactionProveError::InvalidContractPayload;
@@ -1448,7 +1487,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     if (ExtraChain::Contracts::content_hash(*module) != metadata->module_hash) {
         return TransactionProveError::InvalidContractPayload;
     }
-    auto authorization_arguments = ExtraChain::Contracts::Codec::encode_string(metadata->module_hash);
+    auto authorization_arguments = ExtraChain::Contracts::Codec::encode_string_argument(metadata->module_hash);
     auto authorization           = contract_manager_->evaluate(current.module,
                                                      transaction.sender().to_string(),
                                                      "authorize_upgrade",
@@ -1486,10 +1525,10 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
             .detail = "No current wallet",
         });
     }
-    if (kind == "fungible-token") {
+    if (ExtraChain::Contracts::is_system_token_kind(kind)) {
         return std::unexpected(ExtraChain::Contracts::ContractFailure {
             .error  = ExtraChain::Contracts::ContractError::InvalidArguments,
-            .detail = "The fungible-token kind is reserved for the standard token contract",
+            .detail = "The token kind is reserved for a standard token contract",
         });
     }
     auto block = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
@@ -1512,6 +1551,7 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
     const auto&             revision = version.revisions.back();
     ContractTransactionData metadata {
         .kind                = change->record.kind,
+        .language            = change->record.language,
         .method              = "init",
         .arguments_base64    = Utils::to_base64(init_arguments),
         .module_hash         = version.module_hash,
@@ -1577,6 +1617,12 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
     if (!change.has_value()) {
         return std::unexpected(change.error());
     }
+    if (!verify_dfs_effect_authors(dfs_, *change, signer.id())) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::InvalidProof,
+            .detail = "A DFS effect references data from another author",
+        });
+    }
     if (change->kind == ExtraChain::Contracts::ContractChangeKind::ReadOnly) {
         return std::unexpected(ExtraChain::Contracts::ContractFailure {
             .error  = ExtraChain::Contracts::ContractError::InvalidArguments,
@@ -1588,6 +1634,7 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
     const auto&             revision = version.revisions.back();
     ContractTransactionData metadata {
         .kind                = change->record.kind,
+        .language            = change->record.language,
         .method              = std::string(method),
         .arguments_base64    = Utils::to_base64(arguments),
         .module_hash         = version.module_hash,
@@ -1643,6 +1690,7 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
     const auto&             revision = version.revisions.back();
     ContractTransactionData metadata {
         .kind                = change->record.kind,
+        .language            = change->record.language,
         .method              = "migrate",
         .arguments_base64    = Utils::to_base64(migration_arguments),
         .module_hash         = version.module_hash,

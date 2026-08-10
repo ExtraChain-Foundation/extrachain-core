@@ -1,0 +1,20 @@
+{
+  "name": "extrachain-contracts-as",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Independent AssemblyScript SDK and components for ExtraChain contracts.",
+  "scripts": {
+    "build:basic": "asc assembly/index.ts --outFile build/basic.wasm --runtime stub --disable bulk-memory --use abort=assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && node scripts/mark-wasm.mjs build/basic.wasm assemblyscript",
+    "build:router-test": "asc examples/router-conformance/assembly/index.ts --outFile build/router-conformance.wasm --runtime stub --disable bulk-memory --use abort=examples/router-conformance/assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && node scripts/mark-wasm.mjs build/router-conformance.wasm assemblyscript",
+    "build:dfs": "asc examples/dfs-binding/assembly/index.ts --outFile build/dfs-binding.wasm --runtime stub --disable bulk-memory --use abort=examples/dfs-binding/assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && node scripts/mark-wasm.mjs build/dfs-binding.wasm assemblyscript",
+    "build:fungible": "asc fungible-token/assembly/index.ts --outFile build/fungible-token.wasm --runtime stub --disable bulk-memory --use abort=fungible-token/assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && node scripts/mark-wasm.mjs build/fungible-token.wasm assemblyscript",
+    "build:nft": "asc non-fungible-token/assembly/index.ts --outFile build/non-fungible-token.wasm --runtime stub --disable bulk-memory --use abort=non-fungible-token/assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && node scripts/mark-wasm.mjs build/non-fungible-token.wasm assemblyscript",
+    "check": "npm run build:basic && npm run build:router-test && npm run build:dfs && npm run build:fungible && npm run build:nft"
+  },
+  "devDependencies": {
+    "assemblyscript": "0.28.20"
+  },
+  "dependencies": {
+    "as-bignum": "0.3.1"
+  }
+}

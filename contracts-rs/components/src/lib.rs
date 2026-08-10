@@ -2,164 +2,114 @@
 
 extern crate alloc;
 
-use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use extrachain_contract_sdk::{DagProof, Decoder, DfsProof, Effect, Encoder, Event, InvokeRequest};
+use extrachain_contract_sdk::{
+    ActorId, BoundedString, Context, ContractCodec, ContractError, ContractResult, DagProof,
+    DfsProof, NonZeroAmount, StateMap, StateSet, is_content_hash, is_dfs_logical_key,
+};
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ComponentOutput {
-    pub data: Vec<u8>,
-    pub events: Vec<Event>,
-    pub effects: Vec<Effect>,
-}
+pub const MAX_ROLES: usize = 64;
+pub const MAX_ROLE_MEMBERS: usize = 256;
+pub const MAX_REPLAY_IDS: usize = 4_096;
+pub const MAX_LEDGER_ENTRIES: usize = 16_384;
+pub const MAX_MULTISIG_SIGNERS: usize = 256;
+pub const MAX_DFS_BINDINGS: usize = 4_096;
 
-pub trait Component {
-    fn handles(&self, method: &str) -> bool;
-    fn call(&mut self, request: &InvokeRequest) -> Result<ComponentOutput, &'static str>;
-}
-
-#[macro_export]
-macro_rules! dispatch_components {
-    ($request:expr, $($component:expr),+ $(,)?) => {{
-        let mut result = None;
-        $(
-            if result.is_none() && $component.handles(&$request.method) {
-                result = Some($component.call($request));
-            }
-        )+
-        result
-    }};
-}
-
-pub trait Hooks {
-    fn before_call(&self, _request: &InvokeRequest) -> Result<(), &'static str> {
-        Ok(())
-    }
-
-    fn after_call(&self, _request: &InvokeRequest) -> Result<(), &'static str> {
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct Ownership {
-    owner: String,
+    owner: Option<ActorId>,
 }
 
 impl Ownership {
     #[must_use]
-    pub fn new(owner: impl ToString) -> Self {
-        Self {
-            owner: owner.to_string(),
-        }
+    pub fn new(owner: ActorId) -> Self {
+        Self { owner: Some(owner) }
     }
 
     #[must_use]
-    pub fn owner(&self) -> &str {
-        &self.owner
+    pub fn owner(&self) -> Option<&ActorId> {
+        self.owner.as_ref()
     }
 
-    pub fn require_owner(&self, caller: &str) -> Result<(), &'static str> {
-        if caller == self.owner {
+    pub fn initialize(&mut self, owner: ActorId) -> ContractResult<()> {
+        if self.owner.is_some() {
+            return Err(ContractError::new("Ownership is already initialized"));
+        }
+        self.owner = Some(owner);
+        Ok(())
+    }
+
+    pub fn require_owner(&self, caller: &str) -> ContractResult<()> {
+        if self.owner().is_some_and(|owner| owner.as_str() == caller) {
             Ok(())
         } else {
-            Err("Only the owner can perform this operation")
+            Err(ContractError::new(
+                "Only the owner can perform this operation",
+            ))
         }
     }
 
-    pub fn transfer(
-        &mut self,
-        caller: &str,
-        next_owner: impl ToString,
-    ) -> Result<(), &'static str> {
+    pub fn transfer(&mut self, caller: &str, next_owner: ActorId) -> ContractResult<()> {
         self.require_owner(caller)?;
-        let next_owner = next_owner.to_string();
-        if next_owner.is_empty() {
-            return Err("The new owner is empty");
-        }
-        self.owner = next_owner;
+        self.owner = Some(next_owner);
         Ok(())
     }
 }
 
-impl Component for Ownership {
-    fn handles(&self, method: &str) -> bool {
-        matches!(method, "owner" | "transfer_owner")
-    }
-
-    fn call(&mut self, request: &InvokeRequest) -> Result<ComponentOutput, &'static str> {
-        match request.method.as_str() {
-            "owner" => {
-                let mut data = Encoder::new();
-                data.string(&self.owner);
-                Ok(ComponentOutput {
-                    data: data.finish(),
-                    ..ComponentOutput::default()
-                })
-            }
-            "transfer_owner" => {
-                let mut decoder = Decoder::new(&request.arguments);
-                let next_owner = decoder.string().map_err(|_| "The new owner is invalid")?;
-                if !decoder.is_empty() {
-                    return Err("The new owner is invalid");
-                }
-                self.transfer(&request.caller, &next_owner)?;
-                let mut event = Encoder::new();
-                event.string(&next_owner);
-                Ok(ComponentOutput {
-                    events: alloc::vec![Event {
-                        topic: "owner_transferred".to_string(),
-                        data: event.finish(),
-                    }],
-                    ..ComponentOutput::default()
-                })
-            }
-            _ => Err("The ownership method is not supported"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct Roles {
-    members: BTreeMap<String, BTreeSet<String>>,
+    members: StateMap<String, StateSet<ActorId, MAX_ROLE_MEMBERS>, MAX_ROLES>,
 }
 
 impl Roles {
-    pub fn grant(&mut self, role: impl ToString, actor: impl ToString) -> Result<(), &'static str> {
-        let role = role.to_string();
-        let actor = actor.to_string();
-        if role.is_empty() || actor.is_empty() {
-            return Err("The role and actor are required");
+    pub fn grant(&mut self, role: BoundedString<64>, actor: ActorId) -> ContractResult<bool> {
+        let role = role.into_string();
+        if let Some(members) = self.members.get_mut(&role) {
+            return members.insert(actor);
         }
-        self.members.entry(role).or_default().insert(actor);
-        Ok(())
+        let mut members = StateSet::default();
+        members.insert(actor)?;
+        self.members.insert(role, members)?;
+        Ok(true)
     }
 
-    pub fn revoke(&mut self, role: &str, actor: &str) -> bool {
-        self.members
-            .get_mut(role)
-            .is_some_and(|members| members.remove(actor))
+    pub fn revoke(&mut self, role: &str, actor: &ActorId) -> bool {
+        let removed = self
+            .members
+            .get_mut(&role.to_string())
+            .is_some_and(|members| members.remove(actor));
+        if removed
+            && self
+                .members
+                .get(&role.to_string())
+                .is_some_and(StateSet::is_empty)
+        {
+            self.members.remove(&role.to_string());
+        }
+        removed
     }
 
     #[must_use]
-    pub fn has(&self, role: &str, actor: &str) -> bool {
+    pub fn has(&self, role: &str, actor: &ActorId) -> bool {
         self.members
-            .get(role)
+            .get(&role.to_string())
             .is_some_and(|members| members.contains(actor))
     }
 
-    pub fn require(&self, role: &str, actor: &str) -> Result<(), &'static str> {
+    pub fn require(&self, role: &str, actor: &ActorId) -> ContractResult<()> {
         if self.has(role, actor) {
             Ok(())
         } else {
-            Err("The caller does not have the required role")
+            Err(ContractError::new(
+                "The caller does not have the required role",
+            ))
         }
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct Pausable {
     paused: bool,
 }
@@ -178,73 +128,54 @@ impl Pausable {
         self.paused = false;
     }
 
-    pub fn require_active(&self) -> Result<(), &'static str> {
+    pub fn require_active(&self) -> ContractResult<()> {
         if self.paused {
-            Err("The contract is paused")
+            Err(ContractError::new("The contract is paused"))
         } else {
             Ok(())
         }
     }
 }
 
-impl Hooks for Pausable {
-    fn before_call(&self, _request: &InvokeRequest) -> Result<(), &'static str> {
-        self.require_active()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct UpgradePolicy {
-    owner: String,
+    ownership: Ownership,
 }
 
 impl UpgradePolicy {
     #[must_use]
-    pub fn new(owner: impl ToString) -> Self {
+    pub fn new(owner: ActorId) -> Self {
         Self {
-            owner: owner.to_string(),
+            ownership: Ownership::new(owner),
         }
     }
 
-    pub fn authorize(&self, sender: &str) -> Result<(), &'static str> {
-        if sender == self.owner {
-            Ok(())
-        } else {
-            Err("Only the owner can upgrade this contract")
-        }
+    pub fn authorize(&self, caller: &str) -> ContractResult<()> {
+        self.ownership.require_owner(caller)
     }
 }
 
-impl Component for UpgradePolicy {
-    fn handles(&self, method: &str) -> bool {
-        method == "authorize_upgrade"
-    }
-
-    fn call(&mut self, request: &InvokeRequest) -> Result<ComponentOutput, &'static str> {
-        self.authorize(&request.caller)?;
-        Ok(ComponentOutput::default())
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct ReplayGuard {
-    consumed: BTreeSet<String>,
+    consumed: StateSet<String, MAX_REPLAY_IDS>,
 }
 
 impl ReplayGuard {
-    pub fn consume(&mut self, operation_id: impl ToString) -> Result<(), &'static str> {
-        let operation_id = operation_id.to_string();
-        if operation_id.is_empty() {
-            return Err("The operation ID is empty");
+    pub fn consume(&mut self, operation_id: BoundedString<128>) -> ContractResult<()> {
+        if self.consumed.insert(operation_id.into_string())? {
+            Ok(())
+        } else {
+            Err(ContractError::new("The operation was already processed"))
         }
-        if !self.consumed.insert(operation_id) {
-            return Err("The operation was already processed");
-        }
-        Ok(())
+    }
+
+    #[must_use]
+    pub fn contains(&self, operation_id: &str) -> bool {
+        self.consumed.contains(&operation_id.to_string())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct SectionTimelock {
     unlock_section: u64,
 }
@@ -255,209 +186,280 @@ impl SectionTimelock {
         Self { unlock_section }
     }
 
-    pub fn require_unlocked(&self, section: u64) -> Result<(), &'static str> {
+    pub fn require_unlocked(&self, section: u64) -> ContractResult<()> {
         if section >= self.unlock_section {
             Ok(())
         } else {
-            Err("The operation is timelocked")
+            Err(ContractError::new("The operation is timelocked"))
         }
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct FungibleLedger {
-    balances: BTreeMap<String, u64>,
-    total_supply: u64,
+    balances: StateMap<ActorId, u128, MAX_LEDGER_ENTRIES>,
+    total_supply: u128,
 }
 
 impl FungibleLedger {
     #[must_use]
-    pub fn balance_of(&self, actor: &str) -> u64 {
+    pub fn balance_of(&self, actor: &ActorId) -> u128 {
         self.balances.get(actor).copied().unwrap_or_default()
     }
 
     #[must_use]
-    pub fn total_supply(&self) -> u64 {
+    pub fn total_supply(&self) -> u128 {
         self.total_supply
     }
 
-    pub fn mint(&mut self, actor: impl ToString, amount: u64) -> Result<(), &'static str> {
-        let actor = actor.to_string();
-        if actor.is_empty() || amount == 0 {
-            return Err("The receiver and a positive amount are required");
-        }
-        let balance = self.balance_of(&actor);
-        self.balances.insert(
-            actor,
-            balance
-                .checked_add(amount)
-                .ok_or("The balance is too large")?,
-        );
-        self.total_supply = self
+    pub fn mint(&mut self, actor: ActorId, amount: NonZeroAmount) -> ContractResult<u128> {
+        let next_balance = self
+            .balance_of(&actor)
+            .checked_add(amount.get())
+            .ok_or(ContractError::new("The balance is too large"))?;
+        let next_supply = self
             .total_supply
-            .checked_add(amount)
-            .ok_or("The supply is too large")?;
-        Ok(())
+            .checked_add(amount.get())
+            .ok_or(ContractError::new("The supply is too large"))?;
+        self.balances.insert(actor, next_balance)?;
+        self.total_supply = next_supply;
+        Ok(next_supply)
     }
 
-    pub fn burn(&mut self, actor: &str, amount: u64) -> Result<(), &'static str> {
-        if actor.is_empty() || amount == 0 {
-            return Err("The owner and a positive amount are required");
-        }
+    pub fn burn(&mut self, actor: &ActorId, amount: NonZeroAmount) -> ContractResult<u128> {
         let balance = self.balance_of(actor);
-        if balance < amount {
-            return Err("The balance is too low");
+        if balance < amount.get() {
+            return Err(ContractError::new("The balance is too low"));
         }
-        self.balances.insert(actor.to_string(), balance - amount);
-        self.total_supply -= amount;
-        Ok(())
+        self.balances
+            .insert(actor.clone(), balance - amount.get())?;
+        self.total_supply -= amount.get();
+        Ok(self.total_supply)
     }
 
     pub fn transfer(
         &mut self,
-        from: &str,
-        to: impl ToString,
-        amount: u64,
-    ) -> Result<(), &'static str> {
-        let to = to.to_string();
-        if from.is_empty() || to.is_empty() || amount == 0 {
-            return Err("The sender, receiver, and a positive amount are required");
+        from: &ActorId,
+        to: ActorId,
+        amount: NonZeroAmount,
+    ) -> ContractResult<()> {
+        if from == &to {
+            return Err(ContractError::new("The receiver is the sender"));
         }
-        if to == from {
-            return Err("The receiver is the sender");
+        let source = self.balance_of(from);
+        if source < amount.get() {
+            return Err(ContractError::new("The balance is too low"));
         }
-        let source_balance = self.balance_of(from);
-        if source_balance < amount {
-            return Err("The balance is too low");
-        }
-        let balance = self.balance_of(&to);
-        let target_balance = balance
-            .checked_add(amount)
-            .ok_or("The balance is too large")?;
-        self.balances
-            .insert(from.to_string(), source_balance - amount);
-        self.balances.insert(to, target_balance);
+        let target = self
+            .balance_of(&to)
+            .checked_add(amount.get())
+            .ok_or(ContractError::new("The balance is too large"))?;
+        self.balances.insert(from.clone(), source - amount.get())?;
+        self.balances.insert(to, target)?;
         Ok(())
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct NftLedger {
-    owners: BTreeMap<u64, String>,
+    owners: StateMap<u128, ActorId, MAX_LEDGER_ENTRIES>,
 }
 
 impl NftLedger {
-    pub fn mint(&mut self, token_id: u64, owner: impl ToString) -> Result<(), &'static str> {
+    pub fn mint(&mut self, token_id: u128, owner: ActorId) -> ContractResult<()> {
         if self.owners.contains_key(&token_id) {
-            return Err("The token already exists");
+            return Err(ContractError::new("The token already exists"));
         }
-        let owner = owner.to_string();
-        if owner.is_empty() {
-            return Err("The token owner is empty");
-        }
-        self.owners.insert(token_id, owner);
+        self.owners.insert(token_id, owner)?;
         Ok(())
     }
 
     #[must_use]
-    pub fn owner_of(&self, token_id: u64) -> Option<&str> {
-        self.owners.get(&token_id).map(String::as_str)
+    pub fn owner_of(&self, token_id: u128) -> Option<&ActorId> {
+        self.owners.get(&token_id)
     }
 
     pub fn transfer(
         &mut self,
-        caller: &str,
-        token_id: u64,
-        to: impl ToString,
-    ) -> Result<(), &'static str> {
+        caller: &ActorId,
+        token_id: u128,
+        receiver: ActorId,
+    ) -> ContractResult<()> {
         if self.owner_of(token_id) != Some(caller) {
-            return Err("The caller does not own the token");
+            return Err(ContractError::new("The caller does not own the token"));
         }
-        let to = to.to_string();
-        if to.is_empty() {
-            return Err("The receiver is empty");
-        }
-        self.owners.insert(token_id, to);
+        self.owners.insert(token_id, receiver)?;
         Ok(())
     }
 
-    pub fn burn(&mut self, caller: &str, token_id: u64) -> Result<(), &'static str> {
+    pub fn burn(&mut self, caller: &ActorId, token_id: u128) -> ContractResult<()> {
         if self.owner_of(token_id) != Some(caller) {
-            return Err("The caller does not own the token");
+            return Err(ContractError::new("The caller does not own the token"));
         }
         self.owners.remove(&token_id);
         Ok(())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct Escrow {
-    pub payer: String,
-    pub payee: String,
-    pub amount: u64,
-    pub released: bool,
+    payer: Option<ActorId>,
+    payee: Option<ActorId>,
+    amount: u128,
+    released: bool,
 }
 
 impl Escrow {
-    pub fn new(
-        payer: impl ToString,
-        payee: impl ToString,
-        amount: u64,
-    ) -> Result<Self, &'static str> {
-        let payer = payer.to_string();
-        let payee = payee.to_string();
-        if payer.is_empty() || payee.is_empty() || payer == payee || amount == 0 {
-            return Err("The escrow participants or amount are invalid");
+    pub fn new(payer: ActorId, payee: ActorId, amount: NonZeroAmount) -> ContractResult<Self> {
+        if payer == payee {
+            return Err(ContractError::new("The escrow participants are equal"));
         }
         Ok(Self {
-            payer,
-            payee,
-            amount,
+            payer: Some(payer),
+            payee: Some(payee),
+            amount: amount.get(),
             released: false,
         })
     }
 
-    pub fn release(&mut self, caller: &str) -> Result<(), &'static str> {
-        if caller != self.payer {
-            return Err("Only the payer can release the escrow");
+    #[must_use]
+    pub fn payer(&self) -> Option<&ActorId> {
+        self.payer.as_ref()
+    }
+
+    #[must_use]
+    pub fn payee(&self) -> Option<&ActorId> {
+        self.payee.as_ref()
+    }
+
+    #[must_use]
+    pub fn amount(&self) -> u128 {
+        self.amount
+    }
+
+    #[must_use]
+    pub fn is_released(&self) -> bool {
+        self.released
+    }
+
+    pub fn release(&mut self, caller: &ActorId) -> ContractResult<()> {
+        if self.payer() != Some(caller) {
+            return Err(ContractError::new("Only the payer can release the escrow"));
         }
         if self.released {
-            return Err("The escrow was already released");
+            return Err(ContractError::new("The escrow was already released"));
         }
         self.released = true;
         Ok(())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct Multisig {
-    signers: BTreeSet<String>,
-    threshold: usize,
+    signers: StateSet<ActorId, MAX_MULTISIG_SIGNERS>,
+    threshold: u16,
 }
 
 impl Multisig {
-    pub fn new(
-        signers: impl IntoIterator<Item = String>,
-        threshold: usize,
-    ) -> Result<Self, &'static str> {
-        let signers: BTreeSet<_> = signers.into_iter().collect();
-        if threshold == 0 || threshold > signers.len() || signers.iter().any(String::is_empty) {
-            return Err("The multisig threshold is invalid");
+    pub fn new(signers: Vec<ActorId>, threshold: u16) -> ContractResult<Self> {
+        let mut unique = StateSet::default();
+        for signer in signers {
+            if !unique.insert(signer)? {
+                return Err(ContractError::new("A multisig signer is duplicated"));
+            }
         }
-        Ok(Self { signers, threshold })
+        if threshold == 0 || usize::from(threshold) > unique.len() {
+            return Err(ContractError::new("The multisig threshold is invalid"));
+        }
+        Ok(Self {
+            signers: unique,
+            threshold,
+        })
     }
 
-    pub fn require(&self, approvals: &[String]) -> Result<(), &'static str> {
-        let approved = approvals
-            .iter()
-            .filter(|actor| self.signers.contains(actor.as_str()))
-            .collect::<BTreeSet<_>>()
-            .len();
-        if approved >= self.threshold {
+    pub fn require(&self, approvals: &[ActorId]) -> ContractResult<()> {
+        let mut accepted = StateSet::<ActorId, MAX_MULTISIG_SIGNERS>::default();
+        for actor in approvals {
+            if self.signers.contains(actor) {
+                accepted.insert(actor.clone())?;
+            }
+        }
+        if accepted.len() >= usize::from(self.threshold) {
             Ok(())
         } else {
-            Err("The operation does not have enough approvals")
+            Err(ContractError::new(
+                "The operation does not have enough approvals",
+            ))
         }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
+pub struct DfsBinding {
+    pub file_id: String,
+    pub content_hash: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
+pub struct DfsBindings {
+    bindings: StateMap<String, DfsBinding, MAX_DFS_BINDINGS>,
+}
+
+impl DfsBindings {
+    #[must_use]
+    pub fn get(&self, logical_key: &str) -> Option<&DfsBinding> {
+        self.bindings.get(&logical_key.to_string())
+    }
+
+    pub fn bind(
+        &mut self,
+        logical_key: BoundedString<128>,
+        file_id: BoundedString<256>,
+        content_hash: BoundedString<64>,
+        previous_content_hash: Option<BoundedString<64>>,
+    ) -> ContractResult<()> {
+        let logical_key = logical_key.into_string();
+        if !is_dfs_logical_key(&logical_key)
+            || file_id.as_str().is_empty()
+            || !is_content_hash(content_hash.as_str(), false)
+            || previous_content_hash
+                .as_ref()
+                .is_some_and(|hash| !is_content_hash(hash.as_str(), false))
+        {
+            return Err(ContractError::new("The ExDFS binding is invalid"));
+        }
+        let current_hash = self
+            .get(&logical_key)
+            .map_or("", |binding| binding.content_hash.as_str());
+        let previous_content_hash = previous_content_hash
+            .as_ref()
+            .map_or("", BoundedString::as_str);
+        if current_hash != previous_content_hash {
+            return Err(ContractError::new("The ExDFS binding state is stale"));
+        }
+        self.bindings.insert(
+            logical_key,
+            DfsBinding {
+                file_id: file_id.into_string(),
+                content_hash: content_hash.into_string(),
+            },
+        )?;
+        Ok(())
+    }
+
+    pub fn tombstone(
+        &mut self,
+        logical_key: &str,
+        previous_content_hash: &str,
+    ) -> ContractResult<()> {
+        if self
+            .get(logical_key)
+            .is_none_or(|binding| binding.content_hash != previous_content_hash)
+        {
+            return Err(ContractError::new("The ExDFS binding state is stale"));
+        }
+        self.bindings.remove(&logical_key.to_string());
+        Ok(())
     }
 }
 
@@ -465,17 +467,15 @@ pub mod dag {
     use super::*;
 
     pub fn require_transaction<'a>(
-        proofs: &'a [DagProof],
+        context: &'a Context<'_>,
         transaction_hash: &str,
         minimum_confirmations: u64,
-    ) -> Result<&'a DagProof, &'static str> {
-        proofs
-            .iter()
-            .find(|proof| {
-                proof.transaction_hash == transaction_hash
-                    && proof.confirmations >= minimum_confirmations
-            })
-            .ok_or("A confirmed DAG transaction is required")
+    ) -> ContractResult<&'a DagProof> {
+        context
+            .dag_proof(transaction_hash, minimum_confirmations)
+            .ok_or(ContractError::new(
+                "A confirmed DAG transaction is required",
+            ))
     }
 }
 
@@ -483,112 +483,158 @@ pub mod dfs {
     use super::*;
 
     pub fn require_file<'a>(
-        proofs: &'a [DfsProof],
+        context: &'a Context<'_>,
+        owner_id: &str,
         file_id: &str,
-    ) -> Result<&'a DfsProof, &'static str> {
-        proofs
-            .iter()
-            .find(|proof| proof.file_id == file_id)
-            .ok_or("A verified DFS file is required")
-    }
-}
-
-#[must_use]
-pub fn call_contract(
-    contract_id: impl ToString,
-    method: impl ToString,
-    arguments: Vec<u8>,
-) -> Effect {
-    Effect::ContractCall {
-        contract_id: contract_id.to_string(),
-        method: method.to_string(),
-        arguments,
+        content_hash: &str,
+    ) -> ContractResult<&'a DfsProof> {
+        context
+            .dfs_proof(owner_id, file_id, content_hash)
+            .ok_or(ContractError::new("A verified ExDFS file is required"))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use extrachain_contract_sdk::{ContractValue, Decoder, VerifiedInputs, encode_result};
 
-    #[test]
-    fn ownership_and_pause_apply_clear_rules() {
-        let mut ownership = Ownership::new("alice");
-        assert!(ownership.require_owner("alice").is_ok());
-        assert!(ownership.transfer("bob", "carol").is_err());
-        ownership.transfer("alice", "carol").unwrap();
-        assert_eq!(ownership.owner(), "carol");
-
-        let mut pause = Pausable::default();
-        pause.pause();
-        assert!(pause.require_active().is_err());
-        pause.resume();
-        assert!(pause.require_active().is_ok());
+    fn actor(value: &str) -> ActorId {
+        ActorId::new(value.to_string()).unwrap()
     }
 
     #[test]
-    fn ledgers_do_not_duplicate_or_overdraw_assets() {
+    fn typed_components_round_trip_as_contract_values() {
+        let mut ownership = Ownership::new(actor("1"));
+        ownership.transfer(actor("1").as_str(), actor("2")).unwrap();
+        let encoded = encode_result(&ownership);
+        let mut decoder = Decoder::new(&encoded);
+        let decoded = Ownership::decode_value(&mut decoder).unwrap();
+        assert_eq!(decoded.owner(), Some(&actor("2")));
+        assert!(decoder.is_empty());
+    }
+
+    #[test]
+    fn ledgers_reject_duplicates_overdraw_and_overflow() {
+        let alice = actor("1");
+        let bob = actor("2");
         let mut fungible = FungibleLedger::default();
-        assert!(fungible.mint("", 10).is_err());
-        assert!(fungible.mint("alice", 0).is_err());
-        fungible.mint("alice", 10).unwrap();
-        fungible.transfer("alice", "bob", 4).unwrap();
-        assert_eq!(fungible.total_supply(), 10);
-        assert_eq!(fungible.balance_of("alice"), 6);
-        assert_eq!(fungible.balance_of("bob"), 4);
-        assert!(fungible.transfer("alice", "bob", 7).is_err());
-        assert!(fungible.transfer("alice", "alice", 1).is_err());
-        assert!(fungible.transfer("alice", "bob", 0).is_err());
+        fungible
+            .mint(alice.clone(), NonZeroAmount::new(10).unwrap())
+            .unwrap();
+        fungible
+            .transfer(&alice, bob.clone(), NonZeroAmount::new(4).unwrap())
+            .unwrap();
+        assert_eq!(fungible.balance_of(&alice), 6);
+        assert_eq!(fungible.balance_of(&bob), 4);
+        assert!(
+            fungible
+                .transfer(&alice, bob.clone(), NonZeroAmount::new(7).unwrap())
+                .is_err()
+        );
 
         let mut nft = NftLedger::default();
-        nft.mint(1, "alice").unwrap();
-        assert!(nft.mint(1, "bob").is_err());
-        nft.transfer("alice", 1, "bob").unwrap();
-        assert_eq!(nft.owner_of(1), Some("bob"));
+        nft.mint(1, alice.clone()).unwrap();
+        assert!(nft.mint(1, bob.clone()).is_err());
+        nft.transfer(&alice, 1, bob.clone()).unwrap();
+        assert_eq!(nft.owner_of(1), Some(&bob));
     }
 
     #[test]
-    fn proofs_and_effects_use_verified_inputs() {
-        let proofs = [DagProof {
-            transaction_hash: "tx".to_string(),
-            section: 8,
-            confirmations: 2,
-        }];
-        assert!(dag::require_transaction(&proofs, "tx", 2).is_ok());
-        assert!(dag::require_transaction(&proofs, "tx", 3).is_err());
-        let dfs_proofs = [DfsProof {
-            file_id: "file".to_string(),
-            owner_id: "alice".to_string(),
-            content_hash: "hash".to_string(),
-        }];
-        assert!(dfs::require_file(&dfs_proofs, "file").is_ok());
+    fn roles_replay_and_multisig_are_bounded_and_duplicate_safe() {
+        let alice = actor("1");
+        let bob = actor("2");
+        let mut roles = Roles::default();
+        roles
+            .grant(
+                BoundedString::new("admin".to_string()).unwrap(),
+                alice.clone(),
+            )
+            .unwrap();
+        assert!(roles.has("admin", &alice));
+        assert!(roles.revoke("admin", &alice));
+
+        let mut replay = ReplayGuard::default();
+        let operation = BoundedString::new("operation-1".to_string()).unwrap();
+        replay.consume(operation).unwrap();
+        assert!(
+            replay
+                .consume(BoundedString::new("operation-1".to_string()).unwrap())
+                .is_err()
+        );
+
+        let multisig = Multisig::new(alloc::vec![alice.clone(), bob.clone()], 2).unwrap();
+        assert!(multisig.require(&[alice.clone(), bob]).is_ok());
+        assert!(multisig.require(&[alice]).is_err());
     }
 
     #[test]
-    fn component_dispatch_can_be_extended_by_a_contract() {
-        let request = InvokeRequest {
-            sender: "alice".to_string(),
-            caller: "alice".to_string(),
-            contract_id: "contract".to_string(),
-            method: "owner".to_string(),
+    fn dfs_bindings_validate_paths_hashes_and_previous_state() {
+        let mut bindings = DfsBindings::default();
+        let hash = "a".repeat(64);
+        bindings
+            .bind(
+                BoundedString::new("profile/avatar".to_string()).unwrap(),
+                BoundedString::new("file-1".to_string()).unwrap(),
+                BoundedString::new(hash.clone()).unwrap(),
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            bindings
+                .get("profile/avatar")
+                .map(|binding| binding.content_hash.as_str()),
+            Some(hash.as_str())
+        );
+        assert!(
+            bindings
+                .bind(
+                    BoundedString::new("../avatar".to_string()).unwrap(),
+                    BoundedString::new("file-2".to_string()).unwrap(),
+                    BoundedString::new(hash.clone()).unwrap(),
+                    None,
+                )
+                .is_err()
+        );
+        assert!(
+            bindings
+                .bind(
+                    BoundedString::new("profile/avatar".to_string()).unwrap(),
+                    BoundedString::new("file-2".to_string()).unwrap(),
+                    BoundedString::new("b".repeat(64)).unwrap(),
+                    None,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn proof_helpers_read_only_verified_context() {
+        let request = extrachain_contract_sdk::InvokeRequest {
+            sender: actor("1").into_string(),
+            caller: actor("1").into_string(),
+            contract_id: actor("2").into_string(),
+            method: "run".to_string(),
             arguments: Vec::new(),
             state: Vec::new(),
-            block: 1,
+            block: 4,
             depth: 0,
-            verified: Default::default(),
+            verified: VerifiedInputs {
+                dag: alloc::vec![DagProof {
+                    transaction_hash: "tx".to_string(),
+                    section: 2,
+                    confirmations: 2,
+                }],
+                dfs: alloc::vec![DfsProof {
+                    file_id: "file".to_string(),
+                    owner_id: actor("1").into_string(),
+                    content_hash: "a".repeat(64),
+                }],
+            },
         };
-        let mut ownership = Ownership::new("alice");
-        let result = dispatch_components!(&request, ownership);
-        assert!(matches!(result, Some(Ok(_))));
-
-        let mut arguments = Encoder::new();
-        arguments.string("bob");
-        let transfer = InvokeRequest {
-            caller: "parent-contract".to_string(),
-            method: "transfer_owner".to_string(),
-            arguments: arguments.finish(),
-            ..request
-        };
-        let result = dispatch_components!(&transfer, ownership);
-        assert!(matches!(result, Some(Err(_))));
+        let context = Context::new(&request);
+        assert!(dag::require_transaction(&context, "tx", 2).is_ok());
+        assert!(dag::require_transaction(&context, "tx", 3).is_err());
+        assert!(dfs::require_file(&context, actor("1").as_str(), "file", &"a".repeat(64)).is_ok());
     }
 }

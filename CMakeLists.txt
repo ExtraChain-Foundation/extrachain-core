@@ -127,8 +127,10 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_types.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_codec.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_module.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/dfs_contract_storage.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_transaction.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/standard_token.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/wasm_runtime.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/toolchain_registry.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
@@ -197,6 +199,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_policy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_codec.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_module.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/standard_token.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/dfs_contract_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/toolchain_registry.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/toolchain_installer.cpp

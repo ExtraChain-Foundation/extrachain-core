@@ -17,6 +17,8 @@
 
 #include "contracts/contract_codec.h"
 #include "contracts/contract_hash.h"
+#include "contracts/contract_module.h"
+#include "contracts/standard_token.h"
 
 namespace ExtraChain::Contracts {
     namespace {
@@ -82,17 +84,113 @@ namespace ExtraChain::Contracts {
             }
         }
 
+        bool valid_nft_delta(const ContractEffect &effect) {
+            try {
+                std::size_t offset = 0;
+                auto        handle = msgpack::unpack(reinterpret_cast<const char *>(effect.arguments.data()),
+                                              effect.arguments.size(),
+                                              offset);
+                if (offset != effect.arguments.size()) {
+                    return false;
+                }
+                std::vector<std::string> values;
+                handle.get().convert(values);
+                const auto expected_size = effect.operation == "nft_transfer" ? 3U : 2U;
+                if ((effect.operation != "nft_mint" && effect.operation != "nft_transfer"
+                     && effect.operation != "nft_burn")
+                    || values.size() != expected_size || values.front().empty() || values.front().size() > 39
+                    || !std::ranges::all_of(values.front(),
+                                            [](char digit) {
+                                                return digit >= '0' && digit <= '9';
+                                            })
+                    || (values.front().size() > 1 && values.front().front() == '0')
+                    || (values.front().size() == 39
+                        && values.front() > "340282366920938463463374607431768211455")) {
+                    return false;
+                }
+                return std::all_of(values.begin() + 1, values.end(), [](const std::string &actor) {
+                    return !actor.empty();
+                });
+            } catch (const std::exception &) {
+                return false;
+            }
+        }
+
+        bool valid_hash(std::string_view value, bool allow_empty = false) {
+            return (allow_empty && value.empty())
+                   || (value.size() == 64 && std::ranges::all_of(value, [](char character) {
+                           return (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f');
+                       }));
+        }
+
+        bool valid_logical_key(std::string_view value) {
+            if (value.empty() || value.size() > 128 || value.front() == '/' || value.back() == '/') {
+                return false;
+            }
+            if (value == ".." || value.starts_with("../") || value.ends_with("/..")
+                || value.find("/../") != std::string_view::npos) {
+                return false;
+            }
+            return std::ranges::all_of(value, [](char character) {
+                return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
+                       || (character >= '0' && character <= '9') || character == '-' || character == '_'
+                       || character == '.' || character == '/';
+            });
+        }
+
+        bool valid_dfs_write(const ContractEffect &effect,
+                             std::string_view      contract_id,
+                             std::string_view      sender_id,
+                             const VerifiedInputs &verified) {
+            if ((effect.target != contract_id && effect.target != sender_id)
+                || (effect.operation != "bind" && effect.operation != "tombstone")) {
+                return false;
+            }
+            try {
+                std::size_t offset = 0;
+                auto        handle = msgpack::unpack(reinterpret_cast<const char *>(effect.arguments.data()),
+                                              effect.arguments.size(),
+                                              offset);
+                if (offset != effect.arguments.size()) {
+                    return false;
+                }
+                std::tuple<std::string, std::string, std::string, std::string> binding;
+                handle.get().convert(binding);
+                const auto &[logical_key, file_id, content_hash, previous_content_hash] = binding;
+                if (!valid_logical_key(logical_key) || !valid_hash(previous_content_hash, true)) {
+                    return false;
+                }
+                if (effect.operation == "tombstone") {
+                    return file_id.empty() && content_hash.empty() && !previous_content_hash.empty();
+                }
+                if (file_id.empty() || !valid_hash(content_hash)) {
+                    return false;
+                }
+                return std::ranges::any_of(verified.dfs, [&](const DfsProof &proof) {
+                    return proof.owner_id == effect.target && proof.file_id == file_id
+                           && proof.content_hash == content_hash;
+                });
+            } catch (const std::exception &) {
+                return false;
+            }
+        }
+
         bool effects_match_contract(const ContractOutput &output,
                                     std::string_view      contract_id,
-                                    std::string_view      kind) {
+                                    std::string_view      kind,
+                                    std::string_view      sender_id,
+                                    const VerifiedInputs &verified = {}) {
             return std::ranges::all_of(output.effects, [&](const ContractEffect &effect) {
                 if (effect.kind == ContractEffectKind::ContractCall) {
                     return true;
                 }
                 if (effect.kind == ContractEffectKind::TokenDelta) {
-                    return kind == "fungible-token" && effect.target == contract_id && valid_token_delta(effect);
+                    return effect.target == contract_id
+                           && ((kind == "fungible-token" && valid_token_delta(effect))
+                               || (kind == "non-fungible-token" && valid_nft_delta(effect)));
                 }
-                return false;
+                return effect.kind == ContractEffectKind::DfsWrite
+                       && valid_dfs_write(effect, contract_id, sender_id, verified);
             });
         }
 
@@ -297,6 +395,10 @@ namespace ExtraChain::Contracts {
             || init_arguments.size() > 512 * 1024) {
             return std::unexpected(failure(ContractError::InvalidArguments, "Invalid contract identity"));
         }
+        auto language = module_language(module);
+        if (is_system_token_kind(kind) && !language.has_value()) {
+            return std::unexpected(failure(ContractError::InvalidModule, language.error()));
+        }
         auto output = evaluate(module, owner_id, "init", init_arguments, {}, block, contract_id);
         if (!output.has_value()) {
             return std::unexpected(output.error());
@@ -305,7 +407,7 @@ namespace ExtraChain::Contracts {
                                 [](const ContractEffect &effect) {
                                     return effect.kind == ContractEffectKind::ContractCall;
                                 })
-            || !effects_match_contract(output.value(), contract_id, kind)) {
+            || !effects_match_contract(output.value(), contract_id, kind, owner_id)) {
             return std::unexpected(
                 failure(ContractError::InvalidResponse, "Contract initialization emitted an invalid effect"));
         }
@@ -318,6 +420,7 @@ namespace ExtraChain::Contracts {
             .contract_id    = std::move(contract_id),
             .owner_id       = std::move(owner_id),
             .kind           = std::move(kind),
+            .language       = language.value_or(std::string()),
             .active_version = 1,
             .versions       = { ContractVersion {
                       .version              = 1,
@@ -411,7 +514,7 @@ namespace ExtraChain::Contracts {
         if (!output.has_value()) {
             return std::unexpected(output.error());
         }
-        if (!effects_match_contract(output.value(), contract_id, record.kind)) {
+        if (!effects_match_contract(output.value(), contract_id, record.kind, sender_id, verified)) {
             return std::unexpected(
                 failure(ContractError::InvalidResponse, "Contract emitted an effect for another authority"));
         }
@@ -541,10 +644,17 @@ namespace ExtraChain::Contracts {
         if (record.owner_id != sender_id) {
             return std::unexpected(failure(ContractError::InvalidOwner, "Only the contract owner can upgrade"));
         }
+        if (is_system_token_kind(record.kind)) {
+            auto language = module_language(module);
+            if (!language.has_value() || *language != record.language) {
+                return std::unexpected(
+                    failure(ContractError::UpgradeDenied, "A token update must use its original language"));
+            }
+        }
         auto      &current                 = active_version(record);
         const auto previous                = latest_revision(current);
         const auto new_module_hash         = content_hash(module);
-        auto       authorization_arguments = Codec::encode_string(new_module_hash);
+        auto       authorization_arguments = Codec::encode_string_argument(new_module_hash);
         auto       authorization           = evaluate(current.module,
                                       sender_id,
                                       "authorize_upgrade",
@@ -568,7 +678,6 @@ namespace ExtraChain::Contracts {
             return std::unexpected(
                 failure(ContractError::InvalidResponse, "Contract migration cannot emit effects"));
         }
-
         StateRevision migrated {
             .revision             = previous.revision + 1,
             .block                = block,

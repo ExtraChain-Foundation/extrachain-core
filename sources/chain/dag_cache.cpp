@@ -879,11 +879,11 @@ bool DagCache::ensure_contract_catalog_schema() {
         return false;
     }
     if (cache_db_->table_exists("contract_catalog")) {
-        const auto columns        = cache_db_->table_columns("contract_catalog");
-        const auto has_schema_two = std::ranges::any_of(columns, [](const DBColumn& column) {
-            return column.name == "checkpoint_revision";
+        const auto columns            = cache_db_->table_columns("contract_catalog");
+        const auto has_current_schema = std::ranges::any_of(columns, [](const DBColumn& column) {
+            return column.name == "language";
         });
-        if (!has_schema_two && !cache_db_->drop_table("contract_catalog")) {
+        if (!has_current_schema && !cache_db_->drop_table("contract_catalog")) {
             return false;
         }
     }
@@ -932,6 +932,7 @@ void DagCache::index_contract_transaction(const Transaction& transaction) {
     }
 
     summary.kind             = metadata->kind;
+    summary.language         = metadata->language;
     summary.version          = metadata->version;
     summary.revision         = metadata->revision;
     summary.module_hash      = metadata->module_hash;
@@ -960,6 +961,7 @@ void DagCache::index_contract_transaction(const Transaction& transaction) {
             continue;
         }
         nested->kind             = transition.kind;
+        nested->language         = transition.language;
         nested->version          = transition.version;
         nested->revision         = transition.revision;
         nested->module_hash      = transition.module_hash;
