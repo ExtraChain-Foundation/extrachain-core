@@ -82,9 +82,70 @@ namespace ExtraChain::Contracts {
             }
         }
 
+        bool valid_hash(std::string_view value, bool allow_empty = false) {
+            return (allow_empty && value.empty())
+                   || (value.size() == 64 && std::ranges::all_of(value, [](char character) {
+                           return (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f');
+                       }));
+        }
+
+        bool valid_logical_key(std::string_view value) {
+            if (value.empty() || value.size() > 128 || value.front() == '/' || value.back() == '/') {
+                return false;
+            }
+            if (value == ".." || value.starts_with("../") || value.ends_with("/..")
+                || value.find("/../") != std::string_view::npos) {
+                return false;
+            }
+            return std::ranges::all_of(value, [](char character) {
+                return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
+                       || (character >= '0' && character <= '9') || character == '-' || character == '_'
+                       || character == '.' || character == '/';
+            });
+        }
+
+        bool valid_dfs_write(const ContractEffect &effect,
+                             std::string_view      contract_id,
+                             std::string_view      sender_id,
+                             const VerifiedInputs &verified) {
+            if ((effect.target != contract_id && effect.target != sender_id)
+                || (effect.operation != "bind" && effect.operation != "tombstone")) {
+                return false;
+            }
+            try {
+                std::size_t offset = 0;
+                auto        handle = msgpack::unpack(reinterpret_cast<const char *>(effect.arguments.data()),
+                                              effect.arguments.size(),
+                                              offset);
+                if (offset != effect.arguments.size()) {
+                    return false;
+                }
+                std::tuple<std::string, std::string, std::string, std::string> binding;
+                handle.get().convert(binding);
+                const auto &[logical_key, file_id, content_hash, previous_content_hash] = binding;
+                if (!valid_logical_key(logical_key) || !valid_hash(previous_content_hash, true)) {
+                    return false;
+                }
+                if (effect.operation == "tombstone") {
+                    return file_id.empty() && content_hash.empty() && !previous_content_hash.empty();
+                }
+                if (file_id.empty() || !valid_hash(content_hash)) {
+                    return false;
+                }
+                return std::ranges::any_of(verified.dfs, [&](const DfsProof &proof) {
+                    return proof.owner_id == effect.target && proof.file_id == file_id
+                           && proof.content_hash == content_hash;
+                });
+            } catch (const std::exception &) {
+                return false;
+            }
+        }
+
         bool effects_match_contract(const ContractOutput &output,
                                     std::string_view      contract_id,
-                                    std::string_view      kind) {
+                                    std::string_view      kind,
+                                    std::string_view      sender_id,
+                                    const VerifiedInputs &verified = {}) {
             return std::ranges::all_of(output.effects, [&](const ContractEffect &effect) {
                 if (effect.kind == ContractEffectKind::ContractCall) {
                     return true;
@@ -92,7 +153,8 @@ namespace ExtraChain::Contracts {
                 if (effect.kind == ContractEffectKind::TokenDelta) {
                     return kind == "fungible-token" && effect.target == contract_id && valid_token_delta(effect);
                 }
-                return false;
+                return effect.kind == ContractEffectKind::DfsWrite
+                       && valid_dfs_write(effect, contract_id, sender_id, verified);
             });
         }
 
@@ -305,7 +367,7 @@ namespace ExtraChain::Contracts {
                                 [](const ContractEffect &effect) {
                                     return effect.kind == ContractEffectKind::ContractCall;
                                 })
-            || !effects_match_contract(output.value(), contract_id, kind)) {
+            || !effects_match_contract(output.value(), contract_id, kind, owner_id)) {
             return std::unexpected(
                 failure(ContractError::InvalidResponse, "Contract initialization emitted an invalid effect"));
         }
@@ -411,7 +473,7 @@ namespace ExtraChain::Contracts {
         if (!output.has_value()) {
             return std::unexpected(output.error());
         }
-        if (!effects_match_contract(output.value(), contract_id, record.kind)) {
+        if (!effects_match_contract(output.value(), contract_id, record.kind, sender_id, verified)) {
             return std::unexpected(
                 failure(ContractError::InvalidResponse, "Contract emitted an effect for another authority"));
         }

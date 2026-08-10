@@ -1,0 +1,13 @@
+{
+  "name": "extrachain-contracts-as",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Independent AssemblyScript SDK and components for ExtraChain contracts.",
+  "scripts": {
+    "build:basic": "asc assembly/index.ts --outFile build/basic.wasm --runtime stub --disable bulk-memory --use abort=assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1",
+    "check": "asc assembly/index.ts --outFile build/basic.wasm --runtime stub --disable bulk-memory --use abort=assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1 && asc examples/dfs-binding/assembly/index.ts --outFile build/dfs-binding.wasm --runtime stub --disable bulk-memory --use abort=examples/dfs-binding/assembly/index/contractAbort --optimizeLevel 3 --shrinkLevel 1"
+  },
+  "devDependencies": {
+    "assemblyscript": "0.28.20"
+  }
+}

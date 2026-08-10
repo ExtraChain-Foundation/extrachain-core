@@ -106,6 +106,19 @@ namespace {
         return result;
     }
 
+    Bytes dfs_binding_argument(std::string_view logical_key,
+                               std::string_view file_id,
+                               std::string_view content_hash,
+                               std::string_view previous_content_hash) {
+        Bytes result;
+        append_array(result, 4);
+        append_string(result, logical_key);
+        append_string(result, file_id);
+        append_string(result, content_hash);
+        append_string(result, previous_content_hash);
+        return result;
+    }
+
     Bytes transfer_from_argument(std::string_view owner, std::string_view receiver, std::uint64_t amount) {
         Bytes result;
         append_array(result, 3);
@@ -231,6 +244,10 @@ namespace {
             } else {
                 static_cast<void>(string());
             }
+        }
+
+        bool empty() const {
+            return source_.empty();
         }
 
     private:
@@ -522,6 +539,64 @@ namespace {
         require(!result.ok && result.state == state, "Redeemed message token still has an owner");
     }
 
+    void test_assemblyscript(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
+        const auto initialized = invoke(runtime, module, "alice", "init", {}, {});
+        require(initialized.ok && !initialized.state.empty(),
+                "AssemblyScript contract did not execute ABI 3 initialization");
+        const auto unknown = invoke(runtime, module, "alice", "unknown", {}, initialized.state);
+        require(!unknown.ok && unknown.state == initialized.state,
+                "AssemblyScript contract did not preserve state after an unknown method");
+        const auto added = invoke(runtime, module, "alice", "add", unsigned_argument(5), initialized.state);
+        require(added.ok && added.state != initialized.state,
+                "AssemblyScript contract did not save an owner-approved change");
+        const auto denied = invoke(runtime, module, "bob", "add", unsigned_argument(1), added.state);
+        require(!denied.ok && denied.state == added.state,
+                "AssemblyScript ownership component accepted another caller");
+    }
+
+    void test_assemblyscript_dfs_binding(const Bytes &module) {
+        ExtraChain::Contracts::ContractManager manager;
+        require(manager.deploy("dfs-contract", "alice", "storage", module, {}, 1).has_value(),
+                "AssemblyScript DFS contract deployment failed");
+        const std::string hash(64, 'a');
+        const auto        arguments = dfs_binding_argument("profile/avatar", "file-1", hash, "");
+        require(!manager.prepare_call("dfs-contract", "alice", "bind", arguments, 2).has_value(),
+                "DFS binding was accepted without a verified file");
+        ExtraChain::Contracts::VerifiedInputs verified {
+            .dfs = { ExtraChain::Contracts::DfsProof { .file_id      = "file-1",
+                                                       .owner_id     = "dfs-contract",
+                                                       .content_hash = hash } },
+        };
+        require(!manager
+                     .prepare_call("dfs-contract",
+                                   "alice",
+                                   "bind",
+                                   dfs_binding_argument("../avatar", "file-1", hash, ""),
+                                   2,
+                                   verified)
+                     .has_value(),
+                "DFS binding accepted an unsafe logical key");
+        auto binding = manager.prepare_call("dfs-contract", "alice", "bind", arguments, 2, verified);
+        require(binding.has_value() && manager.commit(std::move(binding.value()), "bind-transaction").has_value(),
+                "Verified DFS binding was rejected");
+        auto lookup = manager.query("dfs-contract", "alice", "binding", string_argument("profile/avatar"), 2);
+        require(lookup.has_value(), "Stored DFS binding could not be read");
+        Reader binding_reader(lookup->data);
+        require(binding_reader.array() == 2 && binding_reader.string() == "file-1"
+                    && binding_reader.string() == hash && binding_reader.empty(),
+                "Stored DFS binding changed during state encoding");
+        auto tombstone = manager.prepare_call("dfs-contract",
+                                              "alice",
+                                              "tombstone",
+                                              dfs_binding_argument("profile/avatar", "", "", hash),
+                                              3);
+        require(tombstone.has_value()
+                    && manager.commit(std::move(tombstone.value()), "tombstone-transaction").has_value(),
+                "DFS binding tombstone was rejected");
+        auto removed = manager.query("dfs-contract", "alice", "binding", string_argument("profile/avatar"), 3);
+        require(removed.has_value() && removed->data.empty(), "DFS binding remained visible after a tombstone");
+    }
+
     void test_worker_thread(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
         auto invocation = std::async(std::launch::async, [&runtime, &module]() {
             Bytes state;
@@ -779,8 +854,8 @@ namespace {
 
 int main(int argc, char **argv) {
     try {
-        if (argc != 3) {
-            throw std::runtime_error("Expected fungible and message contract module paths");
+        if (argc < 3 || argc > 5) {
+            throw std::runtime_error("Expected fungible, message, and optional AssemblyScript module paths");
         }
         ExtraChain::Contracts::WasmRuntime runtime;
         require(runtime.available(), "WAMR is unavailable");
@@ -797,6 +872,13 @@ int main(int argc, char **argv) {
         test_contract_manager(fungible_module, message_module);
         test_checkpoint_schedule(fungible_module);
         test_prepare_and_artifact_stage_are_separate(message_module);
+        if (argc == 4) {
+            test_assemblyscript(runtime, read_file(argv[3]));
+        }
+        if (argc == 5) {
+            test_assemblyscript(runtime, read_file(argv[3]));
+            test_assemblyscript_dfs_binding(read_file(argv[4]));
+        }
         std::cout << "Contract runtime tests passed\n";
         return 0;
     } catch (const std::exception &error) {

@@ -35,7 +35,7 @@
 
 namespace ExtraChain::Contracts {
     namespace {
-        constexpr auto StateFile = "installation.json";
+        constexpr auto StateFile                  = "installation.json";
         constexpr auto SupportedComponentsVersion = "0.1.0";
         constexpr auto SupportedCatalogVersion    = "0.1.0";
         constexpr auto SupportedTemplateVersion   = "0.1.0";
@@ -206,8 +206,50 @@ namespace ExtraChain::Contracts {
             return {};
         }
 
-        bool valid_toolchain_layout(const QString& root) {
+        bool valid_toolchain_layout(const QString&           root,
+                                    ToolchainLanguage        language,
+                                    const ToolchainManifest& manifest) {
             const QDir directory(root);
+            if (language == ToolchainLanguage::AssemblyScript) {
+#if defined(Q_OS_WIN)
+                constexpr auto NodeName = "bin/node.exe";
+#else
+                constexpr auto NodeName = "bin/node";
+#endif
+                const QFileInfo node(directory.filePath(NodeName));
+                const QFileInfo compiler(directory.filePath("compiler/asc.js"));
+                const QFileInfo sdk(directory.filePath("sdk/index.ts"));
+                const QFileInfo components(directory.filePath("components/index.ts"));
+                const QFileInfo catalog(directory.filePath("catalog/components.json"));
+                const QFileInfo template_file(directory.filePath("templates/basic/assembly/contract.ts"));
+                const QFileInfo generated_file(directory.filePath("templates/basic/assembly/generated.ts"));
+                const QFileInfo entry_file(directory.filePath("templates/basic/assembly/index.ts"));
+                QFile           metadata_file(directory.filePath("toolchain.json"));
+                QFile           catalog_file(catalog.absoluteFilePath());
+                if (!catalog_file.open(QIODevice::ReadOnly) || !metadata_file.open(QIODevice::ReadOnly)) {
+                    return false;
+                }
+                const auto catalog_document  = QJsonDocument::fromJson(catalog_file.readAll());
+                const auto metadata_document = QJsonDocument::fromJson(metadata_file.readAll());
+                const auto runtime_version   = run_process(node.absoluteFilePath(), { "--version" }, 5000);
+                return node.isFile() && node.isExecutable() && compiler.isFile() && sdk.isFile()
+                       && components.isFile() && catalog.isFile() && template_file.isFile()
+                       && generated_file.isFile() && entry_file.isFile() && catalog_document.isObject()
+                       && catalog_document.object().value("schema").toInt() == 1
+                       && catalog_document.object().value("version").toString() == SupportedCatalogVersion
+                       && catalog_document.object().value("language").toString() == "assemblyscript"
+                       && catalog_document.object().value("components").isArray() && metadata_document.isObject()
+                       && metadata_document.object().value("schema").toInt() == 1
+                       && metadata_document.object().value("language").toString() == "assemblyscript"
+                       && metadata_document.object().value("version").toString().toStdString() == manifest.version
+                       && metadata_document.object().value("compiler_version").toString().toStdString()
+                              == manifest.compiler_version
+                       && metadata_document.object().value("runtime_version").toString().toStdString()
+                              == manifest.runtime_version
+                       && runtime_version.has_value()
+                       && QString::fromUtf8(runtime_version.value()).trimmed()
+                              == QString("v%1").arg(QString::fromStdString(manifest.runtime_version));
+            }
 #if defined(Q_OS_WIN)
             constexpr auto CargoName = "bin/cargo.exe";
             constexpr auto RustcName = "bin/rustc.exe";
@@ -234,11 +276,43 @@ namespace ExtraChain::Contracts {
                    && catalog_document.object().value("version").toString() == SupportedCatalogVersion
                    && catalog_document.object().value("components").isArray();
         }
+
+        bool valid_assemblyscript_source(const QString& source) {
+            static const QRegularExpression import_expression(
+                R"(\b(?:import|export)\b[^;]*\bfrom\s*[\"']([^\"']+)[\"'])");
+            auto imports = import_expression.globalMatch(source);
+            while (imports.hasNext()) {
+                if (imports.next().captured(1) != "./generated") {
+                    return false;
+                }
+            }
+            static const QRegularExpression side_effect_import(R"(\bimport\s*[\"'])");
+            static const QRegularExpression blocked_expression(
+                R"(\b(?:declare|namespace|require)\b|@external\b|<reference\s+path|\bimport\s*\(|\bmemory\.(?:grow|size)\b)");
+            return !side_effect_import.match(source).hasMatch() && !blocked_expression.match(source).hasMatch();
+        }
+
+        bool copy_file(const QString& source, const QString& target) {
+            if (!QFileInfo::exists(source)) {
+                return false;
+            }
+            QFile::remove(target);
+            return QFile::copy(source, target);
+        }
     } // namespace
 
     ToolchainInstaller::ToolchainInstaller(ExtraChainNode* node, QString root_path)
         : node_(node)
         , root_path_(std::move(root_path)) {
+    }
+
+    ToolchainInstaller::ToolchainInstaller(ExtraChainNode* node, QString root_path, ToolchainLanguage language)
+        : node_(node)
+        , root_path_(language == ToolchainLanguage::Rust
+                         ? std::move(root_path)
+                         : QDir(std::move(root_path))
+                               .filePath(QString::fromStdString(std::string(toolchain_language_name(language)))))
+        , language_(language) {
     }
 
     std::expected<ToolchainInstallation, ToolchainFailure> ToolchainInstaller::current() const {
@@ -261,9 +335,16 @@ namespace ExtraChain::Contracts {
         const auto release        = QFileInfo(path);
         const auto canonical_path = release.canonicalFilePath();
         const auto release_parent = QFileInfo(canonical_path).dir().canonicalPath();
-        if (!installed.has_value() || installed->schema != 2 || installed->channel != "stable"
-            || installed->release_sequence != sequence || installed->rust_version.empty()
-            || installed->sdk_version.empty() || installed->components_version.empty()
+        const bool manifest_matches =
+            installed.has_value()
+            && ((language_ == ToolchainLanguage::Rust && installed->schema == 2)
+                || (installed->schema == 3 && installed->language == toolchain_language_name(language_)));
+        const bool compiler_matches =
+            language_ == ToolchainLanguage::Rust
+                ? !installed->rust_version.empty()
+                : !installed->compiler_version.empty() && !installed->runtime_version.empty();
+        if (!manifest_matches || installed->channel != "stable" || installed->release_sequence != sequence
+            || !compiler_matches || installed->sdk_version.empty() || installed->components_version.empty()
             || installed->catalog_version.empty() || installed->template_version.empty()
             || installed->components_version != SupportedComponentsVersion
             || installed->catalog_version != SupportedCatalogVersion
@@ -297,7 +378,7 @@ namespace ExtraChain::Contracts {
             return std::unexpected(
                 failure(ToolchainError::Unauthorized, "Contract development must be enabled first"));
         }
-        auto manifest = node_->toolchain_registry()->manifest(accepted_sequence);
+        auto manifest = node_->toolchain_registry()->manifest(language_, accepted_sequence);
         if (!manifest.has_value()) {
             return std::unexpected(manifest.error());
         }
@@ -345,7 +426,7 @@ namespace ExtraChain::Contracts {
         if (!extracted.has_value()) {
             return std::unexpected(extracted.error());
         }
-        if (!valid_toolchain_layout(staging.path())) {
+        if (!valid_toolchain_layout(staging.path(), language_, manifest.value())) {
             return std::unexpected(
                 failure(ToolchainError::InvalidManifest, "Toolchain package layout is incomplete"));
         }
@@ -383,16 +464,80 @@ namespace ExtraChain::Contracts {
             return std::unexpected(
                 failure(ToolchainError::InvalidManifest, "Project name contains unsupported characters"));
         }
-        static const QRegularExpression blocked_source(
+        static const QRegularExpression blocked_rust_source(
             R"((\b(?:include|include_bytes|include_str|env|option_env)\s*!|#\s*\[\s*path\b))");
-        if (source.size() > 1024 * 1024 || blocked_source.match(source).hasMatch()) {
+        if (source.size() > 1024 * 1024
+            || (language_ == ToolchainLanguage::Rust && blocked_rust_source.match(source).hasMatch())
+            || (language_ == ToolchainLanguage::AssemblyScript && !valid_assemblyscript_source(source))) {
             return std::unexpected(
                 failure(ToolchainError::InvalidManifest, "Contract source is not supported by the safe template"));
         }
         QTemporaryDir project(QDir(root_path_).filePath("build-XXXXXX"));
-        if (!project.isValid() || !QDir(project.path()).mkpath("src")) {
+        const auto    source_directory = language_ == ToolchainLanguage::Rust ? "src" : "assembly";
+        if (!project.isValid() || !QDir(project.path()).mkpath(source_directory)) {
             return std::unexpected(
                 failure(ToolchainError::StorageError, "Cannot create the contract build directory"));
+        }
+        if (language_ == ToolchainLanguage::AssemblyScript) {
+            const QDir release(installation->path);
+            QDir       build(project.path());
+            if (!build.mkpath("sdk") || !build.mkpath("components") || !build.mkpath("build")
+                || !copy_file(release.filePath("sdk/index.ts"), build.filePath("sdk/index.ts"))
+                || !copy_file(release.filePath("components/index.ts"), build.filePath("components/index.ts"))
+                || !copy_file(release.filePath("templates/basic/assembly/generated.ts"),
+                              build.filePath("assembly/generated.ts"))
+                || !copy_file(release.filePath("templates/basic/assembly/index.ts"),
+                              build.filePath("assembly/index.ts"))) {
+                return std::unexpected(
+                    failure(ToolchainError::StorageError, "Cannot create the AssemblyScript project"));
+            }
+            QSaveFile  source_file(build.filePath("assembly/contract.ts"));
+            const auto source_bytes = source.toUtf8();
+            if (!source_file.open(QIODevice::WriteOnly) || source_file.write(source_bytes) != source_bytes.size()
+                || !source_file.commit()) {
+                return std::unexpected(failure(ToolchainError::StorageError, "Cannot write the contract source"));
+            }
+#if defined(Q_OS_WIN)
+            const auto node_program = release.filePath("bin/node.exe");
+#else
+            const auto node_program = release.filePath("bin/node");
+#endif
+            auto built = run_process(node_program,
+                                     { release.filePath("compiler/asc.js"),
+                                       "assembly/index.ts",
+                                       "--outFile",
+                                       "build/module.wasm",
+                                       "--runtime",
+                                       "stub",
+                                       "--disable",
+                                       "bulk-memory",
+                                       "--optimizeLevel",
+                                       "3",
+                                       "--shrinkLevel",
+                                       "1",
+                                       "--use",
+                                       "abort=assembly/index/contractAbort" },
+                                     timeout_ms,
+                                     project.path());
+            if (!built.has_value()) {
+                return std::unexpected(built.error());
+            }
+            const auto artifact = build.filePath("build/module.wasm");
+            if (!QFile::exists(artifact)) {
+                return std::unexpected(
+                    failure(ToolchainError::StorageError, "AssemblyScript did not produce a WebAssembly module"));
+            }
+            const auto output = QDir(root_path_).filePath(QString("artifacts/%1.wasm").arg(safe_name));
+            if (!QDir(root_path_).mkpath("artifacts")) {
+                return std::unexpected(
+                    failure(ToolchainError::StorageError, "Cannot create the artifact directory"));
+            }
+            QFile::remove(output);
+            if (!QFile::copy(artifact, output)) {
+                return std::unexpected(
+                    failure(ToolchainError::StorageError, "Cannot save the WebAssembly module"));
+            }
+            return output;
         }
         const auto sdk        = QDir(installation->path).filePath("sdk");
         const auto components = QDir(installation->path).filePath("components");
@@ -499,6 +644,10 @@ namespace ExtraChain::Contracts {
                 .description = object.value("description").toString().toStdString(),
                 .category    = object.value("category").toString().toStdString(),
                 .rust_import = object.value("rust_import").toString().toStdString(),
+                .source_import =
+                    object.value(language_ == ToolchainLanguage::Rust ? "rust_import" : "source_import")
+                        .toString()
+                        .toStdString(),
             };
             const auto dependencies = object.value("dependencies").toArray();
             component.dependencies.reserve(static_cast<std::size_t>(dependencies.size()));
@@ -506,7 +655,7 @@ namespace ExtraChain::Contracts {
                 component.dependencies.push_back(dependency.toString().toStdString());
             }
             if (component.id.empty() || component.name.empty() || component.description.empty()
-                || component.category.empty() || component.rust_import.empty()
+                || component.category.empty() || component.source_import.empty()
                 || std::ranges::any_of(result, [&](const ContractComponent& known) {
                        return known.id == component.id;
                    })) {
@@ -572,8 +721,27 @@ namespace ExtraChain::Contracts {
         for (const auto& component_id : selected) {
             const auto component = std::ranges::find(catalog, component_id, &ContractComponent::id);
             component_list += QString("// - %1\n").arg(QString::fromStdString(component_id));
-            component_imports += QString("    pub use extrachain_contract_components::%1;\n")
-                                     .arg(QString::fromStdString(component->rust_import));
+            if (language_ == ToolchainLanguage::Rust) {
+                component_imports += QString("    pub use extrachain_contract_components::%1;\n")
+                                         .arg(QString::fromStdString(component->source_import));
+            } else {
+                component_imports += QString("    %1,\n").arg(QString::fromStdString(component->source_import));
+            }
+        }
+        if (language_ == ToolchainLanguage::AssemblyScript) {
+            return QString(
+                       "import {\n"
+                       "  GeneratedContract,\n"
+                       "  InvokeRequest,\n"
+                       "  InvokeResponse,\n%2"
+                       "} from \"./generated\";\n\n"
+                       "// Components selected from the trusted ExtraChain catalog:\n%1"
+                       "export class CustomContract extends GeneratedContract {\n"
+                       "  invokeCustom(request: InvokeRequest): InvokeResponse | null {\n"
+                       "    return null;\n"
+                       "  }\n"
+                       "}\n")
+                .arg(component_list, component_imports);
         }
         return QString(
                    "#![no_std]\n\n"

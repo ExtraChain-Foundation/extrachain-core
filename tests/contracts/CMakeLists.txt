@@ -30,4 +30,6 @@ enable_testing()
 add_test(NAME contract-runtime
     COMMAND extrachain-contract-tests
         ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/fungible_token.wasm
-        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/message_claim.wasm)
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/message_claim.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/assemblyscript_basic.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/assemblyscript_dfs_binding.wasm)

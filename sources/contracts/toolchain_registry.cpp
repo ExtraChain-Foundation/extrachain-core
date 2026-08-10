@@ -26,8 +26,27 @@
 #include "utils/exc_utils.h"
 
 namespace ExtraChain::Contracts {
+    std::string_view toolchain_language_name(ToolchainLanguage language) {
+        switch (language) {
+        case ToolchainLanguage::Rust:
+            return "rust";
+        case ToolchainLanguage::AssemblyScript:
+            return "assemblyscript";
+        }
+        return {};
+    }
+
+    std::expected<ToolchainLanguage, std::string> toolchain_language(std::string_view value) {
+        if (value == "rust")
+            return ToolchainLanguage::Rust;
+        if (value == "assemblyscript")
+            return ToolchainLanguage::AssemblyScript;
+        return std::unexpected("Unsupported contract toolchain language");
+    }
+
     namespace {
-        constexpr std::uint64_t MaxToolchainPackageSize = 2ULL * 1024 * 1024 * 1024;
+        constexpr std::uint64_t    MaxToolchainPackageSize = 2ULL * 1024 * 1024 * 1024;
+        constexpr std::string_view AssemblyScriptVersion   = "0.28.20";
 
         ToolchainFailure failure(ToolchainError error, std::string detail) {
             return { error, std::move(detail) };
@@ -107,6 +126,29 @@ namespace ExtraChain::Contracts {
                    && package.size <= MaxToolchainPackageSize;
         }
 
+        bool valid_manifest(const ToolchainManifest& manifest, ToolchainLanguage language) {
+            const auto expected_language = toolchain_language_name(language);
+            const bool legacy_rust       = manifest.schema == 2 && language == ToolchainLanguage::Rust;
+            const bool current           = manifest.schema == 3 && manifest.language == expected_language
+                                 && !manifest.compiler_version.empty() && !manifest.runtime_version.empty();
+            const bool compiler_supported = language != ToolchainLanguage::AssemblyScript
+                                            || (manifest.compiler_version == AssemblyScriptVersion
+                                                && manifest.runtime_version.starts_with("24."));
+            return (legacy_rust || current) && compiler_supported && manifest.release_sequence != 0
+                   && manifest.channel == "stable" && !manifest.version.empty()
+                   && (language != ToolchainLanguage::Rust || !manifest.rust_version.empty())
+                   && !manifest.sdk_version.empty() && !manifest.components_version.empty()
+                   && !manifest.catalog_version.empty() && !manifest.template_version.empty()
+                   && manifest.contract_abi == std::to_string(ContractAbiVersion) && manifest.created != 0
+                   && !manifest.packages.empty() && !manifest.core_min.empty() && !manifest.core_max.empty()
+                   && version_parts(manifest.version).has_value() && version_parts(manifest.core_min).has_value()
+                   && version_parts(manifest.core_max).has_value()
+                   && *version_parts(manifest.core_min) <= *version_parts(manifest.core_max)
+                   && std::ranges::none_of(manifest.packages, [](const ToolchainPackage& package) {
+                          return !valid_package(package);
+                      });
+        }
+
         bool verify_signed_row(ExtraChainNode* node, Dfs::DirRow row, const ActorId& network_id) {
             if (row.owner_id != network_id || row.actor_id != network_id) {
                 return false;
@@ -173,7 +215,8 @@ namespace ExtraChain::Contracts {
     }
 
     std::expected<ToolchainManifest, ToolchainFailure> ToolchainRegistry::manifest(
-        std::uint64_t minimum_release_sequence) const {
+        ToolchainLanguage language,
+        std::uint64_t     minimum_release_sequence) const {
         if (node_ == nullptr || node_->dfs() == nullptr || node_->actor_index() == nullptr) {
             return std::unexpected(failure(ToolchainError::Unavailable, "ExtraChain DFS is not ready"));
         }
@@ -186,10 +229,13 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ToolchainError::Unavailable, "Toolchain manifest is not known"));
         }
         std::vector<Dfs::DirRow> manifests;
-        std::ranges::copy_if(*rows, std::back_inserter(manifests), [](const Dfs::DirRow& row) {
-            return row.folder == Dfs::Basic::TEMPLATE_CONTRACT_TOOLCHAIN
-                   && row.name.starts_with("contract-toolchain-manifest-") && row.name.ends_with(".json")
-                   && row.state == Dfs::FileState::Ready;
+        const auto               language_name = std::string(toolchain_language_name(language));
+        std::ranges::copy_if(*rows, std::back_inserter(manifests), [&](const Dfs::DirRow& row) {
+            const bool legacy_rust =
+                language == ToolchainLanguage::Rust && row.name.starts_with("contract-toolchain-manifest-");
+            const bool named = row.name.starts_with("contract-toolchain-" + language_name + "-manifest-");
+            return row.folder == Dfs::Basic::TEMPLATE_CONTRACT_TOOLCHAIN && (legacy_rust || named)
+                   && row.name.ends_with(".json") && row.state == Dfs::FileState::Ready;
         });
         std::ranges::sort(manifests, std::greater {}, &Dfs::DirRow::name);
         std::optional<ToolchainFailure> unavailable;
@@ -206,18 +252,7 @@ namespace ExtraChain::Contracts {
             }
             const auto parsed = Json::deserialize<ToolchainManifest>(
                 std::string(reinterpret_cast<const char*>(content->data()), content->size()));
-            if (!parsed.has_value() || parsed->schema != 2 || parsed->release_sequence == 0
-                || parsed->channel != "stable" || parsed->version.empty() || parsed->rust_version.empty()
-                || parsed->sdk_version.empty() || parsed->components_version.empty()
-                || parsed->catalog_version.empty() || parsed->template_version.empty()
-                || parsed->contract_abi != std::to_string(ContractAbiVersion) || parsed->created == 0
-                || parsed->packages.empty() || parsed->core_min.empty() || parsed->core_max.empty()
-                || !version_parts(parsed->version).has_value() || !version_parts(parsed->core_min).has_value()
-                || !version_parts(parsed->core_max).has_value()
-                || *version_parts(parsed->core_min) > *version_parts(parsed->core_max)
-                || std::ranges::any_of(parsed->packages, [](const ToolchainPackage& package) {
-                       return !valid_package(package);
-                   })) {
+            if (!parsed.has_value() || !valid_manifest(*parsed, language)) {
                 continue;
             }
             if (parsed->release_sequence < minimum_release_sequence) {
@@ -237,6 +272,11 @@ namespace ExtraChain::Contracts {
             return std::unexpected(*unavailable);
         }
         return std::unexpected(failure(ToolchainError::InvalidManifest, "No valid toolchain manifest was found"));
+    }
+
+    std::expected<ToolchainManifest, ToolchainFailure> ToolchainRegistry::manifest(
+        std::uint64_t minimum_release_sequence) const {
+        return manifest(ToolchainLanguage::Rust, minimum_release_sequence);
     }
 
     std::expected<std::vector<std::uint8_t>, ToolchainFailure> ToolchainRegistry::package(
@@ -268,6 +308,7 @@ namespace ExtraChain::Contracts {
     }
 
     std::expected<ToolchainPackage, ToolchainFailure> ToolchainRegistry::publish_package(
+        ToolchainLanguage             language,
         std::string                   platform,
         std::string                   architecture,
         std::string                   archive_format,
@@ -286,7 +327,8 @@ namespace ExtraChain::Contracts {
                                            "Only the ExtraChain network address can publish toolchains"));
         }
         const auto hash   = content_hash(content);
-        const auto name   = fmt::format("contract-toolchain-{}-{}-{}-{}.{}",
+        const auto name   = fmt::format("contract-toolchain-{}-{}-{}-{}-{}.{}",
+                                      toolchain_language_name(language),
                                       version,
                                       platform,
                                       architecture,
@@ -313,18 +355,25 @@ namespace ExtraChain::Contracts {
         };
     }
 
+    std::expected<ToolchainPackage, ToolchainFailure> ToolchainRegistry::publish_package(
+        std::string                   platform,
+        std::string                   architecture,
+        std::string                   archive_format,
+        std::string                   version,
+        std::span<const std::uint8_t> content) const {
+        return publish_package(ToolchainLanguage::Rust,
+                               std::move(platform),
+                               std::move(architecture),
+                               std::move(archive_format),
+                               std::move(version),
+                               content);
+    }
+
     std::expected<void, ToolchainFailure> ToolchainRegistry::publish_manifest(
         const ToolchainManifest& value) const {
-        if (node_ == nullptr || node_->dfs() == nullptr || value.schema != 2 || value.release_sequence == 0
-            || value.channel != "stable" || value.version.empty() || value.rust_version.empty()
-            || value.sdk_version.empty() || value.components_version.empty() || value.catalog_version.empty()
-            || value.template_version.empty() || value.contract_abi != std::to_string(ContractAbiVersion)
-            || value.created == 0 || value.packages.empty() || !version_parts(value.version).has_value()
-            || !version_parts(value.core_min).has_value() || !version_parts(value.core_max).has_value()
-            || *version_parts(value.core_min) > *version_parts(value.core_max)
-            || std::ranges::any_of(value.packages, [](const ToolchainPackage& package) {
-                   return !valid_package(package);
-               })) {
+        const auto language = toolchain_language(value.language);
+        if (node_ == nullptr || node_->dfs() == nullptr || !language.has_value()
+            || !valid_manifest(value, language.value())) {
             return std::unexpected(failure(ToolchainError::InvalidManifest, "Toolchain manifest is incomplete"));
         }
         const auto network_id = node_->network_id();
@@ -333,7 +382,7 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ToolchainError::Unauthorized,
                                            "Only the ExtraChain network address can publish toolchains"));
         }
-        const auto current = manifest();
+        const auto current = manifest(language.value());
         if (current.has_value() && value.release_sequence <= current->release_sequence) {
             return std::unexpected(failure(ToolchainError::Downgrade, "Toolchain release sequence must increase"));
         }
@@ -343,11 +392,12 @@ namespace ExtraChain::Contracts {
                 return std::unexpected(verified.error());
             }
         }
-        const auto json   = Json::serialize(value);
-        const auto name   = fmt::format("contract-toolchain-manifest-r{:020}.json", value.release_sequence);
-        auto       stored = node_->dfs()->store_data_as_file(network_id,
+        const auto json = Json::serialize(value);
+        const auto name =
+            fmt::format("contract-toolchain-{}-manifest-r{:020}.json", value.language, value.release_sequence);
+        auto stored = node_->dfs()->store_data_as_file(network_id,
                                                        network_id,
-                                                             { json.begin(), json.end() },
+                                                       { json.begin(), json.end() },
                                                        Dfs::Basic::TEMPLATE_CONTRACT_TOOLCHAIN,
                                                        name,
                                                        Dfs::DataSecurity::Public);

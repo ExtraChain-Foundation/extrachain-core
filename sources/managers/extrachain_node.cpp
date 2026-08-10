@@ -29,6 +29,7 @@
 #include <QJsonObject>
 #include <QFile>
 #include <QThread>
+#include <msgpack.hpp>
 #include <sodium/core.h>
 
 #include "chain/dag.h"
@@ -185,6 +186,45 @@ namespace {
             });
         }
         return result;
+    }
+
+    bool verify_dfs_effect_authors(DfsController*                                       dfs,
+                                   const ExtraChain::Contracts::PreparedContractChange& change,
+                                   const ActorId&                                       sender) {
+        for (const auto& effect : change.output.effects) {
+            if (effect.kind != ExtraChain::Contracts::ContractEffectKind::DfsWrite
+                || effect.operation == "tombstone") {
+                continue;
+            }
+            try {
+                if (dfs == nullptr) {
+                    return false;
+                }
+                std::size_t offset = 0;
+                auto        handle = msgpack::unpack(reinterpret_cast<const char*>(effect.arguments.data()),
+                                              effect.arguments.size(),
+                                              offset);
+                std::tuple<std::string, std::string, std::string, std::string> binding;
+                handle.get().convert(binding);
+                const auto  owner   = ActorId::create(effect.target);
+                const auto& file_id = std::get<1>(binding);
+                if (!owner.has_value()) {
+                    return false;
+                }
+                const auto row =
+                    Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dfs->get_db_instance(), owner.value(), file_id);
+                if (offset != effect.arguments.size() || !row.has_value() || row->actor_id != sender
+                    || row->owner_id != owner.value() || row->state != Dfs::FileState::Ready
+                    || row->hash != std::get<2>(binding)) {
+                    return false;
+                }
+            } catch (const std::exception&) {
+                return false;
+            }
+        }
+        return std::ranges::all_of(change.children, [&](const auto& child) {
+            return verify_dfs_effect_authors(dfs, child, sender);
+        });
     }
 } // namespace
 
@@ -1417,6 +1457,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
                                                       block,
                                                       *verified_inputs);
         if (!change.has_value() || change->kind == ExtraChain::Contracts::ContractChangeKind::ReadOnly
+            || !verify_dfs_effect_authors(dfs_, *change, transaction.sender())
             || change->checkpoint != metadata->checkpoint
             || Json::serialize(contract_transitions(*change)) != Json::serialize(metadata->transitions)) {
             return TransactionProveError::InvalidContractPayload;
@@ -1576,6 +1617,12 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
                                                   *verified);
     if (!change.has_value()) {
         return std::unexpected(change.error());
+    }
+    if (!verify_dfs_effect_authors(dfs_, *change, signer.id())) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::InvalidProof,
+            .detail = "A DFS effect references data from another author",
+        });
     }
     if (change->kind == ExtraChain::Contracts::ContractChangeKind::ReadOnly) {
         return std::unexpected(ExtraChain::Contracts::ContractFailure {
