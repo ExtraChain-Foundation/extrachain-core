@@ -71,6 +71,20 @@ Items from the 2026-08-09/10 stabilization sessions, carried over from the
 section above: `0.x`/`1.x` here are not the `0`-`4` items above.
 
 
+### 0.02 Reading connectivity from `lsof` on loopback is misleading (testing note)
+
+Not a defect — a trap that cost a long detour, recorded so the next person does not
+repeat it. On loopback the source address of an outgoing socket equals its destination,
+so every established socket prints as `127.0.0.X:port -> 127.0.0.X:17593` and a node's
+own alias never appears as a source. Read literally, that says "this node is connected
+only to itself", which is false: the same run showed five `Incoming Activated` lines,
+one per peer, all healthy.
+
+Check connectivity from the node's own log (`Incoming Activated` / `First message`),
+not from socket tables. Likewise `DuplicateIdentifier` on an *Outgoing* socket is normal
+arbitration when both sides dial simultaneously — the surviving connection is the
+incoming one, and counting the closures as failures overstates the problem.
+
 ### 0.01 Migration leaves the hot tail as files, not in HotSections.db
 
 Found while verifying the migration on real data (see the fix in `8b7fd670`). The
