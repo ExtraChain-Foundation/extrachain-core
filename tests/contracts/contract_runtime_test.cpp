@@ -945,6 +945,75 @@ namespace {
                   << ",\"p95_ns\":" << percentile(95) << ",\"p99_ns\":" << percentile(99) << "}\n";
     }
 
+    void test_python(ExtraChain::Contracts::WasmRuntime &runtime,
+                     const Bytes                        &counter_module,
+                     const Bytes                        &token_module) {
+        require(ExtraChain::Contracts::module_language(counter_module).value_or("") == "python",
+                "Counter Python language marker is invalid");
+        require(ExtraChain::Contracts::module_language(token_module).value_or("") == "python",
+                "Token Python language marker is invalid");
+        const auto runtime_hash =
+            ExtraChain::Contracts::module_custom_section(counter_module,
+                                                         ExtraChain::Contracts::PythonRuntimeSection);
+        require(runtime_hash.has_value() && runtime_hash->size() == 64, "Counter Python runtime hash is invalid");
+        auto tampered_module = counter_module;
+        auto hash_position   = std::search(tampered_module.begin(),
+                                         tampered_module.end(),
+                                         runtime_hash->begin(),
+                                         runtime_hash->end());
+        require(hash_position != tampered_module.end(), "Counter Python runtime hash cannot be located");
+        *hash_position = *hash_position == '0' ? '1' : '0';
+        const auto rejected_runtime =
+            runtime.invoke(tampered_module, request(Alice, "init", unsigned_argument(7), {}));
+        require(!rejected_runtime.has_value()
+                    && rejected_runtime.error().error == ExtraChain::Contracts::ExecutionError::InvalidModule,
+                "A Python artifact with another runtime hash was accepted");
+
+        const auto first_counter  = invoke(runtime, counter_module, Alice, "init", unsigned_argument(7), {});
+        const auto second_counter = invoke(runtime, counter_module, Alice, "init", unsigned_argument(7), {});
+        require(first_counter.ok && first_counter.state == second_counter.state
+                    && first_counter.data == second_counter.data,
+                "Python counter initialization is not deterministic");
+        const auto incremented =
+            invoke(runtime, counter_module, Alice, "increment", unsigned_argument(5), first_counter.state);
+        require(incremented.ok, "Python counter action failed");
+        const auto value = invoke(runtime, counter_module, Alice, "value", empty_arguments(), incremented.state);
+        require(value.ok && value.state == incremented.state, "Python counter query changed state");
+
+        auto initialized = invoke(runtime, token_module, Alice, "init", token_init_argument(), {});
+        require(initialized.ok, "Python Token X initialization failed");
+        auto migrated = invoke(runtime, token_module, Alice, "migrate", empty_arguments(), initialized.state);
+        require(migrated.ok, "Python Token X migration failed");
+        auto frozen = invoke(runtime, token_module, Alice, "transfer", pair_argument(Bob, 999), migrated.state);
+        require(frozen.ok, "Python Token X freeze transfer failed");
+        auto denied = invoke(runtime, token_module, Alice, "transfer", pair_argument(Bob, 1), frozen.state);
+        require(!denied.ok && denied.state == frozen.state, "Python Token X changed state after a denied call");
+    }
+
+    void benchmark_python_token_x(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
+        constexpr std::size_t      Samples = 100;
+        std::vector<std::uint64_t> samples;
+        samples.reserve(Samples);
+        for (std::size_t index = 0; index < Samples; ++index) {
+            const auto started     = std::chrono::steady_clock::now();
+            auto       initialized = invoke(runtime, module, Alice, "init", token_init_argument(), {});
+            auto       migrated = invoke(runtime, module, Alice, "migrate", empty_arguments(), initialized.state);
+            auto frozen = invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 999), migrated.state);
+            auto denied = invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 1), frozen.state);
+            require(initialized.ok && migrated.ok && frozen.ok && !denied.ok,
+                    "Python Token X benchmark flow failed");
+            samples.push_back(static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started)
+                    .count()));
+        }
+        std::ranges::sort(samples);
+        const auto total = std::accumulate(samples.begin(), samples.end(), std::uint64_t { 0 });
+        std::cout << "BENCHMARK {\"language\":\"python\",\"samples\":" << Samples
+                  << ",\"mean_ns\":" << total / Samples << ",\"p50_ns\":" << samples[Samples / 2]
+                  << ",\"p95_ns\":" << samples[Samples * 95 / 100] << ",\"p99_ns\":" << samples[Samples * 99 / 100]
+                  << "}\n";
+    }
+
     void test_checkpoint_schedule(const Bytes &fungible_module) {
         std::vector<std::string> state_hashes;
         state_hashes.reserve(ExtraChain::Contracts::ContractCheckpointInterval + 1);
@@ -1076,17 +1145,38 @@ namespace {
 
 int main(int argc, char **argv) {
     try {
-        if (argc != 8) {
-            throw std::runtime_error(
-                "Expected Rust and AssemblyScript token modules, message, and AssemblyScript fixture paths");
+        if (argc != 10) {
+            throw std::runtime_error("Expected Rust, AssemblyScript, and Python contract fixture paths");
         }
         ExtraChain::Contracts::WasmRuntime runtime;
         require(runtime.available(), "WAMR is unavailable");
-        auto rust_fungible_module = read_file(argv[1]);
-        auto as_fungible_module   = read_file(argv[2]);
-        auto rust_nft_module      = read_file(argv[3]);
-        auto as_nft_module        = read_file(argv[4]);
-        auto message_module       = read_file(argv[5]);
+        auto       rust_fungible_module = read_file(argv[1]);
+        auto       as_fungible_module   = read_file(argv[2]);
+        auto       rust_nft_module      = read_file(argv[3]);
+        auto       as_nft_module        = read_file(argv[4]);
+        auto       message_module       = read_file(argv[5]);
+        const auto python_counter       = read_file(argv[8]);
+        const auto python_token         = read_file(argv[9]);
+        const auto disabled_python =
+            runtime.invoke(python_counter, request(Alice, "init", unsigned_argument(7), {}));
+        require(!disabled_python.has_value()
+                    && disabled_python.error().error == ExtraChain::Contracts::ExecutionError::RuntimeUnavailable,
+                "MicroPython execution was enabled without explicit research opt-in");
+        auto python_tuning              = ExtraChain::Contracts::RuntimeTuning {};
+        python_tuning.enable_python_poc = true;
+#if defined(__linux__) && !defined(__ANDROID__)
+        auto python_limits         = ExtraChain::Contracts::ExecutionLimits {};
+        python_limits.instructions = 20'000'000;
+        ExtraChain::Contracts::WasmRuntime python_runtime(python_limits, python_tuning);
+        test_python(python_runtime, python_counter, python_token);
+#else
+        ExtraChain::Contracts::WasmRuntime python_runtime({}, python_tuning);
+        const auto                         python_result =
+            python_runtime.invoke(python_counter, request(Alice, "init", unsigned_argument(7), {}));
+        require(!python_result.has_value()
+                    && python_result.error().error == ExtraChain::Contracts::ExecutionError::RuntimeUnavailable,
+                "MicroPython execution did not fail safely on an unsupported platform");
+#endif
         require(ExtraChain::Contracts::module_language(rust_fungible_module).value_or("") == "rust",
                 "Rust token language marker is invalid");
         require(ExtraChain::Contracts::module_language(as_fungible_module).value_or("") == "assemblyscript",
@@ -1127,6 +1217,9 @@ int main(int argc, char **argv) {
         test_assemblyscript(runtime, assemblyscript_basic);
         test_assemblyscript_upgrade(assemblyscript_basic);
         test_assemblyscript_dfs_binding(read_file(argv[7]));
+#if defined(__linux__) && !defined(__ANDROID__)
+        benchmark_python_token_x(python_runtime, python_token);
+#endif
         std::cout << "Contract runtime tests passed\n";
         return 0;
     } catch (const std::exception &error) {

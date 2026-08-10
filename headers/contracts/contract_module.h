@@ -20,8 +20,16 @@
 namespace ExtraChain::Contracts {
 
     inline constexpr std::string_view ContractLanguageSection = "extrachain.language";
+    inline constexpr std::string_view PythonRuntimeSection    = "extrachain.python.runtime";
+    inline constexpr std::string_view PythonSdkSection        = "extrachain.python.sdk";
+    inline constexpr std::string_view PythonBytecodeSection   = "extrachain.python.bytecode";
+    inline constexpr std::string_view PythonSourceSection     = "extrachain.python.source";
 
     [[nodiscard]] EXTRACHAIN_EXPORT std::expected<std::string, std::string> module_language(
         std::span<const std::uint8_t> module);
+
+    [[nodiscard]] EXTRACHAIN_EXPORT std::expected<std::vector<std::uint8_t>, std::string> module_custom_section(
+        std::span<const std::uint8_t> module,
+        std::string_view              name);
 
 } // namespace ExtraChain::Contracts

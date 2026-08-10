@@ -23,6 +23,7 @@ namespace ExtraChain::Contracts {
         std::size_t max_concurrent_executions = 4;
         std::size_t module_cache_entries      = 8;
         std::size_t module_cache_bytes        = 16 * 1024 * 1024;
+        bool        enable_python_poc         = false;
     };
 
     class EXTRACHAIN_EXPORT WasmRuntime {

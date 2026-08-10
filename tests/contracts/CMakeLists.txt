@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.21)
 
 project(extrachain-contract-tests LANGUAGES C CXX)
 
+set(CMAKE_AUTORCC ON)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -18,7 +20,8 @@ add_executable(extrachain-contract-tests
     ../../sources/contracts/contract_module.cpp
     ../../sources/contracts/standard_token.cpp
     ../../sources/contracts/wasm_policy.cpp
-    ../../sources/contracts/wasm_runtime.cpp)
+    ../../sources/contracts/wasm_runtime.cpp
+    ../../contracts/contracts.qrc)
 target_include_directories(extrachain-contract-tests PRIVATE
     ../../headers
     ../../../extrachain-3rdparty/msgpack/include)
@@ -37,4 +40,6 @@ add_test(NAME contract-runtime
         ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/non_fungible_token_assemblyscript.wasm
         ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/message_claim.wasm
         ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/assemblyscript_basic.wasm
-        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/assemblyscript_dfs_binding.wasm)
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts/standard/assemblyscript_dfs_binding.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts-python/fixtures/counter.wasm
+        ${CMAKE_CURRENT_LIST_DIR}/../../contracts-python/fixtures/token_x.wasm)

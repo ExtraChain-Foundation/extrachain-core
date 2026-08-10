@@ -86,14 +86,16 @@ namespace ExtraChain::Contracts {
         };
     } // namespace
 
-    std::expected<std::string, std::string> module_language(std::span<const std::uint8_t> module) {
+    std::expected<std::vector<std::uint8_t>, std::string> module_custom_section(
+        std::span<const std::uint8_t> module,
+        std::string_view              expected_name) {
         static constexpr std::array<std::uint8_t, 8> Header { 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 };
         if (module.size() < Header.size() || !std::equal(Header.begin(), Header.end(), module.begin())) {
             return std::unexpected("Contract module is not valid WebAssembly");
         }
 
-        Reader                     input(module.subspan(Header.size()));
-        std::optional<std::string> found;
+        Reader                                   input(module.subspan(Header.size()));
+        std::optional<std::vector<std::uint8_t>> found;
         while (!input.empty()) {
             std::uint8_t  section_id   = 0;
             std::uint32_t section_size = 0;
@@ -109,22 +111,31 @@ namespace ExtraChain::Contracts {
             if (!section.string(name)) {
                 return std::unexpected("Contract module has an invalid custom section");
             }
-            if (name != ContractLanguageSection) {
+            if (name != expected_name) {
                 continue;
             }
             if (found.has_value()) {
-                return std::unexpected("Contract module has more than one language section");
+                return std::unexpected("Contract module has more than one matching custom section");
             }
-            auto language = section.remaining_string();
-            if (language != "rust" && language != "assemblyscript") {
-                return std::unexpected("Contract module declares an unsupported language");
-            }
-            found = std::move(language);
+            const auto value = section.remaining_string();
+            found            = std::vector<std::uint8_t>(value.begin(), value.end());
         }
         if (!found.has_value()) {
-            return std::unexpected("Contract module does not declare its language");
+            return std::unexpected("Contract module does not contain the requested custom section");
         }
         return found.value();
+    }
+
+    std::expected<std::string, std::string> module_language(std::span<const std::uint8_t> module) {
+        const auto section = module_custom_section(module, ContractLanguageSection);
+        if (!section.has_value()) {
+            return std::unexpected(section.error());
+        }
+        std::string language(section.value().begin(), section.value().end());
+        if (language != "rust" && language != "assemblyscript" && language != "python") {
+            return std::unexpected("Contract module declares an unsupported language");
+        }
+        return language;
     }
 
 } // namespace ExtraChain::Contracts

@@ -1,0 +1,3 @@
+micropython_version=1.28.0
+micropython_commit=e0e9fbb17ed6fd06bb76e266ae554784c9c80804
+sdk_version=0.1.0-poc

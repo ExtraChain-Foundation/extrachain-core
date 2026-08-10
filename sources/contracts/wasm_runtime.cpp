@@ -11,6 +11,7 @@
 #include "contracts/wasm_runtime.h"
 
 #include "contracts/contract_hash.h"
+#include "contracts/contract_module.h"
 #include "wasm_policy.h"
 
 #include <algorithm>
@@ -20,6 +21,7 @@
 #include <limits>
 #include <vector>
 
+#include <QFile>
 #include <wasm_export.h>
 
 namespace ExtraChain::Contracts {
@@ -174,6 +176,42 @@ namespace ExtraChain::Contracts {
             return ExecutionError::ExecutionFailed;
         }
 
+        std::expected<std::vector<std::uint8_t>, ExecutionFailure> python_runtime(std::string_view expected_hash) {
+            QFile file(":/contracts/micropython_runtime.wasm");
+            if (!file.open(QIODevice::ReadOnly)) {
+                return std::unexpected(
+                    failure(ExecutionError::RuntimeUnavailable, "MicroPython contract runtime is not available"));
+            }
+            const auto                bytes = file.readAll();
+            std::vector<std::uint8_t> runtime(bytes.begin(), bytes.end());
+            if (content_hash(runtime) != expected_hash) {
+                return std::unexpected(failure(ExecutionError::InvalidModule,
+                                               "MicroPython runtime hash does not match the contract"));
+            }
+            return runtime;
+        }
+
+        std::expected<std::vector<std::uint8_t>, ExecutionFailure> python_envelope(
+            std::span<const std::uint8_t> bytecode,
+            std::span<const std::uint8_t> input,
+            std::size_t                   maximum_size) {
+            if (bytecode.empty() || bytecode.size() > std::numeric_limits<std::uint32_t>::max()
+                || bytecode.size() + input.size() + 4 > maximum_size) {
+                return std::unexpected(
+                    failure(ExecutionError::InputTooLarge, "MicroPython bytecode and input exceed the limit"));
+            }
+            const auto                size = static_cast<std::uint32_t>(bytecode.size());
+            std::vector<std::uint8_t> result;
+            result.reserve(bytecode.size() + input.size() + 4);
+            result.push_back(static_cast<std::uint8_t>(size >> 24));
+            result.push_back(static_cast<std::uint8_t>(size >> 16));
+            result.push_back(static_cast<std::uint8_t>(size >> 8));
+            result.push_back(static_cast<std::uint8_t>(size));
+            result.insert(result.end(), bytecode.begin(), bytecode.end());
+            result.insert(result.end(), input.begin(), input.end());
+            return result;
+        }
+
         class ExecutionSlot final {
         public:
             explicit ExecutionSlot(std::counting_semaphore<64> &semaphore)
@@ -225,6 +263,45 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ExecutionError::InputTooLarge, "Contract input cannot be addressed"));
         }
 
+        std::vector<std::uint8_t> executable_storage;
+        std::vector<std::uint8_t> input_storage;
+        bool                      trusted_python_runtime = false;
+        const auto                language               = module_language(module_bytes);
+        if (language.has_value() && language.value() == "python") {
+            if (!tuning_.enable_python_poc) {
+                return std::unexpected(failure(ExecutionError::RuntimeUnavailable,
+                                               "MicroPython contract execution is disabled; enable the research "
+                                               "proof of concept explicitly"));
+            }
+#if !defined(__linux__) || defined(__ANDROID__)
+            return std::unexpected(
+                failure(ExecutionError::RuntimeUnavailable,
+                        "MicroPython contract execution is available only in the Linux proof of concept"));
+#else
+            const auto runtime_section = module_custom_section(module_bytes, PythonRuntimeSection);
+            const auto bytecode        = module_custom_section(module_bytes, PythonBytecodeSection);
+            const auto sdk             = module_custom_section(module_bytes, PythonSdkSection);
+            if (!runtime_section.has_value() || !bytecode.has_value() || !sdk.has_value() || sdk.value().empty()) {
+                return std::unexpected(
+                    failure(ExecutionError::InvalidModule, "MicroPython contract metadata is incomplete"));
+            }
+            const std::string runtime_hash(runtime_section.value().begin(), runtime_section.value().end());
+            const auto        runtime = python_runtime(runtime_hash);
+            if (!runtime.has_value()) {
+                return std::unexpected(runtime.error());
+            }
+            const auto envelope = python_envelope(bytecode.value(), input, limits_.input_bytes);
+            if (!envelope.has_value()) {
+                return std::unexpected(envelope.error());
+            }
+            executable_storage     = std::move(runtime.value());
+            input_storage          = std::move(envelope.value());
+            module_bytes           = executable_storage;
+            input                  = input_storage;
+            trusted_python_runtime = true;
+#endif
+        }
+
         ExecutionSlot execution_slot(execution_slots_);
 
         if (!thread_environment().ready()) {
@@ -238,7 +315,8 @@ namespace ExtraChain::Contracts {
                                std::max(tuning_.module_cache_bytes, module_bytes.size()));
         wasm_module_t module = module_cache.find(module_bytes);
         if (module == nullptr) {
-            const auto policy_result = Internal::validate_wasm_policy(module_bytes);
+            const auto policy_result = trusted_python_runtime ? Internal::WasmPolicyResult::Accepted
+                                                              : Internal::validate_wasm_policy(module_bytes);
             if (policy_result == Internal::WasmPolicyResult::FloatingPoint) {
                 return std::unexpected(
                     failure(ExecutionError::InvalidModule, "Contract modules cannot use floating-point values"));
@@ -304,6 +382,17 @@ namespace ExtraChain::Contracts {
             finish();
             return std::unexpected(
                 failure(ExecutionError::InvalidEntryPoint, "Contract entry points must use i32 values"));
+        }
+
+        if (trusted_python_runtime) {
+            wasm_function_inst_t initialize = wasm_runtime_lookup_function(instance, "_initialize");
+            if (initialize == nullptr
+                || !wasm_runtime_call_wasm_a(environment, initialize, 0, nullptr, 0, nullptr)) {
+                const char *exception = wasm_runtime_get_exception(instance);
+                auto        error     = failure(execution_error(exception), exception);
+                finish();
+                return std::unexpected(std::move(error));
+            }
         }
 
         void         *native_input = nullptr;
