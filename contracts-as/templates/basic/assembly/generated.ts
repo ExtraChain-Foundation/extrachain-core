@@ -1,17 +1,71 @@
-import {
-  Contract,
-  InvokeRequest,
-  InvokeResponse,
-} from "../sdk/index";
-
 export {
+  ActorId,
+  ActorIdCodec,
+  Amount,
+  AmountCodec,
+  ArrayCodec,
+  BoundedString,
+  BoundedStringCodec,
+  BoolCodec,
+  BytesCodec,
+  Contract,
   ContractEffect,
   ContractEvent,
+  ContractResult,
+  ContractRouter,
+  Context,
+  DagProof,
   Decoder,
+  DfsProof,
+  EmptyCodec,
+  EmptyValue,
   Encoder,
+  I16Codec,
+  I32Codec,
+  I64Codec,
+  I8Codec,
   InvokeRequest,
   InvokeResponse,
-  callContract,
+  NonZeroAmount,
+  NonZeroAmountCodec,
+  OptionalCodec,
+  OptionalValue,
+  RouteKind,
+  StateMap,
+  StateMapCodec,
+  StateEntry,
+  StateSet,
+  StateSetCodec,
+  ValueCodec,
+  VersionedStateCodec,
+  U16Codec,
+  U32Codec,
+  U64Codec,
+  U8Codec,
+  VerifiedInputs,
+  actorIdCodec,
+  amountCodec,
+  boolCodec,
+  bytesCodec,
+  compareActorId,
+  compareString,
+  compareU64,
+  emptyCodec,
+  failure,
+  i16Codec,
+  i32Codec,
+  i64Codec,
+  i8Codec,
+  isContentHash,
+  isDfsLogicalKey,
+  nonZeroAmountCodec,
+  StringCodec,
+  stringCodec,
+  success,
+  u16Codec,
+  u32Codec,
+  u64Codec,
+  u8Codec,
 } from "../sdk/index";
 export {
   DfsBindings,
@@ -30,18 +84,3 @@ export {
   requireDfsFile,
   tombstoneDfsFile,
 } from "../components/index";
-
-export class GeneratedContract implements Contract {
-  invoke(request: InvokeRequest): InvokeResponse {
-    const response = this.invokeCustom(request);
-    if (response !== null) return response;
-    if (request.method == "init" || request.method == "authorize_upgrade" || request.method == "migrate") {
-      return InvokeResponse.success(request.state);
-    }
-    return InvokeResponse.failure(request.state, "Unknown contract method");
-  }
-
-  invokeCustom(request: InvokeRequest): InvokeResponse | null {
-    return null;
-  }
-}

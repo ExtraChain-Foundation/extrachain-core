@@ -39,7 +39,7 @@ class CollectionState {
     const state = new CollectionState();
     if (source.length == 0) return state;
     const decoder = new Decoder(source);
-    if (decoder.array() != 6) return null;
+    if (decoder.array() != 7 || decoder.u64() != 1) return null;
     state.name = decoder.string();
     state.symbol = decoder.string();
     state.owner = decoder.string();
@@ -47,13 +47,15 @@ class CollectionState {
     const itemCount = decoder.array();
     if (itemCount < 0 || itemCount > MAX_STATE_ENTRIES) return null;
     for (let index = 0; index < itemCount; ++index) {
+      if (decoder.array() != 2) return null;
+      const key = decoder.amount();
       if (decoder.array() != 5) return null;
       const id = decoder.amount();
       const owner = decoder.string();
       const metadataOwner = decoder.string();
       const metadataFile = decoder.string();
       const metadataHash = decoder.string();
-      if (!decoder.valid || id === null) return null;
+      if (!decoder.valid || key === null || id === null || !key.equals(id) || state.itemIndex(id) >= 0) return null;
       state.items.push(new Item(id, owner, metadataOwner, metadataFile, metadataHash));
     }
     const approvalCount = decoder.array();
@@ -70,7 +72,8 @@ class CollectionState {
 
   encode(): Uint8Array {
     const encoder = new Encoder();
-    encoder.array(6);
+    encoder.array(7);
+    encoder.u64(1);
     encoder.string(this.name);
     encoder.string(this.symbol);
     encoder.string(this.owner);
@@ -78,6 +81,8 @@ class CollectionState {
     encoder.array(this.items.length);
     for (let index = 0; index < this.items.length; ++index) {
       const item = this.items[index];
+      encoder.array(2);
+      encoder.amount(item.id);
       encoder.array(5);
       encoder.amount(item.id);
       encoder.string(item.owner);
@@ -108,6 +113,16 @@ class CollectionState {
     return "";
   }
 
+  insertItem(item: Item): void {
+    let index = 0;
+    while (index < this.items.length && this.items[index].id.lessThan(item.id)) ++index;
+    this.items.push(item);
+    for (let move = this.items.length - 1; move > index; --move) {
+      this.items[move] = this.items[move - 1];
+    }
+    this.items[index] = item;
+  }
+
   setApproval(id: Amount, actor: string): void {
     for (let index = 0; index < this.approvals.length; ++index) {
       if (!this.approvals[index].id.equals(id)) continue;
@@ -115,7 +130,16 @@ class CollectionState {
       else this.approvals[index].actor = actor;
       return;
     }
-    if (actor.length > 0) this.approvals.push(new Approval(id.clone(), actor));
+    if (actor.length > 0) {
+      let index = 0;
+      while (index < this.approvals.length && this.approvals[index].id.lessThan(id)) ++index;
+      const approval = new Approval(id.clone(), actor);
+      this.approvals.push(approval);
+      for (let move = this.approvals.length - 1; move > index; --move) {
+        this.approvals[move] = this.approvals[move - 1];
+      }
+      this.approvals[index] = approval;
+    }
   }
 }
 
@@ -133,8 +157,15 @@ function effect(contractId: string, event: ContractEvent): ContractEffect {
 
 function parseId(argumentsData: Uint8Array): Amount | null {
   const decoder = new Decoder(argumentsData);
+  if (decoder.array() != 1) return null;
   const id = decoder.amount();
   return id !== null && decoder.empty() ? id : null;
+}
+
+function unitData(): Uint8Array {
+  const encoder = new Encoder();
+  encoder.nil();
+  return encoder.finish();
 }
 
 export class NonFungibleToken implements Contract {
@@ -156,19 +187,37 @@ export class NonFungibleToken implements Contract {
     if (request.method == "owner_of") return this.ownerOf(request, state);
     if (request.method == "metadata_of") return this.metadataOf(request, state);
     if (request.method == "revoke_mint") {
-      if (request.caller != state.owner || !state.mintEnabled) return InvokeResponse.failure(request.state, "Mint control is not available");
+      const decoder = new Decoder(request.argumentsData);
+      if (decoder.array() != 0 || !decoder.empty() || request.caller != state.owner || !state.mintEnabled) {
+        return InvokeResponse.failure(request.state, "Mint control is not available");
+      }
       state.mintEnabled = false;
-      return InvokeResponse.success(request.state);
+      const response = InvokeResponse.success(request.state);
+      response.data = unitData();
+      response.events.push(new ContractEvent("mint_revoked", unitData()));
+      return response;
     }
     if (request.method == "authorize_upgrade") {
-      return request.caller == state.owner
-        ? InvokeResponse.success(request.state)
-        : InvokeResponse.failure(request.state, "Only the owner can update the collection");
+      const decoder = new Decoder(request.argumentsData);
+      if (decoder.array() != 1) {
+        return InvokeResponse.failure(request.state, "Only the owner can update the collection");
+      }
+      const moduleHash = decoder.string();
+      if (moduleHash.length != 64 || !decoder.empty() || request.caller != state.owner) {
+        return InvokeResponse.failure(request.state, "Only the owner can update the collection");
+      }
+      const response = InvokeResponse.success(request.state);
+      response.data = unitData();
+      return response;
     }
     if (request.method == "migrate") {
-      return request.caller == state.owner && request.argumentsData.length == 0
-        ? InvokeResponse.success(request.state)
-        : InvokeResponse.failure(request.state, "Invalid collection migration");
+      const decoder = new Decoder(request.argumentsData);
+      if (decoder.array() != 0 || !decoder.empty() || request.caller != state.owner) {
+        return InvokeResponse.failure(request.state, "Invalid collection migration");
+      }
+      const response = InvokeResponse.success(request.state);
+      response.data = unitData();
+      return response;
     }
     return InvokeResponse.failure(request.state, "Unknown collection method");
   }
@@ -188,7 +237,9 @@ export class NonFungibleToken implements Contract {
     state.symbol = symbol;
     state.owner = request.caller;
     state.mintEnabled = true;
-    return InvokeResponse.success(request.state);
+    const response = InvokeResponse.success(request.state);
+    response.data = unitData();
+    return response;
   }
 
   private mint(request: InvokeRequest, state: CollectionState): InvokeResponse {
@@ -214,8 +265,9 @@ export class NonFungibleToken implements Contract {
       }
     }
     if (!verified) return InvokeResponse.failure(request.state, "NFT metadata is not verified");
-    state.items.push(new Item(id, receiver, metadataOwner, metadataFile, metadataHash));
+    state.insertItem(new Item(id, receiver, metadataOwner, metadataFile, metadataHash));
     const response = InvokeResponse.success(request.state);
+    response.data = unitData();
     const created = itemEvent("nft_mint", id, [receiver]);
     response.events.push(created);
     response.effects.push(effect(request.contractId, created));
@@ -234,6 +286,7 @@ export class NonFungibleToken implements Contract {
     if (index < 0 || state.items[index].owner != request.caller) return InvokeResponse.failure(request.state, "Approval is not allowed");
     state.setApproval(id, actor);
     const response = InvokeResponse.success(request.state);
+    response.data = unitData();
     response.events.push(itemEvent("nft_approval", id, [actor]));
     return response;
   }
@@ -274,6 +327,7 @@ export class NonFungibleToken implements Contract {
 
   private transferResponse(request: InvokeRequest, id: Amount, owner: string, receiver: string): InvokeResponse {
     const response = InvokeResponse.success(request.state);
+    response.data = unitData();
     const moved = itemEvent("nft_transfer", id, [owner, receiver]);
     response.events.push(moved);
     response.effects.push(effect(request.contractId, moved));
@@ -290,6 +344,7 @@ export class NonFungibleToken implements Contract {
     state.items.splice(index, 1);
     state.setApproval(id, "");
     const response = InvokeResponse.success(request.state);
+    response.data = unitData();
     const burned = itemEvent("nft_burn", id, [owner]);
     response.events.push(burned);
     response.effects.push(effect(request.contractId, burned));

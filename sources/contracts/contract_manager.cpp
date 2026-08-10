@@ -654,7 +654,7 @@ namespace ExtraChain::Contracts {
         auto      &current                 = active_version(record);
         const auto previous                = latest_revision(current);
         const auto new_module_hash         = content_hash(module);
-        auto       authorization_arguments = Codec::encode_string(new_module_hash);
+        auto       authorization_arguments = Codec::encode_string_argument(new_module_hash);
         auto       authorization           = evaluate(current.module,
                                       sender_id,
                                       "authorize_upgrade",

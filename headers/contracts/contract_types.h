@@ -20,7 +20,7 @@
 
 namespace ExtraChain::Contracts {
 
-    inline constexpr std::uint32_t ContractAbiVersion         = 3;
+    inline constexpr std::uint32_t ContractAbiVersion         = 4;
     inline constexpr std::uint64_t ContractCheckpointInterval = 256;
     inline constexpr std::uint32_t ContractMaximumCallDepth   = 8;
     inline constexpr std::uint32_t ContractMaximumCalls       = 32;

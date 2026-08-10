@@ -192,9 +192,11 @@ namespace ExtraChain::Contracts::Codec {
         return { begin, begin + buffer.size() };
     }
 
-    std::vector<std::uint8_t> encode_string(std::string_view value) {
+    std::vector<std::uint8_t> encode_string_argument(std::string_view value) {
         msgpack::sbuffer buffer;
-        msgpack::pack(buffer, value);
+        msgpack::packer  packer(buffer);
+        packer.pack_array(1);
+        packer.pack(value);
         auto *begin = reinterpret_cast<const std::uint8_t *>(buffer.data());
         return { begin, begin + buffer.size() };
     }

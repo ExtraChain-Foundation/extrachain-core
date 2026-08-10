@@ -129,9 +129,11 @@ public:
 
 private:
     std::optional<std::string> registry_file_id() const;
-    bool                       registry_row_valid(const TokenData &token_data) const;
+    bool                       registry_row_valid(TokenData &token_data) const;
+    void                       track_token_creation(const Transaction &transaction, TokenData token_data);
 
     ExtraChainNode                            *node;
+    mutable std::mutex                         cache_creation_mutex_;
     std::unordered_map<std::string, TokenData> cache_creation_; // TODO: also save to temp file
     mutable std::mutex                         legacy_cache_mutex_;
     mutable std::optional<SectionId>           legacy_cache_section_;

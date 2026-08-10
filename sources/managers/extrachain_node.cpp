@@ -1487,7 +1487,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     if (ExtraChain::Contracts::content_hash(*module) != metadata->module_hash) {
         return TransactionProveError::InvalidContractPayload;
     }
-    auto authorization_arguments = ExtraChain::Contracts::Codec::encode_string(metadata->module_hash);
+    auto authorization_arguments = ExtraChain::Contracts::Codec::encode_string_argument(metadata->module_hash);
     auto authorization           = contract_manager_->evaluate(current.module,
                                                      transaction.sender().to_string(),
                                                      "authorize_upgrade",

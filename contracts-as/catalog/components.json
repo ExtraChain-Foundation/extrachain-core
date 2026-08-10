@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "language": "assemblyscript",
   "components": [
     { "id": "ownership", "name": "Ownership", "description": "Restrict operations to one owner.", "category": "Access", "source_import": "Ownership", "dependencies": [] },

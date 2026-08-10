@@ -18,9 +18,6 @@ export class GeneratedContract implements Contract {
   invoke(request: InvokeRequest): InvokeResponse {
     const response = this.invokeCustom(request);
     if (response !== null) return response;
-    if (request.method == "init" || request.method == "authorize_upgrade" || request.method == "migrate") {
-      return InvokeResponse.success(request.state);
-    }
     return InvokeResponse.failure(request.state, "Unknown contract method");
   }
 

@@ -37,8 +37,7 @@ class TokenState {
     const state = new TokenState();
     if (source.length == 0) return state;
     const decoder = new Decoder(source);
-    const fields = decoder.array();
-    if (fields != 8 && fields != 10) return null;
+    if (decoder.array() != 11 || decoder.u64() != 1) return null;
     state.name = decoder.string();
     state.symbol = decoder.string();
     const decimals = decoder.u64();
@@ -62,7 +61,7 @@ class TokenState {
     const allowanceCount = decoder.array();
     if (allowanceCount < 0 || allowanceCount > MAX_STATE_ENTRIES) return null;
     for (let index = 0; index < allowanceCount; ++index) {
-      if (decoder.array() != 3) return null;
+      if (decoder.array() != 2 || decoder.array() != 2) return null;
       const owner = decoder.string();
       const spender = decoder.string();
       const amount = decoder.amount();
@@ -70,24 +69,23 @@ class TokenState {
       state.allowances.push(new AllowanceEntry(owner, spender, amount));
     }
 
-    if (fields == 10) {
-      state.freezeLastEnabled = decoder.boolean();
-      const lockedCount = decoder.array();
-      if (lockedCount < 0 || lockedCount > MAX_STATE_ENTRIES) return null;
-      for (let index = 0; index < lockedCount; ++index) {
-        if (decoder.array() != 2) return null;
-        const actor = decoder.string();
-        const amount = decoder.amount();
-        if (!decoder.valid || amount === null) return null;
-        state.locked.push(new BalanceEntry(actor, amount));
-      }
+    state.freezeLastEnabled = decoder.boolean();
+    const lockedCount = decoder.array();
+    if (lockedCount < 0 || lockedCount > MAX_STATE_ENTRIES) return null;
+    for (let index = 0; index < lockedCount; ++index) {
+      if (decoder.array() != 2) return null;
+      const actor = decoder.string();
+      const amount = decoder.amount();
+      if (!decoder.valid || amount === null) return null;
+      state.locked.push(new BalanceEntry(actor, amount));
     }
     return decoder.empty() ? state : null;
   }
 
   encode(): Uint8Array {
     const encoder = new Encoder();
-    encoder.array(10);
+    encoder.array(11);
+    encoder.u64(1);
     encoder.string(this.name);
     encoder.string(this.symbol);
     encoder.u64(this.decimals);
@@ -102,7 +100,8 @@ class TokenState {
     }
     encoder.array(this.allowances.length);
     for (let index = 0; index < this.allowances.length; ++index) {
-      encoder.array(3);
+      encoder.array(2);
+      encoder.array(2);
       encoder.string(this.allowances[index].owner);
       encoder.string(this.allowances[index].spender);
       encoder.amount(this.allowances[index].amount);
@@ -131,7 +130,15 @@ class TokenState {
       else this.balances[index].amount = amount;
       return;
     }
-    if (!amount.isZero()) this.balances.push(new BalanceEntry(actor, amount));
+    if (!amount.isZero()) {
+      let index = 0;
+      while (index < this.balances.length && this.balances[index].actor < actor) ++index;
+      this.balances.push(new BalanceEntry(actor, amount));
+      for (let move = this.balances.length - 1; move > index; --move) {
+        this.balances[move] = this.balances[move - 1];
+      }
+      this.balances[index] = new BalanceEntry(actor, amount);
+    }
   }
 
   allowance(owner: string, spender: string): Amount {
@@ -150,7 +157,19 @@ class TokenState {
       else entry.amount = amount;
       return;
     }
-    if (!amount.isZero()) this.allowances.push(new AllowanceEntry(owner, spender, amount));
+    if (!amount.isZero()) {
+      let index = 0;
+      while (index < this.allowances.length) {
+        const current = this.allowances[index];
+        if (current.owner > owner || (current.owner == owner && current.spender >= spender)) break;
+        ++index;
+      }
+      this.allowances.push(new AllowanceEntry(owner, spender, amount));
+      for (let move = this.allowances.length - 1; move > index; --move) {
+        this.allowances[move] = this.allowances[move - 1];
+      }
+      this.allowances[index] = new AllowanceEntry(owner, spender, amount);
+    }
   }
 
   lockedBalance(actor: string): Amount {
@@ -167,7 +186,15 @@ class TokenState {
       else this.locked[index].amount = amount;
       return;
     }
-    if (!amount.isZero()) this.locked.push(new BalanceEntry(actor, amount));
+    if (!amount.isZero()) {
+      let index = 0;
+      while (index < this.locked.length && this.locked[index].actor < actor) ++index;
+      this.locked.push(new BalanceEntry(actor, amount));
+      for (let move = this.locked.length - 1; move > index; --move) {
+        this.locked[move] = this.locked[move - 1];
+      }
+      this.locked[index] = new BalanceEntry(actor, amount);
+    }
   }
 
   spendable(actor: string): Amount | null {
@@ -190,6 +217,12 @@ function parsePair(argumentsData: Uint8Array): Pair | null {
 function amountData(amount: Amount): Uint8Array {
   const encoder = new Encoder();
   encoder.amount(amount);
+  return encoder.finish();
+}
+
+function unitData(): Uint8Array {
+  const encoder = new Encoder();
+  encoder.nil();
   return encoder.finish();
 }
 
@@ -259,9 +292,20 @@ export class FungibleToken implements Contract {
     if (request.method == "balance_of") return this.balanceOf(request, state);
     if (request.method == "allowance") return this.allowance(request, state);
     if (request.method == "authorize_upgrade") {
-      return request.caller == state.owner
-        ? InvokeResponse.success(request.state)
-        : InvokeResponse.failure(request.state, "Only the owner can update the token");
+      const decoder = new Decoder(request.argumentsData);
+      if (decoder.array() != 1) {
+        return InvokeResponse.failure(request.state, "Invalid contract arguments");
+      }
+      const moduleHash = decoder.string();
+      if (moduleHash.length != 64 || !decoder.empty()) {
+        return InvokeResponse.failure(request.state, "Invalid contract arguments");
+      }
+      if (request.caller != state.owner) {
+        return InvokeResponse.failure(request.state, "Only the owner can update the token");
+      }
+      const response = InvokeResponse.success(request.state);
+      response.data = unitData();
+      return response;
     }
     if (request.method == "migrate") return this.migrate(request, state);
     return InvokeResponse.failure(request.state, "Unknown token method");
@@ -272,8 +316,7 @@ export class FungibleToken implements Contract {
       return InvokeResponse.failure(request.state, "Token is already initialized");
     }
     const decoder = new Decoder(request.argumentsData);
-    const fields = decoder.array();
-    if (fields != 4 && fields != 5) return InvokeResponse.failure(request.state, "Invalid init arguments");
+    if (decoder.array() != 5) return InvokeResponse.failure(request.state, "Invalid init arguments");
     const name = decoder.string();
     const symbol = decoder.string();
     const decimals = decoder.u64();
@@ -290,10 +333,10 @@ export class FungibleToken implements Contract {
     state.totalSupply = supply;
     const response = InvokeResponse.success(request.state);
     response.data = amountData(supply);
-    if (fields == 5) {
-      const count = decoder.array();
+    const count = decoder.array();
+    if (count < 0 || count > MAX_STATE_ENTRIES) return InvokeResponse.failure(request.state, "Invalid migration balances");
+    if (count > 0) {
       let migrated = Amount.zero();
-      if (count <= 0 || count > MAX_STATE_ENTRIES) return InvokeResponse.failure(request.state, "Invalid migration balances");
       for (let index = 0; index < count; ++index) {
         if (decoder.array() != 2) return InvokeResponse.failure(request.state, "Invalid migration balance");
         const actor = decoder.string();
@@ -307,7 +350,7 @@ export class FungibleToken implements Contract {
         state.setBalance(actor, amount);
       }
       if (!decoder.empty() || !migrated.equals(supply)) return InvokeResponse.failure(request.state, "Migration supply does not match balances");
-      response.events.push(event("migrated", new Array<string>(), new Array<Amount>()));
+      response.events.push(new ContractEvent("migrated", unitData()));
       return response;
     }
     if (!decoder.empty()) return InvokeResponse.failure(request.state, "Invalid init arguments");
@@ -324,6 +367,7 @@ export class FungibleToken implements Contract {
     const result = transfer(state, request.caller, pair.actor, pair.amount);
     if (result === null) return InvokeResponse.failure(request.state, "Transfer is not allowed");
     const response = InvokeResponse.success(request.state);
+    response.data = unitData();
     const moved = event("transfer", [request.caller, pair.actor], [pair.amount, pair.amount]);
     response.events.push(moved);
     response.effects.push(tokenEffect(request.contractId, moved));
@@ -340,6 +384,7 @@ export class FungibleToken implements Contract {
     if (pair === null || pair.actor == request.caller) return InvokeResponse.failure(request.state, "Self approval is not allowed");
     state.setAllowance(request.caller, pair.actor, pair.amount);
     const response = InvokeResponse.success(request.state);
+    response.data = unitData();
     response.events.push(event("approval", [pair.actor], [pair.amount]));
     return response;
   }
@@ -359,6 +404,7 @@ export class FungibleToken implements Contract {
     if (allowance === null) return InvokeResponse.failure(request.state, "Allowance is too small");
     state.setAllowance(owner, request.caller, allowance);
     const response = InvokeResponse.success(request.state);
+    response.data = unitData();
     const moved = event("transfer", [owner, receiver], [amount, amount]);
     response.events.push(moved);
     response.effects.push(tokenEffect(request.contractId, moved));
@@ -389,15 +435,20 @@ export class FungibleToken implements Contract {
   }
 
   private revokeMint(request: InvokeRequest, state: TokenState): InvokeResponse {
-    if (request.caller != state.owner || !state.mintEnabled) return InvokeResponse.failure(request.state, "Mint control is not available");
+    const decoder = new Decoder(request.argumentsData);
+    if (decoder.array() != 0 || !decoder.empty() || request.caller != state.owner || !state.mintEnabled) {
+      return InvokeResponse.failure(request.state, "Mint control is not available");
+    }
     state.mintEnabled = false;
     const response = InvokeResponse.success(request.state);
-    response.events.push(event("mint_revoked", new Array<string>(), new Array<Amount>()));
+    response.data = unitData();
+    response.events.push(new ContractEvent("mint_revoked", unitData()));
     return response;
   }
 
   private burn(request: InvokeRequest, state: TokenState): InvokeResponse {
     const decoder = new Decoder(request.argumentsData);
+    if (decoder.array() != 1) return InvokeResponse.failure(request.state, "Invalid arguments");
     const amount = decoder.amount();
     const spendable = state.spendable(request.caller);
     if (amount === null || amount.isZero() || !decoder.empty() || spendable === null || spendable.lessThan(amount)) {
@@ -418,6 +469,7 @@ export class FungibleToken implements Contract {
 
   private balanceOf(request: InvokeRequest, state: TokenState): InvokeResponse {
     const decoder = new Decoder(request.argumentsData);
+    if (decoder.array() != 1) return InvokeResponse.failure(request.state, "Invalid arguments");
     const actor = decoder.string();
     if (!decoder.empty()) return InvokeResponse.failure(request.state, "Invalid arguments");
     const response = InvokeResponse.success(request.state);
@@ -439,9 +491,11 @@ export class FungibleToken implements Contract {
   private migrate(request: InvokeRequest, state: TokenState): InvokeResponse {
     if (request.caller != state.owner) return InvokeResponse.failure(request.state, "Only the owner can update the token");
     const decoder = new Decoder(request.argumentsData);
-    state.freezeLastEnabled = request.argumentsData.length == 0 ? true : decoder.boolean();
-    return decoder.empty()
-      ? InvokeResponse.success(request.state)
-      : InvokeResponse.failure(request.state, "Invalid freeze policy");
+    if (decoder.array() != 0) return InvokeResponse.failure(request.state, "Invalid freeze policy");
+    state.freezeLastEnabled = true;
+    if (!decoder.empty()) return InvokeResponse.failure(request.state, "Invalid freeze policy");
+    const response = InvokeResponse.success(request.state);
+    response.data = unitData();
+    return response;
   }
 }

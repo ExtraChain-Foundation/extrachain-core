@@ -1,66 +1,85 @@
 import {
+  BoundedString,
+  BoundedStringCodec,
+  Context,
+  ContractResult,
+  ContractRouter,
   Decoder,
+  EmptyValue,
   Encoder,
-  GeneratedContract,
-  InvokeRequest,
-  InvokeResponse,
-  Ownership,
+  RouteKind,
+  VersionedStateCodec,
+  emptyCodec,
+  failure,
+  success,
+  u64Codec,
 } from "./generated";
 
-export class CustomContract extends GeneratedContract {
-  invokeCustom(request: InvokeRequest): InvokeResponse | null {
-    if (request.method == "init") {
-      if (request.state.length != 0 || request.caller.length == 0) {
-        return InvokeResponse.failure(request.state, "Counter is already initialized");
-      }
-      return InvokeResponse.success(this.state(request.caller, 0));
-    }
+class CounterState {
+  owner: string = "";
+  value: u64 = 0;
+}
 
-    const decoder = new Decoder(request.state);
-    if (decoder.array() != 2) return InvokeResponse.failure(request.state, "Counter state is invalid");
-    const owner = decoder.string();
-    const value = decoder.u64();
-    if (!decoder.empty()) return InvokeResponse.failure(request.state, "Counter state is invalid");
-
-    if (request.method == "get") {
-      const response = InvokeResponse.success(request.state);
-      response.data = this.value(value);
-      return response;
-    }
-    if (request.method == "add") {
-      if (!new Ownership(owner).requireOwner(request.caller)) {
-        return InvokeResponse.failure(request.state, "Only the owner can add a value");
-      }
-      const argumentsDecoder = new Decoder(request.argumentsData);
-      const amount = argumentsDecoder.u64();
-      const next = value + amount;
-      if (!argumentsDecoder.empty() || amount == 0 || next < value) {
-        return InvokeResponse.failure(request.state, "Counter value is invalid");
-      }
-      const response = InvokeResponse.success(this.state(owner, next));
-      response.data = this.value(next);
-      return response;
-    }
-    if (request.method == "authorize_upgrade") {
-      return new Ownership(owner).requireOwner(request.caller)
-        ? InvokeResponse.success(request.state)
-        : InvokeResponse.failure(request.state, "Only the owner can update the contract");
-    }
-    if (request.method == "migrate") return InvokeResponse.success(request.state);
-    return null;
+class CounterStateCodec extends VersionedStateCodec<CounterState> {
+  constructor() { super(1, 2); }
+  create(): CounterState { return new CounterState(); }
+  decodeFields(decoder: Decoder, state: CounterState): void {
+    state.owner = decoder.string();
+    state.value = decoder.u64();
   }
-
-  private state(owner: string, value: u64): Uint8Array {
-    const encoder = new Encoder();
-    encoder.array(2);
-    encoder.string(owner);
-    encoder.u64(value);
-    return encoder.finish();
+  encodeFields(encoder: Encoder, state: CounterState): void {
+    encoder.string(state.owner);
+    encoder.u64(state.value);
   }
+}
 
-  private value(value: u64): Uint8Array {
-    const encoder = new Encoder();
-    encoder.u64(value);
-    return encoder.finish();
+function initialize(state: CounterState, context: Context): ContractResult<EmptyValue> {
+  if (context.caller().length == 0) return failure(new EmptyValue(), "Counter owner is invalid");
+  state.owner = context.caller();
+  return success(new EmptyValue());
+}
+
+function ownerGuard(state: CounterState, context: Context): string | null {
+  return state.owner == context.caller() ? null : "Only the owner can perform this operation";
+}
+
+function add(state: CounterState, _context: Context, amount: u64): ContractResult<u64> {
+  const next = state.value + amount;
+  if (amount == 0 || next < state.value) return failure(state.value, "Counter value is invalid");
+  state.value = next;
+  return success(next);
+}
+
+function get(state: CounterState, _context: Context): ContractResult<u64> {
+  return success(state.value);
+}
+
+function authorize(
+  _state: CounterState,
+  _context: Context,
+  _moduleHash: BoundedString,
+): ContractResult<EmptyValue> {
+  return success(new EmptyValue());
+}
+
+function migrate(_state: CounterState, _context: Context): ContractResult<EmptyValue> {
+  return success(new EmptyValue());
+}
+
+export class CustomContract extends ContractRouter<CounterState> {
+  constructor() {
+    super(new CounterStateCodec());
+    this.route0<EmptyValue>(RouteKind.Init, "init", emptyCodec, initialize);
+    this.route1<u64, u64>(RouteKind.Call, "add", u64Codec, u64Codec, add, ownerGuard);
+    this.route0<u64>(RouteKind.Query, "get", u64Codec, get);
+    this.route1<BoundedString, EmptyValue>(
+      RouteKind.AuthorizeUpgrade,
+      "authorize_upgrade",
+      new BoundedStringCodec(64),
+      emptyCodec,
+      authorize,
+      ownerGuard,
+    );
+    this.route0<EmptyValue>(RouteKind.Migrate, "migrate", emptyCodec, migrate, ownerGuard);
   }
 }

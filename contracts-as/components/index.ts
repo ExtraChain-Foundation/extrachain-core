@@ -4,6 +4,12 @@ import {
   Decoder,
   DfsProof,
   Encoder,
+  StateMap,
+  StateSet,
+  compareString,
+  compareU64,
+  isContentHash,
+  isDfsLogicalKey,
 } from "../sdk/index";
 
 export class Ownership {
@@ -21,21 +27,30 @@ export class Ownership {
 }
 
 export class Roles {
-  private members: Map<string, Set<string>> = new Map<string, Set<string>>();
+  private members: StateMap<string, StateSet<string>> =
+    new StateMap<string, StateSet<string>>(compareString, 64);
 
   grant(role: string, actor: string): bool {
     if (role.length == 0 || actor.length == 0) return false;
-    if (!this.members.has(role)) this.members.set(role, new Set<string>());
-    this.members.get(role).add(actor);
-    return true;
+    let members = this.members.get(role);
+    if (members === null) {
+      members = new StateSet<string>(compareString, 256);
+      if (this.members.set(role, members) < 0) return false;
+    }
+    return members.add(actor) >= 0;
   }
 
   revoke(role: string, actor: string): bool {
-    return this.members.has(role) && this.members.get(role).delete(actor);
+    const members = this.members.get(role);
+    if (members === null) return false;
+    const removed = members.delete(actor);
+    if (removed && members.size == 0) this.members.delete(role);
+    return removed;
   }
 
   has(role: string, actor: string): bool {
-    return this.members.has(role) && this.members.get(role).has(actor);
+    const members = this.members.get(role);
+    return members !== null && members.has(actor);
   }
 }
 
@@ -53,12 +68,10 @@ export class UpgradePolicy {
 }
 
 export class ReplayGuard {
-  private consumed: Set<string> = new Set<string>();
+  private consumed: StateSet<string> = new StateSet<string>(compareString, 4096);
 
   consume(operationId: string): bool {
-    if (operationId.length == 0 || this.consumed.has(operationId)) return false;
-    this.consumed.add(operationId);
-    return true;
+    return operationId.length > 0 && this.consumed.add(operationId) == 0;
   }
 }
 
@@ -68,11 +81,12 @@ export class SectionTimelock {
 }
 
 export class FungibleLedger {
-  private balances: Map<string, u64> = new Map<string, u64>();
+  private balances: StateMap<string, u64> = new StateMap<string, u64>(compareString);
   totalSupply: u64 = 0;
 
   balanceOf(actor: string): u64 {
-    return this.balances.has(actor) ? this.balances.get(actor) : 0;
+    const balance = this.balances.get(actor);
+    return balance === null ? 0 : balance;
   }
 
   mint(actor: string, amount: u64): bool {
@@ -81,7 +95,7 @@ export class FungibleLedger {
     const nextBalance = balance + amount;
     const nextSupply = this.totalSupply + amount;
     if (nextBalance < balance || nextSupply < this.totalSupply) return false;
-    this.balances.set(actor, nextBalance);
+    if (this.balances.set(actor, nextBalance) < 0) return false;
     this.totalSupply = nextSupply;
     return true;
   }
@@ -89,7 +103,8 @@ export class FungibleLedger {
   burn(actor: string, amount: u64): bool {
     const balance = this.balanceOf(actor);
     if (actor.length == 0 || amount == 0 || balance < amount) return false;
-    this.balances.set(actor, balance - amount);
+    if (balance == amount) this.balances.delete(actor);
+    else this.balances.set(actor, balance - amount);
     this.totalSupply -= amount;
     return true;
   }
@@ -100,29 +115,29 @@ export class FungibleLedger {
     if (from.length == 0 || to.length == 0 || from == to || amount == 0 || source < amount) return false;
     const nextTarget = target + amount;
     if (nextTarget < target) return false;
-    this.balances.set(from, source - amount);
-    this.balances.set(to, nextTarget);
+    if (this.balances.set(to, nextTarget) < 0) return false;
+    if (source == amount) this.balances.delete(from);
+    else this.balances.set(from, source - amount);
     return true;
   }
 }
 
 export class NftLedger {
-  private owners: Map<u64, string> = new Map<u64, string>();
+  private owners: StateMap<u64, string> = new StateMap<u64, string>(compareU64);
 
   mint(tokenId: u64, owner: string): bool {
     if (owner.length == 0 || this.owners.has(tokenId)) return false;
-    this.owners.set(tokenId, owner);
-    return true;
+    return this.owners.set(tokenId, owner) == 0;
   }
 
   ownerOf(tokenId: u64): string {
-    return this.owners.has(tokenId) ? this.owners.get(tokenId) : "";
+    const owner = this.owners.get(tokenId);
+    return owner === null ? "" : owner;
   }
 
   transfer(caller: string, tokenId: u64, receiver: string): bool {
     if (receiver.length == 0 || this.ownerOf(tokenId) != caller) return false;
-    this.owners.set(tokenId, receiver);
-    return true;
+    return this.owners.set(tokenId, receiver) >= 0;
   }
 
   burn(caller: string, tokenId: u64): bool {
@@ -147,7 +162,7 @@ export class Escrow {
 }
 
 export class Multisig {
-  private signers: Set<string> = new Set<string>();
+  private signers: StateSet<string> = new StateSet<string>(compareString, 256);
 
   constructor(signers: Array<string>, public threshold: i32) {
     for (let index = 0; index < signers.length; ++index) this.signers.add(signers[index]);
@@ -159,7 +174,7 @@ export class Multisig {
 
   approved(approvals: Array<string>): bool {
     if (!this.valid()) return false;
-    const accepted = new Set<string>();
+    const accepted = new StateSet<string>(compareString, 256);
     for (let index = 0; index < approvals.length; ++index) {
       if (this.signers.has(approvals[index])) accepted.add(approvals[index]);
     }
@@ -179,10 +194,16 @@ export function requireDagTransaction(
   return false;
 }
 
-export function requireDfsFile(proofs: Array<DfsProof>, fileId: string, contentHash: string = ""): bool {
+export function requireDfsFile(
+  proofs: Array<DfsProof>,
+  ownerId: string,
+  fileId: string,
+  contentHash: string,
+): bool {
   for (let index = 0; index < proofs.length; ++index) {
-    if (proofs[index].fileId == fileId
-        && (contentHash.length == 0 || proofs[index].contentHash == contentHash)) return true;
+    if (proofs[index].ownerId == ownerId
+        && proofs[index].fileId == fileId
+        && proofs[index].contentHash == contentHash) return true;
   }
   return false;
 }
@@ -192,7 +213,7 @@ export class DfsBinding {
 }
 
 export class DfsBindings {
-  private bindings: Map<string, DfsBinding> = new Map<string, DfsBinding>();
+  private bindings: StateMap<string, DfsBinding> = new StateMap<string, DfsBinding>(compareString, 4096);
 
   static decode(state: Uint8Array): DfsBindings | null {
     const result = new DfsBindings();
@@ -212,12 +233,12 @@ export class DfsBindings {
 
   encode(): Uint8Array {
     const encoder = new Encoder();
-    const keys = this.bindings.keys();
-    encoder.array(keys.length);
-    for (let index = 0; index < keys.length; ++index) {
-      const binding = this.bindings.get(keys[index]);
+    const entries = this.bindings.entries();
+    encoder.array(entries.length);
+    for (let index = 0; index < entries.length; ++index) {
+      const binding = entries[index].value;
       encoder.array(3);
-      encoder.string(keys[index]);
+      encoder.string(entries[index].key);
       encoder.string(binding.fileId);
       encoder.string(binding.contentHash);
     }
@@ -225,51 +246,25 @@ export class DfsBindings {
   }
 
   get(logicalKey: string): DfsBinding | null {
-    return this.bindings.has(logicalKey) ? this.bindings.get(logicalKey) : null;
+    return this.bindings.get(logicalKey);
   }
 
   bind(logicalKey: string, fileId: string, contentHash: string, previousContentHash: string): bool {
-    if (!validLogicalKey(logicalKey) || fileId.length == 0 || !validContentHash(contentHash)) {
+    if (!isDfsLogicalKey(logicalKey) || fileId.length == 0 || !isContentHash(contentHash)) {
       return false;
     }
     const previous = this.get(logicalKey);
     const currentHash = previous === null ? "" : previous.contentHash;
     if (currentHash != previousContentHash) return false;
-    this.bindings.set(logicalKey, new DfsBinding(fileId, contentHash));
-    return true;
+    return this.bindings.set(logicalKey, new DfsBinding(fileId, contentHash)) >= 0;
   }
 
   tombstone(logicalKey: string, previousContentHash: string): bool {
+    if (!isDfsLogicalKey(logicalKey) || !isContentHash(previousContentHash)) return false;
     const previous = this.get(logicalKey);
     if (previous === null || previous.contentHash != previousContentHash) return false;
     return this.bindings.delete(logicalKey);
   }
-}
-
-function validLogicalKey(value: string): bool {
-  if (value.length == 0 || value.length > 128 || value.startsWith("/") || value.endsWith("/")) return false;
-  if (value == ".." || value.startsWith("../") || value.endsWith("/..") || value.includes("/../")) return false;
-  for (let index = 0; index < value.length; ++index) {
-    const character = value.charCodeAt(index);
-    const valid = (character >= 48 && character <= 57)
-      || (character >= 65 && character <= 90)
-      || (character >= 97 && character <= 122)
-      || character == 45
-      || character == 46
-      || character == 47
-      || character == 95;
-    if (!valid) return false;
-  }
-  return true;
-}
-
-function validContentHash(value: string): bool {
-  if (value.length != 64) return false;
-  for (let index = 0; index < value.length; ++index) {
-    const character = value.charCodeAt(index);
-    if (!((character >= 48 && character <= 57) || (character >= 97 && character <= 102))) return false;
-  }
-  return true;
 }
 
 function bindingArguments(
@@ -293,7 +288,9 @@ export function bindDfsFile(
   fileId: string,
   contentHash: string,
   previousContentHash: string = "",
-): ContractEffect {
+): ContractEffect | null {
+  if (ownerId.length == 0 || !isDfsLogicalKey(logicalKey) || fileId.length == 0
+      || !isContentHash(contentHash) || !isContentHash(previousContentHash, true)) return null;
   return new ContractEffect(
     "dfs_write",
     ownerId,
@@ -306,7 +303,9 @@ export function tombstoneDfsFile(
   ownerId: string,
   logicalKey: string,
   previousContentHash: string,
-): ContractEffect {
+): ContractEffect | null {
+  if (ownerId.length == 0 || !isDfsLogicalKey(logicalKey)
+      || !isContentHash(previousContentHash)) return null;
   return new ContractEffect(
     "dfs_write",
     ownerId,

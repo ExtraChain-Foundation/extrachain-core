@@ -37,9 +37,9 @@
 namespace ExtraChain::Contracts {
     namespace {
         constexpr auto StateFile                  = "installation.json";
-        constexpr auto SupportedComponentsVersion = "0.1.0";
-        constexpr auto SupportedCatalogVersion    = "0.1.0";
-        constexpr auto SupportedTemplateVersion   = "0.1.0";
+        constexpr auto SupportedComponentsVersion = "0.2.0";
+        constexpr auto SupportedCatalogVersion    = "0.2.0";
+        constexpr auto SupportedTemplateVersion   = "0.2.0";
 
         ToolchainFailure failure(ToolchainError error, std::string detail) {
             return { error, std::move(detail) };
@@ -262,6 +262,7 @@ namespace ExtraChain::Contracts {
 #endif
             const QFileInfo cargo(directory.filePath(CargoName));
             const QFileInfo rustc(directory.filePath(RustcName));
+            const QFileInfo macros(directory.filePath("macros/Cargo.toml"));
             const QFileInfo sdk(directory.filePath("sdk/Cargo.toml"));
             const QFileInfo components(directory.filePath("components/Cargo.toml"));
             const QFileInfo catalog(directory.filePath("catalog/components.json"));
@@ -271,9 +272,9 @@ namespace ExtraChain::Contracts {
                 return false;
             }
             const auto catalog_document = QJsonDocument::fromJson(catalog_file.readAll());
-            return cargo.isFile() && cargo.isExecutable() && rustc.isFile() && rustc.isExecutable() && sdk.isFile()
-                   && components.isFile() && catalog.isFile() && template_file.isFile()
-                   && QDir(directory.filePath("rustup")).exists()
+            return cargo.isFile() && cargo.isExecutable() && rustc.isFile() && rustc.isExecutable()
+                   && macros.isFile() && sdk.isFile() && components.isFile() && catalog.isFile()
+                   && template_file.isFile() && QDir(directory.filePath("rustup")).exists()
                    && QDir(directory.filePath("cargo-home")).exists() && catalog_document.isObject()
                    && catalog_document.object().value("schema").toInt() == 1
                    && catalog_document.object().value("version").toString() == SupportedCatalogVersion
@@ -587,7 +588,7 @@ namespace ExtraChain::Contracts {
                 "[lib]\ncrate-type = [\"cdylib\"]\n"
                 "[dependencies]\nextrachain-contract-sdk = { path = \"%2\" }\n"
                 "extrachain-contract-components = { path = \"%3\" }\n"
-                "[profile.release]\npanic = \"abort\"\nlto = true\nopt-level = \"s\"\n"
+                "[profile.release]\npanic = \"abort\"\nlto = true\nopt-level = \"z\"\n"
                 "codegen-units = 1\nstrip = true\n")
                 .arg(safe_name, QDir::fromNativeSeparators(sdk), QDir::fromNativeSeparators(components));
         const auto cargo_bytes = cargo.toUtf8();
@@ -769,14 +770,68 @@ namespace ExtraChain::Contracts {
         if (language_ == ToolchainLanguage::AssemblyScript) {
             return QString(
                        "import {\n"
-                       "  GeneratedContract,\n"
-                       "  InvokeRequest,\n"
-                       "  InvokeResponse,\n%2"
+                       "  BoundedString,\n"
+                       "  BoundedStringCodec,\n"
+                       "  Context,\n"
+                       "  ContractResult,\n"
+                       "  ContractRouter,\n"
+                       "  Decoder,\n"
+                       "  EmptyValue,\n"
+                       "  Encoder,\n"
+                       "  RouteKind,\n"
+                       "  VersionedStateCodec,\n"
+                       "  emptyCodec,\n"
+                       "  failure,\n"
+                       "  success,\n%2"
                        "} from \"./generated\";\n\n"
                        "// Components selected from the trusted ExtraChain catalog:\n%1"
-                       "export class CustomContract extends GeneratedContract {\n"
-                       "  invokeCustom(request: InvokeRequest): InvokeResponse | null {\n"
-                       "    return null;\n"
+                       "class State { owner: string = \"\"; }\n\n"
+                       "class StateCodec extends VersionedStateCodec<State> {\n"
+                       "  constructor() { super(1, 1); }\n"
+                       "  create(): State { return new State(); }\n"
+                       "  decodeFields(decoder: Decoder, state: State): void {\n"
+                       "    state.owner = decoder.string();\n"
+                       "  }\n"
+                       "  encodeFields(encoder: Encoder, state: State): void {\n"
+                       "    encoder.string(state.owner);\n"
+                       "  }\n"
+                       "}\n\n"
+                       "function initialize(state: State, context: Context): ContractResult<EmptyValue> {\n"
+                       "  if (context.caller().length == 0) {\n"
+                       "    return failure(new EmptyValue(), \"Contract owner is invalid\");\n"
+                       "  }\n"
+                       "  state.owner = context.caller();\n"
+                       "  return success(new EmptyValue());\n"
+                       "}\n\n"
+                       "function ownerGuard(state: State, context: Context): string | null {\n"
+                       "  return state.owner == context.caller()\n"
+                       "    ? null\n"
+                       "    : \"Only the owner can perform this operation\";\n"
+                       "}\n\n"
+                       "function authorize(\n"
+                       "  _state: State,\n"
+                       "  _context: Context,\n"
+                       "  _moduleHash: BoundedString,\n"
+                       "): ContractResult<EmptyValue> {\n"
+                       "  return success(new EmptyValue());\n"
+                       "}\n\n"
+                       "function migrate(_state: State, _context: Context): ContractResult<EmptyValue> {\n"
+                       "  return success(new EmptyValue());\n"
+                       "}\n\n"
+                       "export class CustomContract extends ContractRouter<State> {\n"
+                       "  constructor() {\n"
+                       "    super(new StateCodec());\n"
+                       "    this.route0<EmptyValue>(RouteKind.Init, \"init\", emptyCodec, initialize);\n"
+                       "    this.route1<BoundedString, EmptyValue>(\n"
+                       "      RouteKind.AuthorizeUpgrade,\n"
+                       "      \"authorize_upgrade\",\n"
+                       "      new BoundedStringCodec(64),\n"
+                       "      emptyCodec,\n"
+                       "      authorize,\n"
+                       "      ownerGuard,\n"
+                       "    );\n"
+                       "    this.route0<EmptyValue>(RouteKind.Migrate, \"migrate\", emptyCodec, migrate, "
+                       "ownerGuard);\n"
                        "  }\n"
                        "}\n")
                 .arg(component_list, component_imports);
@@ -784,23 +839,40 @@ namespace ExtraChain::Contracts {
         return QString(
                    "#![no_std]\n\n"
                    "extern crate alloc;\n\n"
-                   "use alloc::vec::Vec;\n"
-                   "use extrachain_contract_sdk::{Contract, InvokeRequest, InvokeResponse, export_contract};\n\n"
+                   "use alloc::string::{String, ToString};\n"
+                   "use extrachain_contract_sdk::{BoundedString, Context, ContractResult, ContractState, "
+                   "contract};\n\n"
                    "// Components selected from the trusted ExtraChain catalog:\n%1\n"
                    "#[allow(unused_imports)]\n"
                    "mod components {\n%2}\n"
-                   "pub struct GeneratedContract;\n\n"
-                   "impl Contract for GeneratedContract {\n"
-                   "    fn invoke(request: InvokeRequest) -> InvokeResponse {\n"
-                   "        match request.method.as_str() {\n"
-                   "            \"init\" | \"authorize_upgrade\" | \"migrate\" => {\n"
-                   "                InvokeResponse::success(request.state, Vec::new(), Vec::new())\n"
-                   "            }\n"
-                   "            _ => InvokeResponse::failure(request.state, \"Unknown contract method\"),\n"
-                   "        }\n"
-                   "    }\n"
+                   "#[derive(Default, ContractState)]\n"
+                   "#[state(version = 1)]\n"
+                   "pub struct GeneratedContract {\n"
+                   "    #[owner]\n"
+                   "    owner: String,\n"
                    "}\n\n"
-                   "export_contract!(GeneratedContract);\n")
+                   "#[contract]\n"
+                   "impl GeneratedContract {\n"
+                   "    #[init]\n"
+                   "    fn init(&mut self, ctx: &Context<'_>) -> ContractResult<()> {\n"
+                   "        self.owner = ctx.caller().to_string();\n"
+                   "        Ok(())\n"
+                   "    }\n\n"
+                   "    #[authorize_upgrade]\n"
+                   "    #[owner_only]\n"
+                   "    fn authorize_upgrade(\n"
+                   "        &self,\n"
+                   "        _ctx: &Context<'_>,\n"
+                   "        _module_hash: BoundedString<64>,\n"
+                   "    ) -> ContractResult<()> {\n"
+                   "        Ok(())\n"
+                   "    }\n\n"
+                   "    #[migrate]\n"
+                   "    #[owner_only]\n"
+                   "    fn migrate(&mut self, _ctx: &Context<'_>) -> ContractResult<()> {\n"
+                   "        Ok(())\n"
+                   "    }\n"
+                   "}\n")
             .arg(component_list, component_imports);
     }
 

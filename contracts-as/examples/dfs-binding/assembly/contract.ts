@@ -4,10 +4,20 @@ import { GeneratedContract, InvokeRequest, InvokeResponse } from "./generated";
 
 export class CustomContract extends GeneratedContract {
   invokeCustom(request: InvokeRequest): InvokeResponse | null {
+    if (request.method == "init") {
+      const argumentsDecoder = new Decoder(request.argumentsData);
+      if (request.state.length != 0 || argumentsDecoder.array() != 0 || !argumentsDecoder.empty()) {
+        return InvokeResponse.failure(request.state, "DFS binding initialization is invalid");
+      }
+      return InvokeResponse.success(new DfsBindings().encode());
+    }
     const bindings = DfsBindings.decode(request.state);
     if (bindings === null) return InvokeResponse.failure(request.state, "DFS binding state is invalid");
     if (request.method == "binding") {
       const keyDecoder = new Decoder(request.argumentsData);
+      if (keyDecoder.array() != 1) {
+        return InvokeResponse.failure(request.state, "Logical key is invalid");
+      }
       const key = keyDecoder.string();
       if (!keyDecoder.empty()) return InvokeResponse.failure(request.state, "Logical key is invalid");
       const binding = bindings.get(key);
