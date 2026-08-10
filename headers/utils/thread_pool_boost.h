@@ -31,7 +31,14 @@ class ThreadPoolBoost {
 public:
     ThreadPoolBoost() = delete;
 
-    static std::shared_ptr<ThreadPoolBoost> instance_dfs(size_t threads_count = 1);
+    // 4, not 1: eleven different DFS jobs share this pool — dirs sync, file fragments,
+    // vector content, vector row writes. Since sqlite writes now wait for a contended
+    // lock instead of failing (sqlite3_busy_timeout), a single worker can stall the
+    // whole queue for seconds. Measured on a six-node stand with one thread: vector
+    // replication dropped to ~1 file per 45s, a hundredfold slowdown, while the same
+    // work took two minutes before. Per-vector ordering is unaffected — concurrent
+    // writers to one file are serialised by sqlite itself.
+    static std::shared_ptr<ThreadPoolBoost> instance_dfs(size_t threads_count = 4);
     static std::shared_ptr<ThreadPoolBoost> instance_dag(size_t threads_count = 1);
     static std::shared_ptr<ThreadPoolBoost> instance_dag_sync(size_t threads_count = 8);
     static std::shared_ptr<ThreadPoolBoost> instance(size_t threads_count = 1);
