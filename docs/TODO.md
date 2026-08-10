@@ -462,6 +462,32 @@ Minimum fix: reject a transaction whose timestamp is further ahead of local time
 small tolerance, and further behind than the acceptance window allows; keep anti-spam
 state on the receiver's own clock rather than on a value the sender supplies.
 
+### 0.8 A transaction rejected as too old is lost by the whole network
+
+**Found 2026-08-10 under chaos.** A node that was frozen keeps emitting transactions
+stamped with the section it last knew about. By the time it resumes, the network has moved
+on, every peer rejects the transaction as `TooSectionDiff`, and **nobody retries** — the
+transaction is simply gone.
+
+```
+[Dag] Transaction not approved: … section: 769 …
+[Dag] Current: 1916 (0x77c) section, but TooSectionDiff!: 1897 (0x769)
+```
+
+19 sections apart against a ±15 window, so the rejection is correct. What is wrong is what
+follows it: 8 rejections on five nodes, 4 on a sixth, and checking four of the rejected
+hashes against every section file on two nodes — **none of them are in the chain
+anywhere**, and each hash appears exactly once in the log, so no retry was ever attempted.
+
+This is worse than the two findings below because it is a *transaction* — money — and the
+loss is total rather than per-node. The sender believes it sent; the network never had it.
+
+What is missing is an answer to rejection. Options, roughly in order of cost: have the
+sender re-stamp and re-send on `TooSectionDiff` (it knows the current section from the
+rejection); or have a node refuse to emit transactions until it has re-synced after a
+disruption; or acknowledge acceptance so the sender can tell the difference between
+"delivered" and "dropped". Today there is no feedback path at all.
+
 ### 0.9 A restarted node accepts a transaction into a section the network has closed
 
 **Found 2026-08-10 by the first chaos run after all the fixes.** This is the defect the
