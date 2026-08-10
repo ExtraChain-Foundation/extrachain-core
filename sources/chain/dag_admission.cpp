@@ -212,6 +212,12 @@ private:
     }
 
     void reject(const std::shared_ptr<Request> &request, TransactionProveError result) {
+        // Name the reason. Every rejection here used to be silent, so a node that
+        // accepted nothing looked identical to a node with no traffic: on a six-node
+        // stand 224 transactions were sent and 3 accepted, with not one line saying
+        // why. The sender learns the verdict over the wire, but the log — where an
+        // operator looks — said nothing at all.
+        eWarning("[Dag] Admission rejected {}: {}", request->transaction.hash(), result);
         send_result(*request, result);
         complete(request->completion, std::unexpected(result), false);
     }
