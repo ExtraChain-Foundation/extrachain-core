@@ -63,7 +63,7 @@ SeedProfile AccountController::create_profile(const std::string               &h
 
     // chat_main is in seed_profile.actors()[2]; add to profile.actors_ for DFS lookup.
     if (profile_seed.actors().size() > 2) {
-        const auto& chat_main = profile_seed.actors()[2];
+        const auto &chat_main = profile_seed.actors()[2];
         this->profile(current_profile_).add_wallet(chat_main, false);
         node->actor_index()->store_new_actor(chat_main.to_public());
         eLog("[Accounts] chat_main registered: {}", chat_main.id());
@@ -303,7 +303,7 @@ bool AccountController::load_profile(const ActorId                &actor_id,
 
             // chat_main lives at seed_profile.actors()[2]; needs to be in profile.actors_ for DFS.
             if (try_new->actors().size() > 2) {
-                const auto& chat_main = try_new->actors()[2];
+                const auto &chat_main = try_new->actors()[2];
                 profile.add_wallet(chat_main, false);
                 if (!node->actor_index()->exists(chat_main.id())) {
                     node->actor_index()->store_new_actor(chat_main.to_public());
@@ -433,7 +433,7 @@ void AccountController::clear() {
 
 std::set<ActorId> AccountController::profiles_list() {
     QString file_name = QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles);
-    QFile file(file_name);
+    QFile   file(file_name);
     if (!file.exists())
         return {};
 
@@ -459,12 +459,12 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
     profiles.insert(actorId);
     QJsonArray array;
     for (auto &actorId : profiles) {
-        array.push_back(actorId.toQString());
+        array.push_back(QString::fromStdString(actorId.to_string()));
     }
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact);
 
     QString file_name = QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles);
-    QFile file(file_name);
+    QFile   file(file_name);
     if (!file.open(QFile::WriteOnly)) {
         eWarning("Failed to open file: {}. Error: {}", file_name, file.errorString());
         return;

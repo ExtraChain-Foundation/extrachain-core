@@ -94,7 +94,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/network_status_adapter.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/message_body.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/peer_meta.h
@@ -178,7 +177,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/janus_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/network_status_adapter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/wire_format.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
@@ -238,6 +236,20 @@ if(WIN32)
     target_compile_definitions(extrachain-runtime PUBLIC _WIN32_WINNT=0x0A00)
 endif()
 set_property(TARGET extrachain-runtime PROPERTY POSITION_INDEPENDENT_CODE ON)
+
+option(EXTRACHAIN_BUILD_QT_COMPAT "Build the Qt compatibility layer" ON)
+if(EXTRACHAIN_BUILD_QT_COMPAT)
+    add_library(extrachain-qt-compat STATIC
+        ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/actor_id_adapter.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/network_status_adapter.h
+        ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/actor_id_adapter.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/network_status_adapter.cpp
+    )
+    target_include_directories(extrachain-qt-compat PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
+    target_link_libraries(extrachain-qt-compat PUBLIC extrachain-runtime Qt6::Core Qt6::Network)
+    target_compile_features(extrachain-qt-compat PUBLIC cxx_std_23)
+    set_property(TARGET extrachain-qt-compat PROPERTY POSITION_INDEPENDENT_CODE ON)
+endif()
 
 # C FFI bindings (optional)
 option(EXTRACHAIN_BUILD_CBINDINGS "Build C FFI bindings (libextrachainc)" OFF)
@@ -309,6 +321,9 @@ target_link_libraries(extrachain
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
     Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x extrachain-wamr
     $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+if(EXTRACHAIN_BUILD_QT_COMPAT)
+    target_link_libraries(extrachain extrachain-qt-compat)
+endif()
 if(UNIX AND NOT APPLE)
     target_link_options(extrachain PRIVATE "-Wl,-z,noexecstack")
 endif()

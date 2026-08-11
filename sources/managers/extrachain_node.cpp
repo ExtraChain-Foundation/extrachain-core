@@ -366,7 +366,6 @@ void ExtraChainNode::process() {
     thoth_manager_ = new ThothManager(this);
     janus_manager_ = new JanusManager(this);
 
-    // auto key             = actorIndex()->network_id().toQByteArray();
     // auto address         = "12.12.12.12";
     // auto port            = "1212";
 
@@ -2016,7 +2015,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction_
         //                tx.setSenderBalance(BigNumber(0));
         return this->create_transaction(tx);
     } else {
-        eWarning("Can not create tx to '{}'. There no current user", receiver.toQByteArray());
+        eWarning("Can not create tx to '{}'. There no current user", receiver);
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 

@@ -93,7 +93,7 @@ namespace ExtraChain::Contracts {
 
         QString head_path(const ActorId &contract_id) {
             return QDir::current().filePath(
-                QStringLiteral("contract-heads/%1.msgpack").arg(contract_id.toQString()));
+                QStringLiteral("contract-heads/%1.msgpack").arg(QString::fromStdString(contract_id.to_string())));
         }
 
         bool write_head(const ActorId &contract_id, const ContractHeadCache &head) {

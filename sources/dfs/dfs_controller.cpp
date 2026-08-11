@@ -224,9 +224,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     //     return std::unexpected(Dfs::DfsError::StorageFull);
     // }
 
-    std::string           file_id = create_file_id(file_path);
-    std::filesystem::path place_in_dfs =
-        DfsB::fsActrRootW + DfsB::separator + owner_id.toQString().toStdWString() + DfsB::separator;
+    std::string           file_id      = create_file_id(file_path);
+    std::filesystem::path place_in_dfs = DfsB::fsActrRootW + DfsB::separator
+                                         + QString::fromStdString(owner_id.to_string()).toStdWString()
+                                         + DfsB::separator;
     auto dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
 
     try {
@@ -1799,10 +1800,7 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
         package = empty.value();
     }
 
-    responder.send_response(package,
-                            MessageType::DfsVectorContent,
-                            SendMode::Focused,
-                            MessageStatus::Response);
+    responder.send_response(package, MessageType::DfsVectorContent, SendMode::Focused, MessageStatus::Response);
 }
 
 std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::make_vector(
@@ -1815,7 +1813,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
 
     if (!dir_row.has_value()) {
-        eLog("[Dfs] make_vector: no dir_row for {} / {}", owner_id.toQString(), file_id);
+        eLog("[Dfs] make_vector: no dir_row for {} / {}", owner_id, file_id);
         return std::unexpected(DfsVectorError::Unknown);
     }
     // if (dir_row->state == Dfs::FileState::Ready) {
@@ -1827,7 +1825,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     auto encryption = dir_row->encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
 
     if (!signer_actor.has_value()) {
-        eLog("[Dfs] make_vector: no signer actor for {} / {}", owner_id.toQString(), file_id);
+        eLog("[Dfs] make_vector: no signer actor for {} / {}", owner_id, file_id);
         return std::unexpected(DfsVectorError::Unknown);
     }
 
@@ -2362,9 +2360,8 @@ void DfsController::increaseSizeTaken(uintmax_t value) {
 
 void DfsController::completeDownloadedFile(const ActorId &owner_id, const Dfs::DirRow &dir_row) {
     std::lock_guard lock(size_state_mutex_);
-    auto current = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
-                                                                  owner_id,
-                                                                  dir_row.file_id);
+    auto            current =
+        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, dir_row.file_id);
     if (!current.has_value() || current->state == Dfs::FileState::Ready) {
         return;
     }

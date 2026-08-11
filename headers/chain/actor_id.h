@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <expected>
 #include <msgpack.hpp>
 
@@ -45,15 +46,14 @@ enum class ActorError {
 
 class EXTRACHAIN_EXPORT ActorId final {
 public:
+    static constexpr std::size_t SIZE = 40;
+
     ActorId();
     explicit ActorId(const std::string &actorId);
     ActorId(const ActorId &other);
     ActorId(ActorId &&other) noexcept;
 
-    static std::expected<ActorId, ActorError> create(const std::string actor_id);
-
-    QByteArray toQByteArray() const;
-    QString    toQString() const;
+    [[nodiscard]] static std::expected<ActorId, ActorError> create(const std::string &actor_id);
 
     const std::string &value() const;
     const std::string &to_string() const;
@@ -75,6 +75,7 @@ public:
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         m_id = msgpack_o.as<std::string>();
+        normalize();
     }
 
 private:

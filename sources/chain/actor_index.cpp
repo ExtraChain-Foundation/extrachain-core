@@ -260,7 +260,7 @@ std::string ActorIndex::folder_path() const {
 }
 
 QString ActorIndex::build_file_path(const ActorId &id) const {
-    QByteArray Id = id.toQByteArray(); // id.to_string - std::string
+    QByteArray Id = QByteArray::fromStdString(id.to_string());
 
     QByteArray section      = Id.right(SECTION_NAME_SIZE);
     QString    pathToFolder = QString::fromStdString(folder_path_) + section;

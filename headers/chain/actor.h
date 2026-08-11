@@ -72,8 +72,8 @@ public:
         auto public_key = this->key_.public_key();
         auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Blake3);
 
-        if (hash.size() >= ChainConst::ACTOR_SIZE)
-            id_ = hash.substr(0, ChainConst::ACTOR_SIZE);
+        if (hash.size() >= ActorId::SIZE)
+            id_ = hash.substr(0, ActorId::SIZE);
         else
             eFatal("[Actor] Create: error size of hash");
     }
@@ -87,8 +87,8 @@ public:
         auto public_key = this->key_.public_key();
         auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Blake3);
 
-        if (hash.size() >= ChainConst::ACTOR_SIZE)
-            id_ = hash.substr(0, ChainConst::ACTOR_SIZE);
+        if (hash.size() >= ActorId::SIZE)
+            id_ = hash.substr(0, ActorId::SIZE);
         else
             eFatal("[Actor] Create: error size of hash");
     }
@@ -102,8 +102,8 @@ public:
         auto public_key = this->key_.public_key();
         auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Blake3);
 
-        if (hash.size() >= ChainConst::ACTOR_SIZE)
-            id_ = hash.substr(0, ChainConst::ACTOR_SIZE);
+        if (hash.size() >= ActorId::SIZE)
+            id_ = hash.substr(0, ActorId::SIZE);
         else
             eFatal("[Actor] Create: error size of hash");
     }
@@ -175,7 +175,7 @@ public:
         QJsonArray array;
         QString    pub = QString::fromStdString(Utils::to_base64(key_.public_key()));
 
-        array << id_.toQString() << int(type_) << pub;
+        array << QString::fromStdString(id_.to_string()) << int(type_) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
             QString secret = QString::fromStdString(Utils::to_base64(key_.secret_key()));

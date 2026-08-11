@@ -92,13 +92,26 @@ add_executable(extrachain-runtime-tests runtime/runtime_test.cpp)
 target_link_libraries(extrachain-runtime-tests PRIVATE extrachain-runtime)
 set_property(TARGET extrachain-runtime-tests PROPERTY POSITION_INDEPENDENT_CODE 1)
 
+if(EXTRACHAIN_BUILD_QT_COMPAT)
+    add_executable(extrachain-qt-compat-tests qt_compat_test.cpp)
+    target_link_libraries(extrachain-qt-compat-tests PRIVATE extrachain-qt-compat extrachain)
+    set_property(TARGET extrachain-qt-compat-tests PROPERTY POSITION_INDEPENDENT_CODE 1)
+endif()
+
 enable_testing()
 add_test(NAME core-unit COMMAND extrachain-ci-unit)
 add_test(NAME amount-roundtrip COMMAND extrachain-amount-rt)
 add_test(NAME sync-roundtrip COMMAND extrachain-sync-tests)
 add_test(NAME native-balance COMMAND extrachain-native-balance)
 add_test(NAME runtime COMMAND extrachain-runtime-tests)
-set_tests_properties(core-unit amount-roundtrip sync-roundtrip native-balance runtime PROPERTIES
+if(EXTRACHAIN_BUILD_QT_COMPAT)
+    add_test(NAME qt-compat COMMAND extrachain-qt-compat-tests)
+endif()
+set(EXTRACHAIN_TEST_NAMES core-unit amount-roundtrip sync-roundtrip native-balance runtime)
+if(EXTRACHAIN_BUILD_QT_COMPAT)
+    list(APPEND EXTRACHAIN_TEST_NAMES qt-compat)
+endif()
+set_tests_properties(${EXTRACHAIN_TEST_NAMES} PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt${QT_VERSION_MAJOR}::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:unofficial::sqlite3::sqlite3>"
     TIMEOUT 120

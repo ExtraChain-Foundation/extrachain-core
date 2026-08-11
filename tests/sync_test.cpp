@@ -80,6 +80,16 @@ class SyncTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void actorIdUsesCanonicalCoreRepresentation() {
+        const ActorId actor_id("abc");
+        QCOMPARE(actor_id.to_string().size(), ActorId::SIZE);
+        QVERIFY(actor_id.to_string().ends_with("abc"));
+        QVERIFY(!ActorId::create(std::string(ActorId::SIZE + 1, 'a')).has_value());
+        QVERIFY(!ActorId::create("ABC").has_value());
+        QVERIFY(ActorId(std::string(ActorId::SIZE + 1, 'a')).is_zero());
+        QVERIFY(ActorId("ABC").is_zero());
+    }
+
     void transactionAdmissionClosesAtCacheBoundary() {
         QVERIFY(transaction_section_is_open(SectionId(14), SectionId(0)));
         QVERIFY(!transaction_section_is_open(SectionId(15), SectionId(0)));

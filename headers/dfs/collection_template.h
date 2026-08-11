@@ -204,8 +204,7 @@ namespace Dfs {
             return FieldBuilder(std::move(name), FieldType::Real);
         }
         static FieldBuilder ActorId(std::string name) {
-            return FieldBuilder(std::move(name), FieldType::ActorId)
-                .length(ChainConst::ACTOR_SIZE, ChainConst::ACTOR_SIZE);
+            return FieldBuilder(std::move(name), FieldType::ActorId).length(ActorId::SIZE, ActorId::SIZE);
         }
         static FieldBuilder String(std::string name) {
             return FieldBuilder(std::move(name), FieldType::String);
