@@ -145,13 +145,13 @@ Concretely, before shipping:
 Until this exists, the fixes stop the bleeding for **new** chains and do nothing for the
 damage already accumulated.
 
-### 0. Vectors and dictionaries are not covered by load testing
+### 0. Vectors and dictionaries need a concurrent same-object load test
 
-Stand runs so far exercised plain files only: a typical run replicated ~235 files
-(`FileType::File`) against 3 vectors and 1 dictionary — and those four were created by
-the core itself at startup, not by the stand. So the whole structured-data path
-(`store_vector`, row appends, `DfsVectorContent` replication, per-row signatures,
-`DataSecurity` variants) has never been under concurrent load with node restarts.
+The early stands exercised plain files only. A later two-node stand created a vector and
+a dictionary, replicated their rows, restarted a node, removed local payloads, and
+confirmed byte-for-byte recovery. A six-node combined stand repeated structured payload
+recovery after one hard restart. The remaining gap is concurrent writes from several
+nodes to the same vector or dictionary during repeated disconnects.
 
 This matters more than the file path: vectors carry chat history, profiles and
 dictionaries, they replicate row-by-row rather than as an immutable blob, and rows are
@@ -880,23 +880,23 @@ What to fix, in order:
 2. **A node must be able to notice its own gaps.** `range` records only first/last, so a
    hole in the middle is unrepresentable. Either track the received set, or verify
    contiguity when crossing a control boundary.
-3. **A detected gap must be repairable** — which is §2 (backfill), now with a concrete
-   case to test against, not a hypothetical one.
+3. **A detected gap must be repairable.** The bounded recovery in §2 is now implemented.
+   Keep this case as a regression test for the recovery path.
 
 Reproduction: six nodes, real rate, seed 8090 (`HARNESS_SEED=8090 REAL=1 DAG_NODES=6`),
 join the last node while the network is still near height 0. Check with:
 `for i in 1 2 3 4; do ls dagdfs/d6/dag/0/$(printf %x $i); done`.
 
-### 2. Backfill of missed sections inside the acceptance window
+### 2. Backfill of missed sections inside the acceptance window — done 2026-08-11
 
-A node that was dead or frozen does not pull the transactions it missed
-(`request_sections` is only reachable from a commented-out block in
-`network_transaction`, `dag.cpp:311-324`). With the connection and integrity fixes in
-place this is no longer a workaround but a genuine second line of defence.
+A transaction ahead of the local frontier is kept in the bounded pending cache and
+schedules a synchronization check. A future `TooSectionDiff` result schedules the same
+check. The periodic watchdog repeats the check after the local height stays stable and
+retries a stalled synchronization on the node thread.
 
-Scope it to the **open window only** (`±15` sections): trigger on a detected gap between
-`current_section_` and an incoming `tx.section()`, or a periodic control/section-hash
-comparison with neighbours. Not a global catch-up.
+The admission window uses the same closed boundary as the cache. A response must match
+the outstanding message id and requested range. The retry timer remains active until the
+response passes validation and storage succeeds.
 
 ### 3. DAG CPU: per-transaction cost grows with section size
 
