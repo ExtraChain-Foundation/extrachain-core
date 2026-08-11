@@ -7,7 +7,8 @@ use alloc::vec::Vec;
 
 use extrachain_contract_sdk::{
     ActorId, BoundedString, Context, ContractCodec, ContractError, ContractResult, DagProof,
-    DfsProof, NonZeroAmount, StateMap, StateSet, is_content_hash, is_dfs_logical_key,
+    DfsProof, ErrorCode, NonZeroAmount, OperationReceipt, StateMap, StateSet, is_content_hash,
+    is_dfs_logical_key,
 };
 
 pub const MAX_ROLES: usize = 64;
@@ -198,6 +199,8 @@ impl SectionTimelock {
 #[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct FungibleLedger {
     balances: StateMap<ActorId, u128, MAX_LEDGER_ENTRIES>,
+    allowances: StateMap<(ActorId, ActorId), u128, MAX_LEDGER_ENTRIES>,
+    locked: StateMap<ActorId, u128, MAX_LEDGER_ENTRIES>,
     total_supply: u128,
 }
 
@@ -212,32 +215,145 @@ impl FungibleLedger {
         self.total_supply
     }
 
-    pub fn mint(&mut self, actor: ActorId, amount: NonZeroAmount) -> ContractResult<u128> {
-        let next_balance = self
-            .balance_of(&actor)
-            .checked_add(amount.get())
-            .ok_or(ContractError::new("The balance is too large"))?;
-        let next_supply = self
-            .total_supply
-            .checked_add(amount.get())
-            .ok_or(ContractError::new("The supply is too large"))?;
-        self.balances.insert(actor, next_balance)?;
-        self.total_supply = next_supply;
-        Ok(next_supply)
+    #[must_use]
+    pub fn allowance(&self, owner: &ActorId, spender: &ActorId) -> u128 {
+        self.allowances
+            .get(&(owner.clone(), spender.clone()))
+            .copied()
+            .unwrap_or_default()
     }
 
-    pub fn burn(&mut self, actor: &ActorId, amount: NonZeroAmount) -> ContractResult<u128> {
-        let balance = self.balance_of(actor);
-        if balance < amount.get() {
-            return Err(ContractError::new("The balance is too low"));
+    #[must_use]
+    pub fn locked_balance(&self, actor: &ActorId) -> u128 {
+        self.locked.get(actor).copied().unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn spendable_balance(&self, actor: &ActorId) -> u128 {
+        self.balance_of(actor)
+            .saturating_sub(self.locked_balance(actor))
+    }
+
+    fn set_balance(&mut self, actor: ActorId, amount: u128) -> ContractResult<()> {
+        if amount == 0 {
+            self.balances.remove(&actor);
+        } else {
+            self.balances.insert(actor, amount)?;
         }
-        self.balances
-            .insert(actor.clone(), balance - amount.get())?;
-        self.total_supply -= amount.get();
-        Ok(self.total_supply)
+        Ok(())
     }
 
-    pub fn transfer(
+    fn set_allowance(
+        &mut self,
+        owner: ActorId,
+        spender: ActorId,
+        amount: u128,
+    ) -> ContractResult<()> {
+        let key = (owner, spender);
+        if amount == 0 {
+            self.allowances.remove(&key);
+        } else {
+            self.allowances.insert(key, amount)?;
+        }
+        Ok(())
+    }
+
+    fn set_locked(&mut self, actor: ActorId, amount: u128) -> ContractResult<()> {
+        if amount == 0 {
+            self.locked.remove(&actor);
+        } else {
+            self.locked.insert(actor, amount)?;
+        }
+        Ok(())
+    }
+
+    pub fn mint(
+        &mut self,
+        context: &mut Context<'_>,
+        actor: ActorId,
+        amount: NonZeroAmount,
+    ) -> ContractResult<OperationReceipt> {
+        let next_balance =
+            self.balance_of(&actor)
+                .checked_add(amount.get())
+                .ok_or(ContractError::with_code(
+                    ErrorCode::Overflow,
+                    "The balance is too large",
+                ))?;
+        let next_supply =
+            self.total_supply
+                .checked_add(amount.get())
+                .ok_or(ContractError::with_code(
+                    ErrorCode::Overflow,
+                    "The supply is too large",
+                ))?;
+        self.set_balance(actor.clone(), next_balance)?;
+        self.total_supply = next_supply;
+        context.fungible_mint(&actor, amount);
+        Ok(OperationReceipt::new("mint", actor.as_str(), amount.get()))
+    }
+
+    pub fn restore_balance(&mut self, actor: ActorId, amount: NonZeroAmount) -> ContractResult<()> {
+        if self.balance_of(&actor) != 0 {
+            return Err(ContractError::with_code(
+                ErrorCode::Conflict,
+                "The restored actor is duplicated",
+            ));
+        }
+        let next_supply =
+            self.total_supply
+                .checked_add(amount.get())
+                .ok_or(ContractError::with_code(
+                    ErrorCode::Overflow,
+                    "The restored supply is too large",
+                ))?;
+        self.set_balance(actor, amount.get())?;
+        self.total_supply = next_supply;
+        Ok(())
+    }
+
+    pub fn burn(
+        &mut self,
+        context: &mut Context<'_>,
+        actor: &ActorId,
+        amount: NonZeroAmount,
+    ) -> ContractResult<OperationReceipt> {
+        let balance = self.spendable_balance(actor);
+        if balance < amount.get() {
+            return Err(ContractError::with_code(
+                ErrorCode::InsufficientBalance,
+                "The balance is too low",
+            ));
+        }
+        self.set_balance(actor.clone(), self.balance_of(actor) - amount.get())?;
+        self.total_supply -= amount.get();
+        context.fungible_burn(actor, amount);
+        Ok(OperationReceipt::new("burn", actor.as_str(), amount.get()))
+    }
+
+    pub fn approve(
+        &mut self,
+        context: &mut Context<'_>,
+        owner: &ActorId,
+        spender: ActorId,
+        amount: u128,
+    ) -> ContractResult<OperationReceipt> {
+        if owner == &spender {
+            return Err(ContractError::new("The spender is the owner"));
+        }
+        self.set_allowance(owner.clone(), spender.clone(), amount)?;
+        context.emit(
+            "approval",
+            &(
+                owner.as_str().to_string(),
+                spender.as_str().to_string(),
+                amount,
+            ),
+        );
+        Ok(OperationReceipt::new("approval", spender.as_str(), amount))
+    }
+
+    fn move_balance(
         &mut self,
         from: &ActorId,
         to: ActorId,
@@ -246,16 +362,127 @@ impl FungibleLedger {
         if from == &to {
             return Err(ContractError::new("The receiver is the sender"));
         }
-        let source = self.balance_of(from);
+        let source = self.spendable_balance(from);
         if source < amount.get() {
-            return Err(ContractError::new("The balance is too low"));
+            return Err(ContractError::with_code(
+                ErrorCode::InsufficientBalance,
+                "The balance is too low",
+            ));
         }
-        let target = self
-            .balance_of(&to)
-            .checked_add(amount.get())
-            .ok_or(ContractError::new("The balance is too large"))?;
-        self.balances.insert(from.clone(), source - amount.get())?;
-        self.balances.insert(to, target)?;
+        let target =
+            self.balance_of(&to)
+                .checked_add(amount.get())
+                .ok_or(ContractError::with_code(
+                    ErrorCode::Overflow,
+                    "The balance is too large",
+                ))?;
+        self.set_balance(to, target)?;
+        self.set_balance(from.clone(), self.balance_of(from) - amount.get())?;
+        Ok(())
+    }
+
+    pub fn transfer<P: FungiblePolicy>(
+        &mut self,
+        context: &mut Context<'_>,
+        from: &ActorId,
+        to: ActorId,
+        amount: NonZeroAmount,
+        policy: &P,
+    ) -> ContractResult<OperationReceipt> {
+        self.move_balance(from, to.clone(), amount)?;
+        context.fungible_transfer(from, &to, amount);
+        policy.after_transfer(self, context, from)?;
+        Ok(OperationReceipt::new("transfer", to.as_str(), amount.get()))
+    }
+
+    pub fn transfer_from<P: FungiblePolicy>(
+        &mut self,
+        context: &mut Context<'_>,
+        spender: &ActorId,
+        owner: &ActorId,
+        to: ActorId,
+        amount: NonZeroAmount,
+        policy: &P,
+    ) -> ContractResult<OperationReceipt> {
+        let allowance = self.allowance(owner, spender);
+        if allowance < amount.get() {
+            return Err(ContractError::with_code(
+                ErrorCode::InsufficientBalance,
+                "The allowance is too low",
+            ));
+        }
+        self.move_balance(owner, to.clone(), amount)?;
+        self.set_allowance(owner.clone(), spender.clone(), allowance - amount.get())?;
+        context.fungible_transfer(owner, &to, amount);
+        policy.after_transfer(self, context, owner)?;
+        Ok(OperationReceipt::new("transfer", to.as_str(), amount.get()))
+    }
+}
+
+pub trait FungiblePolicy {
+    fn after_transfer(
+        &self,
+        ledger: &mut FungibleLedger,
+        context: &mut Context<'_>,
+        sender: &ActorId,
+    ) -> ContractResult<()>;
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OpenTransfers;
+
+impl FungiblePolicy for OpenTransfers {
+    fn after_transfer(
+        &self,
+        _ledger: &mut FungibleLedger,
+        _context: &mut Context<'_>,
+        _sender: &ActorId,
+    ) -> ContractResult<()> {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
+pub struct FreezeLastUnit {
+    unit: u128,
+    enabled: bool,
+}
+
+impl FreezeLastUnit {
+    pub fn new(decimals: u8) -> ContractResult<Self> {
+        let unit = 10_u128
+            .checked_pow(u32::from(decimals))
+            .ok_or(ContractError::with_code(
+                ErrorCode::Overflow,
+                "Token decimals are too large",
+            ))?;
+        Ok(Self {
+            unit,
+            enabled: true,
+        })
+    }
+
+    pub fn disable(&mut self) {
+        self.enabled = false;
+    }
+}
+
+impl FungiblePolicy for FreezeLastUnit {
+    fn after_transfer(
+        &self,
+        ledger: &mut FungibleLedger,
+        context: &mut Context<'_>,
+        sender: &ActorId,
+    ) -> ContractResult<()> {
+        if !self.enabled
+            || ledger.balance_of(sender) != self.unit
+            || ledger.locked_balance(sender) != 0
+        {
+            return Ok(());
+        }
+        ledger.set_locked(sender.clone(), self.unit)?;
+        let amount = NonZeroAmount::new(self.unit)?;
+        context.fungible_lock(sender, amount);
         Ok(())
     }
 }
@@ -263,15 +490,25 @@ impl FungibleLedger {
 #[derive(Debug, Clone, Default, PartialEq, Eq, ContractCodec)]
 pub struct NftLedger {
     owners: StateMap<u128, ActorId, MAX_LEDGER_ENTRIES>,
+    approvals: StateMap<u128, ActorId, MAX_LEDGER_ENTRIES>,
 }
 
 impl NftLedger {
-    pub fn mint(&mut self, token_id: u128, owner: ActorId) -> ContractResult<()> {
+    pub fn mint(
+        &mut self,
+        context: &mut Context<'_>,
+        token_id: u128,
+        owner: ActorId,
+    ) -> ContractResult<OperationReceipt> {
         if self.owners.contains_key(&token_id) {
-            return Err(ContractError::new("The token already exists"));
+            return Err(ContractError::with_code(
+                ErrorCode::Conflict,
+                "The token already exists",
+            ));
         }
-        self.owners.insert(token_id, owner)?;
-        Ok(())
+        self.owners.insert(token_id, owner.clone())?;
+        context.nft_mint(token_id, &owner);
+        Ok(OperationReceipt::new("nft_mint", owner.as_str(), token_id))
     }
 
     #[must_use]
@@ -279,25 +516,81 @@ impl NftLedger {
         self.owners.get(&token_id)
     }
 
+    #[must_use]
+    pub fn approved(&self, token_id: u128) -> Option<&ActorId> {
+        self.approvals.get(&token_id)
+    }
+
+    pub fn approve(
+        &mut self,
+        context: &mut Context<'_>,
+        caller: &ActorId,
+        token_id: u128,
+        actor: ActorId,
+    ) -> ContractResult<OperationReceipt> {
+        if self.owner_of(token_id) != Some(caller) {
+            return Err(ContractError::access("Approval is not allowed"));
+        }
+        if caller == &actor {
+            return Err(ContractError::new("The approved actor owns the token"));
+        }
+        self.approvals.insert(token_id, actor.clone())?;
+        context.emit("nft_approval", &(token_id, actor.as_str().to_string()));
+        Ok(OperationReceipt::new(
+            "nft_approval",
+            actor.as_str(),
+            token_id,
+        ))
+    }
+
     pub fn transfer(
         &mut self,
+        context: &mut Context<'_>,
         caller: &ActorId,
         token_id: u128,
         receiver: ActorId,
-    ) -> ContractResult<()> {
-        if self.owner_of(token_id) != Some(caller) {
-            return Err(ContractError::new("The caller does not own the token"));
+    ) -> ContractResult<OperationReceipt> {
+        let Some(owner) = self.owner_of(token_id).cloned() else {
+            return Err(ContractError::with_code(
+                ErrorCode::NotFound,
+                "The token does not exist",
+            ));
+        };
+        if &owner != caller && self.approved(token_id) != Some(caller) {
+            return Err(ContractError::access("Transfer is not allowed"));
         }
-        self.owners.insert(token_id, receiver)?;
-        Ok(())
+        if owner == receiver {
+            return Err(ContractError::new("The receiver owns the token"));
+        }
+        self.owners.insert(token_id, receiver.clone())?;
+        self.approvals.remove(&token_id);
+        context.nft_transfer(token_id, &owner, &receiver);
+        Ok(OperationReceipt::new(
+            "nft_transfer",
+            receiver.as_str(),
+            token_id,
+        ))
     }
 
-    pub fn burn(&mut self, caller: &ActorId, token_id: u128) -> ContractResult<()> {
-        if self.owner_of(token_id) != Some(caller) {
-            return Err(ContractError::new("The caller does not own the token"));
+    pub fn burn(
+        &mut self,
+        context: &mut Context<'_>,
+        caller: &ActorId,
+        token_id: u128,
+    ) -> ContractResult<OperationReceipt> {
+        let Some(owner) = self.owner_of(token_id).cloned() else {
+            return Err(ContractError::with_code(
+                ErrorCode::NotFound,
+                "The token does not exist",
+            ));
+        };
+        if &owner != caller && self.approved(token_id) != Some(caller) {
+            return Err(ContractError::access("Burn is not allowed"));
         }
         self.owners.remove(&token_id);
-        Ok(())
+        self.approvals.remove(&token_id);
+        context.nft_burn(token_id, &owner);
+        Ok(OperationReceipt::new("nft_burn", owner.as_str(), token_id))
     }
 }
 
@@ -518,25 +811,50 @@ mod tests {
     fn ledgers_reject_duplicates_overdraw_and_overflow() {
         let alice = actor("1");
         let bob = actor("2");
+        let request = extrachain_contract_sdk::InvokeRequest {
+            sender: alice.as_str().to_string(),
+            caller: alice.as_str().to_string(),
+            contract_id: actor("3").into_string(),
+            method: "test".to_string(),
+            arguments: Vec::new(),
+            state: Vec::new(),
+            block: 1,
+            depth: 0,
+            verified: VerifiedInputs::default(),
+        };
+        let mut context = Context::new(&request);
+        let policy = OpenTransfers;
         let mut fungible = FungibleLedger::default();
         fungible
-            .mint(alice.clone(), NonZeroAmount::new(10).unwrap())
+            .mint(&mut context, alice.clone(), NonZeroAmount::new(10).unwrap())
             .unwrap();
         fungible
-            .transfer(&alice, bob.clone(), NonZeroAmount::new(4).unwrap())
+            .transfer(
+                &mut context,
+                &alice,
+                bob.clone(),
+                NonZeroAmount::new(4).unwrap(),
+                &policy,
+            )
             .unwrap();
         assert_eq!(fungible.balance_of(&alice), 6);
         assert_eq!(fungible.balance_of(&bob), 4);
         assert!(
             fungible
-                .transfer(&alice, bob.clone(), NonZeroAmount::new(7).unwrap())
+                .transfer(
+                    &mut context,
+                    &alice,
+                    bob.clone(),
+                    NonZeroAmount::new(7).unwrap(),
+                    &policy,
+                )
                 .is_err()
         );
 
         let mut nft = NftLedger::default();
-        nft.mint(1, alice.clone()).unwrap();
-        assert!(nft.mint(1, bob.clone()).is_err());
-        nft.transfer(&alice, 1, bob.clone()).unwrap();
+        nft.mint(&mut context, 1, alice.clone()).unwrap();
+        assert!(nft.mint(&mut context, 1, bob.clone()).is_err());
+        nft.transfer(&mut context, &alice, 1, bob.clone()).unwrap();
         assert_eq!(nft.owner_of(1), Some(&bob));
     }
 

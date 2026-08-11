@@ -287,7 +287,8 @@ EXC_API ExcError exc_contract_compose(const char* project_name,
         const auto root =
             QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/contract-toolchain";
         const ExtraChain::Contracts::ToolchainInstaller installer(GlobalState::instance().node, root);
-        const auto source = installer.compose_contract(*component_ids, QString::fromUtf8(project_name));
+        const auto                                      source =
+            installer.compose_contract(*component_ids, "custom", {}, QString::fromUtf8(project_name));
         if (!source.has_value()) {
             result = EXC_ERR_CONTRACT_INVALID_ARGUMENT;
             return;

@@ -42,6 +42,7 @@ await writeFile(
   'import "./node_modules/assemblyscript/bin/asc.js";\n',
 );
 await cp(join(root, "scripts", "mark-wasm.mjs"), join(staging, "compiler", "mark-wasm.mjs"));
+await cp(join(root, "scripts", "generate-contract.mjs"), join(staging, "compiler", "generate-contract.mjs"));
 await cp(join(root, "node_modules", "as-bignum"), join(staging, "dependencies", "as-bignum"), {
   recursive: true,
   dereference: true,

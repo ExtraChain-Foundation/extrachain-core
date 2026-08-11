@@ -1,9 +1,9 @@
 extern crate alloc;
 
-use extrachain_contract_sdk::{ContractResult, ContractState, contract};
+use extrachain_contract_sdk::{ContractResult, contract};
 
-#[derive(Default, ContractState)]
-#[state(version = 1)]
+#[contract(version = 1)]
+#[derive(Default)]
 struct Counter {
     value: u64,
 }

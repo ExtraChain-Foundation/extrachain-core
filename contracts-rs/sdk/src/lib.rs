@@ -1,6 +1,7 @@
 #![no_std]
 
 extern crate alloc;
+extern crate self as extrachain_contract_sdk;
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -14,7 +15,9 @@ use rmp::encode::{
     write_array_len, write_bin, write_bool, write_nil, write_sint, write_str, write_u64,
 };
 
-pub use extrachain_contract_macros::{ContractCodec, ContractState, contract};
+pub use extrachain_contract_macros::{
+    ContractCodec, ContractState, contract, fungible_token, nft_collection,
+};
 
 pub const ABI_VERSION: u32 = 4;
 pub const MAX_PROOFS: u32 = 64;
@@ -165,20 +168,62 @@ impl Encoder {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
+pub enum ErrorCode {
+    InvalidData = 1,
+    InvalidState = 2,
+    InvalidArgument = 3,
+    AccessDenied = 4,
+    NotFound = 5,
+    Conflict = 6,
+    LimitExceeded = 7,
+    InsufficientBalance = 8,
+    Overflow = 9,
+    Paused = 10,
+    VerificationFailed = 11,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContractError {
+    code: ErrorCode,
     message: &'static str,
 }
 
 impl ContractError {
     #[must_use]
     pub const fn new(message: &'static str) -> Self {
-        Self { message }
+        Self::with_code(ErrorCode::InvalidArgument, message)
+    }
+
+    #[must_use]
+    pub const fn with_code(code: ErrorCode, message: &'static str) -> Self {
+        Self { code, message }
+    }
+
+    #[must_use]
+    pub const fn state(message: &'static str) -> Self {
+        Self::with_code(ErrorCode::InvalidState, message)
+    }
+
+    #[must_use]
+    pub const fn access(message: &'static str) -> Self {
+        Self::with_code(ErrorCode::AccessDenied, message)
+    }
+
+    #[must_use]
+    pub const fn code(&self) -> ErrorCode {
+        self.code
+    }
+
+    #[must_use]
+    pub const fn message(&self) -> &'static str {
+        self.message
     }
 
     #[must_use]
     pub fn codec(_: CodecError) -> Self {
-        Self::new("Invalid contract data")
+        Self::with_code(ErrorCode::InvalidData, "Invalid contract data")
     }
 }
 
@@ -667,6 +712,30 @@ pub trait OwnedContract {
     fn contract_owner(&self) -> &str;
 }
 
+pub trait ContractConfiguration {
+    const OWNER_UPGRADE: bool;
+
+    fn configured_owner(&self) -> Option<&str>;
+
+    fn require_owner(&self, caller: &str) -> ContractResult<()> {
+        if self.configured_owner() == Some(caller) {
+            Ok(())
+        } else {
+            Err(ContractError::access(
+                "Only the owner can perform this operation",
+            ))
+        }
+    }
+
+    fn authorize_upgrade(&self, caller: &str) -> ContractResult<()> {
+        if Self::OWNER_UPGRADE {
+            self.require_owner(caller)
+        } else {
+            Err(ContractError::access("Contract upgrades are locked"))
+        }
+    }
+}
+
 #[must_use]
 pub fn encode_result<T: ContractValue>(value: &T) -> Vec<u8> {
     let mut encoder = Encoder::new();
@@ -830,6 +899,44 @@ impl VerifiedInputs {
 pub struct Event {
     pub topic: String,
     pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OperationReceipt {
+    pub operation: String,
+    pub subject: String,
+    pub amount: u128,
+}
+
+impl OperationReceipt {
+    #[must_use]
+    pub fn new(operation: &str, subject: &str, amount: u128) -> Self {
+        Self {
+            operation: operation.to_string(),
+            subject: subject.to_string(),
+            amount,
+        }
+    }
+}
+
+impl ContractValue for OperationReceipt {
+    fn decode_value(decoder: &mut Decoder<'_>) -> ContractResult<Self> {
+        if decoder.array().map_err(ContractError::codec)? != 3 {
+            return Err(ContractError::codec(CodecError::InvalidData));
+        }
+        Ok(Self {
+            operation: String::decode_value(decoder)?,
+            subject: String::decode_value(decoder)?,
+            amount: u128::decode_value(decoder)?,
+        })
+    }
+
+    fn encode_value(&self, encoder: &mut Encoder) {
+        encoder.array(3);
+        self.operation.encode_value(encoder);
+        self.subject.encode_value(encoder);
+        self.amount.encode_value(encoder);
+    }
 }
 
 impl Event {

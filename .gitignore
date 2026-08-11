@@ -91,6 +91,7 @@ preconfig.h
 build*/
 target/
 Cargo.lock
+contracts-as/**/.exco/
 CMakeSettings.json
 html
 Doxyfile

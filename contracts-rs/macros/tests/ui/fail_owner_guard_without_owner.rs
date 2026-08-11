@@ -1,21 +1,11 @@
 extern crate alloc;
 
-use extrachain_contract_sdk::{Context, ContractResult, ContractState, contract};
+use extrachain_contract_sdk::contract;
 
-#[derive(Default, ContractState)]
-#[state(version = 1)]
+#[contract(version = 1, upgrade = "owner")]
+#[derive(Default)]
 struct Counter {
     value: u64,
-}
-
-#[contract]
-impl Counter {
-    #[call]
-    #[owner_only]
-    fn set(&mut self, _ctx: &Context<'_>, value: u64) -> ContractResult<()> {
-        self.value = value;
-        Ok(())
-    }
 }
 
 fn main() {}

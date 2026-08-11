@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <map>
 #include <span>
 #include <string>
 #include <vector>
@@ -150,10 +151,29 @@ namespace ExtraChain::Contracts {
         std::string              rust_import;
         std::string              source_import;
         std::vector<std::string> dependencies;
+        std::vector<std::string> conflicts;
     };
     BOOST_DESCRIBE_STRUCT(ContractComponent,
                           (),
-                          (id, name, description, category, rust_import, source_import, dependencies))
+                          (id, name, description, category, rust_import, source_import, dependencies, conflicts))
+
+    struct ContractParameter {
+        std::string id;
+        std::string name;
+        std::string type;
+        std::string default_value;
+        bool        required = false;
+    };
+    BOOST_DESCRIBE_STRUCT(ContractParameter, (), (id, name, type, default_value, required))
+
+    struct ContractBlueprint {
+        std::string                    id;
+        std::string                    name;
+        std::string                    description;
+        std::vector<std::string>       components;
+        std::vector<ContractParameter> parameters;
+    };
+    BOOST_DESCRIBE_STRUCT(ContractBlueprint, (), (id, name, description, components, parameters))
 
     class EXTRACHAIN_EXPORT ToolchainInstaller {
     public:
@@ -166,9 +186,12 @@ namespace ExtraChain::Contracts {
                                                                               const QString& project_name,
                                                                               int            timeout_ms = 120000) const;
         [[nodiscard]] std::vector<ContractComponent>           component_catalog() const;
+        [[nodiscard]] std::vector<ContractBlueprint>           contract_blueprints() const;
         [[nodiscard]] std::expected<QString, ToolchainFailure> compose_contract(
-            std::span<const std::string> component_ids,
-            const QString&               project_name) const;
+            std::span<const std::string>              component_ids,
+            std::string_view                          blueprint_id,
+            const std::map<std::string, std::string>& parameters,
+            const QString&                            project_name) const;
 
     private:
         ExtraChainNode*   node_;

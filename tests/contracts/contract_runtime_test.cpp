@@ -361,6 +361,17 @@ namespace {
         return result;
     }
 
+    void require_receipt(const Response  &response,
+                         std::string_view operation,
+                         std::string_view subject,
+                         std::string_view amount) {
+        Reader reader(response.data);
+        if (reader.array() != 3 || reader.string() != operation || reader.string() != subject
+            || reader.string() != amount || !reader.empty()) {
+            throw std::runtime_error("Contract operation receipt is invalid");
+        }
+    }
+
     Bytes read_file(const char *path) {
         std::ifstream stream(path, std::ios::binary | std::ios::ate);
         if (!stream) {
@@ -466,26 +477,32 @@ namespace {
         auto       result     = invoke(runtime, module, Alice, "init", token_init_argument(), state);
         const auto init_error = "Token init failed: " + result.error.value_or(std::string("no error detail"));
         require(result.ok, init_error);
+        require_receipt(result, "mint", Alice, "1000");
         state = result.state;
 
         result = invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 250), state);
         require(result.ok, "Token transfer failed");
+        require_receipt(result, "transfer", Bob, "250");
         state = result.state;
 
         result = invoke(runtime, module, Alice, "approve", pair_argument(Carol, 100), state);
         require(result.ok, "Token approval failed");
+        require_receipt(result, "approval", Carol, "100");
         state = result.state;
 
         result = invoke(runtime, module, Carol, "transfer_from", transfer_from_argument(Alice, Dave, 75), state);
         require(result.ok, "Approved token transfer failed");
+        require_receipt(result, "transfer", Dave, "75");
         state = result.state;
 
         result = invoke(runtime, module, Dave, "burn", unsigned_argument(25), state);
         require(result.ok, "Token burn failed");
+        require_receipt(result, "burn", Dave, "25");
         state = result.state;
 
         result = invoke(runtime, module, Alice, "mint", pair_argument(Bob, 50), state);
         require(result.ok, "Owner mint failed");
+        require_receipt(result, "mint", Bob, "50");
         state = result.state;
 
         result = invoke(runtime, module, Alice, "revoke_mint", empty_arguments(), state);
@@ -571,11 +588,13 @@ namespace {
                                  state,
                                  proof);
         require(result.ok, "NFT mint with a u128 item ID failed");
+        require_receipt(result, "nft_mint", Alice, item_id);
         state  = result.state;
         result = invoke(runtime, module, Alice, "owner_of", string_argument(item_id), state);
         require(result.ok && Reader(result.data).string() == Alice, "NFT owner query failed");
         result = invoke(runtime, module, Alice, "approve", nft_pair_argument(item_id, Carol), state);
         require(result.ok, "NFT approval failed");
+        require_receipt(result, "nft_approval", Carol, item_id);
         state  = result.state;
         result = invoke(runtime,
                         module,
@@ -584,11 +603,13 @@ namespace {
                         nft_transfer_from_argument(item_id, Alice, Bob),
                         state);
         require(result.ok, "Approved NFT transfer failed");
+        require_receipt(result, "nft_transfer", Bob, item_id);
         state  = result.state;
         result = invoke(runtime, module, Bob, "metadata_of", string_argument(item_id), state);
         require(result.ok, "NFT metadata query failed");
         result = invoke(runtime, module, Bob, "burn", string_argument(item_id), state);
         require(result.ok, "NFT burn failed");
+        require_receipt(result, "nft_burn", Bob, item_id);
         state  = result.state;
         result = invoke(runtime, module, Bob, "owner_of", string_argument(item_id), state);
         require(!result.ok && result.state == state, "Burned NFT is still available");
@@ -818,6 +839,9 @@ namespace {
                 "ContractManager did not retain the immutable token version chain");
         auto frozen = manager.call("token-contract", Alice, "transfer", pair_argument(Bob, 799), 4);
         require(frozen.has_value(), "Upgraded token did not enter the one-token freeze state");
+        const auto locked = manager.query("token-contract", Alice, "locked_balance_of", string_argument(Alice), 4);
+        require(locked.has_value() && Reader(locked->data).string() == "1",
+                "Upgraded token did not expose the locked balance");
         auto denied_frozen = manager.call("token-contract", Alice, "transfer", pair_argument(Bob, 1), 5);
         require(!denied_frozen.has_value(), "Upgraded token allowed transfer of the frozen reserve");
 

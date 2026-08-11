@@ -5,8 +5,7 @@ extern crate alloc;
 use alloc::string::{String, ToString};
 
 use extrachain_contract_sdk::{
-    ActorId, BoundedString, Context, ContractCodec, ContractResult, ContractState, StateMap,
-    contract, require,
+    ActorId, BoundedString, Context, ContractCodec, ContractResult, StateMap, contract, require,
 };
 
 const MAX_ACTIVE_CLAIMS: usize = 16_384;
@@ -19,10 +18,9 @@ struct Claim {
     message: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ContractState)]
-#[state(version = 1)]
+#[contract(version = 1, owner = "owner", upgrade = "owner")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MessageClaim {
-    #[owner]
     owner: String,
     next_id: u64,
     claims: StateMap<u64, Claim, MAX_ACTIVE_CLAIMS>,
@@ -135,18 +133,7 @@ impl MessageClaim {
             .clone())
     }
 
-    #[authorize_upgrade]
-    #[owner_only]
-    fn authorize_upgrade(
-        &self,
-        _ctx: &Context<'_>,
-        _module_hash: BoundedString<64>,
-    ) -> ContractResult<()> {
-        Ok(())
-    }
-
-    #[migrate]
-    #[owner_only]
+    #[migrate(from = 0, to = 1, access = "owner")]
     fn migrate(&mut self, _ctx: &Context<'_>) -> ContractResult<()> {
         Ok(())
     }

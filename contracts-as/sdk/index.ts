@@ -816,8 +816,26 @@ export class ContractEffect {
   ) {}
 }
 
+export enum ErrorCode {
+  InvalidData = 1,
+  InvalidState = 2,
+  InvalidArgument = 3,
+  AccessDenied = 4,
+  NotFound = 5,
+  Conflict = 6,
+  LimitExceeded = 7,
+  InsufficientBalance = 8,
+  Overflow = 9,
+  Paused = 10,
+  VerificationFailed = 11,
+}
+
 export class ContractResult<T> {
-  constructor(public value: T, public error: string | null = null) {}
+  constructor(
+    public value: T,
+    public error: string | null = null,
+    public code: ErrorCode = ErrorCode.InvalidArgument,
+  ) {}
   get ok(): bool { return this.error === null; }
 }
 
@@ -825,9 +843,49 @@ export function success<T>(value: T): ContractResult<T> {
   return new ContractResult<T>(value);
 }
 
-export function failure<T>(fallback: T, error: string): ContractResult<T> {
-  return new ContractResult<T>(fallback, error);
+export function failure<T>(
+  fallback: T,
+  error: string,
+  code: ErrorCode = ErrorCode.InvalidArgument,
+): ContractResult<T> {
+  return new ContractResult<T>(fallback, error, code);
 }
+
+export class OperationReceipt {
+  constructor(
+    public operation: string,
+    public subject: string,
+    public amount: Amount,
+  ) {}
+}
+
+export class OperationReceiptCodec extends ValueCodec<OperationReceipt> {
+  defaultValue(): OperationReceipt {
+    return new OperationReceipt("", "", Amount.zero());
+  }
+  decode(decoder: Decoder): OperationReceipt {
+    if (decoder.array() != 3) {
+      decoder.reject();
+      return this.defaultValue();
+    }
+    const operation = decoder.string();
+    const subject = decoder.string();
+    const amount = decoder.amount();
+    if (amount === null) {
+      decoder.reject();
+      return this.defaultValue();
+    }
+    return new OperationReceipt(operation, subject, amount);
+  }
+  encode(encoder: Encoder, value: OperationReceipt): void {
+    encoder.array(3);
+    encoder.string(value.operation);
+    encoder.string(value.subject);
+    encoder.amount(value.amount);
+  }
+}
+
+export const operationReceiptCodec = new OperationReceiptCodec();
 
 export function isContentHash(value: string, allowEmpty: bool = false): bool {
   if (allowEmpty && value.length == 0) return true;

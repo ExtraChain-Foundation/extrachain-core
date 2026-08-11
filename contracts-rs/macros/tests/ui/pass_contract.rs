@@ -1,12 +1,11 @@
 extern crate alloc;
 
 use alloc::string::{String, ToString};
-use extrachain_contract_sdk::{Context, ContractResult, ContractState, contract};
+use extrachain_contract_sdk::{Context, ContractResult, contract};
 
-#[derive(Default, ContractState)]
-#[state(version = 1)]
+#[contract(version = 1, owner = "owner", upgrade = "owner")]
+#[derive(Default)]
 struct Counter {
-    #[owner]
     owner: String,
     value: u64,
 }
@@ -19,8 +18,7 @@ impl Counter {
         Ok(())
     }
 
-    #[call]
-    #[owner_only]
+    #[call(access = "owner")]
     fn add(&mut self, _ctx: &Context<'_>, amount: u64) -> ContractResult<u64> {
         self.value += amount;
         Ok(self.value)

@@ -3,287 +3,153 @@
 extern crate alloc;
 
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 
+use extrachain_contract_components::{FreezeLastUnit, FungibleLedger};
 use extrachain_contract_sdk::{
-    ActorId, BoundedString, Context, ContractResult, ContractState, NonZeroAmount, StateMap,
-    contract, require,
+    ActorId, BoundedString, Context, ContractResult, NonZeroAmount, OperationReceipt, contract,
+    require,
 };
 
-const MAX_STATE_ENTRIES: usize = 16_384;
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, ContractState)]
-#[state(version = 1)]
+#[contract(version = 2, owner = "owner", upgrade = "owner")]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FungibleToken {
+    owner: String,
     name: String,
     symbol: String,
     decimals: u8,
-    #[owner]
-    owner: String,
     mint_enabled: bool,
-    total_supply: u128,
-    balances: StateMap<String, u128, MAX_STATE_ENTRIES>,
-    allowances: StateMap<(String, String), u128, MAX_STATE_ENTRIES>,
-    freeze_last_enabled: bool,
-    locked: StateMap<String, u128, MAX_STATE_ENTRIES>,
+    ledger: FungibleLedger,
+    transfers: FreezeLastUnit,
 }
 
 #[contract]
 impl FungibleToken {
-    fn balance(&self, owner: &str) -> u128 {
-        self.balances.get(&owner.to_string()).copied().unwrap_or(0)
-    }
-
-    fn set_balance(&mut self, owner: &str, amount: u128) -> ContractResult<()> {
-        let owner = owner.to_string();
-        if amount == 0 {
-            self.balances.remove(&owner);
-        } else {
-            self.balances.insert(owner, amount)?;
-        }
-        Ok(())
-    }
-
-    fn allowance_value(&self, owner: &str, spender: &str) -> u128 {
-        self.allowances
-            .get(&(owner.to_string(), spender.to_string()))
-            .copied()
-            .unwrap_or(0)
-    }
-
-    fn set_allowance(&mut self, owner: &str, spender: &str, amount: u128) -> ContractResult<()> {
-        let key = (owner.to_string(), spender.to_string());
-        if amount == 0 {
-            self.allowances.remove(&key);
-        } else {
-            self.allowances.insert(key, amount)?;
-        }
-        Ok(())
-    }
-
-    fn locked_balance(&self, owner: &str) -> u128 {
-        self.locked.get(&owner.to_string()).copied().unwrap_or(0)
-    }
-
-    fn set_locked_balance(&mut self, owner: &str, amount: u128) -> ContractResult<()> {
-        let owner = owner.to_string();
-        if amount == 0 {
-            self.locked.remove(&owner);
-        } else {
-            self.locked.insert(owner, amount)?;
-        }
-        Ok(())
-    }
-
-    fn spendable_balance(&self, owner: &str) -> u128 {
-        self.balance(owner)
-            .saturating_sub(self.locked_balance(owner))
-    }
-
-    fn move_balance(&mut self, from: &str, to: &str, amount: u128) -> ContractResult<bool> {
-        require!(from != to, "Self transfer is not allowed");
-        require!(
-            self.spendable_balance(from) >= amount,
-            "Balance is too small"
-        );
-        let receiver_balance = self
-            .balance(to)
-            .checked_add(amount)
-            .ok_or("Balance overflow")?;
-        self.set_balance(from, self.balance(from) - amount)?;
-        self.set_balance(to, receiver_balance)?;
-
-        let unit = 10_u128
-            .checked_pow(u32::from(self.decimals))
-            .ok_or("Invalid decimals")?;
-        let freeze = self.freeze_last_enabled
-            && self.balance(from) == unit
-            && self.locked_balance(from) == 0;
-        if freeze {
-            self.set_locked_balance(from, unit)?;
-        }
-        Ok(freeze)
-    }
-
-    fn emit_transfer(ctx: &mut Context<'_>, from: &str, to: &str, amount: u128) {
-        ctx.token_event(
-            "transfer",
-            &alloc::vec![(from.to_string(), amount), (to.to_string(), amount)],
-        );
-    }
-
     #[init]
     fn init(
         &mut self,
-        ctx: &mut Context<'_>,
+        context: &mut Context<'_>,
         name: BoundedString<64>,
         symbol: BoundedString<12>,
         decimals: u8,
-        supply: u128,
-        initial_balances: Vec<(ActorId, u128)>,
-    ) -> ContractResult<u128> {
+        supply: NonZeroAmount,
+        initial_balances: alloc::vec::Vec<(ActorId, NonZeroAmount)>,
+    ) -> ContractResult<OperationReceipt> {
         require!(decimals <= 18, "Token decimals are out of range");
+        self.owner = context.caller().to_string();
         self.name = name.into_string();
         self.symbol = symbol.into_string();
         self.decimals = decimals;
-        self.owner = ctx.caller().to_string();
         self.mint_enabled = true;
-        self.total_supply = supply;
+        self.transfers = FreezeLastUnit::new(decimals)?;
+        self.transfers.disable();
 
         if initial_balances.is_empty() {
-            self.set_balance(ctx.caller(), supply)?;
-            ctx.token_event("mint", &alloc::vec![(ctx.caller().to_string(), supply)]);
-            return Ok(supply);
+            let owner = ActorId::new(self.owner.clone())?;
+            return self.ledger.mint(context, owner, supply);
         }
 
-        let mut migrated_supply = 0_u128;
+        let mut distributed = 0_u128;
         for (actor, amount) in initial_balances {
-            require!(amount != 0, "Migration balance is zero");
-            let actor = actor.into_string();
-            require!(self.balance(&actor) == 0, "Migration actor is duplicated");
-            migrated_supply = migrated_supply
-                .checked_add(amount)
+            distributed = distributed
+                .checked_add(amount.get())
                 .ok_or("Migration supply overflow")?;
-            self.set_balance(&actor, amount)?;
+            self.ledger.restore_balance(actor, amount)?;
         }
         require!(
-            migrated_supply == supply,
+            distributed == supply.get(),
             "Migration supply does not match balances"
         );
-        ctx.emit("migrated", &());
-        Ok(supply)
+        context.emit("migrated", &distributed);
+        Ok(OperationReceipt::new(
+            "migrated",
+            self.owner.as_str(),
+            distributed,
+        ))
     }
 
     #[call]
     fn transfer(
         &mut self,
-        ctx: &mut Context<'_>,
-        to: ActorId,
+        context: &mut Context<'_>,
+        receiver: ActorId,
         amount: NonZeroAmount,
-    ) -> ContractResult<()> {
-        let to = to.into_string();
-        let amount = amount.get();
-        let caller = ctx.caller().to_string();
-        let freeze = self.move_balance(&caller, &to, amount)?;
-        Self::emit_transfer(ctx, &caller, &to, amount);
-        if freeze {
-            ctx.token_event(
-                "lock",
-                &alloc::vec![(caller.clone(), self.locked_balance(&caller))],
-            );
-        }
-        Ok(())
+    ) -> ContractResult<OperationReceipt> {
+        let sender = ActorId::new(context.caller().to_string())?;
+        self.ledger
+            .transfer(context, &sender, receiver, amount, &self.transfers)
     }
 
     #[call]
     fn approve(
         &mut self,
-        ctx: &mut Context<'_>,
+        context: &mut Context<'_>,
         spender: ActorId,
         amount: u128,
-    ) -> ContractResult<()> {
-        let spender = spender.into_string();
-        require!(spender != ctx.caller(), "Self approval is not allowed");
-        self.set_allowance(ctx.caller(), &spender, amount)?;
-        ctx.emit("approval", &alloc::vec![(spender, amount)]);
-        Ok(())
+    ) -> ContractResult<OperationReceipt> {
+        let owner = ActorId::new(context.caller().to_string())?;
+        self.ledger.approve(context, &owner, spender, amount)
     }
 
     #[call]
     fn transfer_from(
         &mut self,
-        ctx: &mut Context<'_>,
+        context: &mut Context<'_>,
         owner: ActorId,
-        to: ActorId,
+        receiver: ActorId,
         amount: NonZeroAmount,
-    ) -> ContractResult<()> {
-        let owner = owner.into_string();
-        let to = to.into_string();
-        let amount = amount.get();
-        let allowance = self.allowance_value(&owner, ctx.caller());
-        require!(allowance >= amount, "Allowance is too small");
-        let freeze = self.move_balance(&owner, &to, amount)?;
-        self.set_allowance(&owner, ctx.caller(), allowance - amount)?;
-        Self::emit_transfer(ctx, &owner, &to, amount);
-        if freeze {
-            ctx.token_event(
-                "lock",
-                &alloc::vec![(owner.clone(), self.locked_balance(&owner))],
-            );
-        }
-        Ok(())
+    ) -> ContractResult<OperationReceipt> {
+        let spender = ActorId::new(context.caller().to_string())?;
+        self.ledger
+            .transfer_from(context, &spender, &owner, receiver, amount, &self.transfers)
     }
 
-    #[call]
-    #[owner_only]
+    #[call(access = "owner")]
     fn mint(
         &mut self,
-        ctx: &mut Context<'_>,
-        to: ActorId,
+        context: &mut Context<'_>,
+        receiver: ActorId,
         amount: NonZeroAmount,
-    ) -> ContractResult<u128> {
+    ) -> ContractResult<OperationReceipt> {
         require!(self.mint_enabled, "Mint is disabled");
-        let to = to.into_string();
-        let amount = amount.get();
-        self.total_supply = self
-            .total_supply
-            .checked_add(amount)
-            .ok_or("Supply overflow")?;
-        let next = self
-            .balance(&to)
-            .checked_add(amount)
-            .ok_or("Balance overflow")?;
-        self.set_balance(&to, next)?;
-        ctx.token_event("mint", &alloc::vec![(to, amount)]);
-        Ok(self.total_supply)
+        self.ledger.mint(context, receiver, amount)
     }
 
-    #[call]
-    #[owner_only]
-    fn revoke_mint(&mut self, ctx: &mut Context<'_>) -> ContractResult<()> {
+    #[call(access = "owner")]
+    fn revoke_mint(&mut self, context: &mut Context<'_>) -> ContractResult<()> {
         require!(self.mint_enabled, "Mint control is not available");
         self.mint_enabled = false;
-        ctx.emit("mint_revoked", &());
+        context.emit("mint_revoked", &());
         Ok(())
     }
 
     #[call]
-    fn burn(&mut self, ctx: &mut Context<'_>, amount: NonZeroAmount) -> ContractResult<u128> {
-        let amount = amount.get();
-        require!(
-            self.spendable_balance(ctx.caller()) >= amount,
-            "Balance is too small"
-        );
-        self.set_balance(ctx.caller(), self.balance(ctx.caller()) - amount)?;
-        self.total_supply -= amount;
-        ctx.token_event("burn", &alloc::vec![(ctx.caller().to_string(), amount)]);
-        Ok(self.total_supply)
+    fn burn(
+        &mut self,
+        context: &mut Context<'_>,
+        amount: NonZeroAmount,
+    ) -> ContractResult<OperationReceipt> {
+        let owner = ActorId::new(context.caller().to_string())?;
+        self.ledger.burn(context, &owner, amount)
     }
 
     #[query]
     fn balance_of(&self, owner: ActorId) -> ContractResult<u128> {
-        Ok(self.balance(owner.as_str()))
+        Ok(self.ledger.balance_of(&owner))
     }
 
     #[query]
     fn allowance(&self, owner: ActorId, spender: ActorId) -> ContractResult<u128> {
-        Ok(self.allowance_value(owner.as_str(), spender.as_str()))
+        Ok(self.ledger.allowance(&owner, &spender))
     }
 
-    #[authorize_upgrade]
-    #[owner_only]
-    fn authorize_upgrade(
-        &self,
-        _ctx: &Context<'_>,
-        _module_hash: BoundedString<64>,
-    ) -> ContractResult<()> {
-        Ok(())
+    #[query]
+    fn locked_balance_of(&self, owner: ActorId) -> ContractResult<u128> {
+        Ok(self.ledger.locked_balance(&owner))
     }
 
-    #[migrate]
-    #[owner_only]
-    fn migrate(&mut self, _ctx: &Context<'_>) -> ContractResult<()> {
-        self.freeze_last_enabled = true;
+    #[migrate(from = 1, to = 2, access = "owner")]
+    fn enable_freeze_last_unit(&mut self, _context: &mut Context<'_>) -> ContractResult<()> {
+        self.transfers = FreezeLastUnit::new(self.decimals)?;
         Ok(())
     }
 }

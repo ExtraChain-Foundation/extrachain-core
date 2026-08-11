@@ -37,12 +37,26 @@
 namespace ExtraChain::Contracts {
     namespace {
         constexpr auto StateFile                  = "installation.json";
-        constexpr auto SupportedComponentsVersion = "0.2.0";
-        constexpr auto SupportedCatalogVersion    = "0.2.0";
-        constexpr auto SupportedTemplateVersion   = "0.2.0";
+        constexpr auto SupportedComponentsVersion = "0.3.0";
+        constexpr auto SupportedCatalogVersion    = "0.3.0";
+        constexpr auto SupportedTemplateVersion   = "0.3.0";
 
         ToolchainFailure failure(ToolchainError error, std::string detail) {
             return { error, std::move(detail) };
+        }
+
+        std::optional<QString> source_string(const std::string& value, qsizetype maximum_bytes) {
+            const auto text = QString::fromUtf8(value);
+            if (text.isEmpty() || text.toUtf8().size() > maximum_bytes
+                || std::ranges::any_of(text, [](QChar character) {
+                       return character.category() == QChar::Other_Control;
+                   })) {
+                return std::nullopt;
+            }
+            auto escaped = text;
+            escaped.replace('\\', "\\\\");
+            escaped.replace('"', "\\\"");
+            return escaped;
         }
 
         QString platform_name() {
@@ -220,6 +234,7 @@ namespace ExtraChain::Contracts {
                 const QFileInfo node(directory.filePath(NodeName));
                 const QFileInfo compiler(directory.filePath("compiler/asc.js"));
                 const QFileInfo marker(directory.filePath("compiler/mark-wasm.mjs"));
+                const QFileInfo generator(directory.filePath("compiler/generate-contract.mjs"));
                 const QFileInfo amount_library(directory.filePath("dependencies/as-bignum/package.json"));
                 const QFileInfo sdk(directory.filePath("sdk/index.ts"));
                 const QFileInfo components(directory.filePath("components/index.ts"));
@@ -236,9 +251,10 @@ namespace ExtraChain::Contracts {
                 const auto metadata_document = QJsonDocument::fromJson(metadata_file.readAll());
                 const auto runtime_version   = run_process(node.absoluteFilePath(), { "--version" }, 5000);
                 return node.isFile() && node.isExecutable() && compiler.isFile() && marker.isFile()
-                       && amount_library.isFile() && sdk.isFile() && components.isFile() && catalog.isFile()
-                       && template_file.isFile() && generated_file.isFile() && entry_file.isFile()
-                       && catalog_document.isObject() && catalog_document.object().value("schema").toInt() == 1
+                       && generator.isFile() && amount_library.isFile() && sdk.isFile() && components.isFile()
+                       && catalog.isFile() && template_file.isFile() && generated_file.isFile()
+                       && entry_file.isFile() && catalog_document.isObject()
+                       && catalog_document.object().value("schema").toInt() == 2
                        && catalog_document.object().value("version").toString() == SupportedCatalogVersion
                        && catalog_document.object().value("language").toString() == "assemblyscript"
                        && catalog_document.object().value("components").isArray() && metadata_document.isObject()
@@ -276,7 +292,7 @@ namespace ExtraChain::Contracts {
                    && macros.isFile() && sdk.isFile() && components.isFile() && catalog.isFile()
                    && template_file.isFile() && QDir(directory.filePath("rustup")).exists()
                    && QDir(directory.filePath("cargo-home")).exists() && catalog_document.isObject()
-                   && catalog_document.object().value("schema").toInt() == 1
+                   && catalog_document.object().value("schema").toInt() == 2
                    && catalog_document.object().value("version").toString() == SupportedCatalogVersion
                    && catalog_document.object().value("components").isArray();
         }
@@ -513,11 +529,9 @@ namespace ExtraChain::Contracts {
             if (!build.mkpath("sdk") || !build.mkpath("components") || !build.mkpath("build")
                 || !build.mkpath("node_modules")
                 || !copy_file(release.filePath("sdk/index.ts"), build.filePath("sdk/index.ts"))
-                || !copy_file(release.filePath("components/index.ts"), build.filePath("components/index.ts"))
+                || !copy_directory(release.filePath("components"), build.filePath("components"))
                 || !copy_file(release.filePath("templates/basic/assembly/generated.ts"),
                               build.filePath("assembly/generated.ts"))
-                || !copy_file(release.filePath("templates/basic/assembly/index.ts"),
-                              build.filePath("assembly/index.ts"))
                 || !copy_directory(release.filePath("dependencies/as-bignum"),
                                    build.filePath("node_modules/as-bignum"))) {
                 return std::unexpected(
@@ -534,9 +548,17 @@ namespace ExtraChain::Contracts {
 #else
             const auto node_program = release.filePath("bin/node");
 #endif
+            auto generated =
+                run_process(node_program,
+                            { release.filePath("compiler/generate-contract.mjs"), "assembly/contract.ts" },
+                            timeout_ms,
+                            project.path());
+            if (!generated.has_value()) {
+                return std::unexpected(generated.error());
+            }
             auto built = run_process(node_program,
                                      { release.filePath("compiler/asc.js"),
-                                       "assembly/index.ts",
+                                       "assembly/.exco/index.ts",
                                        "--outFile",
                                        "build/module.wasm",
                                        "--runtime",
@@ -548,7 +570,7 @@ namespace ExtraChain::Contracts {
                                        "--shrinkLevel",
                                        "1",
                                        "--use",
-                                       "abort=assembly/index/contractAbort" },
+                                       "abort=assembly/.exco/index/contractAbort" },
                                      timeout_ms,
                                      project.path());
             if (!built.has_value()) {
@@ -667,7 +689,7 @@ namespace ExtraChain::Contracts {
             return {};
         }
         const auto document = QJsonDocument::fromJson(file.readAll());
-        if (!document.isObject() || document.object().value("schema").toInt() != 1
+        if (!document.isObject() || document.object().value("schema").toInt() != 2
             || document.object().value("version").toString() != SupportedCatalogVersion
             || !document.object().value("components").isArray()) {
             return {};
@@ -693,6 +715,11 @@ namespace ExtraChain::Contracts {
             for (const auto& dependency : dependencies) {
                 component.dependencies.push_back(dependency.toString().toStdString());
             }
+            const auto conflicts = object.value("conflicts").toArray();
+            component.conflicts.reserve(static_cast<std::size_t>(conflicts.size()));
+            for (const auto& conflict : conflicts) {
+                component.conflicts.push_back(conflict.toString().toStdString());
+            }
             if (component.id.empty() || component.name.empty() || component.description.empty()
                 || component.category.empty() || component.source_import.empty()
                 || std::ranges::any_of(result, [&](const ContractComponent& known) {
@@ -705,9 +732,67 @@ namespace ExtraChain::Contracts {
         return result;
     }
 
+    std::vector<ContractBlueprint> ToolchainInstaller::contract_blueprints() const {
+        const auto installation = current();
+        if (!installation.has_value()) {
+            return {};
+        }
+        QFile file(QDir(installation->path).filePath("catalog/components.json"));
+        if (!file.open(QIODevice::ReadOnly)) {
+            return {};
+        }
+        const auto document = QJsonDocument::fromJson(file.readAll());
+        if (!document.isObject() || document.object().value("schema").toInt() != 2
+            || document.object().value("version").toString() != SupportedCatalogVersion
+            || !document.object().value("blueprints").isArray()) {
+            return {};
+        }
+        const auto catalog = component_catalog();
+        if (catalog.empty()) {
+            return {};
+        }
+        std::vector<ContractBlueprint> result;
+        const auto                     blueprints = document.object().value("blueprints").toArray();
+        result.reserve(static_cast<std::size_t>(blueprints.size()));
+        for (const auto& value : blueprints) {
+            const auto        object = value.toObject();
+            ContractBlueprint blueprint {
+                .id          = object.value("id").toString().toStdString(),
+                .name        = object.value("name").toString().toStdString(),
+                .description = object.value("description").toString().toStdString(),
+            };
+            for (const auto& component : object.value("components").toArray()) {
+                blueprint.components.push_back(component.toString().toStdString());
+            }
+            for (const auto& value : object.value("parameters").toArray()) {
+                const auto parameter = value.toObject();
+                blueprint.parameters.push_back({
+                    .id            = parameter.value("id").toString().toStdString(),
+                    .name          = parameter.value("name").toString().toStdString(),
+                    .type          = parameter.value("type").toString().toStdString(),
+                    .default_value = parameter.value("default").toVariant().toString().toStdString(),
+                    .required      = parameter.value("required").toBool(),
+                });
+            }
+            const auto invalid_component = std::ranges::any_of(blueprint.components, [&](const std::string& id) {
+                return std::ranges::find(catalog, id, &ContractComponent::id) == catalog.end();
+            });
+            if (blueprint.id.empty() || blueprint.name.empty() || blueprint.description.empty()
+                || invalid_component || std::ranges::any_of(result, [&](const ContractBlueprint& known) {
+                       return known.id == blueprint.id;
+                   })) {
+                return {};
+            }
+            result.push_back(std::move(blueprint));
+        }
+        return result;
+    }
+
     std::expected<QString, ToolchainFailure> ToolchainInstaller::compose_contract(
-        std::span<const std::string> component_ids,
-        const QString&               project_name) const {
+        std::span<const std::string>              component_ids,
+        std::string_view                          blueprint_id,
+        const std::map<std::string, std::string>& parameters,
+        const QString&                            project_name) const {
         const auto name = project_name.trimmed();
         if (name.isEmpty() || name.size() > 64 || component_ids.empty()
             || std::ranges::any_of(name, [](QChar character) {
@@ -754,6 +839,115 @@ namespace ExtraChain::Contracts {
                     failure(ToolchainError::InvalidManifest, "The component catalog dependency graph is invalid"));
             }
         }
+        for (const auto& component_id : selected) {
+            const auto component = std::ranges::find(catalog, component_id, &ContractComponent::id);
+            if (std::ranges::any_of(component->conflicts, [&](const std::string& conflict) {
+                    return std::ranges::find(selected, conflict) != selected.end();
+                })) {
+                return std::unexpected(
+                    failure(ToolchainError::InvalidManifest, "Selected contract components conflict"));
+            }
+        }
+
+        const auto blueprints = contract_blueprints();
+        const auto blueprint  = std::ranges::find(blueprints, blueprint_id, &ContractBlueprint::id);
+        if (blueprint == blueprints.end()) {
+            return std::unexpected(
+                failure(ToolchainError::InvalidManifest, "The selected contract preset is invalid"));
+        }
+        for (const auto& parameter : blueprint->parameters) {
+            const auto value = parameters.find(parameter.id);
+            if (parameter.required && (value == parameters.end() || value->second.empty())) {
+                return std::unexpected(
+                    failure(ToolchainError::InvalidManifest, "A required contract preset value is missing"));
+            }
+            if (value != parameters.end() && parameter.type == "integer"
+                && (value->second.empty() || !std::ranges::all_of(value->second, [](char character) {
+                        return character >= '0' && character <= '9';
+                    }))) {
+                return std::unexpected(
+                    failure(ToolchainError::InvalidManifest, "A contract preset integer is invalid"));
+            }
+        }
+        if (std::ranges::any_of(parameters, [&](const auto& value) {
+                return std::ranges::find(blueprint->parameters, value.first, &ContractParameter::id)
+                       == blueprint->parameters.end();
+            })) {
+            return std::unexpected(
+                failure(ToolchainError::InvalidManifest, "The contract preset has an unknown value"));
+        }
+
+        const auto parameter_value = [&](std::string_view id) -> std::string {
+            const auto supplied = parameters.find(std::string(id));
+            if (supplied != parameters.end()) {
+                return supplied->second;
+            }
+            const auto configured = std::ranges::find(blueprint->parameters, id, &ContractParameter::id);
+            return configured == blueprint->parameters.end() ? std::string() : configured->default_value;
+        };
+        if (blueprint_id == "token") {
+            const auto token_name   = source_string(parameter_value("name"), 64);
+            const auto token_symbol = source_string(parameter_value("symbol"), 12);
+            const auto decimals     = parameter_value("decimals");
+            if (!token_name.has_value() || !token_symbol.has_value() || decimals.empty() || decimals.size() > 2
+                || !std::ranges::all_of(decimals,
+                                        [](char character) {
+                                            return character >= '0' && character <= '9';
+                                        })
+                || std::stoul(decimals) > 18) {
+                return std::unexpected(
+                    failure(ToolchainError::InvalidManifest, "The fungible token preset is invalid"));
+            }
+            if (language_ == ToolchainLanguage::AssemblyScript) {
+                return QString(
+                           "import { StandardFungibleContract } from \"./generated\";\n\n"
+                           "@contract({ standard: \"fungible\" })\n"
+                           "export class GeneratedContract extends StandardFungibleContract {\n"
+                           "  constructor() {\n"
+                           "    super(\"%1\", \"%2\", %3, true);\n"
+                           "  }\n"
+                           "}\n")
+                    .arg(*token_name, *token_symbol, QString::fromStdString(decimals));
+            }
+            return QString(
+                       "#![no_std]\n\n"
+                       "extern crate alloc;\n\n"
+                       "use extrachain_contract_sdk::fungible_token;\n\n"
+                       "#[fungible_token(\n"
+                       "    name = \"%1\",\n"
+                       "    symbol = \"%2\",\n"
+                       "    decimals = %3,\n"
+                       "    freeze_last_unit = true,\n"
+                       ")]\n"
+                       "pub struct GeneratedContract;\n")
+                .arg(*token_name, *token_symbol, QString::fromStdString(decimals));
+        }
+        if (blueprint_id == "nft") {
+            const auto collection_name   = source_string(parameter_value("name"), 64);
+            const auto collection_symbol = source_string(parameter_value("symbol"), 12);
+            if (!collection_name.has_value() || !collection_symbol.has_value()) {
+                return std::unexpected(
+                    failure(ToolchainError::InvalidManifest, "The NFT collection preset is invalid"));
+            }
+            if (language_ == ToolchainLanguage::AssemblyScript) {
+                return QString(
+                           "import { StandardNonFungibleContract } from \"./generated\";\n\n"
+                           "@contract({ standard: \"nft\" })\n"
+                           "export class GeneratedContract extends StandardNonFungibleContract {\n"
+                           "  constructor() {\n"
+                           "    super(\"%1\", \"%2\");\n"
+                           "  }\n"
+                           "}\n")
+                    .arg(*collection_name, *collection_symbol);
+            }
+            return QString(
+                       "#![no_std]\n\n"
+                       "extern crate alloc;\n\n"
+                       "use extrachain_contract_sdk::nft_collection;\n\n"
+                       "#[nft_collection(name = \"%1\", symbol = \"%2\")]\n"
+                       "pub struct GeneratedContract;\n")
+                .arg(*collection_name, *collection_symbol);
+        }
 
         QString component_list;
         QString component_imports;
@@ -770,68 +964,19 @@ namespace ExtraChain::Contracts {
         if (language_ == ToolchainLanguage::AssemblyScript) {
             return QString(
                        "import {\n"
-                       "  BoundedString,\n"
-                       "  BoundedStringCodec,\n"
                        "  Context,\n"
                        "  ContractResult,\n"
-                       "  ContractRouter,\n"
-                       "  Decoder,\n"
                        "  EmptyValue,\n"
-                       "  Encoder,\n"
-                       "  RouteKind,\n"
-                       "  VersionedStateCodec,\n"
-                       "  emptyCodec,\n"
-                       "  failure,\n"
                        "  success,\n%2"
                        "} from \"./generated\";\n\n"
                        "// Components selected from the trusted ExtraChain catalog:\n%1"
-                       "class State { owner: string = \"\"; }\n\n"
-                       "class StateCodec extends VersionedStateCodec<State> {\n"
-                       "  constructor() { super(1, 1); }\n"
-                       "  create(): State { return new State(); }\n"
-                       "  decodeFields(decoder: Decoder, state: State): void {\n"
-                       "    state.owner = decoder.string();\n"
-                       "  }\n"
-                       "  encodeFields(encoder: Encoder, state: State): void {\n"
-                       "    encoder.string(state.owner);\n"
-                       "  }\n"
-                       "}\n\n"
-                       "function initialize(state: State, context: Context): ContractResult<EmptyValue> {\n"
-                       "  if (context.caller().length == 0) {\n"
-                       "    return failure(new EmptyValue(), \"Contract owner is invalid\");\n"
-                       "  }\n"
-                       "  state.owner = context.caller();\n"
-                       "  return success(new EmptyValue());\n"
-                       "}\n\n"
-                       "function ownerGuard(state: State, context: Context): string | null {\n"
-                       "  return state.owner == context.caller()\n"
-                       "    ? null\n"
-                       "    : \"Only the owner can perform this operation\";\n"
-                       "}\n\n"
-                       "function authorize(\n"
-                       "  _state: State,\n"
-                       "  _context: Context,\n"
-                       "  _moduleHash: BoundedString,\n"
-                       "): ContractResult<EmptyValue> {\n"
-                       "  return success(new EmptyValue());\n"
-                       "}\n\n"
-                       "function migrate(_state: State, _context: Context): ContractResult<EmptyValue> {\n"
-                       "  return success(new EmptyValue());\n"
-                       "}\n\n"
-                       "export class CustomContract extends ContractRouter<State> {\n"
-                       "  constructor() {\n"
-                       "    super(new StateCodec());\n"
-                       "    this.route0<EmptyValue>(RouteKind.Init, \"init\", emptyCodec, initialize);\n"
-                       "    this.route1<BoundedString, EmptyValue>(\n"
-                       "      RouteKind.AuthorizeUpgrade,\n"
-                       "      \"authorize_upgrade\",\n"
-                       "      new BoundedStringCodec(64),\n"
-                       "      emptyCodec,\n"
-                       "      authorize,\n"
-                       "      ownerGuard,\n"
-                       "    );\n"
-                       "    this.route0<EmptyValue>(RouteKind.Migrate, \"migrate\", emptyCodec, migrate, "
-                       "ownerGuard);\n"
+                       "@contract({ version: 1, owner: \"owner\", upgrade: \"owner\" })\n"
+                       "export class GeneratedContract {\n"
+                       "  @state owner: string = \"\";\n\n"
+                       "  @init\n"
+                       "  initialize(context: Context): ContractResult<EmptyValue> {\n"
+                       "    this.owner = context.caller();\n"
+                       "    return success(new EmptyValue());\n"
                        "  }\n"
                        "}\n")
                 .arg(component_list, component_imports);
@@ -840,36 +985,20 @@ namespace ExtraChain::Contracts {
                    "#![no_std]\n\n"
                    "extern crate alloc;\n\n"
                    "use alloc::string::{String, ToString};\n"
-                   "use extrachain_contract_sdk::{BoundedString, Context, ContractResult, ContractState, "
-                   "contract};\n\n"
+                   "use extrachain_contract_sdk::{Context, ContractResult, contract};\n\n"
                    "// Components selected from the trusted ExtraChain catalog:\n%1\n"
                    "#[allow(unused_imports)]\n"
                    "mod components {\n%2}\n"
-                   "#[derive(Default, ContractState)]\n"
-                   "#[state(version = 1)]\n"
+                   "#[contract(version = 1, owner = \"owner\", upgrade = \"owner\")]\n"
+                   "#[derive(Default)]\n"
                    "pub struct GeneratedContract {\n"
-                   "    #[owner]\n"
                    "    owner: String,\n"
                    "}\n\n"
                    "#[contract]\n"
                    "impl GeneratedContract {\n"
                    "    #[init]\n"
-                   "    fn init(&mut self, ctx: &Context<'_>) -> ContractResult<()> {\n"
-                   "        self.owner = ctx.caller().to_string();\n"
-                   "        Ok(())\n"
-                   "    }\n\n"
-                   "    #[authorize_upgrade]\n"
-                   "    #[owner_only]\n"
-                   "    fn authorize_upgrade(\n"
-                   "        &self,\n"
-                   "        _ctx: &Context<'_>,\n"
-                   "        _module_hash: BoundedString<64>,\n"
-                   "    ) -> ContractResult<()> {\n"
-                   "        Ok(())\n"
-                   "    }\n\n"
-                   "    #[migrate]\n"
-                   "    #[owner_only]\n"
-                   "    fn migrate(&mut self, _ctx: &Context<'_>) -> ContractResult<()> {\n"
+                   "    fn init(&mut self, context: &Context<'_>) -> ContractResult<()> {\n"
+                   "        self.owner = context.caller().to_string();\n"
                    "        Ok(())\n"
                    "    }\n"
                    "}\n")

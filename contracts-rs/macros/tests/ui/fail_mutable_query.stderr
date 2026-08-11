@@ -9,7 +9,7 @@ error: query methods cannot use &mut self
 warning: unused import: `ContractResult`
  --> tests/ui/fail_mutable_query.rs:3:31
   |
-3 | use extrachain_contract_sdk::{ContractResult, ContractState, contract};
+3 | use extrachain_contract_sdk::{ContractResult, contract};
   |                               ^^^^^^^^^^^^^^
   |
   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

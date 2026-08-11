@@ -1,12 +1,7 @@
-error[E0277]: the trait bound `Counter: OwnedContract` is not satisfied
-  --> tests/ui/fail_owner_guard_without_owner.rs:11:1
-   |
-11 | #[contract]
-   | ^^^^^^^^^^^ unsatisfied trait bound
-   |
-help: the trait `OwnedContract` is not implemented for `Counter`
-  --> tests/ui/fail_owner_guard_without_owner.rs:7:1
-   |
- 7 | struct Counter {
-   | ^^^^^^^^^^^^^^
-   = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+error: owner upgrade requires an owner field
+ --> tests/ui/fail_owner_guard_without_owner.rs:5:1
+  |
+5 | #[contract(version = 1, upgrade = "owner")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)

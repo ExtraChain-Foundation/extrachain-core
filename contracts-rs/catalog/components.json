@@ -1,19 +1,36 @@
 {
-  "schema": 1,
-  "version": "0.2.0",
+  "schema": 2,
+  "version": "0.3.0",
+  "language": "rust",
   "components": [
-    { "id": "ownership", "name": "Ownership", "description": "Restrict operations to one owner.", "category": "Access", "rust_import": "Ownership", "dependencies": [] },
-    { "id": "roles", "name": "Roles", "description": "Assign named roles to approved addresses.", "category": "Access", "rust_import": "Roles", "dependencies": [] },
-    { "id": "pause", "name": "Pause", "description": "Stop state-changing operations and resume them later.", "category": "Safety", "rust_import": "Pausable", "dependencies": ["ownership"] },
-    { "id": "upgrade", "name": "Upgrade policy", "description": "Permit an owner-approved contract upgrade.", "category": "Lifecycle", "rust_import": "UpgradePolicy", "dependencies": ["ownership"] },
-    { "id": "replay-guard", "name": "Replay guard", "description": "Reject an operation ID that was already used.", "category": "Safety", "rust_import": "ReplayGuard", "dependencies": [] },
-    { "id": "section-timelock", "name": "Section timelock", "description": "Delay an operation until a DAG section.", "category": "Safety", "rust_import": "SectionTimelock", "dependencies": [] },
-    { "id": "fungible", "name": "Fungible token", "description": "Manage supply, balances, burns, and transfers.", "category": "Assets", "rust_import": "FungibleLedger", "dependencies": ["ownership"] },
-    { "id": "nft", "name": "NFT", "description": "Manage unique token ownership and transfers.", "category": "Assets", "rust_import": "NftLedger", "dependencies": ["ownership"] },
-    { "id": "escrow", "name": "Fungible escrow", "description": "Hold a fungible amount until release.", "category": "Finance", "rust_import": "Escrow", "dependencies": [] },
-    { "id": "multisig", "name": "Multisig", "description": "Require approvals from several addresses.", "category": "Access", "rust_import": "Multisig", "dependencies": [] },
-    { "id": "dfs-proof", "name": "DFS proof", "description": "Require a verified DFS file reference and content hash.", "category": "Storage", "rust_import": "dfs", "dependencies": [] },
-    { "id": "dfs-storage", "name": "DFS storage", "description": "Bind logical contract keys to verified DFS files.", "category": "Storage", "rust_import": "DfsBindings", "dependencies": ["dfs-proof"] },
-    { "id": "dag-proof", "name": "DAG proof", "description": "Require a verified and confirmed DAG transaction.", "category": "Chain", "rust_import": "dag", "dependencies": [] }
+    { "id": "ownership", "name": "Ownership", "description": "Restrict selected calls to one owner.", "category": "Access", "rust_import": "Ownership", "dependencies": [], "conflicts": [] },
+    { "id": "roles", "name": "Roles", "description": "Grant named roles to approved actors.", "category": "Access", "rust_import": "Roles", "dependencies": [], "conflicts": [] },
+    { "id": "pause", "name": "Pause control", "description": "Pause and resume state-changing calls.", "category": "Safety", "rust_import": "Pausable", "dependencies": ["ownership"], "conflicts": [] },
+    { "id": "upgrade", "name": "Owner upgrades", "description": "Allow the owner to approve a contract upgrade.", "category": "Lifecycle", "rust_import": "UpgradePolicy", "dependencies": ["ownership"], "conflicts": [] },
+    { "id": "replay-guard", "name": "Replay guard", "description": "Reject an operation ID after its first use.", "category": "Safety", "rust_import": "ReplayGuard", "dependencies": [], "conflicts": [] },
+    { "id": "section-timelock", "name": "Section timelock", "description": "Delay a call until a DAG section.", "category": "Safety", "rust_import": "SectionTimelock", "dependencies": [], "conflicts": [] },
+    { "id": "fungible", "name": "Fungible token", "description": "Manage supply, balances, allowances, locks, burns, and transfers.", "category": "Assets", "rust_import": "FungibleLedger", "dependencies": ["ownership"], "conflicts": ["nft"] },
+    { "id": "freeze-last-unit", "name": "Freeze last unit", "description": "Lock the last whole token after a transfer.", "category": "Assets", "rust_import": "FreezeLastUnit", "dependencies": ["fungible"], "conflicts": [] },
+    { "id": "nft", "name": "NFT", "description": "Manage unique token ownership, approvals, burns, and transfers.", "category": "Assets", "rust_import": "NftLedger", "dependencies": ["ownership"], "conflicts": ["fungible", "freeze-last-unit"] },
+    { "id": "escrow", "name": "Escrow", "description": "Hold an amount until an approved release.", "category": "Finance", "rust_import": "Escrow", "dependencies": [], "conflicts": [] },
+    { "id": "multisig", "name": "Multisig", "description": "Require approvals from several actors.", "category": "Access", "rust_import": "Multisig", "dependencies": [], "conflicts": [] },
+    { "id": "dfs-proof", "name": "Verified DFS file", "description": "Require a verified DFS file and content hash.", "category": "Storage", "rust_import": "dfs", "dependencies": [], "conflicts": [] },
+    { "id": "dfs-storage", "name": "DFS bindings", "description": "Bind contract keys to verified immutable DFS files.", "category": "Storage", "rust_import": "DfsBindings", "dependencies": ["dfs-proof"], "conflicts": [] },
+    { "id": "dag-proof", "name": "Confirmed DAG transaction", "description": "Require a verified DAG transaction with enough confirmations.", "category": "Chain", "rust_import": "dag", "dependencies": [], "conflicts": [] }
+  ],
+  "blueprints": [
+    { "id": "custom", "name": "Custom contract", "description": "Start with ownership and add selected components.", "components": ["ownership", "upgrade"], "parameters": [] },
+    { "id": "token", "name": "Fungible token", "description": "Create a fungible token with optional last-unit freezing.", "components": ["ownership", "upgrade", "fungible", "freeze-last-unit"], "parameters": [
+      { "id": "name", "name": "Token name", "type": "string", "default": "Token X", "required": true },
+      { "id": "symbol", "name": "Symbol", "type": "string", "default": "X", "required": true },
+      { "id": "decimals", "name": "Decimals", "type": "integer", "default": 0, "required": true }
+    ] },
+    { "id": "nft", "name": "NFT collection", "description": "Create an NFT collection with verified DFS metadata.", "components": ["ownership", "upgrade", "nft", "dfs-proof"], "parameters": [
+      { "id": "name", "name": "Collection name", "type": "string", "default": "ExtraChain Collection", "required": true },
+      { "id": "symbol", "name": "Symbol", "type": "string", "default": "EXNFT", "required": true }
+    ] },
+    { "id": "escrow", "name": "Escrow", "description": "Create an escrow that can require a confirmed DAG payment.", "components": ["ownership", "upgrade", "escrow", "dag-proof"], "parameters": [
+      { "id": "confirmations", "name": "DAG confirmations", "type": "integer", "default": 1, "required": true }
+    ] }
   ]
 }

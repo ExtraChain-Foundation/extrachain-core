@@ -1,9 +1,15 @@
 import {
+  ActorId,
+  Amount,
+  Context,
   ContractEffect,
+  ContractEvent,
   DagProof,
   Decoder,
   DfsProof,
   Encoder,
+  NonZeroAmount,
+  OperationReceipt,
   StateMap,
   StateSet,
   compareString,
@@ -81,67 +87,196 @@ export class SectionTimelock {
 }
 
 export class FungibleLedger {
-  private balances: StateMap<string, u64> = new StateMap<string, u64>(compareString);
-  totalSupply: u64 = 0;
+  private balances: StateMap<string, Amount> = new StateMap<string, Amount>(compareString);
+  private allowances: StateMap<string, Amount> = new StateMap<string, Amount>(compareString);
+  private locked: StateMap<string, Amount> = new StateMap<string, Amount>(compareString);
+  totalSupply: Amount = Amount.zero();
 
-  balanceOf(actor: string): u64 {
-    const balance = this.balances.get(actor);
-    return balance === null ? 0 : balance;
+  balanceOf(actor: ActorId): Amount {
+    const balance = this.balances.get(actor.value);
+    return balance === null ? Amount.zero() : balance.clone();
   }
 
-  mint(actor: string, amount: u64): bool {
-    if (actor.length == 0 || amount == 0) return false;
-    const balance = this.balanceOf(actor);
-    const nextBalance = balance + amount;
-    const nextSupply = this.totalSupply + amount;
-    if (nextBalance < balance || nextSupply < this.totalSupply) return false;
-    if (this.balances.set(actor, nextBalance) < 0) return false;
+  allowance(owner: ActorId, spender: ActorId): Amount {
+    const value = this.allowances.get(owner.value + ":" + spender.value);
+    return value === null ? Amount.zero() : value.clone();
+  }
+
+  lockedBalance(actor: ActorId): Amount {
+    const value = this.locked.get(actor.value);
+    return value === null ? Amount.zero() : value.clone();
+  }
+
+  spendableBalance(actor: ActorId): Amount | null {
+    return this.balanceOf(actor).checkedSub(this.lockedBalance(actor));
+  }
+
+  private setBalance(actor: ActorId, amount: Amount): bool {
+    if (amount.isZero()) return this.balances.delete(actor.value) || true;
+    return this.balances.set(actor.value, amount) >= 0;
+  }
+
+  private setAllowance(owner: ActorId, spender: ActorId, amount: Amount): bool {
+    const key = owner.value + ":" + spender.value;
+    if (amount.isZero()) return this.allowances.delete(key) || true;
+    return this.allowances.set(key, amount) >= 0;
+  }
+
+  setLocked(actor: ActorId, amount: Amount): bool {
+    if (amount.isZero()) return this.locked.delete(actor.value) || true;
+    return this.locked.set(actor.value, amount) >= 0;
+  }
+
+  mint(context: Context, actor: ActorId, amount: NonZeroAmount): OperationReceipt | null {
+    const nextBalance = this.balanceOf(actor).checkedAdd(amount.value);
+    const nextSupply = this.totalSupply.checkedAdd(amount.value);
+    if (nextBalance === null || nextSupply === null || !this.setBalance(actor, nextBalance)) return null;
     this.totalSupply = nextSupply;
-    return true;
+    context.fungibleMint(actor, amount);
+    return new OperationReceipt("mint", actor.value, amount.value);
   }
 
-  burn(actor: string, amount: u64): bool {
-    const balance = this.balanceOf(actor);
-    if (actor.length == 0 || amount == 0 || balance < amount) return false;
-    if (balance == amount) this.balances.delete(actor);
-    else this.balances.set(actor, balance - amount);
-    this.totalSupply -= amount;
-    return true;
+  burn(context: Context, actor: ActorId, amount: NonZeroAmount): OperationReceipt | null {
+    const spendable = this.spendableBalance(actor);
+    const balance = this.balanceOf(actor).checkedSub(amount.value);
+    const supply = this.totalSupply.checkedSub(amount.value);
+    if (spendable === null || spendable.lessThan(amount.value) || balance === null || supply === null) return null;
+    if (!this.setBalance(actor, balance)) return null;
+    this.totalSupply = supply;
+    context.fungibleBurn(actor, amount);
+    return new OperationReceipt("burn", actor.value, amount.value);
   }
 
-  transfer(from: string, to: string, amount: u64): bool {
-    const source = this.balanceOf(from);
-    const target = this.balanceOf(to);
-    if (from.length == 0 || to.length == 0 || from == to || amount == 0 || source < amount) return false;
-    const nextTarget = target + amount;
-    if (nextTarget < target) return false;
-    if (this.balances.set(to, nextTarget) < 0) return false;
-    if (source == amount) this.balances.delete(from);
-    else this.balances.set(from, source - amount);
+  approve(context: Context, owner: ActorId, spender: ActorId, amount: Amount): OperationReceipt | null {
+    if (owner.value == spender.value || !this.setAllowance(owner, spender, amount)) return null;
+    const encoder = new Encoder();
+    encoder.array(3);
+    encoder.string(owner.value);
+    encoder.string(spender.value);
+    encoder.amount(amount);
+    context.events.push(new ContractEvent("approval", encoder.finish()));
+    return new OperationReceipt("approval", spender.value, amount);
+  }
+
+  transfer(
+    context: Context,
+    sender: ActorId,
+    receiver: ActorId,
+    amount: NonZeroAmount,
+    policy: FungiblePolicy,
+  ): OperationReceipt | null {
+    if (!this.move(sender, receiver, amount)) return null;
+    context.fungibleTransfer(sender, receiver, amount);
+    if (!policy.afterTransfer(this, context, sender)) return null;
+    return new OperationReceipt("transfer", receiver.value, amount.value);
+  }
+
+  transferFrom(
+    context: Context,
+    spender: ActorId,
+    owner: ActorId,
+    receiver: ActorId,
+    amount: NonZeroAmount,
+    policy: FungiblePolicy,
+  ): OperationReceipt | null {
+    const allowance = this.allowance(owner, spender);
+    const remaining = allowance.checkedSub(amount.value);
+    if (remaining === null || !this.move(owner, receiver, amount)) return null;
+    if (!this.setAllowance(owner, spender, remaining)) return null;
+    context.fungibleTransfer(owner, receiver, amount);
+    if (!policy.afterTransfer(this, context, owner)) return null;
+    return new OperationReceipt("transfer", receiver.value, amount.value);
+  }
+
+  private move(sender: ActorId, receiver: ActorId, amount: NonZeroAmount): bool {
+    if (sender.value == receiver.value) return false;
+    const spendable = this.spendableBalance(sender);
+    if (spendable === null || spendable.lessThan(amount.value)) return false;
+    const source = this.balanceOf(sender).checkedSub(amount.value);
+    const target = this.balanceOf(receiver).checkedAdd(amount.value);
+    if (source === null || target === null || !this.setBalance(receiver, target)) return false;
+    return this.setBalance(sender, source);
+  }
+}
+
+export abstract class FungiblePolicy {
+  abstract afterTransfer(ledger: FungibleLedger, context: Context, sender: ActorId): bool;
+}
+
+export class OpenTransfers extends FungiblePolicy {
+  afterTransfer(_ledger: FungibleLedger, _context: Context, _sender: ActorId): bool { return true; }
+}
+
+export class FreezeLastUnit extends FungiblePolicy {
+  constructor(public unit: Amount, public enabled: bool = true) { super(); }
+
+  afterTransfer(ledger: FungibleLedger, context: Context, sender: ActorId): bool {
+    if (!this.enabled || !ledger.balanceOf(sender).equals(this.unit) || !ledger.lockedBalance(sender).isZero()) {
+      return true;
+    }
+    const amount = NonZeroAmount.create(this.unit);
+    if (amount === null || !ledger.setLocked(sender, this.unit)) return false;
+    context.fungibleLock(sender, amount);
     return true;
   }
 }
 
 export class NftLedger {
-  private owners: StateMap<u64, string> = new StateMap<u64, string>(compareU64);
+  private owners: StateMap<string, ActorId> = new StateMap<string, ActorId>(compareString);
+  private approvals: StateMap<string, ActorId> = new StateMap<string, ActorId>(compareString);
 
-  mint(tokenId: u64, owner: string): bool {
-    if (owner.length == 0 || this.owners.has(tokenId)) return false;
-    return this.owners.set(tokenId, owner) == 0;
+  mint(context: Context, tokenId: Amount, owner: ActorId): OperationReceipt | null {
+    const key = tokenId.toString();
+    if (this.owners.has(key) || this.owners.set(key, owner) < 0) return null;
+    context.nftMint(tokenId, owner);
+    return new OperationReceipt("nft_mint", owner.value, tokenId);
   }
 
-  ownerOf(tokenId: u64): string {
-    const owner = this.owners.get(tokenId);
-    return owner === null ? "" : owner;
+  ownerOf(tokenId: Amount): ActorId | null {
+    return this.owners.get(tokenId.toString());
   }
 
-  transfer(caller: string, tokenId: u64, receiver: string): bool {
-    if (receiver.length == 0 || this.ownerOf(tokenId) != caller) return false;
-    return this.owners.set(tokenId, receiver) >= 0;
+  approved(tokenId: Amount): ActorId | null {
+    return this.approvals.get(tokenId.toString());
   }
 
-  burn(caller: string, tokenId: u64): bool {
-    return this.ownerOf(tokenId) == caller && this.owners.delete(tokenId);
+  approve(context: Context, caller: ActorId, tokenId: Amount, actor: ActorId): OperationReceipt | null {
+    const owner = this.ownerOf(tokenId);
+    if (owner === null || owner.value != caller.value || actor.value == caller.value) return null;
+    if (this.approvals.set(tokenId.toString(), actor) < 0) return null;
+    const encoder = new Encoder();
+    encoder.array(2);
+    encoder.amount(tokenId);
+    encoder.string(actor.value);
+    context.events.push(new ContractEvent("nft_approval", encoder.finish()));
+    return new OperationReceipt("nft_approval", actor.value, tokenId);
+  }
+
+  transfer(
+    context: Context,
+    caller: ActorId,
+    tokenId: Amount,
+    receiver: ActorId,
+  ): OperationReceipt | null {
+    const owner = this.ownerOf(tokenId);
+    const approval = this.approved(tokenId);
+    if (owner === null || owner.value == receiver.value
+        || (owner.value != caller.value && (approval === null || approval.value != caller.value))) return null;
+    if (this.owners.set(tokenId.toString(), receiver) < 0) return null;
+    this.approvals.delete(tokenId.toString());
+    context.nftTransfer(tokenId, owner, receiver);
+    return new OperationReceipt("nft_transfer", receiver.value, tokenId);
+  }
+
+  burn(context: Context, caller: ActorId, tokenId: Amount): OperationReceipt | null {
+    const owner = this.ownerOf(tokenId);
+    const approval = this.approved(tokenId);
+    if (owner === null
+        || (owner.value != caller.value && (approval === null || approval.value != caller.value))) return null;
+    this.owners.delete(tokenId.toString());
+    this.approvals.delete(tokenId.toString());
+    context.nftBurn(tokenId, owner);
+    return new OperationReceipt("nft_burn", owner.value, tokenId);
   }
 }
 

@@ -2,20 +2,20 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
-use extrachain_contract_sdk::{Contract, InvokeRequest, InvokeResponse, export_contract};
+use alloc::string::{String, ToString};
+use extrachain_contract_sdk::{Context, ContractResult, contract};
 
-pub struct ContractTemplate;
-
-impl Contract for ContractTemplate {
-    fn invoke(request: InvokeRequest) -> InvokeResponse {
-        match request.method.as_str() {
-            "init" | "authorize_upgrade" | "migrate" => {
-                InvokeResponse::success(request.state, Vec::new(), Vec::new())
-            }
-            _ => InvokeResponse::failure(request.state, "Unknown contract method"),
-        }
-    }
+#[contract(version = 1, owner = "owner", upgrade = "owner")]
+#[derive(Default)]
+pub struct ContractTemplate {
+    owner: String,
 }
 
-export_contract!(ContractTemplate);
+#[contract]
+impl ContractTemplate {
+    #[init]
+    fn initialize(&mut self, context: &Context<'_>) -> ContractResult<()> {
+        self.owner = context.caller().to_string();
+        Ok(())
+    }
+}
