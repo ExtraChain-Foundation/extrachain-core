@@ -808,6 +808,10 @@ private:
     // Periodic "am I behind?" check that survives a stalled Qt event loop. See the
     // rationale where it is started, in Dag::start().
     std::jthread watchdog_;
+    // Height seen by the previous watchdog round, and how many rounds it has not moved
+    // while a sync was supposedly running. Used to tell a slow sync from a stuck one.
+    SectionId    last_watchdog_section_ = SectionId(-1);
+    int          stalled_sync_rounds_   = 0;
 
     // Boundary -> when we last refetched it after a control mismatch. Several peers
     // reporting the same disagreement must not each trigger their own refetch.

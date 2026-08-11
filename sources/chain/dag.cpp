@@ -301,7 +301,38 @@ void Dag::start() {
                      timer->thread() == node->thread());
             }
 
-            if (status_ == DagStatus::Ready && mode_ == DagMode::Full) {
+            if (mode_ != DagMode::Full) {
+                continue;
+            }
+
+            if (status_ == DagStatus::Ready) {
+                stalled_sync_rounds_ = 0;
+                last_watchdog_section_ = current_section_;
+                this->start_check();
+                continue;
+            }
+
+            // Not Ready means a sync is in progress — normally leave it alone. But a
+            // sync that stops making progress is indistinguishable from a healthy one
+            // from the outside, and nothing else ever restarts it: measured a node that
+            // spent 510 status ticks in Sync against 37 in Ready, frozen at section 1942
+            // while the network reached 5157, because start_check refused to run in that
+            // state and no other trigger exists.
+            //
+            // So watch the height instead of trusting the status. Two rounds without a
+            // single new section (30s) is not a slow fetch, it is a stuck one.
+            if (current_section_ != last_watchdog_section_) {
+                last_watchdog_section_ = current_section_;
+                stalled_sync_rounds_   = 0;
+                continue;
+            }
+
+            if (++stalled_sync_rounds_ >= 2) {
+                eWarning("[Dag] Sync stalled at section {} for {} rounds — restarting the check",
+                         current_section_.to_string(),
+                         stalled_sync_rounds_);
+                stalled_sync_rounds_ = 0;
+                this->set_status(DagStatus::Ready);
                 this->start_check();
             }
         }
@@ -485,6 +516,24 @@ std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Tran
 
 std::expected<Transaction, TransactionError> Dag::send_transaction(const Transaction       &transaction,
                                                                    const Actor<KeyPrivate> &signer) {
+    // A node that is still syncing does not know the current section, and
+    // prepare_transaction stamps `current_section_ + 1` — a number the network passed
+    // long ago. Every such transaction is rejected by every peer as TooSectionDiff and
+    // is then lost outright: a locally created transaction is not written to our chain
+    // when sent, it waits in `sended_transactions_` for an approval that will never
+    // come. Measured on a six-node stand: a node stuck at section 1942 while the
+    // network reached 5157 emitted 3189 doomed transactions, and its own user saw them
+    // simply vanish.
+    //
+    // Refusing here is not a lost transaction — it is an error the caller can act on,
+    // and the only honest answer while our view of the chain is stale.
+    if (status_ != DagStatus::Ready) {
+        eWarning("[Dag] Refusing to send a transaction while {}: our section {} is stale",
+                 status_,
+                 current_section_.to_string());
+        return std::unexpected(TransactionError::NotReady);
+    }
+
     auto tx = this->prepare_transaction(transaction, signer);
     if (!tx.has_value()) {
         return std::unexpected(tx.error());
@@ -2105,9 +2154,9 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    emit node->dagTimerStop();
-    // eLog("Timer stop");
-
+    // Same reasoning as network_file_sections_response: the retry clock stays running
+    // until the answer proves usable, so a corrupt or undecodable one does not silently
+    // cancel the retry it should have caused.
     ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
         const auto section_sync = MessagePack::deserialize<SectionSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
@@ -2117,6 +2166,8 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             // eLog("sysync 2");
             return;
         }
+
+        emit node->dagTimerStop();
 
         if (!section_sync->txs.empty()) {
             auto res = this->save_transactions(section_sync->txs);
@@ -2265,8 +2316,20 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
 }
 
 void Dag::network_file_sections_response(const std::string &compressed, const Responder &responder) {
-    emit node->dagTimerStop();
-
+    // The sync timeout is deliberately NOT cancelled here.
+    //
+    // It used to be, as the first statement of this function — before any of the
+    // fourteen validation checks below, each of which can `return`. A malformed,
+    // oversized or unnegotiated answer therefore disarmed the timeout and left with the
+    // sync still in progress: nothing rearmed the timer, so `timer_tick` never fired,
+    // and the retry it exists to trigger never happened. Measured on a six-node stand:
+    // zero timer ticks across every node, and a node frozen in DagStatus::Sync at
+    // section 1942 while the network reached 5157 — for an hour, emitting 3189
+    // transactions that every peer rejected as TooSectionDiff.
+    //
+    // The timeout is now cancelled only once the answer is known to be usable, just
+    // before this batch is applied. A rejected answer leaves the clock running, which
+    // is exactly what a rejected answer should do.
     if (compressed.size() < sizeof(quint32) || compressed.size() > FILE_SYNC_MAX_COMPRESSED_BYTES) {
         eWarning("[Dag] Reject file sections with invalid compressed size {}", compressed.size());
         return;
@@ -2368,6 +2431,10 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             eWarning("[Dag] Failed to store a section sync batch");
             return;
         }
+        // The answer survived every check and is about to be applied — only now is it
+        // safe to stop the retry clock. See the note at the top of this function.
+        emit node->dagTimerStop();
+
         if (!received_sections.empty() && (!hot_section_store_ || !hot_section_store_->is_open())) {
             for (const auto &[section_id, disk_bytes] : received_sections) {
                 auto path = FsPath::create(this->file_path(section_id));

@@ -59,7 +59,8 @@ enum class TransactionError {
     InsufficientFunds, ///< Sender lacks required balance
     NoCurrentUser,     ///< No active user context
     ZeroAmount,        ///< Transaction amount is zero
-    SubscriptionRowFull
+    SubscriptionRowFull,
+    NotReady ///< Chain view is stale (still syncing) — the section stamp would be wrong
 };
 
 /**
