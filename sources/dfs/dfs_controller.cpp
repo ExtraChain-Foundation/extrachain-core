@@ -1882,7 +1882,7 @@ void DfsController::network_response_content_vector(
                                [this,
                                 owner_id = dfs_vector_content.owner_id,
                                 file_id  = dfs_vector_content.file_id] {
-                                   request_file(owner_id, file_id);
+                                   request_vector_content(owner_id, file_id);
                                });
             return;
         }
@@ -1905,6 +1905,12 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
     ThreadPoolBoost::instance_dfs()->post([this, owner_id, file_id, row] {
         auto res = make_vector(owner_id, file_id);
         if (!res.has_value()) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, owner_id, file_id] {
+                    request_vector_content(owner_id, file_id);
+                },
+                Qt::QueuedConnection);
             return;
         }
 
@@ -2203,10 +2209,17 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
         // }
     }
 
-    auto db_instance = dirs_manager_.get_db_instance();
+    auto             db_instance = dirs_manager_.get_db_instance();
+    std::unique_lock size_state_lock(size_state_mutex_);
+    auto previous_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_instance, owner_id, dir_row.file_id);
 
     auto dir_row2  = dir_row;
     dir_row2.state = Dfs::FileState::Known;
+    if (previous_row.has_value() && previous_row->state == Dfs::FileState::Ready
+        && previous_row->type == dir_row.type && previous_row->size == dir_row.size
+        && previous_row->hash == dir_row.hash) {
+        dir_row2.state = Dfs::FileState::Ready;
+    }
     DbRow dirRowDb = Utils::to_dbrow(dir_row2);
     if (auto it = dirRowDb.find("prev_file_id"); it != dirRowDb.end() && it->second.empty()) {
         dirRowDb.erase(it);
@@ -2227,6 +2240,22 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
         eFatal("Error 2: {}", errorStr);
         return "";
     }
+
+    const auto previous_total = previous_row.has_value() ? previous_row->size : 0;
+    const auto previous_local =
+        previous_row.has_value() && previous_row->state == Dfs::FileState::Ready ? previous_row->size : 0;
+    const auto current_local = dir_row2.state == Dfs::FileState::Ready ? dir_row2.size : 0;
+    if (dir_row2.size >= previous_total) {
+        m_totalDfsSize.fetch_add(dir_row2.size - previous_total);
+    } else {
+        m_totalDfsSize.fetch_sub(previous_total - dir_row2.size);
+    }
+    if (current_local >= previous_local) {
+        m_sizeTaken.fetch_add(current_local - previous_local);
+    } else {
+        m_sizeTaken.fetch_sub(previous_local - current_local);
+    }
+    size_state_lock.unlock();
 
     dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
 
@@ -2259,18 +2288,16 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     // insertToFiles(dir_row);
 
     if (dir_row.type == Dfs::FileType::File && network_stote == Dfs::NetworkStoreFile::Broadcast) {
-        emit stored(owner_id, dir_row);
+        emit stored(owner_id, dir_row2);
 
         // Full nodes replicate content, not only metadata: without this the
         // gossiped row lands as Known and the file itself is never fetched.
-        if (mode() == DfsMode::Full) {
+        if (mode() == DfsMode::Full && dir_row2.state != Dfs::FileState::Ready) {
             request_file(owner_id, dir_row.file_id);
         }
     }
 
-    emit added(owner_id, dir_row);
-    increaseSizeTaken(dir_row.size);
-    m_totalDfsSize += dir_row.size;
+    emit added(owner_id, dir_row2);
 
     std::string stored_added = network_stote == Dfs::NetworkStoreFile::Broadcast ? "stored" : "added";
     eLog("[Dfs] File {}/{} was {}", owner_id, dir_row.file_id, stored_added);
@@ -2322,15 +2349,30 @@ std::string DfsController::create_file_id_from(const std::string &data) {
 }
 
 std::uint64_t DfsController::sizeTaken() const {
-    return m_sizeTaken;
+    return m_sizeTaken.load();
 }
 
 std::uint64_t DfsController::totalDfsSize() const {
-    return m_totalDfsSize;
+    return m_totalDfsSize.load();
 }
 
 void DfsController::increaseSizeTaken(uintmax_t value) {
-    m_sizeTaken += value;
+    m_sizeTaken.fetch_add(value);
+}
+
+void DfsController::completeDownloadedFile(const ActorId &owner_id, const Dfs::DirRow &dir_row) {
+    std::lock_guard lock(size_state_mutex_);
+    auto current = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
+                                                                  owner_id,
+                                                                  dir_row.file_id);
+    if (!current.has_value() || current->state == Dfs::FileState::Ready) {
+        return;
+    }
+    Dfs::Tables::DirsFile::ActorSpace::update_file_state(dirs_manager_.get_db_instance(),
+                                                         owner_id,
+                                                         dir_row.file_id,
+                                                         Dfs::FileState::Ready);
+    refresh_calculate();
 }
 
 std::expected<void, ExportFileError> DfsController::export_file(const ActorId                &owner_id,
@@ -2907,7 +2949,7 @@ void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
 }
 
 void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg, const Responder &responder) {
-    const auto            dfsSize = m_sizeTaken; // calculate_size().local;
+    const auto            dfsSize = m_sizeTaken.load(); // calculate_size().local;
     DfsP::ResponseDfsSize response { .actorId = msg.actorId, .size = dfsSize };
     responder.send_response(response, MessageType::ResponseDfsSize, SendMode::Focused, MessageStatus::Response);
 }

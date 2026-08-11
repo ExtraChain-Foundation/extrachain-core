@@ -1186,10 +1186,7 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
          dir_row.file_id,
          dir_row.size);
 
-    Dfs::Tables::DirsFile::ActorSpace::update_file_state(node->dfs()->get_db_instance(),
-                                                         owner_id,
-                                                         dir_row.file_id,
-                                                         Dfs::FileState::Ready);
+    node->dfs()->completeDownloadedFile(owner_id, dir_row);
     emit node->dfs()->added(owner_id, dir_row);
     emit node->dfs()->downloaded(owner_id, dir_row);
 

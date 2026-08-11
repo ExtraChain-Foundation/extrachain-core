@@ -113,10 +113,10 @@ class EXTRACHAIN_EXPORT DfsController : public QObject {
 private:
     ExtraChainNode *node;
 
-    std::uint64_t m_bytesLimit = 10995116277760;
-    std::size_t   m_sizeTaken  = 0;
-
-    std::uint64_t m_totalDfsSize = 0;
+    std::uint64_t       m_bytesLimit = 10995116277760;
+    std::atomic_uint64_t m_sizeTaken { 0 };
+    std::atomic_uint64_t m_totalDfsSize { 0 };
+    std::mutex           size_state_mutex_;
 
     std::atomic_uint64_t staged_startup_response_count_ { 0 };
 
@@ -566,6 +566,7 @@ public:
     std::uint64_t                        sizeTaken() const;
     std::uint64_t                        totalDfsSize() const;
     void                                 increaseSizeTaken(uintmax_t value);
+    void                                 completeDownloadedFile(const ActorId &owner_id, const Dfs::DirRow &dir_row);
     std::expected<void, ExportFileError> export_file(const ActorId                &owner_id,
                                                      const std::string            &file_id,
                                                      const FsPath                 &output_folder,
