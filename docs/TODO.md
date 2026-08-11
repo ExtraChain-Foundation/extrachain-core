@@ -10,10 +10,11 @@ what we deliberately postponed.
 
 ### 0. Vectors and dictionaries need concurrent load testing
 
-A two-node stand now covers vector and dictionary creation, row replication, a node
-restart, recovery of missing local files, and byte-for-byte convergence. Unit tests also
-cover deterministic conflict ordering. The structured-data path has not yet been tested
-with concurrent writers and repeated node restarts.
+A two-node stand covers vector and dictionary creation, row replication, a node restart,
+recovery of missing local files, and byte-for-byte convergence. A later six-node combined
+stand also recovered the test vectors and dictionary after one hard node restart. Unit
+tests cover deterministic conflict ordering. The structured-data path has not yet been
+tested with concurrent writers to the same object and repeated node restarts.
 
 This matters more than the file path: vectors carry chat history, profiles and
 dictionaries, they replicate row-by-row rather than as an immutable blob, and rows are
@@ -31,16 +32,18 @@ cache watermark. A late transaction cannot change an interval after it is sealed
 tests and a short two-node DAG and DFS stand pass. A long combined stand run is still
 required. The control-hash metric must stay clean for the whole run (see `TESTING.md`).
 
-### 2. Backfill of missed sections inside the acceptance window
+### 2. Backfill of missed sections inside the acceptance window — done 2026-08-11
 
-A node that was dead or frozen does not pull the transactions it missed
-(`request_sections` is only reachable from a commented-out block in
-`network_transaction`, `dag.cpp:311-324`). With the connection and integrity fixes in
-place this is no longer a workaround but a genuine second line of defence.
+A transaction ahead of the local frontier is now kept in the bounded pending cache and
+schedules a synchronization check. A `TooSectionDiff` rejection for a future transaction
+schedules the same check. The periodic watchdog repeats the check after the local height
+stays stable and retries a stalled synchronization without changing the DAG status from a
+worker thread.
 
-Scope it to the **open window only** (`±15` sections): trigger on a detected gap between
-`current_section_` and an incoming `tx.section()`, or a periodic control/section-hash
-comparison with neighbours. Not a global catch-up.
+The admission window now uses the same closed boundary as the cache. At frontier `15`,
+section `0` is closed; at frontier `30`, section `15` is closed. Responses are accepted
+only for the outstanding message id and requested range. The retry timer stays active
+until a response passes validation and storage succeeds.
 
 ### 3. DAG CPU: per-transaction cost grows with section size
 
