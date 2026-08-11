@@ -243,8 +243,10 @@ option(EXTRACHAIN_BUILD_QT_COMPAT "Build the Qt compatibility layer" ON)
 if(EXTRACHAIN_BUILD_QT_COMPAT)
     add_library(extrachain-qt-compat STATIC
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/actor_id_adapter.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/byte_array_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/network_status_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/actor_id_adapter.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/byte_array_adapter.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/network_status_adapter.cpp
     )
     target_include_directories(extrachain-qt-compat PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
