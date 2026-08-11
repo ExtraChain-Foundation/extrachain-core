@@ -229,6 +229,12 @@ be attributed.
     counter climbing 6 → 9 → 12 read as a spreading split; comparing transaction *sets*
     with the control stripped showed exactly one section actually differed out of 290.
     Report the two separately — they have different causes and different fixes.
+11. **Raw SQLite bytes are not a structured-data invariant.** After a hard restart, a
+    vector and a dictionary had the same schema and the same nine logical rows on every
+    node, but the restarted node's database file had change counter 9 while the others
+    had 10. The file hashes differed even though the replicated data and DFS metadata
+    hashes were equal. Compare sorted logical rows, schema, and the DFS logical hash for
+    vectors and dictionaries. Use a raw byte hash only for immutable file payloads.
 
 ---
 
