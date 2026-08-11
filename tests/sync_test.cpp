@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <string>
 #include <vector>
@@ -88,6 +89,31 @@ private slots:
         QVERIFY(!ActorId::create("ABC").has_value());
         QVERIFY(ActorId(std::string(ActorId::SIZE + 1, 'a')).is_zero());
         QVERIFY(ActorId("ABC").is_zero());
+    }
+
+    void hashModuleKeepsBlake3WireValue() {
+        constexpr auto Expected = "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85";
+        QCOMPARE(Utils::calculate_hash(std::string("abc")), std::string(Expected));
+        QCOMPARE(Utils::calculate_hash_bytes("abc", 3), std::string(Expected));
+
+        const auto root = std::filesystem::temp_directory_path() / "extrachain-hash-module-test";
+        std::filesystem::remove_all(root);
+        std::filesystem::create_directories(root);
+        const auto file_path = root / "content";
+        std::ofstream(file_path, std::ios::binary) << "abc";
+
+        const auto path = FsPath::create(file_path.string());
+        QVERIFY(path.has_value());
+        const auto file_hash = Utils::calculate_hash_file(*path);
+        QVERIFY(file_hash.has_value());
+        QCOMPARE(*file_hash, std::string(Expected));
+
+        const auto missing_path = FsPath::create((root / "missing").string());
+        QVERIFY(missing_path.has_value());
+        const auto missing_hash = Utils::calculate_hash_file(*missing_path);
+        QVERIFY(!missing_hash.has_value());
+        QCOMPARE(missing_hash.error(), Utils::FileHashError::FileNotFound);
+        std::filesystem::remove_all(root);
     }
 
     void transactionAdmissionClosesAtCacheBoundary() {

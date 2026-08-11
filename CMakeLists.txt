@@ -109,6 +109,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber_float.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/fs_path.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/hash.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector_strict.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_schema.h
@@ -186,6 +187,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/fs_path.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/hash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_schema.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_iterator.cpp

@@ -60,10 +60,9 @@
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
 
-#include <blake3.h>
-
 #include "utils/exc_utils_base64.h"
 #include "utils/fs_path.h"
+#include "utils/hash.h"
 
 namespace Network {
     Q_NAMESPACE
@@ -378,10 +377,6 @@ namespace Utils {
         On  = 1
     };
 
-    enum class HashAlgorithm {
-        Blake3
-    };
-
     enum class ParseError {
         Invalid,
         EmptyString,
@@ -437,107 +432,6 @@ namespace Utils {
                                                                       const bool                isHahsing);
     EXTRACHAIN_EXPORT void                          hashingElements(std::vector<std::string> &vector);
     EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
-    EXTRACHAIN_EXPORT std::string calculate_hash(const std::string &data,
-                                                 HashAlgorithm      hash_algorithm = HashAlgorithm::Blake3);
-
-    // Hash a raw byte range without materializing a std::string first (used on
-    // the pack read path, where the buffer is large and copying it is wasteful).
-    EXTRACHAIN_EXPORT std::string calculate_hash_bytes(const char   *data,
-                                                       std::size_t   size,
-                                                       HashAlgorithm hash_algorithm = HashAlgorithm::Blake3);
-
-    namespace detail {
-        template <typename T>
-        void update_hasher(blake3_hasher &hasher, const T &value) {
-            if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>) {
-                // eInfo("- '{}'", value);
-                blake3_hasher_update(&hasher, value.data(), value.size());
-            } else if constexpr (std::is_arithmetic_v<T>) {
-                auto str = std::to_string(value);
-                // eInfo("- '{}'", str);
-                blake3_hasher_update(&hasher, str.data(), str.size());
-            } else if constexpr (std::is_enum_v<T>) {
-                auto str = std::to_string(static_cast<std::underlying_type_t<T>>(value));
-                // eInfo("- '{}'", str);
-                blake3_hasher_update(&hasher, str.data(), str.size());
-            } else if constexpr (magic::is_optional<T>::value) {
-                if (value.has_value()) {
-                    update_hasher(hasher, value.value());
-                }
-            } else {
-                auto str = magic::detail::to_string(value);
-                // eInfo("- '{}'", str);
-                blake3_hasher_update(&hasher, str.data(), str.size());
-            }
-        }
-    } // namespace detail
-
-    template <typename T>
-    std::string calculate_hash_blake3(const T &value) {
-        blake3_hasher hasher;
-        blake3_hasher_init(&hasher);
-
-        if constexpr (boost::describe::has_describe_members<T>::value) {
-            boost::mp11::mp_for_each<boost::describe::describe_members<T,
-                                                                       boost::describe::mod_any_access
-                                                                           | boost::describe::mod_inherited>>(
-                [&](auto D) {
-                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        auto field_name = magic::detail::clean_type_name(D.name);
-                        if (field_name != "sign" && field_name != "signature" && field_name != "hash") {
-                            detail::update_hasher(hasher, magic::invoke_member(value, D.pointer));
-                        }
-                    }
-                });
-        } else {
-            detail::update_hasher(hasher, value);
-        }
-
-        uint8_t output[BLAKE3_OUT_LEN];
-        blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
-
-        std::string hash;
-        for (uint8_t byte : output) {
-            hash += fmt::format("{:02x}", byte);
-        }
-        return hash;
-    }
-
-    template <typename T>
-    std::string calculate_hash(const T &value, HashAlgorithm hash_algorithm = HashAlgorithm::Blake3) {
-        switch (hash_algorithm) {
-        case HashAlgorithm::Blake3:
-            return calculate_hash_blake3(value);
-        default:
-            return "";
-        }
-    }
-
-    /**
-     * @brief Error codes for file hashing operations
-     */
-    enum class FileHashError {
-        FileNotFound, ///< File does not exist
-        ReadError,    ///< Error reading file data
-        HashError,    ///< Error during hash calculation
-        AccessError   ///< Permission or access-related errors
-    };
-
-    /**
-     * @brief Calculate BLAKE3 hash of a file
-     * @param path Path to the file
-     * @return Expected containing hex string of hash or FileHashError
-     * @retval string Hex representation of BLAKE3 hash on success
-     * @retval FileHashError::FileNotFound If file doesn't exist
-     * @retval FileHashError::ReadError If file reading fails
-     * @retval FileHashError::AccessError If file access is denied
-     *
-     * @details Uses 64KB buffer for file reading and generates BLAKE3 hash
-     * of the entire file content. The resulting hash is returned as a
-     * hexadecimal string.
-     */
-    EXTRACHAIN_EXPORT std::expected<std::string, FileHashError> calculate_hash_file(const FsPath &path);
-
     enum class ContentError {
         ReadError,
         SizeTooLarge,

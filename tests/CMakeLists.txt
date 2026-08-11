@@ -125,6 +125,7 @@ set(EXTRACHAIN_HEADER_CHECKS
     contracts/wasm_runtime.h
     managers/extrachain_node.h
     network/network_manager.h
+    utils/hash.h
 )
 set(EXTRACHAIN_HEADER_CHECK_TARGETS)
 foreach(header IN LISTS EXTRACHAIN_HEADER_CHECKS)

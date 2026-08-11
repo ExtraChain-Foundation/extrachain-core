@@ -58,27 +58,6 @@
     #include "preconfig.h"
 #endif
 
-std::string Utils::calculate_hash_bytes(const char *data, std::size_t size, HashAlgorithm hash_algorithm) {
-    switch (hash_algorithm) {
-    case HashAlgorithm::Blake3: {
-        blake3_hasher hasher;
-        blake3_hasher_init(&hasher);
-        blake3_hasher_update(&hasher, data, size);
-
-        uint8_t hash[BLAKE3_OUT_LEN];
-        blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
-
-        return fmt::format("{:02x}", fmt::join(std::span(hash, BLAKE3_OUT_LEN), ""));
-    }
-    default:
-        eFatal("Unknown hash algorithm");
-    }
-}
-
-std::string Utils::calculate_hash(const std::string &data, HashAlgorithm hash_algorithm) {
-    return calculate_hash_bytes(data.data(), data.size(), hash_algorithm);
-}
-
 // SERIALIZATION //
 
 std::vector<std::string> Utils::split(const std::string &s, char c) {
@@ -378,49 +357,6 @@ void Utils::hashingElements(std::vector<std::string> &vector) {
 
 std::string Utils::merkleFormula(const std::string &hash1, const std::string &hash2) {
     return Utils::calculate_hash(hash1 + hash2);
-}
-
-std::expected<std::string, Utils::FileHashError> Utils::calculate_hash_file(const FsPath &path) {
-    auto exists_result = path.exists();
-    if (!exists_result) {
-        return std::unexpected(FileHashError::FileNotFound);
-    }
-
-    auto has_read = path.has_read_permission();
-    if (!has_read) {
-        return std::unexpected(FileHashError::AccessError);
-    }
-    if (!*has_read) {
-        return std::unexpected(FileHashError::AccessError);
-    }
-
-    blake3_hasher hasher;
-    blake3_hasher_init(&hasher);
-
-    constexpr size_t     BUFFER_SIZE = 64 * 1024;
-    std::vector<uint8_t> buffer(BUFFER_SIZE);
-
-    FILE *file = fopen(path.native().string().c_str(), "rb");
-    if (!file) {
-        return std::unexpected(FileHashError::ReadError);
-    }
-
-    size_t bytes_read;
-    while ((bytes_read = fread(buffer.data(), 1, buffer.size(), file)) > 0) {
-        blake3_hasher_update(&hasher, buffer.data(), bytes_read);
-        if (ferror(file)) {
-            fclose(file);
-            return std::unexpected(FileHashError::ReadError);
-        }
-    }
-
-    fclose(file);
-
-    uint8_t hash[BLAKE3_OUT_LEN];
-    blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
-
-    auto result = fmt::format("{:02x}", fmt::join(std::span(hash, BLAKE3_OUT_LEN), ""));
-    return result;
 }
 
 QString Utils::fileMimeType(const QString &filePath) {
