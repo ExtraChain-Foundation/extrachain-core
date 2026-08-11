@@ -289,6 +289,18 @@ void Dag::start() {
             if (token.stop_requested() || !started_.load()) {
                 return;
             }
+            // Report the Qt timer's health from a thread that cannot be silenced with
+            // it: on a six-node stand three nodes stopped printing the 10s status line
+            // while their event loops were provably alive (this watchdog kept running,
+            // inbound messages kept arriving). Knowing whether the timer is merely
+            // inactive or is active-but-not-delivering decides where to look next.
+            if (auto *timer = node->info_timer(); timer != nullptr) {
+                eLog("[Dag] Watchdog: info timer active={}, interval={}, thread_match={}",
+                     timer->isActive(),
+                     timer->interval(),
+                     timer->thread() == node->thread());
+            }
+
             if (status_ == DagStatus::Ready && mode_ == DagMode::Full) {
                 this->start_check();
             }
@@ -906,8 +918,21 @@ bool Dag::exists_section_file(const SectionId &section_id) const {
 }
 
 std::optional<bool> Dag::write_section(const Section &section) {
-    if (!is_admission_worker())
-        flush_admission();
+    // Deliberately no flush_admission() here: this is called with save_mutex_ already
+    // held (save_transaction takes it around the whole read-insert-write cycle), and
+    // waiting for the admission queue to drain while holding it is a deadlock.
+    //
+    // Both halves were caught in one sample: the node thread sat in
+    // network_transaction_result -> save_transaction -> write_section ->
+    // flush_admission, waiting for the queue; the admission worker sat in
+    // network_transaction_immediate -> save_transaction, waiting for save_mutex_. Each
+    // held what the other needed. Because the node thread is the one running the Qt
+    // event loop, the whole node froze with it: timers stopped (3 ticks instead of 49),
+    // inbound messages stopped being read, and every peer writing to it filled its send
+    // queue until locally created transactions were dropped — 200+ per node.
+    //
+    // Callers that need the pipeline quiet before writing must flush before taking the
+    // lock; see save_transaction.
     try {
         {
             std::unique_lock<std::shared_mutex> lock(section_mutex_);
@@ -1136,6 +1161,13 @@ SectionDiff Dag::calculate_section_diff(const Section &old_section, const Sectio
 }
 
 bool Dag::save_transaction(const Transaction &transaction) {
+    // Quiet the admission pipeline BEFORE taking save_mutex_, never while holding it:
+    // the admission worker itself calls save_transaction and so waits for this very
+    // mutex, and waiting for it to drain from inside the lock deadlocks both. This used
+    // to live in write_section, which runs with the lock already held.
+    if (!is_admission_worker())
+        flush_admission();
+
     // Hold save_mutex_ across the whole read-insert-write cycle: without it two
     // concurrent transactions for the same section both read the old set and one
     // insert is lost, so sections diverge between nodes and ControlIndex fails.

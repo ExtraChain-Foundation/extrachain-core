@@ -141,8 +141,24 @@ struct Dag::AdmissionState {
         if (IsAdmissionWorker)
             return;
         std::unique_lock lock(mutex);
+        // Deliberately not waiting on `cache_catchup_pending`.
+        //
+        // flush() exists so a section write does not race the admission pipeline; the
+        // balance-cache catch-up is a background refresh that touches neither. Waiting
+        // on it deadlocked the node outright: the flag is cleared only by the worker
+        // (below), and only after its wait_until() times out — but wait_until returns
+        // early whenever the queue is non-empty, and the worker then `continue`s
+        // without clearing it. Under a steady transaction flow the queue is almost
+        // never empty, so the flag stayed set and flush() never returned.
+        //
+        // The caller here is the node thread, inside onBinaryMessage: it was stuck in
+        // network_transaction_result -> save_transaction -> write_section ->
+        // flush_admission, holding the Qt event loop hostage. Measured on a six-node
+        // stand: three nodes printed 3-4 of the expected 49 status ticks, stopped
+        // reading inbound messages, and every peer writing to them filled its send
+        // queue until locally created transactions were dropped outright.
         condition.wait(lock, [this] {
-            return queue.empty() && !processing && !cache_catchup_pending;
+            return queue.empty() && !processing;
         });
         lock.unlock();
         std::unique_lock derived_lock(derived_mutex);
@@ -503,7 +519,11 @@ private:
                     const bool interrupted = condition.wait_until(lock, cache_catchup_due, [&] {
                         return stopping || token.stop_requested() || !queue.empty();
                     });
-                    if (interrupted)
+                    // Give up the catch-up once its deadline has passed, even if work
+                    // arrived first. Without this the flag survived every interruption
+                    // and, under a steady flow where the queue is rarely empty, was
+                    // never cleared at all — the catch-up simply never ran.
+                    if (interrupted && std::chrono::steady_clock::now() < cache_catchup_due)
                         continue;
                     cache_catchup_pending = false;
                     processing            = true;

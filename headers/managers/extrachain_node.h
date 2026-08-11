@@ -221,6 +221,12 @@ public:
     bool            is_client_application() const;
     RuntimeProfile  runtime_profile() const;
     RuntimeActivity runtime_activity() const;
+
+    // Diagnostic only: lets the DAG watchdog report whether the 10s status timer is
+    // still armed, from a thread that cannot stall with it.
+    QTimer* info_timer() const {
+        return timer_info_;
+    }
     RuntimeLimits   runtime_limits() const;
     void            set_runtime_activity(RuntimeActivity activity);
 
