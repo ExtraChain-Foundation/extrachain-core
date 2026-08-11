@@ -270,7 +270,9 @@ void DirsManager::network_response_dir_rows(
     // actor currently has no DFS rows.
     node->dfs()->mark_startup_sync_response();
 
-    if (node->dfs()->mode() == DfsMode::Light) {
+    // Only Selective narrows the catalogue. Light keeps every dir row it is offered —
+    // it economises on payloads, not on knowing what exists.
+    if (node->dfs()->mode() == DfsMode::Selective) {
         const auto              startup_actors = node->dfs()->startup_sync_actors();
         const std::set<ActorId> allowed_actors(startup_actors.begin(), startup_actors.end());
         const auto              received_actor_count = response_data.size();
@@ -293,7 +295,9 @@ void DirsManager::network_response_dir_rows(
             // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
             // TODO: add merge for sync dir file
 
-            Dfs::initialize_actor_folder(owner_id);
+            // No folder here either: knowing an actor's dir rows says nothing about
+            // whether we will ever download any of them. The folder is created when the
+            // first payload is written.
             std::vector<Dfs::DirRow> dir_rows_todo;
 
             /*
@@ -324,9 +328,15 @@ void DirsManager::network_response_dir_rows(
                 if ((row.type == Dfs::FileType::Vector || row.type == Dfs::FileType::Dictionary)
                     && row.state == Dfs::FileState::Ready) {
                     auto local = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
-                    if (local.has_value()
-                        && (local->state != Dfs::FileState::Ready || row.last_modified > local->last_modified
-                            || !node->dfs()->is_file_already_downloaded(owner_id, row.file_id, row.hash))) {
+                    // Also queue when there is no local row at all. Requiring one meant a
+                    // vector first seen through a sync was never queued: the row
+                    // replicated, the payload did not, and no later sync corrected it —
+                    // a node that missed the creation broadcast stayed permanently
+                    // without that vector. Files do not have this hole because they test
+                    // the file's presence on disk.
+                    if (!local.has_value() || !file_path->exists()
+                        || local->state != Dfs::FileState::Ready || row.last_modified > local->last_modified
+                        || !node->dfs()->is_file_already_downloaded(owner_id, row.file_id, row.hash)) {
                         dir_rows_todo.push_back(row);
                     }
                 }
@@ -426,9 +436,9 @@ void DirsManager::network_request_all(const Responder& responder, const std::vec
         auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
 
         if (requested_actors.empty()) {
-            if (node->dfs()->mode() == DfsMode::Light) {
+            if (node->dfs()->mode() == DfsMode::Selective) {
                 actors = node->dfs()->startup_sync_actors();
-                eLog("[Dfs] Legacy startup sync limited for light node: actors={}", actors.size());
+                eLog("[Dfs] Legacy startup sync limited for selective node: actors={}", actors.size());
             } else {
                 actors = node->actor_index()->read_all_actors_ids();
                 std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {

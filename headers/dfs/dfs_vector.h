@@ -110,6 +110,12 @@ public:
     std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> generate_content_package(
         const std::string& where_statement = "");
 
+    // Template and .vector file with an explicitly empty row set, for answering a request
+    // for a vector that has no rows yet. A package without the template is undeliverable:
+    // handle_package rejects it before writing anything.
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError>
+    generate_content_package_empty();
+
     bool handle_package(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
     bool                 store_add(DbRow& row);

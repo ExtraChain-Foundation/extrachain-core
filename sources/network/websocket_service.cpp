@@ -350,9 +350,25 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
         locker.unlock();
     }
 
-    if (!waiting_buffer_space_) {
-        emit needToTryDequeue();
-    }
+    // Always ask for a drain, even while waiting for buffer space.
+    //
+    // Skipping this when `waiting_buffer_space_` is set left the queue with no way to
+    // restart. The flag is cleared only inside tryDequeueMessage, and the only other
+    // thing that calls it in that state is QWebSocket::bytesWritten — which fires only
+    // while the socket is writing. Once its buffer drained to empty there was nothing
+    // left to write, no bytesWritten, and therefore no wakeup: a lost-wakeup deadlock
+    // that survives forever on an idle, perfectly healthy connection.
+    //
+    // Measured on a six-node stand: the internal queue sat at 265KB / 259 messages
+    // while the OS send queue for the same socket was 0 bytes — the network was idle
+    // and the data simply never moved. Every node then hit LIVE_DAG_QUEUE_MAX_MESSAGES
+    // and dropped its own new transactions, which are lost outright: a locally created
+    // transaction is not written to the chain when sent, it waits in
+    // `sended_transactions_` for a peer's approval that can now never arrive.
+    //
+    // Emitting unconditionally is cheap and self-correcting: if there really is no
+    // buffer space, tryDequeueMessage re-arms the flag and returns immediately.
+    emit needToTryDequeue();
 }
 
 bool WebSocketService::canSendMore() const {
@@ -417,15 +433,31 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
         return;
     }
 
+    // Each of these used to return silently. A message dropped here is gone with no
+    // trace anywhere: it left the send queue, so the sender counts it as sent, and it
+    // never reached the wire, so no peer can answer. For a locally created transaction
+    // that is a permanent loss — it waits in sended_transactions_ for an approval that
+    // cannot come.
     auto prepared = prepareSendMessage(data);
     if (prepared.isEmpty()) {
+        eWarning("[WS] {} Dropping message to {}: could not prepare ({} bytes in)",
+                 direction_,
+                 ip_.toStdString(),
+                 data.size());
         return;
     }
 
     if (m_ws == nullptr) {
+        eWarning("[WS] {} Dropping message to {}: socket is gone", direction_, ip_.toStdString());
         return;
     }
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !activated_) {
+    if (!m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !activated_) {
+        eWarning("[WS] {} Dropping message to {}: valid={}, state={}, activated={}",
+                 direction_,
+                 ip_.toStdString(),
+                 m_ws->isValid(),
+                 static_cast<int>(m_ws->state()),
+                 activated_);
         return;
     }
 
@@ -437,6 +469,16 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
                    ip_.toStdString(),
                    identifier_.toStdString(),
                    direction_);
+        return;
+    }
+
+    // Keep the queue moving on its own. tryDequeueMessage hands out at most 32 messages
+    // (or 128KB) per pass, so a backlog needs repeated passes; without this the next one
+    // depends on either a new send_message or a bytesWritten signal, and neither is
+    // guaranteed once the peer stops talking. A drain that stops with data still queued
+    // is what let the backlog build until every new transaction was dropped.
+    if (queued_bytes_.load(std::memory_order_relaxed) > 0) {
+        emit needToTryDequeue();
     }
 }
 

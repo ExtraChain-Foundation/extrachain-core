@@ -266,6 +266,79 @@ void Dag::start() {
     this->set_status(DagStatus::Ready);
 #endif
 
+#ifndef IS_APP_CLIENT
+    // Heartbeat that does not depend on the Qt event loop.
+    //
+    // start_check() otherwise runs only when a peer connects or when the actor
+    // first-sync ends. Both are startup events, so a node that falls behind after the
+    // mesh has formed never asks again — and asking is the only way it learns, because
+    // `last_info_` is filled by answers to a request this node sends.
+    //
+    // The obvious home for this is the node's 10s status timer, and it is hooked there
+    // too. It is not enough: measured on a six-node stand, that timer stopped firing
+    // after ~30 seconds on four of six nodes while every other part of the process kept
+    // running — network, console and DAG threads all alive and logging. Those four then
+    // sat at section 1 while the other two reached 177, and four minutes later their
+    // socket queues filled with transactions stamped for a section the network had long
+    // passed. A plain thread with a sleep cannot be silenced the same way.
+    watchdog_ = std::jthread([this](std::stop_token token) {
+        while (!token.stop_requested()) {
+            for (int slept = 0; slept < 15 && !token.stop_requested(); ++slept) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
+            if (token.stop_requested() || !started_.load()) {
+                return;
+            }
+            // Report the Qt timer's health from a thread that cannot be silenced with
+            // it: on a six-node stand three nodes stopped printing the 10s status line
+            // while their event loops were provably alive (this watchdog kept running,
+            // inbound messages kept arriving). Knowing whether the timer is merely
+            // inactive or is active-but-not-delivering decides where to look next.
+            if (auto *timer = node->info_timer(); timer != nullptr) {
+                eLog("[Dag] Watchdog: info timer active={}, interval={}, thread_match={}",
+                     timer->isActive(),
+                     timer->interval(),
+                     timer->thread() == node->thread());
+            }
+
+            if (mode_ != DagMode::Full) {
+                continue;
+            }
+
+            if (status_ == DagStatus::Ready) {
+                stalled_sync_rounds_ = 0;
+                last_watchdog_section_ = current_section_;
+                this->start_check();
+                continue;
+            }
+
+            // Not Ready means a sync is in progress — normally leave it alone. But a
+            // sync that stops making progress is indistinguishable from a healthy one
+            // from the outside, and nothing else ever restarts it: measured a node that
+            // spent 510 status ticks in Sync against 37 in Ready, frozen at section 1942
+            // while the network reached 5157, because start_check refused to run in that
+            // state and no other trigger exists.
+            //
+            // So watch the height instead of trusting the status. Two rounds without a
+            // single new section (30s) is not a slow fetch, it is a stuck one.
+            if (current_section_ != last_watchdog_section_) {
+                last_watchdog_section_ = current_section_;
+                stalled_sync_rounds_   = 0;
+                continue;
+            }
+
+            if (++stalled_sync_rounds_ >= 2) {
+                eWarning("[Dag] Sync stalled at section {} for {} rounds — restarting the check",
+                         current_section_.to_string(),
+                         stalled_sync_rounds_);
+                stalled_sync_rounds_ = 0;
+                this->set_status(DagStatus::Ready);
+                this->start_check();
+            }
+        }
+    });
+#endif
+
     eLog("[Dag] start: mode {}, current {}", mode_, current_section_);
 }
 
@@ -275,6 +348,13 @@ void Dag::stop() {
     bool was_started = started_.exchange(false);
     accepting_messages_.store(false);
     set_admission_accepting(false);
+
+    // Before anything else it might touch: the watchdog calls start_check().
+    if (watchdog_.joinable()) {
+        watchdog_.request_stop();
+        watchdog_.join();
+    }
+
     if (!was_started) {
         return;
     }
@@ -436,6 +516,24 @@ std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Tran
 
 std::expected<Transaction, TransactionError> Dag::send_transaction(const Transaction       &transaction,
                                                                    const Actor<KeyPrivate> &signer) {
+    // A node that is still syncing does not know the current section, and
+    // prepare_transaction stamps `current_section_ + 1` — a number the network passed
+    // long ago. Every such transaction is rejected by every peer as TooSectionDiff and
+    // is then lost outright: a locally created transaction is not written to our chain
+    // when sent, it waits in `sended_transactions_` for an approval that will never
+    // come. Measured on a six-node stand: a node stuck at section 1942 while the
+    // network reached 5157 emitted 3189 doomed transactions, and its own user saw them
+    // simply vanish.
+    //
+    // Refusing here is not a lost transaction — it is an error the caller can act on,
+    // and the only honest answer while our view of the chain is stale.
+    if (status_ != DagStatus::Ready) {
+        eWarning("[Dag] Refusing to send a transaction while {}: our section {} is stale",
+                 status_,
+                 current_section_.to_string());
+        return std::unexpected(TransactionError::NotReady);
+    }
+
     auto tx = this->prepare_transaction(transaction, signer);
     if (!tx.has_value()) {
         return std::unexpected(tx.error());
@@ -869,8 +967,21 @@ bool Dag::exists_section_file(const SectionId &section_id) const {
 }
 
 std::optional<bool> Dag::write_section(const Section &section) {
-    if (!is_admission_worker())
-        flush_admission();
+    // Deliberately no flush_admission() here: this is called with save_mutex_ already
+    // held (save_transaction takes it around the whole read-insert-write cycle), and
+    // waiting for the admission queue to drain while holding it is a deadlock.
+    //
+    // Both halves were caught in one sample: the node thread sat in
+    // network_transaction_result -> save_transaction -> write_section ->
+    // flush_admission, waiting for the queue; the admission worker sat in
+    // network_transaction_immediate -> save_transaction, waiting for save_mutex_. Each
+    // held what the other needed. Because the node thread is the one running the Qt
+    // event loop, the whole node froze with it: timers stopped (3 ticks instead of 49),
+    // inbound messages stopped being read, and every peer writing to it filled its send
+    // queue until locally created transactions were dropped — 200+ per node.
+    //
+    // Callers that need the pipeline quiet before writing must flush before taking the
+    // lock; see save_transaction.
     try {
         {
             std::unique_lock<std::shared_mutex> lock(section_mutex_);
@@ -992,6 +1103,35 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
 
     if (control_index_)
         control_index_->put(section_id, hash);
+
+    // A peer may have claimed this boundary before we sealed it. Now that we have our
+    // own control, that claim is finally comparable — this is the point of having
+    // remembered it in network_hash_interval.
+    {
+        std::string peer_hash;
+        {
+            std::lock_guard lock(pending_intervals_mutex_);
+            if (auto it = pending_intervals_.find(section_id); it != pending_intervals_.end()) {
+                peer_hash = it->second;
+                pending_intervals_.erase(it);
+            }
+        }
+
+        if (!peer_hash.empty()) {
+            if (peer_hash != hash) {
+                // No responder here — this runs from write_control, not a network
+                // handler, so we cannot ask that peer directly. The next interval
+                // exchange for this boundary hits the live path and refetches.
+                eCritical("[Dag] Control mismatch at section {} (deferred): ours {}, peer {}",
+                          section_id,
+                          hash,
+                          peer_hash);
+            } else {
+                eLog("[Dag] Deferred interval check at {}: match", section_id);
+            }
+        }
+    }
+
     return WriteResult::Write;
 }
 
@@ -1070,6 +1210,13 @@ SectionDiff Dag::calculate_section_diff(const Section &old_section, const Sectio
 }
 
 bool Dag::save_transaction(const Transaction &transaction) {
+    // Quiet the admission pipeline BEFORE taking save_mutex_, never while holding it:
+    // the admission worker itself calls save_transaction and so waits for this very
+    // mutex, and waiting for it to drain from inside the lock deadlocks both. This used
+    // to live in write_section, which runs with the lock already held.
+    if (!is_admission_worker())
+        flush_admission();
+
     // Hold save_mutex_ across the whole read-insert-write cycle: without it two
     // concurrent transactions for the same section both read the old set and one
     // insert is lost, so sections diverge between nodes and ControlIndex fails.
@@ -1789,9 +1936,29 @@ void Dag::start_check() {
         }
         auto zero = this->read_section(SectionId(0));
         if (zero.has_value() && !zero->transactions.empty()) {
-            return;
+            // Holding genesis is not the same as being level with the network. This
+            // used to return unconditionally, so a Ready node that owned section 0 —
+            // which includes the node that created it — never reached
+            // handle_sync_request at all: `last_info_` stayed empty, no peer height was
+            // ever compared, and the node sat at its own current_section_ forever.
+            // Measured on a six-node stand: the seed node stopped at section 0 while
+            // the network reached 141, still reporting DagStatus::Ready.
+            //
+            // The height cannot be checked here: `last_info_` is only ever filled by
+            // network_status_sync_response, which answers a request that start_sync
+            // sends — so returning early is what keeps it empty. Reading it before
+            // asking is a closed loop.
+            //
+            // So ask. start_sync collects peer heights, and handle_sync_request decides
+            // from them whether anything needs fetching: with everyone level it logs
+            // "Not need sync" and goes straight back to Ready, which is the same
+            // outcome this early return produced, only now it is a decision rather than
+            // an assumption. See docs/TODO.md 1.1 and 0.75.
+            eLog("[Dag] start_check: at section {}, asking peers whether we are behind",
+                 current_section_);
+        } else {
+            eLog("[Dag] start_check: no genesis section yet — running initial sync");
         }
-        eLog("[Dag] start_check: no genesis section yet — running initial sync");
     }
 #endif
 
@@ -1819,6 +1986,8 @@ void Dag::network_status_sync_request(const Responder &responder) {
 #ifdef IS_APP_UI_CLIENT
     return;
 #endif
+
+    eLog("[Dag] Peer asked for our height; we are at {}", current_section_.to_string());
 
     if (mode_ == DagMode::Light) {
         return;
@@ -1856,6 +2025,9 @@ void Dag::network_status_sync_request(const Responder &responder) {
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
     std::lock_guard sync_lock(sync_last_info_mutex_);
     if (responder.identifiers().empty() || responder.luminance() < 2) {
+        eLog("[Dag] Sync responce dropped: identifiers={}, luminance={}",
+             responder.identifiers().size(),
+             responder.luminance());
         return;
     }
 
@@ -1982,9 +2154,9 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    emit node->dagTimerStop();
-    // eLog("Timer stop");
-
+    // Same reasoning as network_file_sections_response: the retry clock stays running
+    // until the answer proves usable, so a corrupt or undecodable one does not silently
+    // cancel the retry it should have caused.
     ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
         const auto section_sync = MessagePack::deserialize<SectionSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
@@ -1994,6 +2166,8 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             // eLog("sysync 2");
             return;
         }
+
+        emit node->dagTimerStop();
 
         if (!section_sync->txs.empty()) {
             auto res = this->save_transactions(section_sync->txs);
@@ -2142,8 +2316,20 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
 }
 
 void Dag::network_file_sections_response(const std::string &compressed, const Responder &responder) {
-    emit node->dagTimerStop();
-
+    // The sync timeout is deliberately NOT cancelled here.
+    //
+    // It used to be, as the first statement of this function — before any of the
+    // fourteen validation checks below, each of which can `return`. A malformed,
+    // oversized or unnegotiated answer therefore disarmed the timeout and left with the
+    // sync still in progress: nothing rearmed the timer, so `timer_tick` never fired,
+    // and the retry it exists to trigger never happened. Measured on a six-node stand:
+    // zero timer ticks across every node, and a node frozen in DagStatus::Sync at
+    // section 1942 while the network reached 5157 — for an hour, emitting 3189
+    // transactions that every peer rejected as TooSectionDiff.
+    //
+    // The timeout is now cancelled only once the answer is known to be usable, just
+    // before this batch is applied. A rejected answer leaves the clock running, which
+    // is exactly what a rejected answer should do.
     if (compressed.size() < sizeof(quint32) || compressed.size() > FILE_SYNC_MAX_COMPRESSED_BYTES) {
         eWarning("[Dag] Reject file sections with invalid compressed size {}", compressed.size());
         return;
@@ -2245,6 +2431,10 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             eWarning("[Dag] Failed to store a section sync batch");
             return;
         }
+        // The answer survived every check and is about to be applied — only now is it
+        // safe to stop the retry clock. See the note at the top of this function.
+        emit node->dagTimerStop();
+
         if (!received_sections.empty() && (!hot_section_store_ || !hot_section_store_->is_open())) {
             for (const auto &[section_id, disk_bytes] : received_sections) {
                 auto path = FsPath::create(this->file_path(section_id));
@@ -2522,21 +2712,6 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    // eLog("Hash interval: {}", hash_interval);
-    auto last_control = this->find_last_control(hash_interval.to - 1);
-    if (!last_control.has_value()) {
-        eWarning("[Dag] Hash interval check: no last control");
-        // return;
-        this->start_control(Force::Active);
-
-        last_control = this->find_last_control(hash_interval.to - 1);
-        if (!last_control.has_value()) {
-            return;
-        }
-    }
-
-    // eLog("[Dag] Last control: {}", last_control);
-
     if (hash_interval.to > current_section_) {
         eLog("[Dag] Hash interval check: ignore #2");
         return;
@@ -2547,27 +2722,59 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    if (last_control->section_id != hash_interval.to) {
-        eLog("[Dag] Hash interval check: ignore #4");
+    // Read the control AT the boundary the peer names. This used to call
+    // find_last_control(to - 1), which returns our *latest* control, then compare its
+    // section_id with `to` — so the moment we were one interval ahead the check bailed
+    // out as "ignore #4". Measured on a six-node stand: half of all interval exchanges
+    // died there (6 of 12), i.e. the live verification mostly did not run.
+    // With ControlIndex this lookup is O(1), so there is no cost argument for the walk.
+    auto last_control = this->read_control(hash_interval.to);
+
+    if (!last_control.has_value()) {
+        // The peer sealed this boundary before us. Keep the claim instead of discarding
+        // it — we are Ready and only slightly behind, so our control is minutes away
+        // and the comparison becomes possible then. Bounded to the newest few.
+        std::lock_guard lock(pending_intervals_mutex_);
+        pending_intervals_[hash_interval.to] = hash_interval.hash;
+        while (pending_intervals_.size() > 8) {
+            pending_intervals_.erase(pending_intervals_.begin());
+        }
+        eLog("[Dag] Hash interval check: no control at {} yet — remembered", hash_interval.to);
         return;
     }
 
     if (last_control->control != hash_interval.hash) {
-        eLog("[Dag] Hash interval check: false. Hash interval: {}, last control: {}. Need sync",
-             hash_interval,
-             last_control);
+        eCritical("[Dag] Control mismatch at {}: ours {}, peer {} — refetching interval {}..{}",
+                  hash_interval.to,
+                  last_control->control,
+                  hash_interval.hash,
+                  hash_interval.from,
+                  hash_interval.to);
 
-        // this->start_sync();
-        return;
-        if (current_section_ < hash_interval.to) {
-            if (status_ != DagStatus::Ready) {
-                status_ = DagStatus::Maybe;
+        // Was `return;` since the feature was written, so a node has never acted on a
+        // control mismatch — it logged "Need sync" and carried on. Only the refetch
+        // branch is enabled: the other one flips status_ to Maybe from a network
+        // handler, which is the kind of side effect that likely got this disabled in
+        // the first place. Re-fetching is idempotent (write_section merges), so the
+        // worst case is redundant traffic, not corruption.
+        //
+        // Guard against a stampede: several peers reporting the same boundary would
+        // otherwise each trigger their own refetch of the same range.
+        {
+            std::lock_guard lock(refetched_intervals_mutex_);
+            const auto      now = Utils::current_date_ms();
+            if (auto it = refetched_intervals_.find(hash_interval.to);
+                it != refetched_intervals_.end() && now - it->second < 60'000) {
+                eLog("[Dag] Interval {} already refetched recently — skipping", hash_interval.to);
+                return;
             }
-
-            this->start_check(); // TODO: warning: check or sync?
-        } else {
-            this->request_file_sections(hash_interval.from, hash_interval.to, responder);
+            refetched_intervals_[hash_interval.to] = now;
+            while (refetched_intervals_.size() > 16) {
+                refetched_intervals_.erase(refetched_intervals_.begin());
+            }
         }
+
+        this->request_file_sections(hash_interval.from, hash_interval.to, responder);
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
     }
@@ -2631,7 +2838,24 @@ void Dag::handle_sync_request() {
         // TODO: better cons
         for (const auto &[_, info] : last_info_) {
             if (info.last_section_id > my_index) {
-                if (info.last_control_section_id < SectionId(0)) {
+                // Falling behind by more than the acceptance window is a missing-section
+                // problem, not a control problem. `need_recontrol` alone ends in
+                // request_control_section() followed by `return` — no section is ever
+                // fetched — so a node that came back from a restart 65 sections behind
+                // kept drifting (measured: 65 -> 137 in two minutes) while rejecting
+                // every incoming transaction as TooSectionDiff: 606 rejections against
+                // ~130 on healthy peers. See docs/TODO.md 0.75.
+                //
+                // The hot-tail gap scan above does not cover this: it walks up to
+                // `current_section_`, this node's *own* height, and a node that is
+                // merely behind has no hole below it — its chain is contiguous, just
+                // short. Only a comparison against the peers' height sees it.
+                //
+                // 15 = the acceptance window enforced in prove_transaction. Beyond it we
+                // are not merely lagging, we are rejecting live traffic.
+                if (info.last_section_id > my_index + SectionId(15)) {
+                    need_sync = true;
+                } else if (info.last_control_section_id < SectionId(0)) {
                     need_sync = true;
                 } else {
                     need_recontrol = true;
@@ -2680,6 +2904,13 @@ void Dag::handle_sync_request() {
     }
 
     if (!need_sync && !need_recontrol && mode_ == DagMode::Full) {
+        std::string peers;
+        for (const auto &[id, info] : last_info_) {
+            peers += fmt::format("{}={} ", id.substr(0, 6), info.last_section_id.to_string());
+        }
+        eLog("[Dag] Sync decision: nothing to do at section {} (peers: {})",
+             current_section_.to_string(),
+             peers.empty() ? "none" : peers);
         this->set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
         this->process_cached_transactions();

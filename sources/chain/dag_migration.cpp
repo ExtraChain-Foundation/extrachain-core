@@ -460,9 +460,16 @@ std::expected<void, Error> validate_staging(const fs::path                      
 
         WireFormat::Scope canonical(WireFormat::Mode::Canonical);
         auto              section = Json::deserialize<Section>(*payload);
-        if (!section.has_value() || section->id != section_id) {
+        // `id` is deliberately not part of the serialised form
+        // (BOOST_DESCRIBE_STRUCT(Section, (), (transactions, control))): a section
+        // knows its number from where it is stored, not from its payload. Every reader
+        // therefore assigns it after deserializing, exactly as Dag::read_section does
+        // on all three of its paths. Comparing it before assigning it made this check
+        // fail on the very first section of every migration.
+        if (!section.has_value()) {
             return std::unexpected(Error::ValidationFailed);
         }
+        section->id = section_id;
         const bool wrong_transaction = std::ranges::any_of(section->transactions, [&](const Transaction &tx) {
             return tx.section() != section_id;
         });

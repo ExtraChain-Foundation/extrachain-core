@@ -80,11 +80,6 @@ struct LoadInfo {
     // }
 };
 
-enum class PullMode {
-    All,
-    Selective
-};
-
 class LoadManager : public QObject {
     Q_OBJECT
 public:
@@ -138,8 +133,6 @@ private:
 
     static constexpr int  MAX_ATTEMPTS  = 10;
     static constexpr auto STALL_TIMEOUT = std::chrono::seconds(30);
-
-    PullMode pull_mode = PullMode::All;
 
     SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads;
     SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads_priority;

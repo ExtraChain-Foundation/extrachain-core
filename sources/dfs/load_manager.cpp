@@ -660,12 +660,9 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
 
     // eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
 
-    try {
-        std::filesystem::create_directories(fmt::format("{}/{}", DfsB::DFS_FOLDER, owner_id));
-    } catch (const std::exception& e) {
-        eWarning("[LoadManager] Failed to create directory: {}", e.what());
-        return;
-    }
+    // No directory here: queuing a download is not storing anything. It is created when
+    // the first fragment lands (file_fragment_achieved), so a download that never
+    // completes leaves nothing on disk. See docs/TODO.md 0.46.
 
     auto load_info   = LoadInfo { .dir_row = dir_row };
     load_info.queued = std::chrono::system_clock::now();
@@ -1039,6 +1036,15 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
         if (!path.has_value()) {
             timer_runner(file_link);
             return;
+        }
+
+        // Create the owner directory here, at the first byte that actually arrives,
+        // rather than when the file was queued. A queued download that never completes —
+        // peer gone, file withdrawn, node restarted — used to leave an empty directory
+        // behind, and an empty folder should mean nothing is stored for that actor.
+        if (auto parent = path->native().parent_path(); !parent.empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(parent, ec);
         }
 
         {

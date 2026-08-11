@@ -1099,12 +1099,18 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         (message_type == MessageType::DagTransaction || message_type == MessageType::DagTransactionBatch)
         && send_mode != SendMode::Focused;
 
+    int skipped_inactive = 0;
+    int skipped_light    = 0;
+    int sent_to          = 0;
+
     for (const auto &service : *connections_locked) {
         if (!service->is_active()) {
+            ++skipped_inactive;
             continue;
         }
 
         if (service->mode() == SocketMode::Light && send_mode != SendMode::Focused) {
+            ++skipped_light;
             continue;
         }
 
@@ -1126,15 +1132,57 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
             if (apply_live_dag_backpressure
                 && (service->pending_bytes() >= LIVE_DAG_QUEUE_MAX_BYTES
                     || service->queue_size() >= LIVE_DAG_QUEUE_MAX_MESSAGES)) {
+                eWarning("[Network] Live DAG backpressure: dropping {} to {} (pending {} bytes, {} queued)",
+                         message_type,
+                         service->ip().toStdString(),
+                         service->pending_bytes(),
+                         service->queue_size());
                 continue;
             }
 
             const std::string &payload = payload_for(service);
             calculate_traffic_->add_bytes_sent(service->ip().toStdString(), payload.size());
             service->send_message(QByteArray::fromStdString(payload), priority);
+            ++sent_to;
             if (send_mode == SendMode::Focused) {
                 break;
             }
+        }
+    }
+
+    if (message_type == MessageType::DagTransaction && sent_to == 0) {
+        // Distinguish the two cases, because only one of them is a loss.
+        //
+        // A *relay* reaching nobody is normal: `nodes_identifiers_to_ignore` carries
+        // "already delivered", so once every neighbour has the message there is
+        // correctly nobody left to forward it to.
+        //
+        // Our *own* transaction reaching nobody is a silent loss. A locally created
+        // transaction is not written to our chain when we send it — it waits in
+        // `sended_transactions_` until a peer answers DagTransactionResult, and only
+        // then is it saved (dag.cpp: network_transaction_result). If it left the node
+        // for no one, that answer can never arrive: the transaction is gone, with no
+        // rejection and no retry.
+        // Only a locally created transaction is worth a line here: it is not written to
+        // our chain when sent, it waits in `sended_transactions_` for a peer's
+        // DagTransactionResult and is saved only then. Leaving the node for no one means
+        // that answer can never arrive — a silent loss with no rejection and no retry.
+        //
+        // A relay reaching nobody is the normal end of a broadcast:
+        // `nodes_identifiers_to_ignore` means "already delivered", so an empty result
+        // just says every neighbour already has it. Measured: 1036 of 1036 such cases in
+        // one run were relays. Counting them as losses is what made this look alarming.
+        if (non_serialized_message.nodes_identifiers_to_ignore.empty()) {
+            std::string peers;
+            for (const auto &service : *connections_locked) {
+                peers += service->identifier().toStdString().substr(0, 6) + " ";
+            }
+            eCritical("[Network] Own transaction reached nobody — it can never be approved: "
+                      "{} connections, {} inactive, {} light, peers=[{}]",
+                      connections_locked->size(),
+                      skipped_inactive,
+                      skipped_light,
+                      peers);
         }
     }
 

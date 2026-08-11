@@ -71,9 +71,12 @@ DfsController::DfsController(ExtraChainNode *node)
     // loadBytesLimit();
     eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
 
-    connect(node->actor_index(), &ActorIndex::actorSaved, [this](ActorId actor_id) {
-        Dfs::initialize_actor_folder(actor_id);
-    });
+    // Deliberately not creating a folder per saved actor. A node knows hundreds of
+    // actors and stores files for a handful of them, so this made an empty directory
+    // for almost every one. Directories are now created where content actually lands
+    // (see handle_package / the load manager), so an empty actor leaves no trace on
+    // disk — which is also what makes "does this actor have data" answerable by
+    // looking at the filesystem.
 
     connect(this, &DfsController::downloaded, [this](const ActorId &owner_id, const Dfs::DirRow &dir_row) {
         if (files_waiting_.empty()) {
@@ -89,6 +92,9 @@ DfsController::DfsController(ExtraChainNode *node)
     });
 
 #ifdef IS_APP_UI_CLIENT
+    // Light, not Selective: a client keeps the full catalogue and fetches payloads on
+    // demand. Narrowing the catalogue itself is opt-in (Selective) and must not be the
+    // default — a node that never learns a vector exists cannot repair itself.
     set_mode(DfsMode::Light);
 #endif
 
@@ -1772,11 +1778,28 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return;
     }
-    if (!rows.has_value()) {
-        return;
+    // An empty vector still has to be answered: staying silent left the requester
+    // without the vector files forever (the dir row replicates, the payload never
+    // does, and nothing retries). Freshly created vectors are exactly this case.
+    //
+    // The answer must carry the template even when there are no rows. A package with
+    // only owner_id/file_id set is undeliverable: handle_package rejects it at
+    // `vector_template.fields().size() == 0` and the receiver drops it — 952 such
+    // rejections in the first three minutes of a run. Rebuild the package with an
+    // explicitly empty row set instead of hand-rolling a stub.
+    Dfs::Packets::DfsVectorContentPackage package;
+    if (rows.has_value()) {
+        package = rows.value();
+    } else {
+        auto empty = dfs_vector->generate_content_package_empty();
+        if (!empty.has_value()) {
+            eWarning("[DfsCollection] Can't build empty package for {} / {}", owner_id, file_id);
+            return;
+        }
+        package = empty.value();
     }
 
-    responder.send_response(rows.value(),
+    responder.send_response(package,
                             MessageType::DfsVectorContent,
                             SendMode::Focused,
                             MessageStatus::Response);
@@ -1874,35 +1897,48 @@ void DfsController::network_response_content_vector(
 }
 
 void DfsController::network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
-    auto res = make_vector(owner_id, file_id);
-    if (!res.has_value()) {
-        return;
-    }
-
-    auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.local_add(row, true);
-    // load_manager_.finish_him(owner_id, dir_row);
-
-    auto hash_size = dfs_vector.data_hash_size();
-    if (hash_size.has_value()) {
-        dir_row.hash          = hash_size.value().first;
-        dir_row.size          = hash_size.value().second;
-        dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
-        Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
-                                                                owner_id,
-                                                                dir_row,
-                                                                false);
-    }
-
-    if (operation_res) {
-        // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
-        if (row.at("status") == "1") {
-            emit vectorRowAdded(owner_id, dir_row, row);
-        } else {
-            emit vectorRowRemoved(owner_id, dir_row, row);
+    // Off the dispatch thread, like network_response_content_vector next door. This path
+    // writes sqlite, and since the connection now waits for a contended write lock
+    // instead of dropping the row, doing it inline could stall message dispatch for
+    // seconds — the same starvation that used to push consensus traffic out of the
+    // acceptance window behind bulk transfers.
+    ThreadPoolBoost::instance_dfs()->post([this, owner_id, file_id, row] {
+        auto res = make_vector(owner_id, file_id);
+        if (!res.has_value()) {
+            return;
         }
-        node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
-    }
+
+        auto &[dir_row, dfs_vector] = res.value();
+        auto operation_res          = dfs_vector.local_add(row, true);
+        // load_manager_.finish_him(owner_id, dir_row);
+
+        if (!operation_res) {
+            // Was silent before: a row rejected here is a chat message the user never
+            // sees, and nothing re-requests it (docs/TODO.md 0.45).
+            eWarning("[Dfs] Vector row not stored: {} / {}", owner_id, file_id);
+        }
+
+        auto hash_size = dfs_vector.data_hash_size();
+        if (hash_size.has_value()) {
+            dir_row.hash          = hash_size.value().first;
+            dir_row.size          = hash_size.value().second;
+            dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+            Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
+                                                                    owner_id,
+                                                                    dir_row,
+                                                                    false);
+        }
+
+        if (operation_res) {
+            // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
+            if (row.at("status") == "1") {
+                emit vectorRowAdded(owner_id, dir_row, row);
+            } else {
+                emit vectorRowRemoved(owner_id, dir_row, row);
+            }
+            node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
+        }
+    });
 }
 
 void DfsController::network_request_file_state(const ActorId     &owner_id,
@@ -2770,7 +2806,9 @@ void DfsController::sync(const std::string &identifier) {
         // download) gets re-offered on every sync until it actually lands.
         check_all_files(identifier);
 
-        if (mode() == DfsMode::Full) {
+        // Light pulls the whole catalogue exactly like Full: it saves on payloads, not
+        // on knowing what exists. Only Selective asks for a narrowed actor list.
+        if (mode() != DfsMode::Selective) {
             dirs_manager_.temp_sync_all(identifier);
             return;
         }
@@ -2786,7 +2824,7 @@ void DfsController::sync(const std::string &identifier) {
         constexpr auto stagedFallbackDelayMs = 3000;
         QTimer::singleShot(stagedFallbackDelayMs, node, [this, identifier, responses_before]() {
             ThreadPoolBoost::instance_dfs()->post([this, identifier, responses_before]() {
-                if (mode() != DfsMode::Light) {
+                if (mode() != DfsMode::Selective) {
                     return;
                 }
 
@@ -2819,7 +2857,8 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
         return false;
     }
 
-    // Otherwise the Light filter in network_response_dir_rows would drop the response to this request.
+    // Otherwise the Selective filter in network_response_dir_rows would drop the response to this
+    // request.
     bool has_new_actors = false;
     {
         std::lock_guard lock(requested_sync_actors_mutex_);

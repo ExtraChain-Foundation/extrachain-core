@@ -16,7 +16,31 @@ Stands live in a separate worktree, never in a working repository.
 
 ---
 
-## 0. Principles
+## 0. Philosophy
+
+**Fix the disease, not the symptom.** When a run shows something not keeping up — a
+transaction arriving too late, a socket behaving oddly, bulk transfer starving another
+path — the tempting move is to widen a window, add a retry, or bolt on a backfill. Those
+are usually right *eventually*, and they do close real holes, but reaching for them first
+buries the actual question: why is anything late at all on a loopback network? Every root
+cause in the 2026-08 sessions was found by refusing the patch and asking that question —
+the acceptance window looked too narrow until it turned out consensus messages were
+queued behind megabytes of file data; the missing-transaction problem looked like it
+needed a backfill until a commented-out `if` in connection arbitration explained it. Note
+the workaround in the TODO, then go find the mechanism. Add the safety net afterwards, on
+purpose, as defence in depth — not as an explanation.
+
+**Run both far above and at the real rate.** Heavy load surfaces races and ceilings
+quickly, so start there — but do not stop there. Dropping back to the realistic rate is
+not a formality: it exposes a different class of problem, because timing relationships
+invert. Under a flood, sections fill in milliseconds and the acceptance window is
+effectively huge; at production rate the same window spans minutes, transfers overlap
+differently, and defects that the flood hid become visible. Neither profile subsumes the
+other — a build is validated when it is clean on both.
+
+---
+
+## 1. Principles
 
 1. **Test the runtime, not units.** Start real nodes (the headless console binary built
    against the core under test), push real traffic through real sockets, then read the
@@ -36,7 +60,7 @@ Stands live in a separate worktree, never in a working repository.
 
 ---
 
-## 1. Stand-only core hacks
+## 2. Stand-only core hacks
 
 | Env | Purpose |
 |-----|---------|
@@ -59,7 +83,7 @@ for i in 2 3 4 5 6 7; do sudo ifconfig lo0 alias 127.0.0.$i up; done
 
 ---
 
-## 2. Driving a node from the harness
+## 3. Driving a node from the harness
 
 - **Start:** `Popen([BIN, "--current-dir", ".", "--login", L, "--password", P,
   "--debug-logs"], cwd=nodedir, env=..., stdin=fd, stdout=logf)`. First node of a network:
@@ -75,7 +99,7 @@ for i in 2 3 4 5 6 7; do sudo ifconfig lo0 alias 127.0.0.$i up; done
 
 ---
 
-## 3. Building a stand from scratch
+## 4. Building a stand from scratch
 
 A stand is a harness process (any scripting language) that owns N node processes on one
 host and observes their on-disk state. Nothing below depends on a particular repository
@@ -116,6 +140,18 @@ sealing interval, and the size *and hash* of every replicated file. Scan node lo
 failure markers the core emits. Write one line per audit to a progress log so a long run
 can be read after the fact.
 
+Two of those audits must be **presence-first**, against the union of what exists anywhere
+in the network rather than against what the node claims to hold (see trap 7):
+
+- *section gaps* — which section ids is each node missing, ignoring a small margin at the
+  live tip. This is the only check that catches lost history; heights, per-section diffs
+  and even control hashes can all look healthy while a node is missing sections outright.
+- *catalogue gaps* — which `.dirs` rows is each node missing, and for the rows it does
+  hold, whether the payload is physically on disk.
+
+Both are cheap (a directory listing and a read-only sqlite query) and both found real
+defects that every content-comparison metric had reported as clean.
+
 **Step 8 — chaos (separate mode).** Kill nodes with an uncatchable signal, freeze them with
 stop/continue, restart them, and let the harness revive whatever died. Keep this switchable:
 a clean run proves correctness, a chaos run proves recovery, and mixing them makes failures
@@ -130,7 +166,7 @@ optimistically.
 
 ---
 
-## 4. Stand shapes
+## 5. Stand shapes
 
 Each shape isolates a different failure class. The combined shape is the one that gates
 changes; the others are diagnostic.
@@ -156,7 +192,7 @@ be attributed.
 
 ---
 
-## 5. Traps — verify the harness before trusting a metric
+## 6. Traps — verify the harness before trusting a metric
 
 1. **`range` and section file names are hex.** A `\d+` parser silently reads `4f` as `4`.
    A run reported PASS while 16 of 49 sections actually diverged.
@@ -172,10 +208,31 @@ be attributed.
 6. **Disk budget is mandatory.** N copies of large files fill a disk within an hour; one
    early run took the host to zero free space (ENOSPC). Keep a `statvfs` guard and delete
    generated sources immediately after hashing them.
+7. **A missing artifact is not a differing artifact.** Comparing sections (or dir rows)
+   across nodes only inspects what both nodes have, so a node missing history outright
+   scores as *perfect agreement*. On 2026-08-09 this produced a confident report of "276
+   sections compared, 0 transaction differences" while one node was permanently missing
+   sections 1-4. Audit **presence against the union of what exists anywhere**, then
+   compare contents — in that order. The same trap already bit the vector audit once
+   (a dir row is not a payload); it is the single most reliable way to get a false clean
+   bill of health.
+8. **A node's own bookkeeping can be the thing that is broken.** In that run the gapped
+   node's `range` file was byte-identical to the healthy ones (`first=0, last=…`): the
+   structure cannot represent a hole in the middle, so the node sincerely reported a
+   complete chain. Never audit a node using only the state it reports about itself.
+9. **The tip of the chain is not a gap.** Sections are being written while the audit
+   runs, so the newest one or two are legitimately absent on some nodes. Ignore a small
+   margin below the highest known section, or every live run reports false gaps.
+10. **Hashing a whole section file conflates content with its control.** The section file
+    contains both the transactions and the `control` field, so one genuine content
+    divergence makes every control boundary after it hash differently too. A "mismatches"
+    counter climbing 6 → 9 → 12 read as a spreading split; comparing transaction *sets*
+    with the control stripped showed exactly one section actually differed out of 290.
+    Report the two separately — they have different causes and different fixes.
 
 ---
 
-## 6. Working with core fixes
+## 7. Working with core fixes
 
 **Before the commit:** run the combined DAG + DFS stand on the build you are about to
 commit — clean profile first, then chaos. A change that only ran against a DAG-only or
@@ -194,7 +251,7 @@ to talk yourself into.
 
 ---
 
-## 7. Root-cause checklist for a stuck or divergent artifact
+## 8. Root-cause checklist for a stuck or divergent artifact
 
 1. Is the node alive? (`ps`, and is the log still moving) — note that `pgrep` on a path
    containing brackets does not match; search by `--login` instead.
