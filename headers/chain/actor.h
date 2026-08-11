@@ -29,6 +29,7 @@
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "extrachain_global.h"
+#include "utils/exc_utils.h"
 
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
@@ -197,7 +198,7 @@ public:
         }
         actor.set_id(ActorId(array[0].toString().toStdString()));
         actor.set_type(ActorType(array[1].toInt()));
-        auto pub_decoded = ByteArray::fromBase64(array[2].toString());
+        auto pub_decoded = ByteArray::fromBase64(array[2].toString().toStdString());
         if (!pub_decoded.has_value()) {
             eFatal("Invalid base64 in public key");
             return actor;
@@ -212,7 +213,7 @@ public:
                 eFatal("?2");
                 return actor;
             }
-            auto sec_decoded = ByteArray::fromBase64(array[3].toString());
+            auto sec_decoded = ByteArray::fromBase64(array[3].toString().toStdString());
             if (!sec_decoded.has_value()) {
                 eFatal("Invalid base64 in secret key");
                 return actor;

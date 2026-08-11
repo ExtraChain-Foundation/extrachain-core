@@ -19,74 +19,79 @@
 
 #pragma once
 
-#include "managers/extrachain_node.h"
 #include "network/isocket_service.h"
-#include "network/network_manager.h"
-#include "utils/exc_utils.h"
-#include <QWebSocket>
+
+#include <chrono>
+#include <condition_variable>
+#include <expected>
+#include <memory>
+#include <optional>
+
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/beast/core/tcp_stream.hpp>
+#include <boost/beast/websocket/stream.hpp>
 
 #include "extrachain_global.h"
 
-class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
-    Q_OBJECT
-
+class EXTRACHAIN_EXPORT WebSocketService final : public SocketService {
 public:
-    explicit WebSocketService(QWebSocket     *ws,
-                              ExtraChainNode *node,
-                              QObject        *parent      = nullptr,
-                              const bool      is_constant = false,
-                              const bool      is_light    = false);
-    // WebSocketService(const WebSocketService &);
-    ~WebSocketService();
+    using Tcp           = boost::asio::ip::tcp;
+    using WebSocket     = boost::beast::websocket::stream<boost::beast::tcp_stream>;
+    using Service       = std::shared_ptr<WebSocketService>;
+    using ConnectResult = std::expected<Service, std::string>;
 
-    QWebSocket               *socket() const;
-    bool                      is_active() const override;
-    void                      open(const QString &ip, quint16 port);
-    virtual QString           protocol_string() const override;
-    virtual Network::Protocol protocol() const override;
+    static boost::asio::awaitable<ConnectResult> connect(boost::asio::any_io_executor executor,
+                                                         std::string                  host,
+                                                         std::uint16_t                port,
+                                                         ExtraChainNode*              node,
+                                                         bool                         is_constant = false,
+                                                         bool                         is_light    = false);
+    static Service from_accepted(boost::asio::any_io_executor executor, Tcp::socket socket, ExtraChainNode* node);
 
-    bool operator==(const WebSocketService &service) const;
+    ~WebSocketService() override;
 
-    quint16 port() const override;
-    quint16 server_port() const override;
+    boost::asio::awaitable<void> run(bool accepted_socket);
 
-public:
-    void send_message(const QByteArray &data, Priority priority = Priority::High) override;
-
-    virtual void flush() override;
-
-    qint64 pending_bytes() const override {
-        return queued_bytes_.load(std::memory_order_relaxed) + (m_ws ? m_ws->bytesToWrite() : 0);
-    }
-
-signals:
-    void sendMessageInternal(const QByteArray &data);
-    void needToTryDequeue();
-    void closeSocketSig();
-
-private slots:
-    void onTextMessage(const QString &message);
-    void onBinaryMessage(const QByteArray &message);
-
-    void onConnected();
-    void onSocketError(QAbstractSocket::SocketError error);
-public slots:
-    void closeSocket() override;
-private slots:
-    void sendMessageInternalSlot(const QByteArray &data);
-    void tryDequeueMessage();
+    [[nodiscard]] bool              is_active() const override;
+    [[nodiscard]] std::string       protocol_string() const override;
+    [[nodiscard]] Network::Protocol protocol() const override;
+    std::uint16_t                   port() const override;
+    std::uint16_t                   server_port() const override;
+    void send_message(std::span<const std::uint8_t> data, Priority priority = Priority::High) override;
+    void flush() override;
+    void close_connection() override;
+    [[nodiscard]] bool         wait_closed(std::chrono::milliseconds timeout) override;
+    [[nodiscard]] std::int64_t pending_bytes() const noexcept override;
 
 private:
-    void connections();
-    void send_public_key();
-    void handshake();
-    bool canSendMore() const;
-    void processMessage(const QByteArray &message);
-    void processCachedMessages();
+    explicit WebSocketService(boost::asio::any_io_executor executor, ExtraChainNode* node);
 
-    QWebSocket *m_ws = nullptr;
+    boost::asio::awaitable<std::expected<void, std::string>> open(std::string host, std::uint16_t port);
+    boost::asio::awaitable<void>                             run_on_strand(bool accepted_socket);
+    boost::asio::awaitable<bool>                             exchange_keys();
+    boost::asio::awaitable<bool>                             exchange_handshake();
+    boost::asio::awaitable<void>                             read_loop();
+    boost::asio::awaitable<void>                             write_loop();
+    boost::asio::awaitable<bool>                             write_text(std::string_view text);
+    boost::asio::awaitable<std::optional<std::string>>       read_text();
+    void                                                     process_binary(std::span<const std::uint8_t> message);
+    void report_error(Network::SocketServiceError code, std::string detail = {});
+    void finish_close();
+    void operation_finished();
 
-    QTimer                *m_pingTimer   = nullptr;
-    int                    m_failedPongs = 0;
-    std::queue<QByteArray> m_messageCache;
+    boost::asio::strand<boost::asio::any_io_executor> strand_;
+    std::unique_ptr<WebSocket>                        websocket_;
+    boost::asio::steady_timer                         queue_signal_;
+    std::atomic_bool                                  running_ { false };
+    std::atomic_bool                                  write_running_ { false };
+    std::atomic<std::int64_t>                         socket_pending_bytes_ { 0 };
+    std::mutex                                        close_mutex_;
+    std::condition_variable                           close_condition_;
+    std::atomic_bool                                  transport_closed_ { false };
+    std::atomic_uint                                  active_operations_ { 0 };
+    std::chrono::seconds                              operation_timeout_ { 10 };
 };

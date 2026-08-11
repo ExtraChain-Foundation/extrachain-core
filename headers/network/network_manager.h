@@ -19,14 +19,13 @@
 
 #pragma once
 
-#include <QTimer>
 #include <QtCore/QMutex>
 #include <QtCore/QRandomGenerator>
 #include <QtNetwork/QNetworkAddressEntry>
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkProxy>
-#include <QtWebSockets/QWebSocketServer>
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -34,12 +33,18 @@
 #include <unordered_set>
 #include <vector>
 
+#include <boost/asio/awaitable.hpp>
+
+#include "adapters/qt/network_status_adapter.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
 #include "network/isocket_service.h"
 #include "network/message_body.h"
+#include "network/network_runtime.h"
 #include "network/network_status.h"
+#include "network/traffic_meter.h"
 #include "network/wire_format.h"
+#include "runtime/deadline_task.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
 #include "utils/safeptr.h"
@@ -49,46 +54,7 @@ class WebSocketService;
 class UPNPConnection;
 class UPnPConnector;
 
-class CalculateTraffic {
-private:
-    struct TrafficStats {
-        std::uint64_t bytesSent     = 0;
-        std::uint64_t bytesReceived = 0;
-    };
-
-    std::unordered_map<std::string, TrafficStats>
-                      m_trafficStats; // Container for storing traffic of each connection
-    std::shared_mutex m_mutex;        // Mutex for thread safety in Singleton instance access
-
-    // Private constructor to prevent instantiation
-    CalculateTraffic() {
-    }
-
-    static CalculateTraffic* calculateTraffic_;
-
-public:
-    // Deleted copy constructor and assignment operator to prevent copying
-    CalculateTraffic(const CalculateTraffic&)            = delete;
-    CalculateTraffic& operator=(const CalculateTraffic&) = delete;
-
-    // Static method to access the Singleton instance
-    static CalculateTraffic* get_instance();
-
-    // Method for adding sent bytes data for a specific connection
-    void add_bytes_sent(const std::string& ip, qint64 bytes);
-
-    // Method for adding received bytes data for a specific connection
-    void add_bytes_received(const std::string& connectionId, qint64 bytes);
-
-    // Method for getting the total number of sent bytes data for a specific connection
-    qint64 total_bytes_sent_from_connection(const std::string& ip);
-
-    // Method for getting the total number of received bytes data for a specific connection
-    qint64 total_bytes_received_from_connection(const std::string& ip);
-
-    // Method for gettint pair of sent and recieved bytes from all connections
-    std::pair<uint64_t, uint64_t> total_bytes();
-};
+using CalculateTraffic = ExtraChain::Core::TrafficMeter;
 
 struct NetworkReconnect {
     QString           ip;
@@ -275,13 +241,14 @@ private:
     std::unique_ptr<UPnPConnector>            upnp_connector_;
     QMap<std::string, std::pair<int, qint64>> msg_hash_list_ = {};
 
-    ExtraChainNode*                       node;
-    std::shared_ptr<QNetworkAddressEntry> local_;
-    QWebSocketServer*                     ws_server_ = nullptr;
-
-    SafePtr<std::set<SocketService*>>            connections_;
-    SafePtr<std::map<NetworkReconnect, QString>> reconnections_to_identifier_;
-    NetworkStatus                                network_status_;
+    ExtraChainNode*                                           node;
+    std::shared_ptr<QNetworkAddressEntry>                     local_;
+    std::unique_ptr<ExtraChain::Core::NetworkRuntime>         network_runtime_;
+    SafePtr<std::set<SocketService::Ptr>>                     connections_;
+    SafePtr<std::map<NetworkReconnect, QString>>              reconnections_to_identifier_;
+    ExtraChain::Core::NetworkStatus                           network_status_;
+    ExtraChain::Core::NetworkStatus::ChangedEvent::Connection network_status_connection_;
+    std::unique_ptr<QtNetworkStatusAdapter>                   network_status_adapter_;
 
     struct ReconnEntry {
         uint64_t attempts        = 0;
@@ -292,10 +259,10 @@ private:
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           messages_;
     std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;
     std::map<std::string, MessageIdDataReceived>                                messages_received_;
-    QTimer*                                                                     reconnect_timer_;
+    std::shared_ptr<ExtraChain::Core::DeadlineTask>                             reconnect_timer_;
     std::atomic_bool                                                            offline_ { false };
-    QTimer*                                                                     clear_network_caches_timer_;
-    QTimer*                                                                     live_dag_batch_timer_;
+    std::shared_ptr<ExtraChain::Core::DeadlineTask>                             clear_network_caches_timer_;
+    std::shared_ptr<ExtraChain::Core::DeadlineTask>                             live_dag_batch_timer_;
     CalculateTraffic*                                                           calculate_traffic_;
     SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> forwarded_messages_;
     std::unordered_map<std::string, LiveDagPeerQueue>                           live_dag_peer_queues_;
@@ -332,7 +299,12 @@ public:
     std::uint16_t ws_port = 17593;
 
 private:
-    void connectWsService(WebSocketService* ws, bool requestListNodes = false);
+    void connectWsService(const std::shared_ptr<WebSocketService>& service, bool requestListNodes = false);
+    boost::asio::awaitable<void> connect_websocket(std::string   ip,
+                                                   std::uint16_t port,
+                                                   bool          request_list_nodes,
+                                                   bool          is_constant,
+                                                   bool          is_light);
 
     void send_message_connections(const std::string& serialized_message,
                                   const std::string& serialized_message_legacy,
@@ -359,8 +331,8 @@ private:
     void add_all_services_identifiers_to_message(MessageBody& msg);
 
 public:
-    bool                              is_first_node(const std::string& identifier); // detect for safety
-    SafePtr<std::set<SocketService*>> connections() const;
+    bool                                  is_first_node(const std::string& identifier); // detect for safety
+    SafePtr<std::set<SocketService::Ptr>> connections() const;
 
     // Look up an active connection's peer_meta by its node identifier (the
     // string carried by Responder). Returns nullopt when the peer is not
@@ -417,9 +389,6 @@ public:
         return connections_->size();
     }
 
-private slots:
-    void onNewWsConnection();
-
 protected slots:
     virtual void check_connections_status();
     void         start_discovery();
@@ -442,10 +411,10 @@ public slots:
                      const QString&           user,
                      const QString&           password);
 
-private slots:
-    void remove_socket_connection();
+private:
+    void remove_socket_connection(SocketService::Ptr connection);
     void socket_error(Network::SocketServiceError error,
-                      QString                     errorData,
+                      std::string                 error_data,
                       std::string                 ip,
                       std::string                 identifier,
                       SocketDirection             direction);

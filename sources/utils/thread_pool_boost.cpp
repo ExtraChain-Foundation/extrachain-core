@@ -17,112 +17,124 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 #include "utils/thread_pool_boost.h"
-#include <boost/smart_ptr/detail/spinlock.hpp>
 
-//[CDS] Maybe we will need it for future
-// #include <cds/threading/model.h>
+#include <algorithm>
+#include <array>
+#include <mutex>
+#include <stdexcept>
+#include <string>
 
-static std::shared_ptr<ThreadPoolBoost> thread_pool_dfs;
-static std::shared_ptr<ThreadPoolBoost> thread_pool_dag;
-static std::shared_ptr<ThreadPoolBoost> thread_pool_dag_sync;
-static std::shared_ptr<ThreadPoolBoost> thread_pool_prove;
-static boost::detail::spinlock          mutex;
+namespace {
 
-ThreadPoolBoost::ThreadPoolBoost(size_t threads_count) {
-    if (threads_count == 0)
+    enum class PoolKind : std::size_t {
+        Dfs,
+        General,
+        DagSync,
+        Dag,
+        Count
+    };
+
+    constexpr auto pool_count = static_cast<std::size_t>(PoolKind::Count);
+
+    struct PoolRegistry {
+        std::mutex                                               mutex;
+        bool                                                     terminating = false;
+        std::array<std::shared_ptr<ThreadPoolBoost>, pool_count> pools;
+    };
+
+    PoolRegistry& pool_registry() {
+        static PoolRegistry registry;
+        return registry;
+    }
+
+    std::shared_ptr<ThreadPoolBoost>& pool_at(PoolRegistry& registry, PoolKind kind) {
+        return registry.pools[static_cast<std::size_t>(kind)];
+    }
+
+    template <typename Factory>
+    std::shared_ptr<ThreadPoolBoost> get_pool(PoolKind kind, Factory&& factory) {
+        auto&            registry = pool_registry();
+        std::scoped_lock lock(registry.mutex);
+        auto&            pool = pool_at(registry, kind);
+        if (!pool) {
+            pool = std::forward<Factory>(factory)();
+        }
+        return pool;
+    }
+
+} // namespace
+
+ThreadPoolBoost::ThreadPoolBoost(std::size_t threads_count) {
+    if (threads_count == 0) {
         throw std::runtime_error("ThreadPoolBoost::ThreadPoolBoost: Incorrect threads count value: "
                                  + std::to_string(threads_count));
+    }
 
     m_thread_pool = std::make_unique<boost::asio::thread_pool>(threads_count);
-    ThreadPoolBoost::initialize(*m_thread_pool, threads_count);
 }
 
-void ThreadPoolBoost::initialize(boost::asio::thread_pool& pool, const size_t threadsCount) {
-    //[CDS] Maybe we will need it for future
-    // std::vector<std::promise<void>> promises(threadsCount);
-    // std::atomic<size_t>             counter(0);
-    // auto                            attachFunc = [&counter, &promises, threadsCount](const size_t index)
-    // {
-    //     counter++;
-    //     while (counter != threadsCount)
-    //         std::this_thread::yield();
-
-    //     cds::threading::Manager::attachThread();
-    //     promises[index].set_value();
-    // };
-
-    // for (size_t i = 0; i < threadsCount; i++)
-    //     boost::asio::post(pool, std::bind(attachFunc, i));
-
-    // for (auto& item : promises)
-    //     item.get_future().wait();
+std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dfs(const std::size_t threads_count) {
+    return get_pool(PoolKind::Dfs, [threads_count] {
+        return std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
+    });
 }
 
-std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dfs(const size_t threads_count) {
-    boost::detail::spinlock::scoped_lock lock(mutex);
-
-    if (!thread_pool_dfs) {
-        thread_pool_dfs = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
-    }
-
-    return thread_pool_dfs;
+std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dag(std::size_t threads_count) {
+    return get_pool(PoolKind::Dag, [threads_count] {
+        return std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
+    });
 }
 
-std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dag(size_t threads_count) {
-    boost::detail::spinlock::scoped_lock lock(mutex);
-
-    if (!thread_pool_prove) {
-        thread_pool_prove = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
-    }
-
-    return thread_pool_prove;
+std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dag_sync(std::size_t threads_count) {
+    return get_pool(PoolKind::DagSync, [threads_count] {
+        return std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
+    });
 }
 
-std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dag_sync(size_t threads_count) {
-    boost::detail::spinlock::scoped_lock lock(mutex);
-
-    if (!thread_pool_dag_sync) {
-        thread_pool_dag_sync = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
-    }
-
-    return thread_pool_dag_sync;
-}
-
-std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(size_t threads_count) {
-    boost::detail::spinlock::scoped_lock lock(mutex);
-
-    if (!thread_pool_dag) {
-        thread_pool_dag = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
-    }
-
-    return thread_pool_dag;
+std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(std::size_t threads_count) {
+    return get_pool(PoolKind::General, [threads_count] {
+        return std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
+    });
 }
 
 void ThreadPoolBoost::terminate() {
-    boost::detail::spinlock::scoped_lock lock(mutex);
-
-    if (thread_pool_dfs) {
-        thread_pool_dfs->m_thread_pool->stop();
-        thread_pool_dfs.reset();
+    auto& registry = pool_registry();
+    {
+        std::scoped_lock lock(registry.mutex);
+        if (registry.terminating) {
+            return;
+        }
+        registry.terminating = true;
     }
 
-    if (thread_pool_dag) {
-        thread_pool_dag->m_thread_pool->stop();
-        thread_pool_dag.reset();
-    }
+    for (;;) {
+        std::array<std::shared_ptr<ThreadPoolBoost>, pool_count> pools;
+        {
+            std::scoped_lock lock(registry.mutex);
+            if (std::ranges::all_of(registry.pools, [](const auto& pool) {
+                    return !pool;
+                })) {
+                registry.terminating = false;
+                break;
+            }
+            pools.swap(registry.pools);
+        }
 
-    if (thread_pool_dag_sync) {
-        thread_pool_dag_sync->m_thread_pool->stop();
-        thread_pool_dag_sync.reset();
-    }
-
-    if (thread_pool_prove) {
-        thread_pool_prove->m_thread_pool->stop();
-        thread_pool_prove.reset();
+        for (const auto& pool : pools) {
+            if (pool && pool->m_thread_pool) {
+                pool->m_thread_pool->stop();
+            }
+        }
+        for (const auto& pool : pools) {
+            if (pool && pool->m_thread_pool) {
+                pool->m_thread_pool->join();
+            }
+        }
     }
 }
 
 void ThreadPoolBoost::join() {
-    if (m_thread_pool)
+    if (m_thread_pool) {
         m_thread_pool->join();
+    }
 }

@@ -6,28 +6,32 @@
  * it under the terms of the GNU Lesser General Public License as published
  * by the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef ISOCKETSERVICE_H
-#define ISOCKETSERVICE_H
-
-#include "encryption/key_private.h"
-#include "encryption/key_public.h"
-#include "network/peer_meta.h"
-#include "utils/exc_utils.h"
+#pragma once
 
 #include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <optional>
 #include <queue>
-#include <QMutex>
+#include <set>
+#include <span>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <vector>
+
+#include <boost/describe.hpp>
+
+#include "core/types.h"
+#include "encryption/key_private.h"
+#include "encryption/key_public.h"
+#include "extrachain_global.h"
+#include "network/peer_meta.h"
 
 class ExtraChainNode;
 
@@ -37,44 +41,38 @@ enum class SocketMode {
 };
 
 enum class SocketDirection {
-    Outgoing, // I connected to peer
-    Incoming  // Peer connected to me
+    Outgoing,
+    Incoming
 };
 
-class EXTRACHAIN_EXPORT SocketService : public QObject {
-    Q_OBJECT
-
+class EXTRACHAIN_EXPORT SocketService : public std::enable_shared_from_this<SocketService> {
 public:
+    using Data = std::vector<std::uint8_t>;
+    using Ptr  = std::shared_ptr<SocketService>;
+
     struct SocketPair {
         std::string ip;
         std::string identifier;
 
-        bool operator==(const SocketPair &) const = default;
+        bool operator==(const SocketPair&) const = default;
 
-        bool operator<(const SocketPair &other) const {
-            if (ip != other.ip)
-                return ip < other.ip;
-            return identifier < other.identifier;
+        bool operator<(const SocketPair& other) const {
+            return std::tie(ip, identifier) < std::tie(other.ip, other.identifier);
         }
     };
 
     struct HandshakeMessage {
-        std::string          network_id;
-        std::string          version; // frozen 0.25.0 protocol-compat anchor for the strict version check
-        std::string          identifier;
-        int                  socket_type = 0; // compability
-        std::string          your_ip;
-        std::set<SocketPair> connections;
-        bool                 is_available = false;
-        bool                 is_constant  = false;
-        SocketMode           socket_mode  = SocketMode::Full;
-        DfsMode              dfs_mode     = DfsMode::Full;
-        // Storage schema version. Optional so legacy peers (who don't send it)
-        // parse cleanly — JSON serialization drops absent optionals entirely.
-        // Present + >= 100 = peer understands decimal wire format and pack sync.
-        std::optional<int> dag_version;
-        // Real release version (e.g. "0.26.0"). Optional so pre-0.26 peers parse
-        // cleanly; not version-checked, only a signal that the peer is >= 0.26.
+        std::string                          network_id;
+        std::string                          version;
+        std::string                          identifier;
+        int                                  socket_type = 0;
+        std::string                          your_ip;
+        std::set<SocketPair>                 connections;
+        bool                                 is_available = false;
+        bool                                 is_constant  = false;
+        SocketMode                           socket_mode  = SocketMode::Full;
+        DfsMode                              dfs_mode     = DfsMode::Full;
+        std::optional<int>                   dag_version;
         std::optional<std::string>           node_version;
         std::optional<std::set<std::string>> capabilities;
     };
@@ -85,109 +83,92 @@ public:
         High
     };
 
-    explicit SocketService(ExtraChainNode *node, QObject *parent = nullptr);
-    const QString            &identifier() const;
-    virtual QString           protocol_string() const = 0;
-    virtual Network::Protocol protocol() const        = 0;
-    virtual bool              is_active() const       = 0;
-    virtual quint16           port() const            = 0;
-    virtual quint16           server_port() const     = 0;
-    const QString            &ip() const;
-    DfsMode                   dfs_mode_socket() const;
-    int                       bytes_compressed() const;
-    int                       bytes_outgoing() const;
-    int                       bytes_incoming() const;
-    bool                      is_constant() const;
-    void                      set_constant(bool isConstant);
-    SocketMode                mode() const {
-        return mode_;
+    explicit SocketService(ExtraChainNode* node);
+    virtual ~SocketService() = default;
+
+    SocketService(const SocketService&)            = delete;
+    SocketService& operator=(const SocketService&) = delete;
+
+    [[nodiscard]] const std::string&        identifier() const noexcept;
+    [[nodiscard]] const std::string&        ip() const noexcept;
+    [[nodiscard]] virtual std::string       protocol_string() const = 0;
+    [[nodiscard]] virtual Network::Protocol protocol() const        = 0;
+    [[nodiscard]] virtual bool              is_active() const       = 0;
+    [[nodiscard]] virtual std::uint16_t     port() const            = 0;
+    [[nodiscard]] virtual std::uint16_t     server_port() const     = 0;
+    [[nodiscard]] DfsMode                   dfs_mode_socket() const noexcept;
+    [[nodiscard]] std::int64_t              bytes_compressed() const noexcept;
+    [[nodiscard]] std::int64_t              bytes_outgoing() const noexcept;
+    [[nodiscard]] std::int64_t              bytes_incoming() const noexcept;
+    [[nodiscard]] bool                      is_constant() const noexcept;
+    [[nodiscard]] SocketMode                mode() const noexcept;
+    [[nodiscard]] SocketDirection           direction() const noexcept;
+    [[nodiscard]] std::uint64_t             timestamp() const noexcept;
+    [[nodiscard]] const PeerMeta&           peer_meta() const noexcept;
+    [[nodiscard]] bool                      is_closed() const noexcept;
+    [[nodiscard]] std::size_t               queue_size() const;
+
+    void set_constant(bool constant) noexcept;
+    void set_direction(SocketDirection direction) noexcept;
+
+    virtual void flush()                                                                              = 0;
+    virtual void send_message(std::span<const std::uint8_t> data, Priority priority = Priority::High) = 0;
+    void         send_message(std::string_view data, Priority priority = Priority::High) {
+        send_message(std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(data.data()),
+                                                   data.size()),
+                     priority);
     }
-    SocketDirection direction() const {
-        return direction_;
-    }
-    void set_direction(SocketDirection dir) {
-        direction_ = dir;
-    }
+    virtual void                       close_connection();
+    [[nodiscard]] virtual bool         wait_closed(std::chrono::milliseconds timeout);
+    [[nodiscard]] virtual std::int64_t pending_bytes() const noexcept;
 
-    std::uint64_t timestamp() const;
-
-    // Snapshot of peer attributes derived from the initial handshake.
-    // Populated by check_first_message(); read by send/receive handlers to
-    // decide on wire format and feature availability.
-    const PeerMeta &peer_meta() const {
-        return peer_meta_;
-    }
-
-public:
-    virtual void flush()                                                                  = 0;
-    virtual void send_message(const QByteArray &data, Priority priority = Priority::High) = 0;
-
-    bool is_closed();
-
-    long queue_size() {
-        QMutexLocker locker(&queue_mutex_);
-        return high_queue_.size() + normal_queue_.size() + low_queue_.size();
-    }
-
-    virtual qint64 pending_bytes() const {
-        return queued_bytes_.load(std::memory_order_relaxed);
-    }
-
-    // protected slots:
-public slots:
-    virtual void closeSocket();
-
-signals:
-    void send(const QByteArray &data);
-    void disconnected();
-    void error(Network::SocketServiceError code,
-               const QString              &errorData,
-               std::string                 ip,
-               std::string                 identifier,
-               SocketDirection             direction);
-    void close(Network::SocketServiceError code = Network::SocketServiceError::PhysicalKill);
-    void activated();
-    void finished(); // if threads
-    void shareConnections(const std::set<SocketService::SocketPair> &);
+    std::function<void(Ptr)> on_disconnected;
+    std::function<void(Ptr,
+                       Network::SocketServiceError,
+                       const std::string&,
+                       const std::string&,
+                       const std::string&,
+                       SocketDirection)>
+                                                                    on_error;
+    std::function<void(Ptr)>                                        on_activated;
+    std::function<void(Ptr, const std::set<SocketPair>&)>           on_share_connections;
+    std::function<void(Ptr, std::string, std::string, std::string)> on_message;
 
 protected:
-    bool       check_first_message(const HandshakeMessage &msg);
-    QByteArray generate_first_message();
-    QByteArray prepareSendMessage(const QByteArray &message);
-    QByteArray prepareReceiveMessage(const QByteArray &message);
+    bool check_first_message(const HandshakeMessage& message);
+    Data generate_first_message();
+    Data prepare_send_message(std::span<const std::uint8_t> message);
+    Data prepare_receive_message(std::span<const std::uint8_t> message);
 
-    ExtraChainNode  *node;
-    QString          identifier_;
-    QString          ip_;
-    quint16          port_             = 0;
-    bool             activated_        = false;
-    bool             is_disconnected_  = false;
-    int              bytes_incoming_   = 0;
-    int              bytes_outgoing_   = 0;
-    int              bytes_compressed_ = 0;
-    std::atomic_bool is_constant_      = false;
-    std::uint64_t    timestamp_        = 0;
-    SocketMode       mode_             = SocketMode::Full;
-    SocketDirection  direction_        = SocketDirection::Outgoing;
-    DfsMode          dfs_mode_socket_  = DfsMode::Full;
-    PeerMeta         peer_meta_;
+    ExtraChainNode*           node_ = nullptr;
+    std::string               identifier_;
+    std::string               ip_;
+    std::uint16_t             port_         = 0;
+    std::atomic_bool          activated_    = false;
+    std::atomic_bool          disconnected_ = false;
+    std::atomic_bool          constant_     = false;
+    std::atomic_bool          closed_       = false;
+    std::atomic<std::int64_t> bytes_incoming_ { 0 };
+    std::atomic<std::int64_t> bytes_outgoing_ { 0 };
+    std::atomic<std::int64_t> bytes_compressed_ { 0 };
+    std::uint64_t             timestamp_       = 0;
+    SocketMode                mode_            = SocketMode::Full;
+    SocketDirection           direction_       = SocketDirection::Outgoing;
+    DfsMode                   dfs_mode_socket_ = DfsMode::Full;
+    PeerMeta                  peer_meta_;
 
-    QMutex                 queue_mutex_;
-    std::queue<QByteArray> high_queue_;
-    std::queue<QByteArray> normal_queue_;
-    std::queue<QByteArray> low_queue_;
-    std::atomic<qint64>    queued_bytes_ = 0;
+    mutable std::mutex        queue_mutex_;
+    std::queue<Data>          high_queue_;
+    std::queue<Data>          normal_queue_;
+    std::queue<Data>          low_queue_;
+    std::atomic<std::int64_t> queued_bytes_ { 0 };
 
-    // Keep the socket buffer short so a queued DAG sync or control message does
-    // not wait behind several megabytes of DFS fragments. Bulk transfers remain
-    // bounded by their own high/low water marks in LoadManager.
-    static constexpr qint64 MAX_BUFFER_SIZE       = 1024 * 1024;
-    bool                    waiting_buffer_space_ = false;
+    static constexpr std::int64_t MAX_BUFFER_SIZE       = 1024 * 1024;
+    bool                          waiting_buffer_space_ = false;
 
-    KeyPrivate priv_   = KeyPrivate();
-    KeyPublic  pub_    = KeyPublic();
-    bool       is_pub_ = false;
-    bool       closed_ = false;
+    KeyPrivate private_key_;
+    KeyPublic  public_key_;
+    bool       public_key_received_ = false;
 };
 
 BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
@@ -205,5 +186,3 @@ BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
                        capabilities))
 
 BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
-
-#endif // ISOCKETSERVICE_H

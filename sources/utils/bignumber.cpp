@@ -85,12 +85,12 @@ BigNumber BigNumber::operator&(const BigNumber &value) {
     return da;
 }
 
-BigNumber BigNumber::operator>>(const uint &value) {
+BigNumber BigNumber::operator>>(const std::uint32_t &value) {
     BigNumber ret(m_data >> value);
     return ret;
 }
 
-BigNumber BigNumber::operator>>=(const uint &value) {
+BigNumber BigNumber::operator>>=(const std::uint32_t &value) {
     BigNumber ret(m_data >> value);
     m_data = ret.data();
     UPDATE_DEBUG()

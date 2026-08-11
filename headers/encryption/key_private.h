@@ -22,6 +22,7 @@
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"
+#include "core/byte_array.h"
 
 #include <boost/core/demangle.hpp>
 #include <msgpack.hpp>

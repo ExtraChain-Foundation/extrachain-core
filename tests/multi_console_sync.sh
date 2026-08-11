@@ -16,8 +16,10 @@
 
 set -u
 
-NODE_RUN="/Users/draqonic/ExC/extrachain-core/tests/build/extrachain-node-run"
-SYNC_CHECK="/Users/draqonic/ExC/extrachain-core/tests/build/extrachain-sync-check"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+BUILD_DIR="${EXTRACHAIN_TEST_BUILD:-$SCRIPT_DIR/build}"
+NODE_RUN="$BUILD_DIR/extrachain-node-run"
+SYNC_CHECK="$BUILD_DIR/extrachain-sync-check"
 SEED="${1:-/tmp/gen-25k}"
 N="${2:-3}"
 PORT="${3:-17593}"
@@ -51,7 +53,7 @@ rm -rf "$WORK"; mkdir -p "$WORK"
 mkdir -p "$WORK/server"
 cp -R "$SEED" "$WORK/server/data"
 echo "=== starting server (port $PORT) ==="
-( cd "$WORK/server" && exec "$NODE_RUN" serve data ) >"$WORK/server/console.log" 2>&1 &
+( cd "$WORK/server" && exec "$NODE_RUN" serve data "$PORT" ) >"$WORK/server/console.log" 2>&1 &
 PIDS+=($!)
 
 for i in $(seq 1 90); do
@@ -68,7 +70,8 @@ for c in $(seq 1 "$N"); do
     HOME_C="$WORK/client$c"; DATA_C="$HOME_C/data"
     mkdir -p "$DATA_C"
     echo "=== starting client$c (join) ==="
-    ( cd "$HOME_C" && exec "$NODE_RUN" join data 127.0.0.1 "$SERVER_LAST" ) \
+    CLIENT_PORT=$((PORT + c))
+    ( cd "$HOME_C" && exec "$NODE_RUN" join data 127.0.0.1 "$SERVER_LAST" "$CLIENT_PORT" "$PORT" ) \
         >"$HOME_C/console.log" 2>&1 &
     PIDS+=($!)
     sleep 1

@@ -31,10 +31,10 @@ if(MSVC)
 endif()
 
 
-find_package(Qt6 COMPONENTS Core Network WebSockets REQUIRED)
+find_package(Qt6 COMPONENTS Core Network REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED COMPONENTS system thread mp11 describe json)
+find_package(Boost CONFIG REQUIRED COMPONENTS system thread mp11 describe json beast signals2)
 find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
@@ -49,6 +49,9 @@ set(EXTRACHAIN_CORE_INCLUDES
 
 set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/extrachain_version.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/core/types.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/core/byte_array.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/core/container.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dirs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/load_manager.h
@@ -91,7 +94,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/network_status_adapter.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/message_body.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/peer_meta.h
@@ -99,6 +102,10 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnector.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/event.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/deadline_task.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/periodic_task.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/runtime.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/autologinhash.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber_float.h
@@ -117,7 +124,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_msgpack_describe.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/thread_pool_boost.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/compression.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
@@ -172,7 +178,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/janus_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/network_status_adapter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/wire_format.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
@@ -188,7 +194,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/thread_pool_boost.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
@@ -208,6 +213,31 @@ set(EXTRACHAIN_CORE_SOURCES
     )
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/ExtraChainWamr.cmake)
+
+add_library(extrachain-runtime STATIC
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_runtime.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/traffic_meter.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/deadline_task.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/event.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/periodic_task.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/runtime.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/thread_pool_boost.h
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_runtime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/traffic_meter.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/deadline_task.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/periodic_task.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/runtime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/thread_pool_boost.cpp
+)
+target_include_directories(extrachain-runtime PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
+target_link_libraries(extrachain-runtime PUBLIC Boost::boost Boost::system Boost::thread)
+target_compile_features(extrachain-runtime PUBLIC cxx_std_23)
+if(WIN32)
+    target_compile_definitions(extrachain-runtime PUBLIC _WIN32_WINNT=0x0A00)
+endif()
+set_property(TARGET extrachain-runtime PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 # C FFI bindings (optional)
 option(EXTRACHAIN_BUILD_CBINDINGS "Build C FFI bindings (libextrachainc)" OFF)
@@ -255,7 +285,9 @@ string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
 
 if(MSVC)
-    target_compile_options(extrachain PRIVATE "/FI${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h")
+    target_compile_options(extrachain PRIVATE
+        "/FI${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h"
+        /bigobj)
 else()
     target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 endif()
@@ -272,7 +304,8 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../extrachain-3rdparty/bip3x ${CMAKE_
 target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_LIST_DIR}/../extrachain-3rdparty/bip3x/include)
 
 target_link_libraries(extrachain
-    Qt6::Core Qt6::Network Qt6::WebSockets
+    extrachain-runtime
+    Qt6::Core Qt6::Network
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
     Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x extrachain-wamr
     $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)

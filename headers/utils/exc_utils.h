@@ -35,6 +35,8 @@
 #include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"
+#include "core/byte_array.h"
+#include "core/types.h"
 #include "utils/exc_logs.h"
 #include "utils/bignumber_float.h"
 
@@ -63,234 +65,9 @@ using namespace magic_enum::bitwise_operators;
 #include "utils/exc_utils_base64.h"
 #include "utils/fs_path.h"
 
-enum class DagMode {
-    Full,
-    Light
-};
-
-// Three levels, differing in how much of the `.dirs` catalogue a node keeps and how
-// many payloads it stores. See docs/DIRS_SYNC.md.
-//   Full      — whole catalogue, stores payloads too (relay / server / stand node).
-//   Light     — whole catalogue, payloads only on demand. The default for a client:
-//               a complete catalogue is what lets a node tell "I don't have it" from
-//               "it doesn't exist", which every repair and audit path depends on.
-//   Selective — the catalogue itself is narrowed to explicitly chosen actors
-//               (startup_sync_actors()). Cheapest, but the node knowingly has no view
-//               of anything it did not ask for.
-// Order matters: values are serialised into settings and sent in the handshake, so new
-// modes are appended, never inserted.
-enum class DfsMode {
-    Full,
-    Light,
-    Selective
-};
-
-enum class Force {
-    None,
-    Active
-};
-
-// Storage schema versions. Bump when on-disk layout or canonical string formats change
-// so nodes can detect legacy data and trigger migration.
-// 100 = first decimal-first + packed DAG release.
-constexpr int CURRENT_DAG_VERSION = 100;
-constexpr int CURRENT_DFS_VERSION = 100;
-
-enum class ChainIndexMode {
-    Disabled,
-    Enabled
-};
-
-struct ExtraChainSettings {
-    std::optional<std::string>    first_node;
-    std::optional<DagMode>        dag_mode;
-    std::optional<DfsMode>        dfs_mode;
-    std::optional<std::string>    node_identifier;
-    std::optional<int>            dag_version;
-    std::optional<int>            dfs_version;
-    std::optional<ChainIndexMode> chain_index_mode;
-};
-BOOST_DESCRIBE_STRUCT(
-    ExtraChainSettings,
-    (),
-    (first_node, dag_mode, dfs_mode, node_identifier, dag_version, dfs_version, chain_index_mode))
-
-class ByteArray {
-public:
-    template <size_t N>
-    ByteArray(const std::array<uint8_t, N> &arr)
-        : m_data(arr.begin(), arr.end()) {
-    }
-
-    ByteArray(const std::vector<uint8_t> &vec)
-        : m_data(vec) {
-    }
-
-    ByteArray(const std::string &str)
-        : m_data(reinterpret_cast<const uint8_t *>(str.data()),
-                 reinterpret_cast<const uint8_t *>(str.data()) + str.size()) {
-    }
-
-    ByteArray(const char *data, size_t length)
-        : m_data(reinterpret_cast<const uint8_t *>(data), reinterpret_cast<const uint8_t *>(data) + length) {
-    }
-
-    ByteArray(const char *data)
-        : ByteArray(data, std::strlen(data)) {
-    }
-
-    ByteArray(const QByteArray &qba)
-        : m_data(reinterpret_cast<const uint8_t *>(qba.data()),
-                 reinterpret_cast<const uint8_t *>(qba.data()) + qba.size()) {
-    }
-
-    ByteArray(const QString &qstr)
-        : ByteArray(qstr.toUtf8()) {
-    }
-
-    template <size_t N>
-    std::array<uint8_t, N> toArray() const {
-        std::array<uint8_t, N> result {};
-        std::copy_n(m_data.begin(), std::min(N, m_data.size()), result.begin());
-        return result;
-    }
-
-    std::vector<uint8_t> toBytes() const {
-        return m_data;
-    }
-
-    std::vector<uint8_t> toVector() const {
-        return m_data;
-    }
-
-    std::string toString() const {
-        return std::string(reinterpret_cast<const char *>(m_data.data()), m_data.size());
-    }
-
-    QByteArray toQByteArray() const {
-        return QByteArray(reinterpret_cast<const char *>(m_data.data()), m_data.size());
-    }
-
-    QString toQString() const {
-        return QString::fromUtf8(toQByteArray());
-    }
-
-    size_t size() const {
-        return m_data.size();
-    }
-    bool empty() const {
-        return m_data.empty();
-    }
-    const uint8_t *data() const {
-        return m_data.data();
-    }
-    uint8_t *data() {
-        return m_data.data();
-    }
-
-    auto begin() {
-        return m_data.begin();
-    }
-    auto end() {
-        return m_data.end();
-    }
-    auto begin() const {
-        return m_data.begin();
-    }
-    auto end() const {
-        return m_data.end();
-    }
-
-    uint8_t &operator[](size_t i) {
-        return m_data[i];
-    }
-    const uint8_t &operator[](size_t i) const {
-        return m_data[i];
-    }
-
-    bool operator==(const ByteArray &other) const {
-        return m_data == other.m_data;
-    }
-
-    ByteArray operator+(const ByteArray &other) const {
-        std::vector<uint8_t> result = m_data;
-        result.insert(result.end(), other.m_data.begin(), other.m_data.end());
-        return ByteArray(result);
-    }
-
-    static std::expected<ByteArray, Base64Error> fromBase64(const std::string &encoded) {
-        auto decoded = Utils::from_base64(encoded);
-        if (!decoded.has_value()) {
-            return std::unexpected(decoded.error());
-        }
-        return ByteArray(decoded.value());
-    }
-
-    static std::expected<ByteArray, Base64Error> fromBase64(const QString &encoded) {
-        return fromBase64(encoded.toStdString());
-    }
-
-    std::string toBase64() const {
-        return Utils::to_base64(toString());
-    }
-
-    QString toBase64QString() const {
-        return QString::fromStdString(toBase64());
-    }
-
-    ByteArray slice(size_t start, size_t length) const {
-        return ByteArray(std::vector<uint8_t>(m_data.begin() + start,
-                                              m_data.begin() + std::min(start + length, m_data.size())));
-    }
-
-private:
-    std::vector<uint8_t> m_data;
-};
-
 namespace Network {
     Q_NAMESPACE
-
-    static bool    isStartedServer = true;
-    static quint16 maxConnections =
-#ifdef IS_APP_UI_CLIENT
-    #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-        4
-    #else
-        5
-    #endif
-#else
-        1000
-#endif
-
-        ;
-    static bool networkDebug = false;
-
-    enum class Protocol {
-        Undefined = 0,
-        Udp       = 1,
-        WebSocket = 2
-    };
     Q_ENUM_NS(Protocol)
-
-    enum class SocketServiceError {
-        Unknown,
-        VersionTooOld,
-        VersionTooNew,
-        IncompatibleNetwork,
-        IncompatibleIdentifier,
-        DuplicateIdentifier,
-        IncorrectPublicKey,
-        IncorrectFirstMessage,
-        MaxConnections,
-        PeerUnavailable,
-        EmptyMessage,
-        IncorrectMessage,
-        CantSend,
-        PhysicalKill,
-        IncorrectHandshake,
-        PongLost,
-        Secs10Inactive
-    };
     Q_ENUM_NS(SocketServiceError)
 } // namespace Network
 
@@ -665,7 +442,8 @@ namespace Utils {
 
     // Hash a raw byte range without materializing a std::string first (used on
     // the pack read path, where the buffer is large and copying it is wasteful).
-    EXTRACHAIN_EXPORT std::string calculate_hash_bytes(const char *data, std::size_t size,
+    EXTRACHAIN_EXPORT std::string calculate_hash_bytes(const char   *data,
+                                                       std::size_t   size,
                                                        HashAlgorithm hash_algorithm = HashAlgorithm::Blake3);
 
     namespace detail {

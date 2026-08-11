@@ -18,6 +18,7 @@
  */
 
 #include "encryption/key_public.h"
+#include "core/container.h"
 
 KeyPublic::KeyPublic(const PublicKey &public_key) {
     public_key_ = public_key;
@@ -46,5 +47,5 @@ const PublicKey &KeyPublic::public_key() const {
 }
 
 bool KeyPublic::empty() const {
-    return Utils::is_container_empty(public_key_);
+    return ExtraChain::Core::all_zero(public_key_);
 }

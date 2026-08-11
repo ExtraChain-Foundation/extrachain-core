@@ -151,5 +151,4 @@
 
     #include <QtCore>
     #include <QtNetwork>
-    #include <QtWebSockets>
 #endif

@@ -19,7 +19,7 @@
 
 #include "encryption/key_private.h"
 #include "encryption/encryption_tools.h"
-#include "utils/exc_utils.h"
+#include "core/container.h"
 
 #include <sodium.h>
 
@@ -119,5 +119,5 @@ const PublicKey &KeyPrivate::public_key() const {
 }
 
 bool KeyPrivate::empty() const {
-    return Utils::is_container_empty(secret_key_) || Utils::is_container_empty(public_key_);
+    return ExtraChain::Core::all_zero(secret_key_) || ExtraChain::Core::all_zero(public_key_);
 }

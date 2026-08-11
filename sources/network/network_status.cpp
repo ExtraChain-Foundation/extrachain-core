@@ -6,56 +6,29 @@
  * it under the terms of the GNU Lesser General Public License as published
  * by the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
 #include "network/network_status.h"
 
-#include "utils/exc_logs.h"
+#include <utility>
 
-NetworkStatus::NetworkStatus(QObject *parent)
-    : QObject(parent) {
-    auto networkInfo = QNetworkInformation::instance();
-    if (networkInfo == nullptr) {
-        eLog("[NetworkStatus] Can't detect network status");
-        setNetworkStatus(Status::Unknown);
-        return;
-    }
-    onReachabilityChanged(networkInfo->reachability());
-    connect(networkInfo, &QNetworkInformation::reachabilityChanged, this, &NetworkStatus::onReachabilityChanged);
-}
+namespace ExtraChain::Core {
 
-NetworkStatus::Status NetworkStatus::status() {
-    return m_networkStatus;
-}
-
-void NetworkStatus::onReachabilityChanged(QNetworkInformation::Reachability reachability) {
-    switch (reachability) {
-    case QNetworkInformation::Reachability::Unknown:
-    case QNetworkInformation::Reachability::Disconnected:
-    case QNetworkInformation::Reachability::Local:
-    case QNetworkInformation::Reachability::Site:
-        setNetworkStatus(Status::Offline);
-        break;
-    case QNetworkInformation::Reachability::Online:
-        setNetworkStatus(Status::Online);
-        break;
-    }
-}
-
-void NetworkStatus::setNetworkStatus(NetworkStatus::Status status) {
-    if (m_networkStatus == status) {
-        return;
+    NetworkStatus::Status NetworkStatus::status() const noexcept {
+        return status_.load(std::memory_order_acquire);
     }
 
-    m_networkStatus = status;
-    emit statusChanged(status);
-}
+    bool NetworkStatus::update(Status status) {
+        auto previous = status_.exchange(status, std::memory_order_acq_rel);
+        if (previous == status) {
+            return false;
+        }
+        changed_.publish(status);
+        return true;
+    }
+
+    NetworkStatus::ChangedEvent::Connection NetworkStatus::subscribe(ChangedEvent::Slot slot) {
+        return changed_.subscribe(std::move(slot));
+    }
+
+} // namespace ExtraChain::Core

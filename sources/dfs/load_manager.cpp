@@ -326,7 +326,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     for (const auto& socket : *connections_locked) {
                         if (!socket || !socket->is_active())
                             continue;
-                        auto conn_id = socket->identifier().toStdString();
+                        const auto& conn_id = socket->identifier();
                         if (conn_id.empty())
                             continue;
                         if (!load_info.identifier_storage_checker.contains(conn_id)) {
@@ -680,7 +680,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                 continue;
             }
 
-            const auto conn_id = socket->identifier().toStdString();
+            const auto& conn_id = socket->identifier();
             if (conn_id.empty() || load_info.identifier_storage_checker.contains(conn_id)) {
                 continue;
             }

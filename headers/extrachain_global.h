@@ -19,13 +19,21 @@
 
 #pragma once
 
-#include <QtCore/qglobal.h>
-
 #ifdef EXTRACHAIN_LIBRARY_ACTIVATE
     #ifdef EXTRACHAIN_LIBRARY
-        #define EXTRACHAIN_EXPORT Q_DECL_EXPORT
+        #if defined(_WIN32)
+            #define EXTRACHAIN_EXPORT __declspec(dllexport)
+        #elif defined(__GNUC__) || defined(__clang__)
+            #define EXTRACHAIN_EXPORT __attribute__((visibility("default")))
+        #else
+            #define EXTRACHAIN_EXPORT
+        #endif
     #else
-        #define EXTRACHAIN_EXPORT Q_DECL_IMPORT
+        #if defined(_WIN32)
+            #define EXTRACHAIN_EXPORT __declspec(dllimport)
+        #else
+            #define EXTRACHAIN_EXPORT
+        #endif
     #endif
 #else
     #define EXTRACHAIN_EXPORT

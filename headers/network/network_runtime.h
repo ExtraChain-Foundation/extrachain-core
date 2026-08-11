@@ -1,0 +1,82 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+#pragma once
+
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <expected>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
+
+#include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/ip/tcp.hpp>
+
+#include "runtime/runtime.h"
+
+namespace ExtraChain::Core {
+
+    /**
+     * Owns the Boost network execution context and the inbound TCP listener.
+     *
+     * This type has no Qt dependency. A Qt client can translate its callbacks
+     * to signals without owning sockets or timers.
+     */
+    class NetworkRuntime final {
+    public:
+        using Tcp           = boost::asio::ip::tcp;
+        using AcceptHandler = std::function<void(Tcp::socket)>;
+        using ProbeHandler  = std::function<void(bool, std::string)>;
+
+        explicit NetworkRuntime(RuntimeConfig config = {});
+        ~NetworkRuntime();
+
+        NetworkRuntime(const NetworkRuntime&)            = delete;
+        NetworkRuntime& operator=(const NetworkRuntime&) = delete;
+        NetworkRuntime(NetworkRuntime&&)                 = delete;
+        NetworkRuntime& operator=(NetworkRuntime&&)      = delete;
+
+        [[nodiscard]] std::expected<std::uint16_t, std::string> listen(std::uint16_t port,
+                                                                       AcceptHandler handler);
+        void stop_listening();
+        void stop();
+
+        [[nodiscard]] bool listening() const noexcept;
+        [[nodiscard]] Runtime::Executor executor();
+
+        void async_probe(std::string host,
+                         std::uint16_t port,
+                         std::chrono::milliseconds timeout,
+                         ProbeHandler handler);
+        [[nodiscard]] static std::expected<void, std::string> probe(
+            std::string_view host,
+            std::uint16_t port,
+            std::chrono::milliseconds timeout);
+
+    private:
+        [[nodiscard]] bool open_acceptor(const Tcp& protocol,
+                                         std::uint16_t port,
+                                         boost::system::error_code& error);
+        boost::asio::awaitable<void> accept_loop();
+
+        Runtime                       runtime_;
+        std::unique_ptr<Tcp::acceptor> acceptor_;
+        AcceptHandler                 accept_handler_;
+        mutable std::mutex            accept_handler_mutex_;
+        std::atomic_bool              listening_ { false };
+        std::atomic_bool              stopping_ { false };
+    };
+
+} // namespace ExtraChain::Core

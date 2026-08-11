@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
 
+# Tests use the same deterministic dependency manifest as the library root.
+set(VCPKG_MANIFEST_DIR "${CMAKE_CURRENT_LIST_DIR}/.." CACHE PATH "ExtraChain vcpkg manifest directory")
+
 file(STRINGS "../extrachain_version.h" EXTRACHAIN_VERSION_LINE REGEX "extrachain_version =")
 string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" EXTRACHAIN_VERSION "${EXTRACHAIN_VERSION_LINE}")
 project(extrachain-tests LANGUAGES C CXX VERSION ${EXTRACHAIN_VERSION})
@@ -85,12 +88,17 @@ add_executable(extrachain-native-balance native_balance.cpp)
 target_link_libraries(extrachain-native-balance PRIVATE Qt${QT_VERSION_MAJOR}::Core extrachain)
 set_property(TARGET extrachain-native-balance PROPERTY POSITION_INDEPENDENT_CODE 1)
 
+add_executable(extrachain-runtime-tests runtime/runtime_test.cpp)
+target_link_libraries(extrachain-runtime-tests PRIVATE extrachain-runtime)
+set_property(TARGET extrachain-runtime-tests PROPERTY POSITION_INDEPENDENT_CODE 1)
+
 enable_testing()
 add_test(NAME core-unit COMMAND extrachain-ci-unit)
 add_test(NAME amount-roundtrip COMMAND extrachain-amount-rt)
 add_test(NAME sync-roundtrip COMMAND extrachain-sync-tests)
 add_test(NAME native-balance COMMAND extrachain-native-balance)
-set_tests_properties(core-unit amount-roundtrip sync-roundtrip native-balance PROPERTIES
+add_test(NAME runtime COMMAND extrachain-runtime-tests)
+set_tests_properties(core-unit amount-roundtrip sync-roundtrip native-balance runtime PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt${QT_VERSION_MAJOR}::Core>;PATH=path_list_prepend:$<TARGET_FILE_DIR:unofficial::sqlite3::sqlite3>"
     TIMEOUT 120

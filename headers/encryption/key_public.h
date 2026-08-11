@@ -25,6 +25,7 @@
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"
+#include "core/byte_array.h"
 #include "encryption/encryption_tools.h"
 
 class EXTRACHAIN_EXPORT KeyPublic {

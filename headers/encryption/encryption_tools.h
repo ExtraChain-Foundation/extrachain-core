@@ -24,7 +24,8 @@
 #include <array>
 #include <vector>
 #include <expected>
-#include <utils/exc_utils.h>
+#include "extrachain_global.h"
+#include "utils/fs_path.h"
 #include <sodium.h>
 
 static_assert(crypto_box_NONCEBYTES == crypto_secretbox_NONCEBYTES,

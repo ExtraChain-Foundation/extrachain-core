@@ -18,6 +18,7 @@
  */
 
 #include "encryption/encryption_tools.h"
+#include "core/container.h"
 
 #include <bip3x/bip3x_mnemonic.h>
 
@@ -48,7 +49,7 @@ std::expected<KeyPass, Cryptography::CryptoError> Cryptography::key_from_passwor
     }
 
     Salt vsalt;
-    if (Utils::is_container_empty(salt)) {
+    if (ExtraChain::Core::all_zero(salt)) {
         std::fill(vsalt.begin(), vsalt.end(), '0');
     } else {
         vsalt = salt;
@@ -74,7 +75,7 @@ std::expected<Signature, Cryptography::CryptoError> Cryptography::sign(const Byt
     if (data.empty()) {
         return std::unexpected(CryptoError::EmptyData);
     }
-    if (Utils::is_container_empty(secret_key)) {
+    if (ExtraChain::Core::all_zero(secret_key)) {
         return std::unexpected(CryptoError::EmptyKey);
     }
 
@@ -89,10 +90,10 @@ std::expected<bool, Cryptography::CryptoError> Cryptography::verify(const Bytes&
     if (data.empty()) {
         return std::unexpected(CryptoError::EmptyData);
     }
-    if (Utils::is_container_empty(public_key)) {
+    if (ExtraChain::Core::all_zero(public_key)) {
         return std::unexpected(CryptoError::EmptyKey);
     }
-    if (Utils::is_container_empty(signature)) {
+    if (ExtraChain::Core::all_zero(signature)) {
         return std::unexpected(CryptoError::EmptySign);
     }
 
@@ -106,7 +107,7 @@ Cryptography::CryptoResult Cryptography::symmetric_encrypt(const Bytes&   data,
     if (data.empty()) {
         return std::unexpected(CryptoError::EmptyData);
     }
-    if (Utils::is_container_empty(secret_key)) {
+    if (ExtraChain::Core::all_zero(secret_key)) {
         return std::unexpected(CryptoError::EmptyKey);
     }
 
@@ -143,7 +144,7 @@ Cryptography::CryptoResult Cryptography::symmetric_decrypt(const Bytes&   encryp
         return std::unexpected(CryptoError::EmptyData);
     }
 
-    if (Utils::is_container_empty(secret_key)) {
+    if (ExtraChain::Core::all_zero(secret_key)) {
         return std::unexpected(CryptoError::EmptyKey);
     }
 
@@ -524,7 +525,6 @@ std::expected<bool, FsError> Cryptography::asymmetric_encrypt_file(const FsPath&
                                                                    size_t            block_size) {
     auto valid = validate_encryption_paths(input_path, output_path);
     if (!valid.has_value()) {
-        eLog("[FileEncryption] Invalid: {}", valid.error());
         return valid;
     }
 

@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <expected>
 
@@ -77,8 +78,8 @@ private:
 
 public:
     BigNumber  operator&(const BigNumber &);
-    BigNumber  operator>>(const uint &);
-    BigNumber  operator>>=(const uint &);
+    BigNumber  operator>>(const std::uint32_t &);
+    BigNumber  operator>>=(const std::uint32_t &);
     BigNumber  operator+(const BigNumber &) const;
     BigNumber  operator+(long long) const;
     BigNumber  operator-(const BigNumber &) const;

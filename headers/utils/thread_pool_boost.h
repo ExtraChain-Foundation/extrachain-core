@@ -19,6 +19,10 @@
 
 #pragma once
 
+#include <cstddef>
+#include <memory>
+#include <utility>
+
 #ifdef _WIN32
     #include <winsock2.h>
 #endif
@@ -38,40 +42,27 @@ public:
     // replication dropped to ~1 file per 45s, a hundredfold slowdown, while the same
     // work took two minutes before. Per-vector ordering is unaffected — concurrent
     // writers to one file are serialised by sqlite itself.
-    static std::shared_ptr<ThreadPoolBoost> instance_dfs(size_t threads_count = 4);
-    static std::shared_ptr<ThreadPoolBoost> instance_dag(size_t threads_count = 1);
-    static std::shared_ptr<ThreadPoolBoost> instance_dag_sync(size_t threads_count = 8);
-    static std::shared_ptr<ThreadPoolBoost> instance(size_t threads_count = 1);
+    static std::shared_ptr<ThreadPoolBoost> instance_dfs(std::size_t threads_count = 4);
+    static std::shared_ptr<ThreadPoolBoost> instance_dag(std::size_t threads_count = 1);
+    static std::shared_ptr<ThreadPoolBoost> instance_dag_sync(std::size_t threads_count = 8);
+    static std::shared_ptr<ThreadPoolBoost> instance(std::size_t threads_count = 1);
 
     static void terminate();
 
     template <BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
     auto post(NullaryToken&& nullary_token) {
-        return boost::asio::post(*m_thread_pool, nullary_token);
-        // auto safe_wrapper = [token = std::forward<NullaryToken>(nullary_token)]() mutable {
-        //     try {
-        //         token();
-        //     } catch (const std::exception& e) {
-        //         std::cerr << "Exception in posted task: " << e.what() << std::endl;
-        //     } catch (...) {
-        //         std::cerr << "Unknown exception in posted task." << std::endl;
-        //     }
-        // };
-
-        // return boost::asio::post(*m_thread_pool, std::move(safe_wrapper));
+        return boost::asio::post(*m_thread_pool, std::forward<NullaryToken>(nullary_token));
     }
 
     template <BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
     auto dispatch(NullaryToken&& nullary_token) {
-        return boost::asio::dispatch(*m_thread_pool, nullary_token);
+        return boost::asio::dispatch(*m_thread_pool, std::forward<NullaryToken>(nullary_token));
     }
 
     void join();
 
 private:
-    ThreadPoolBoost(size_t threads_count);
-
-    static void initialize(boost::asio::thread_pool& thread_pool, const size_t threads_count);
+    ThreadPoolBoost(std::size_t threads_count);
 
     std::unique_ptr<boost::asio::thread_pool> m_thread_pool;
 };

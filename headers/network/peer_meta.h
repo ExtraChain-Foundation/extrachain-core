@@ -26,7 +26,7 @@
 
 inline constexpr std::string_view DAG_TX_BATCH_CAPABILITY = "dag_tx_batch_v1";
 
-#include "utils/exc_utils.h"
+#include "core/types.h"
 
 /**
  * Snapshot of what we know about a peer after handshake.

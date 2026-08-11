@@ -6,158 +6,356 @@
  * it under the terms of the GNU Lesser General Public License as published
  * by the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
 #include "network/websocket_service.h"
 
-WebSocketService::WebSocketService(QWebSocket     *ws,
-                                   ExtraChainNode *node,
-                                   QObject        *parent,
-                                   const bool      is_constant,
-                                   const bool      is_light)
-    : SocketService(node, parent) {
-    is_constant_ = is_constant;
+#include <utility>
 
-    if (is_light) {
-        mode_ = SocketMode::Light;
-    }
+#include <boost/asio/connect.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/beast/core/buffers_to_string.hpp>
+#include <boost/beast/core/flat_buffer.hpp>
+#include <boost/beast/core/stream_traits.hpp>
+#include <boost/beast/websocket/error.hpp>
+#include <boost/beast/websocket/stream_base.hpp>
 
-    if (ws == nullptr) {
-        m_ws = new QWebSocket("ExtraChain");
-        eLog("[WS] Create new ws");
-    } else {
-        // from server
-        timestamp_  = Utils::current_date_ms();
-        m_ws        = ws;
-        this->ip_   = m_ws->peerAddress().toString().replace("::ffff:", "");
-        this->port_ = m_ws->peerPort();
-        eLog("[WS] New service: {}", ip_);
-        connections();
-        send_public_key();
-    }
+#include "managers/extrachain_node.h"
+#include "network/network_manager.h"
+#include "utils/exc_logs.h"
+#include "utils/exc_utils_base64.h"
 
-    connect(this,
-            &WebSocketService::sendMessageInternal,
-            this,
-            &WebSocketService::sendMessageInternalSlot,
-            Qt::QueuedConnection);
-    connect(this,
-            &WebSocketService::needToTryDequeue,
-            this,
-            &WebSocketService::tryDequeueMessage,
-            Qt::QueuedConnection);
+namespace asio      = boost::asio;
+namespace beast     = boost::beast;
+namespace websocket = beast::websocket;
 
-    connect(this,
-            &WebSocketService::error,
-            [this](Network::SocketServiceError code,
-                   const QString              &errorData,
-                   std::string                 ip,
-                   std::string                 identifier) {
-                if (m_ws == nullptr) {
-                    return;
-                }
+namespace {
+    constexpr std::size_t MAX_INBOUND_MESSAGE_BYTES = 72 * 1024 * 1024;
+}
 
-                if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
-                    closeSocket();
-                    return;
-                }
-
-                auto code_string = QByteArray::number(std::to_underlying(code));
-                auto encrypted   = prepareSendMessage("Error " + code_string);
-                if (encrypted.isEmpty()) {
-                    eLog("[WS] {} Error not sended (to ip: {}, id: {}): {}", direction_, ip_, identifier_, code);
-                    emit closeSocketSig();
-                    return;
-                }
-                auto encoded = Utils::to_base64(encrypted.toStdString());
-                auto written = m_ws->sendTextMessage(QString::fromStdString(encoded));
-                m_ws->flush();
-                // eLog("[WS] Error sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
-                emit closeSocketSig();
-            });
-
-    connect(m_ws, &QWebSocket::pong, this, [this](quint64) {
-        // eLog("[WS] Pong {}", ip());
-        m_failedPongs = 0;
-    });
-
-    if (!m_pingTimer) {
-        m_pingTimer = new QTimer(this);
-        connect(m_pingTimer, &QTimer::timeout, this, [this]() {
-            if (m_ws && m_ws->isValid() && activated_) {
-                m_ws->ping();
-                // eLog("[WS] Ping {}", ip());
-                m_failedPongs++;
-
-                if (m_failedPongs > 3) {
-                    eLog("[WS] {} Connection lost (no pong) from {}", direction_, ip_);
-                    emit error(Network::SocketServiceError::PongLost,
-                               "No pong response",
-                               ip_.toStdString(),
-                               identifier_.toStdString(),
-                               direction_);
-                }
-            }
-        });
-        // m_pingTimer->start(3000);
-    }
+WebSocketService::WebSocketService(asio::any_io_executor executor, ExtraChainNode* node)
+    : SocketService(node)
+    , strand_(asio::make_strand(std::move(executor)))
+    , queue_signal_(strand_) {
 }
 
 WebSocketService::~WebSocketService() {
-    closeSocket();
-    eLog("[WS] {} I'm socket, i'm death: {}", direction_, ip_);
+    eLog("[WS] Destroyed: {}", ip_);
 }
 
-QWebSocket *WebSocketService::socket() const {
-    return m_ws;
+asio::awaitable<WebSocketService::ConnectResult> WebSocketService::connect(asio::any_io_executor executor,
+                                                                           std::string           host,
+                                                                           std::uint16_t         port,
+                                                                           ExtraChainNode*       node,
+                                                                           bool                  is_constant,
+                                                                           bool                  is_light) {
+    auto service = std::shared_ptr<WebSocketService>(new WebSocketService(std::move(executor), node));
+    service->set_constant(is_constant);
+    service->mode_      = is_light ? SocketMode::Light : SocketMode::Full;
+    service->ip_        = host;
+    service->timestamp_ = Utils::current_date_ms();
+
+    auto opened =
+        co_await asio::co_spawn(service->strand_, service->open(std::move(host), port), asio::use_awaitable);
+    if (!opened.has_value()) {
+        co_return std::unexpected(std::move(opened.error()));
+    }
+    co_return service;
 }
 
-bool WebSocketService::is_active() const {
-    return activated_ && m_ws->isValid();
+WebSocketService::Service WebSocketService::from_accepted(asio::any_io_executor executor,
+                                                          Tcp::socket           socket,
+                                                          ExtraChainNode*       node) {
+    auto service        = std::shared_ptr<WebSocketService>(new WebSocketService(std::move(executor), node));
+    service->timestamp_ = Utils::current_date_ms();
+
+    boost::system::error_code error;
+    const auto                endpoint = socket.remote_endpoint(error);
+    if (!error) {
+        service->ip_   = endpoint.address().to_string();
+        service->port_ = endpoint.port();
+    }
+    service->websocket_ = std::make_unique<WebSocket>(std::move(socket));
+    return service;
 }
 
-void WebSocketService::open(const QString &ip, quint16 port) {
-    if (m_ws->isValid()) {
-        eCritical("[WS] Already opened");
-        closeSocket();
-    } else {
-        timestamp_ = Utils::current_date_ms();
+asio::awaitable<std::expected<void, std::string>> WebSocketService::open(std::string host, std::uint16_t port) {
+    try {
+        Tcp::resolver             resolver(strand_);
+        boost::system::error_code error;
+        const auto                endpoints = co_await resolver.async_resolve(host,
+                                                               std::to_string(port),
+                                                               asio::redirect_error(asio::use_awaitable, error));
+        if (error) {
+            co_return std::unexpected("resolve: " + error.message());
+        }
 
-        auto host = ip.contains(':') ? QString("[%1]").arg(ip) : ip;
-        auto url  = QUrl(QString("ws://%1:%2").arg(host).arg(port));
-        eLog("[WS] Open {}", url);
-        connections();
-        m_ws->open(url);
-        ip_ = ip;
+        websocket_   = std::make_unique<WebSocket>(strand_);
+        auto& stream = beast::get_lowest_layer(*websocket_);
+        stream.expires_after(operation_timeout_);
+        const auto endpoint =
+            co_await stream.async_connect(endpoints, asio::redirect_error(asio::use_awaitable, error));
+        if (error) {
+            co_return std::unexpected("connect: " + error.message());
+        }
 
-        auto *timeout = new QTimer(this);
-        timeout->setSingleShot(true);
+        port_ = endpoint.port();
+        websocket_->set_option(websocket::stream_base::timeout::suggested(beast::role_type::client));
+        websocket_->read_message_max(MAX_INBOUND_MESSAGE_BYTES);
+        stream.expires_never();
+        co_await websocket_->async_handshake(host, "/", asio::redirect_error(asio::use_awaitable, error));
+        if (error) {
+            co_return std::unexpected("websocket handshake: " + error.message());
+        }
+    } catch (const std::exception& exception) {
+        co_return std::unexpected(exception.what());
+    }
 
-        connect(timeout, &QTimer::timeout, this, [this, timeout]() {
-            eLog("[WS] Connection timeout: {}", ip_);
-            timeout->deleteLater();
-            closeSocket();
-        });
+    co_return std::expected<void, std::string> {};
+}
 
-        connect(m_ws, &QWebSocket::connected, timeout, [timeout]() {
-            timeout->stop();
-            timeout->deleteLater();
-        });
+asio::awaitable<void> WebSocketService::run(bool accepted_socket) {
+    const auto self = std::static_pointer_cast<WebSocketService>(shared_from_this());
+    co_await asio::co_spawn(
+        strand_,
+        [self, accepted_socket]() -> asio::awaitable<void> {
+            co_await self->run_on_strand(accepted_socket);
+        },
+        asio::use_awaitable);
+}
 
-        timeout->start(10000);
+asio::awaitable<void> WebSocketService::run_on_strand(bool accepted_socket) {
+    active_operations_.fetch_add(1, std::memory_order_acq_rel);
+    struct OperationGuard final {
+        WebSocketService* service;
+        ~OperationGuard() {
+            service->operation_finished();
+        }
+    } operation_guard { this };
+
+    if (!websocket_ || closed_.load(std::memory_order_acquire)) {
+        co_return;
+    }
+
+    running_.store(true, std::memory_order_release);
+    if (accepted_socket) {
+        websocket_->set_option(websocket::stream_base::timeout::suggested(beast::role_type::server));
+        websocket_->read_message_max(MAX_INBOUND_MESSAGE_BYTES);
+        boost::system::error_code error;
+        co_await websocket_->async_accept(asio::redirect_error(asio::use_awaitable, error));
+        if (error) {
+            report_error(Network::SocketServiceError::IncorrectHandshake, error.message());
+            co_return;
+        }
+    }
+
+    if (!co_await exchange_keys() || !co_await exchange_handshake()) {
+        close_connection();
+        co_return;
+    }
+
+    const auto self = std::static_pointer_cast<WebSocketService>(shared_from_this());
+    active_operations_.fetch_add(1, std::memory_order_acq_rel);
+    asio::co_spawn(
+        strand_,
+        [self]() -> asio::awaitable<void> {
+            struct OperationGuard final {
+                WebSocketService* service;
+                ~OperationGuard() {
+                    service->operation_finished();
+                }
+            } operation_guard { self.get() };
+            co_await self->write_loop();
+        },
+        asio::detached);
+    co_await read_loop();
+}
+
+asio::awaitable<bool> WebSocketService::exchange_keys() {
+    const auto encoded_key = Utils::to_base64(ByteArray(private_key_.public_key()).toString());
+    if (!co_await write_text(encoded_key)) {
+        report_error(Network::SocketServiceError::IncorrectPublicKey, "public key write failed");
+        co_return false;
+    }
+
+    const auto received = co_await read_text();
+    if (!received.has_value()) {
+        report_error(Network::SocketServiceError::IncorrectPublicKey, "public key read failed");
+        co_return false;
+    }
+    const auto decoded = Utils::from_base64(*received);
+    if (!decoded.has_value()) {
+        report_error(Network::SocketServiceError::IncorrectPublicKey, "invalid public key encoding");
+        co_return false;
+    }
+
+    public_key_          = KeyPublic(ByteArray(*decoded).toArray<crypto_sign_PUBLICKEYBYTES>());
+    public_key_received_ = true;
+    co_return true;
+}
+
+asio::awaitable<bool> WebSocketService::exchange_handshake() {
+    const auto encrypted = prepare_send_message(generate_first_message());
+    if (encrypted.empty() || !co_await write_text(Utils::to_base64(ByteArray(encrypted).toString()))) {
+        report_error(Network::SocketServiceError::IncorrectHandshake, "handshake write failed");
+        co_return false;
+    }
+
+    const auto received = co_await read_text();
+    if (!received.has_value()) {
+        report_error(Network::SocketServiceError::IncorrectFirstMessage, "handshake read failed");
+        co_return false;
+    }
+    const auto decoded = Utils::from_base64(*received);
+    if (!decoded.has_value()) {
+        report_error(Network::SocketServiceError::IncorrectFirstMessage, "invalid handshake encoding");
+        co_return false;
+    }
+    const auto decrypted = prepare_receive_message(ByteArray(*decoded).bytes());
+    if (decrypted.empty()) {
+        report_error(Network::SocketServiceError::IncorrectFirstMessage, "handshake decrypt failed");
+        co_return false;
+    }
+
+    const auto text = ByteArray(decrypted).toString();
+    if (text.starts_with("Error ")) {
+        co_return false;
+    }
+    const auto handshake = Json::deserialize<HandshakeMessage>(text);
+    if (!handshake.has_value()) {
+        report_error(Network::SocketServiceError::IncorrectFirstMessage, handshake.error());
+        co_return false;
+    }
+    co_return check_first_message(*handshake);
+}
+
+asio::awaitable<bool> WebSocketService::write_text(std::string_view text) {
+    if (!websocket_ || !websocket_->is_open()) {
+        co_return false;
+    }
+    websocket_->text(true);
+    boost::system::error_code error;
+    socket_pending_bytes_.fetch_add(static_cast<std::int64_t>(text.size()), std::memory_order_relaxed);
+    co_await websocket_->async_write(asio::buffer(text), asio::redirect_error(asio::use_awaitable, error));
+    socket_pending_bytes_.fetch_sub(static_cast<std::int64_t>(text.size()), std::memory_order_relaxed);
+    co_return !error;
+}
+
+asio::awaitable<std::optional<std::string>> WebSocketService::read_text() {
+    if (!websocket_ || !websocket_->is_open()) {
+        co_return std::nullopt;
+    }
+    beast::flat_buffer        buffer;
+    boost::system::error_code error;
+    co_await websocket_->async_read(buffer, asio::redirect_error(asio::use_awaitable, error));
+    if (error || !websocket_->got_text()) {
+        co_return std::nullopt;
+    }
+    co_return beast::buffers_to_string(buffer.data());
+}
+
+asio::awaitable<void> WebSocketService::read_loop() {
+    beast::flat_buffer buffer;
+    while (running_.load(std::memory_order_acquire) && websocket_ && websocket_->is_open()) {
+        boost::system::error_code error;
+        co_await websocket_->async_read(buffer, asio::redirect_error(asio::use_awaitable, error));
+        if (error) {
+            if (error != websocket::error::closed && error != asio::error::operation_aborted) {
+                report_error(Network::SocketServiceError::Unknown, error.message());
+            }
+            break;
+        }
+
+        if (websocket_->got_text()) {
+            eWarning("[WS] Unexpected text message after activation from {}", ip_);
+        } else {
+            const auto raw = beast::buffers_to_string(buffer.data());
+            process_binary(
+                std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(raw.data()), raw.size()));
+        }
+        buffer.consume(buffer.size());
+    }
+    close_connection();
+}
+
+asio::awaitable<void> WebSocketService::write_loop() {
+    if (write_running_.exchange(true, std::memory_order_acq_rel)) {
+        co_return;
+    }
+
+    while (running_.load(std::memory_order_acquire) && websocket_ && websocket_->is_open()) {
+        Data data;
+        {
+            std::scoped_lock lock(queue_mutex_);
+            if (!high_queue_.empty()) {
+                data = std::move(high_queue_.front());
+                high_queue_.pop();
+            } else if (!normal_queue_.empty()) {
+                data = std::move(normal_queue_.front());
+                normal_queue_.pop();
+            } else if (!low_queue_.empty()) {
+                data = std::move(low_queue_.front());
+                low_queue_.pop();
+            }
+            queued_bytes_.fetch_sub(static_cast<std::int64_t>(data.size()), std::memory_order_relaxed);
+        }
+
+        if (data.empty()) {
+            queue_signal_.expires_at(std::chrono::steady_clock::time_point::max());
+            boost::system::error_code ignored;
+            co_await queue_signal_.async_wait(asio::redirect_error(asio::use_awaitable, ignored));
+            continue;
+        }
+
+        auto encrypted = prepare_send_message(data);
+        if (encrypted.empty()) {
+            report_error(Network::SocketServiceError::CantSend, "message encryption failed");
+            break;
+        }
+
+        websocket_->binary(true);
+        boost::system::error_code error;
+        socket_pending_bytes_.fetch_add(static_cast<std::int64_t>(encrypted.size()), std::memory_order_relaxed);
+        co_await websocket_->async_write(asio::buffer(encrypted),
+                                         asio::redirect_error(asio::use_awaitable, error));
+        socket_pending_bytes_.fetch_sub(static_cast<std::int64_t>(encrypted.size()), std::memory_order_relaxed);
+        if (error) {
+            report_error(Network::SocketServiceError::CantSend, error.message());
+            break;
+        }
+    }
+
+    write_running_.store(false, std::memory_order_release);
+    close_connection();
+}
+
+void WebSocketService::process_binary(std::span<const std::uint8_t> message) {
+    const auto decrypted = prepare_receive_message(message);
+    if (decrypted.empty()) {
+        report_error(Network::SocketServiceError::EmptyMessage, "message decrypt failed");
+        return;
+    }
+    if (!node_enabled) {
+        return;
+    }
+    if (on_message) {
+        on_message(shared_from_this(), ByteArray(decrypted).toString(), ip_, identifier_);
     }
 }
 
-QString WebSocketService::protocol_string() const {
+bool WebSocketService::is_active() const {
+    // The Beast stream is confined to strand_. Do not read its state from Qt or
+    // worker threads. The lifecycle atomics are updated on every open/close path.
+    return activated_.load(std::memory_order_acquire) && running_.load(std::memory_order_acquire)
+           && !closed_.load(std::memory_order_acquire);
+}
+
+std::string WebSocketService::protocol_string() const {
     return "WebSocket";
 }
 
@@ -165,457 +363,119 @@ Network::Protocol WebSocketService::protocol() const {
     return Network::Protocol::WebSocket;
 }
 
-void WebSocketService::closeSocket() {
-    activated_            = false;
-    waiting_buffer_space_ = false;
-    closed_               = true;
-
-    {
-        QMutexLocker           locker(&queue_mutex_);
-        std::queue<QByteArray> empty1, empty2, empty3, empty4;
-        high_queue_.swap(empty1);
-        normal_queue_.swap(empty2);
-        low_queue_.swap(empty3);
-        m_messageCache.swap(empty4);
-        queued_bytes_.store(0, std::memory_order_relaxed);
-        locker.unlock();
-    }
-
-    if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
-        eLog("[WS] {} Close socket", direction_);
-        m_ws->close();
-    }
-
-    if (m_ws != nullptr) {
-        // eLog("[WS] Delete socket pointer");
-        m_ws->disconnect();
-        m_ws->deleteLater();
-        m_ws = nullptr;
-    }
-
-    if (!is_disconnected_) {
-        // eLog("[WS] Disconnect socket");
-        is_disconnected_ = true;
-        emit disconnected();
-        // m_ws->disconnect();
-    }
-
-    if (m_pingTimer != nullptr) {
-        m_pingTimer->stop();
-        m_pingTimer->deleteLater();
-        m_pingTimer = nullptr;
-    }
+std::uint16_t WebSocketService::port() const {
+    return port_;
 }
 
-bool WebSocketService::operator==(const WebSocketService &service) const {
-    return m_ws == service.m_ws;
+std::uint16_t WebSocketService::server_port() const {
+    return node_->network()->ws_port;
 }
 
-// for first message
-void WebSocketService::onTextMessage(const QString &message) {
-    m_failedPongs = 0;
-
-    if (message.isEmpty())
+void WebSocketService::send_message(std::span<const std::uint8_t> data, Priority priority) {
+    if (data.empty() || !is_active() || closed_.load(std::memory_order_acquire)) {
         return;
+    }
 
-    if (!is_pub_) {
-        auto pub_result = Utils::from_base64(message.toStdString());
-        if (!pub_result.has_value()) {
-            emit error(Network::SocketServiceError::IncorrectPublicKey,
-                       "",
-                       ip_.toStdString(),
-                       identifier_.toStdString(),
-                       direction_);
+    auto       payload = Data(data.begin(), data.end());
+    const auto self    = std::static_pointer_cast<WebSocketService>(shared_from_this());
+    asio::post(strand_, [self, payload = std::move(payload), priority]() mutable {
+        if (!self->running_.load(std::memory_order_acquire)) {
             return;
         }
-
-        pub_    = KeyPublic(ByteArray(pub_result.value()).toArray<crypto_sign_PUBLICKEYBYTES>());
-        is_pub_ = true;
-
-        handshake();
-        return;
-    }
-
-    auto encoded_result = Utils::from_base64(message.toStdString());
-    if (!encoded_result.has_value()) {
-        emit error(Network::SocketServiceError::IncorrectFirstMessage,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString(),
-                   direction_);
-        return;
-    }
-
-    auto decoded = prepareReceiveMessage(QByteArray::fromStdString(encoded_result.value()));
-    if (decoded.isEmpty()) {
-        eLog("[WS] {} Failed to decode message", direction_);
-        emit error(Network::SocketServiceError::IncorrectPublicKey,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString(),
-                   direction_);
-        return;
-    }
-
-    if (decoded.contains("Error ")) {
-        auto error = Network::SocketServiceError(decoded.mid(6).toInt());
-        eLog("[WS] {} Error received (from ip: {}, id: {}): {}", direction_, ip_, identifier_, error);
-        closeSocket();
-        return;
-    }
-
-    auto handshake_result = Json::deserialize<HandshakeMessage>(decoded.toStdString());
-    if (!handshake_result.has_value()) {
-        eLog("[WS] {} Failed to parse handshake message: {}", direction_, handshake_result.error());
-        emit error(Network::SocketServiceError::IncorrectFirstMessage,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString(),
-                   direction_);
-        return;
-    }
-
-    bool checked = check_first_message(handshake_result.value());
-    if (checked) {
-        processCachedMessages();
-    }
-}
-
-void WebSocketService::onBinaryMessage(const QByteArray &message) {
-    m_failedPongs = 0;
-
-    if (!activated_) {
-        QMutexLocker locker(&queue_mutex_);
-        m_messageCache.push(message);
-        locker.unlock();
-
-        eLog("[WS] Message cached until activation. Cache size: {}", m_messageCache.size());
-        return;
-    }
-    // eFatal("[WS] Binary: not activated");
-
-    processMessage(message);
-}
-
-void WebSocketService::processMessage(const QByteArray &message) {
-    auto mess = prepareReceiveMessage(message);
-
-    if (!node_enabled) {
-        // emit error(Network::SocketServiceError::PhysicalKill, "", ip_.toStdString(), identifier_.toStdString());
-        return;
-    }
-
-    if (!mess.isEmpty()) {
-        node->network()->message_received(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
-    } else {
-        eCritical("[WS] Message is empty after prepare");
-        emit error(Network::SocketServiceError::EmptyMessage,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString(),
-                   direction_);
-    }
-}
-
-void WebSocketService::send_message(const QByteArray &data, Priority priority) {
-    if (!is_active() || closed_) {
-        eLog("[WS] {} Try to send without activation {}", direction_, data.left(35));
-        return;
-    }
-
-    if (data.isEmpty()) {
-        eCritical("[WS] Error send size");
-        emit error(Network::SocketServiceError::IncorrectMessage,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString(),
-                   direction_);
-        return;
-    }
-
-    {
-        QMutexLocker locker(&queue_mutex_);
-        switch (priority) {
-        case Priority::High:
-            high_queue_.push(data);
-            break;
-        case Priority::Normal:
-            normal_queue_.push(data);
-            break;
-        case Priority::Low:
-            low_queue_.push(data);
-            break;
+        const auto size = payload.size();
+        {
+            std::scoped_lock lock(self->queue_mutex_);
+            switch (priority) {
+            case Priority::High:
+                self->high_queue_.push(std::move(payload));
+                break;
+            case Priority::Normal:
+                self->normal_queue_.push(std::move(payload));
+                break;
+            case Priority::Low:
+                self->low_queue_.push(std::move(payload));
+                break;
+            }
+            self->queued_bytes_.fetch_add(static_cast<std::int64_t>(size), std::memory_order_relaxed);
         }
-        queued_bytes_.fetch_add(data.size(), std::memory_order_relaxed);
-        locker.unlock();
-    }
-
-    // Always ask for a drain, even while waiting for buffer space.
-    //
-    // Skipping this when `waiting_buffer_space_` is set left the queue with no way to
-    // restart. The flag is cleared only inside tryDequeueMessage, and the only other
-    // thing that calls it in that state is QWebSocket::bytesWritten — which fires only
-    // while the socket is writing. Once its buffer drained to empty there was nothing
-    // left to write, no bytesWritten, and therefore no wakeup: a lost-wakeup deadlock
-    // that survives forever on an idle, perfectly healthy connection.
-    //
-    // Measured on a six-node stand: the internal queue sat at 265KB / 259 messages
-    // while the OS send queue for the same socket was 0 bytes — the network was idle
-    // and the data simply never moved. Every node then hit LIVE_DAG_QUEUE_MAX_MESSAGES
-    // and dropped its own new transactions, which are lost outright: a locally created
-    // transaction is not written to the chain when sent, it waits in
-    // `sended_transactions_` for a peer's approval that can now never arrive.
-    //
-    // Emitting unconditionally is cheap and self-correcting: if there really is no
-    // buffer space, tryDequeueMessage re-arms the flag and returns immediately.
-    emit needToTryDequeue();
-}
-
-bool WebSocketService::canSendMore() const {
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
-        return false;
-    }
-
-    if (m_ws->error() != QAbstractSocket::UnknownSocketError) {
-        return false;
-    }
-
-    return m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
-}
-
-void WebSocketService::tryDequeueMessage() {
-    if (closed_) {
-        return;
-    }
-
-    if (!canSendMore()) {
-        waiting_buffer_space_ = true;
-        return;
-    }
-
-    waiting_buffer_space_ = false;
-    QMutexLocker locker(&queue_mutex_);
-
-    constexpr std::size_t   DrainMessageLimit = 32;
-    constexpr qsizetype     DrainByteLimit    = 128 * 1024;
-    std::vector<QByteArray> messages;
-    qsizetype               drained_bytes = 0;
-    while (messages.size() < DrainMessageLimit && drained_bytes < DrainByteLimit) {
-        QByteArray data;
-        if (!high_queue_.empty()) {
-            data = std::move(high_queue_.front());
-            high_queue_.pop();
-        } else if (!normal_queue_.empty()) {
-            data = std::move(normal_queue_.front());
-            normal_queue_.pop();
-        } else if (!low_queue_.empty()) {
-            data = std::move(low_queue_.front());
-            low_queue_.pop();
-        } else {
-            break;
-        }
-        drained_bytes += data.size();
-        messages.push_back(std::move(data));
-    }
-    const bool has_more = !high_queue_.empty() || !normal_queue_.empty() || !low_queue_.empty();
-    queued_bytes_.fetch_sub(drained_bytes, std::memory_order_relaxed);
-
-    locker.unlock();
-
-    for (const auto &message : messages)
-        emit sendMessageInternal(message);
-    if (has_more)
-        emit needToTryDequeue();
-}
-
-void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
-    if (data.isEmpty() || closed_) {
-        return;
-    }
-
-    // Each of these used to return silently. A message dropped here is gone with no
-    // trace anywhere: it left the send queue, so the sender counts it as sent, and it
-    // never reached the wire, so no peer can answer. For a locally created transaction
-    // that is a permanent loss — it waits in sended_transactions_ for an approval that
-    // cannot come.
-    auto prepared = prepareSendMessage(data);
-    if (prepared.isEmpty()) {
-        eWarning("[WS] {} Dropping message to {}: could not prepare ({} bytes in)",
-                 direction_,
-                 ip_.toStdString(),
-                 data.size());
-        return;
-    }
-
-    if (m_ws == nullptr) {
-        eWarning("[WS] {} Dropping message to {}: socket is gone", direction_, ip_.toStdString());
-        return;
-    }
-    if (!m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !activated_) {
-        eWarning("[WS] {} Dropping message to {}: valid={}, state={}, activated={}",
-                 direction_,
-                 ip_.toStdString(),
-                 m_ws->isValid(),
-                 static_cast<int>(m_ws->state()),
-                 activated_);
-        return;
-    }
-
-    qint64 written = m_ws->sendBinaryMessage(prepared);
-    if (written < 0) {
-        eCritical("[WS] Failed to send message");
-        emit error(Network::SocketServiceError::CantSend,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString(),
-                   direction_);
-        return;
-    }
-
-    // Keep the queue moving on its own. tryDequeueMessage hands out at most 32 messages
-    // (or 128KB) per pass, so a backlog needs repeated passes; without this the next one
-    // depends on either a new send_message or a bytesWritten signal, and neither is
-    // guaranteed once the peer stops talking. A drain that stops with data still queued
-    // is what let the backlog build until every new transaction was dropped.
-    if (queued_bytes_.load(std::memory_order_relaxed) > 0) {
-        emit needToTryDequeue();
-    }
-}
-
-void WebSocketService::flush() {
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
-        return;
-    }
-    if (!this->activated_ || m_ws->bytesToWrite() == 0) {
-        return;
-    }
-
-    m_ws->flush();
-}
-
-void WebSocketService::onConnected() {
-    if (!m_ws) {
-        eLog("[WS] onConnected called but m_ws is null");
-        return;
-    }
-    // from local connect
-    this->ip_   = m_ws->peerAddress().toString().replace("::ffff:", "");
-    this->port_ = m_ws->peerPort();
-    send_public_key();
-    eLog("[WS] {} New service: {} {}", direction_, ip_, port());
-}
-
-void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
-    eLog("[WS] {} Socket error: {}, {}", direction_, Utils::enum_value_name(error), ip_);
-    closeSocket();
-}
-
-void WebSocketService::connections() {
-    connect(m_ws, &QWebSocket::connected, this, &WebSocketService::onConnected);
-    connect(m_ws, &QWebSocket::disconnected, this, &WebSocketService::closeSocket);
-    connect(this, &WebSocketService::closeSocketSig, this, &WebSocketService::closeSocket);
-    connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage, Qt::QueuedConnection);
-    connect(m_ws,
-            &QWebSocket::binaryMessageReceived,
-            this,
-            &WebSocketService::onBinaryMessage,
-            Qt::QueuedConnection);
-    // connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
-    connect(this, &WebSocketService::close, [this](Network::SocketServiceError code) {
-        emit error(code, "", ip_.toStdString(), identifier_.toStdString(), direction_);
-    }); // slot
-    connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
-    connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
-        if (waiting_buffer_space_) {
-            emit needToTryDequeue();
-        }
+        self->queue_signal_.cancel();
     });
 }
 
-void WebSocketService::send_public_key() {
-    auto pub_key_str = Utils::to_base64(ByteArray(priv_.public_key()).toString());
-
-    if (m_ws == nullptr) {
+void WebSocketService::flush() {
+    if (!is_active()) {
         return;
     }
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
-        closeSocket();
+    const auto self = std::static_pointer_cast<WebSocketService>(shared_from_this());
+    asio::post(strand_, [self] {
+        self->queue_signal_.cancel();
+    });
+}
+
+std::int64_t WebSocketService::pending_bytes() const noexcept {
+    return queued_bytes_.load(std::memory_order_relaxed) + socket_pending_bytes_.load(std::memory_order_relaxed);
+}
+
+void WebSocketService::close_connection() {
+    if (closed_.exchange(true, std::memory_order_acq_rel)) {
         return;
     }
 
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
-        closeSocket();
-        return;
+    running_.store(false, std::memory_order_release);
+    activated_.store(false, std::memory_order_release);
+    {
+        std::scoped_lock lock(queue_mutex_);
+        std::queue<Data> empty;
+        high_queue_.swap(empty);
+        normal_queue_.swap(empty);
+        low_queue_.swap(empty);
+        queued_bytes_.store(0, std::memory_order_relaxed);
     }
 
-    auto written = m_ws->sendTextMessage(QString::fromStdString(pub_key_str));
-    if (written < 0) {
-        eCritical("[WS] Handshake send failed");
-        emit error(Network::SocketServiceError::IncorrectHandshake,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString(),
-                   direction_);
-        return;
+    const auto self = std::static_pointer_cast<WebSocketService>(shared_from_this());
+    asio::dispatch(strand_, [self] {
+        self->finish_close();
+    });
+    SocketService::close_connection();
+}
+
+bool WebSocketService::wait_closed(std::chrono::milliseconds timeout) {
+    std::unique_lock lock(close_mutex_);
+    return close_condition_.wait_for(lock, timeout, [this] {
+        return transport_closed_.load(std::memory_order_acquire);
+    });
+}
+
+void WebSocketService::finish_close() {
+    queue_signal_.cancel();
+    if (websocket_) {
+        boost::system::error_code ignored;
+        beast::get_lowest_layer(*websocket_).cancel();
+        beast::get_lowest_layer(*websocket_).socket().shutdown(Tcp::socket::shutdown_both, ignored);
+        beast::get_lowest_layer(*websocket_).socket().close(ignored);
+    }
+    if (active_operations_.load(std::memory_order_acquire) == 0) {
+        websocket_.reset();
+        transport_closed_.store(true, std::memory_order_release);
+        close_condition_.notify_all();
     }
 }
 
-void WebSocketService::handshake() {
-    auto first_message = generate_first_message();
-    auto encrypted     = prepareSendMessage(first_message);
-    if (encrypted.isEmpty()) {
-        emit error(Network::SocketServiceError::IncorrectHandshake,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString(),
-                   direction_);
-        return;
-    }
-    auto encoded_json = Utils::to_base64(encrypted.toStdString());
-
-    if (m_ws == nullptr) {
+void WebSocketService::operation_finished() {
+    if (active_operations_.fetch_sub(1, std::memory_order_acq_rel) != 1) {
         return;
     }
 
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
-        closeSocket();
-        return;
-    }
-
-    auto written = m_ws->sendTextMessage(QString::fromStdString(encoded_json));
-    if (written < 0) {
-        eCritical("[WS] Handshake send failed");
-        emit error(Network::SocketServiceError::IncorrectHandshake,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString(),
-                   direction_);
-        return;
-    }
+    // All composed Beast operations have returned. The stream must be
+    // destroyed while its io_context is still alive.
+    websocket_.reset();
+    transport_closed_.store(true, std::memory_order_release);
+    close_condition_.notify_all();
 }
 
-quint16 WebSocketService::port() const {
-    if (m_ws == nullptr) {
-        return 0;
+void WebSocketService::report_error(Network::SocketServiceError code, std::string detail) {
+    if (on_error) {
+        on_error(shared_from_this(), code, detail, ip_, identifier_, direction_);
     }
-    if (m_ws->peerPort() != node->network()->ws_port)
-        return m_ws->peerPort();
-    else
-        return m_ws->localPort();
-}
-
-quint16 WebSocketService::server_port() const {
-    return node->network()->ws_port;
-}
-
-void WebSocketService::processCachedMessages() {
-    while (!m_messageCache.empty()) {
-        eLog("-------------------------------- processCachedMessages");
-        auto message = m_messageCache.front();
-        m_messageCache.pop();
-        processMessage(message);
-    }
-
-    std::queue<QByteArray> empty;
-    m_messageCache.swap(empty);
+    close_connection();
 }

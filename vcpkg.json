@@ -1,0 +1,22 @@
+{
+  "name": "extrachain-core",
+  "version-string": "0.26.0",
+  "dependencies": [
+    "blake3",
+    "boost-asio",
+    "boost-beast",
+    "boost-describe",
+    "boost-json",
+    "boost-mp11",
+    "boost-signals2",
+    "boost-system",
+    "boost-thread",
+    "fmt",
+    "hash-library",
+    "libsodium",
+    "magic-enum",
+    "msgpack",
+    "sqlite3",
+    "zstd"
+  ]
+}
