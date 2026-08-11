@@ -80,6 +80,15 @@ class SyncTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void transactionAdmissionClosesAtCacheBoundary() {
+        QVERIFY(transaction_section_is_open(SectionId(14), SectionId(0)));
+        QVERIFY(!transaction_section_is_open(SectionId(15), SectionId(0)));
+        QVERIFY(!transaction_section_is_open(SectionId(30), SectionId(15)));
+        QVERIFY(transaction_section_is_open(SectionId(30), SectionId(16)));
+        QVERIFY(transaction_section_is_open(SectionId(30), SectionId(45)));
+        QVERIFY(!transaction_section_is_open(SectionId(30), SectionId(46)));
+    }
+
     void controlHashUsesOnlyClosedIntervals() {
         QCOMPARE(control_interval_end(SectionId(0)), SectionId(0));
         QCOMPARE(control_interval_end(SectionId(1)), SectionId(20));

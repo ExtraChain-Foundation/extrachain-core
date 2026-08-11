@@ -407,7 +407,10 @@ public slots:
     void dagTimerStarting(int ms);
     void dagTimerStoping();
     void dagTimerTick();
+    void dagWatchdogTick();
+    void dagSyncCheck();
 
     friend class ExtraChainNodeWrapper;
     friend class NetworkManager;
+    friend class Dag;
 };

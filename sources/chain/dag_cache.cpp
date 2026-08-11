@@ -497,6 +497,8 @@ void DagCache::invalidate_live_balances() {
 }
 
 CacheResult DagCache::check_and_update_cache(const SectionId& current_section) {
+    std::lock_guard update_lock(update_mutex_);
+
     // Calculate safe section ID based on lag
     // We only want to cache sections that are at least CACHE_LAG_SECTIONS behind the current section
     // BigNumber cache_boundary = (current_section / 20) * 20;
@@ -639,6 +641,22 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
             // eLog("[Dag] Send {}", hash_interval);
             node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
             // });
+        }
+    }
+
+    // Cache data and controls use the same closed boundary. A node can stop after
+    // committing the cache and before writing its derived control. A later cache
+    // pass then reports "no update" and used to leave that control absent forever.
+    // Repair only the cached boundary. Do not call start_control() here: its broad
+    // search is not safe to run beside active admission and it repeats valid work.
+    if (dag->mode() == DagMode::Full) {
+        const auto cache_tip = section();
+        if (cache_tip >= SectionId(0) && !dag->read_control(cache_tip).has_value()) {
+            const auto start = cache_tip == SectionId(0) ? SectionId(0) : cache_tip - CONTROL_INTERVAL_DIFF;
+            const auto hash  = dag->generate_hash_from_section(start, Force::Active, Force::None);
+            if (!hash.has_value() || !dag->read_control(cache_tip).has_value()) {
+                eWarning("[DagCache] Control repair deferred at cached section {}", cache_tip);
+            }
         }
     }
 }

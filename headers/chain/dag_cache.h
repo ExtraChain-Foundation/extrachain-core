@@ -234,6 +234,7 @@ private:
     bool                         db_initialized_           = false; // Whether DB is initialized
     bool                         contract_catalog_scanned_ = false;
     std::mutex                   mutex_;
+    std::mutex                   update_mutex_;
     std::mutex                   contract_catalog_mutex_;
     std::mutex                   live_balance_mutex_;
     Balances                     live_balances_;

@@ -63,6 +63,16 @@ static constexpr std::size_t   PACK_HOT_CACHE_LIMIT     = Pack::SECTIONS_PER_PAC
 static constexpr std::size_t   PACK_SYNC_MAX_PACKS      = 100000;
 static constexpr std::uint64_t PACK_SYNC_MAX_PACK_BYTES = 512ULL * 1024ULL * 1024ULL;
 
+static inline bool transaction_section_is_open(const SectionId &frontier, const SectionId &section) {
+    if (section > frontier) {
+        return section - frontier <= SectionId(CACHE_LAG_SECTIONS);
+    }
+    if (frontier < SectionId(CACHE_LAG_SECTIONS)) {
+        return true;
+    }
+    return section > frontier - SectionId(CACHE_LAG_SECTIONS);
+}
+
 // find_last_control() walks backwards from the current tip; these caps stop the walk
 // once enough evidence accumulates that no control is ever coming:
 //   - CONTROL_SEARCH_SKIP_LIMIT: sections scanned without finding a control. 37
@@ -805,9 +815,20 @@ private:
     std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;
     std::recursive_mutex                           sync_last_info_mutex_;
 
-    // Periodic "am I behind?" check that survives a stalled Qt event loop. See the
-    // rationale where it is started, in Dag::start().
+    struct PendingSyncResponse {
+        std::string message_id;
+        SectionId  from;
+        SectionId  to;
+    };
+    mutable std::mutex                 sync_response_request_mutex_;
+    std::optional<PendingSyncResponse> pending_section_response_;
+    std::optional<PendingSyncResponse> pending_file_response_;
+
+    // Periodic "am I behind?" trigger. The worker only schedules work; all DAG and
+    // Qt state is read and changed on the node thread.
     std::jthread watchdog_;
+    std::atomic_bool watchdog_tick_pending_ = false;
+    std::atomic_bool sync_check_pending_     = false;
     // Height seen by the previous watchdog round, and how many rounds it has not moved
     // while a sync was supposedly running. Used to tell a slow sync from a stuck one.
     SectionId    last_watchdog_section_ = SectionId(-1);
@@ -851,6 +872,15 @@ private:
 
     //
     void add_to_cached_tx(const Transaction &transaction);
+    void schedule_watchdog_tick();
+    void watchdog_tick();
+    void schedule_sync_check();
+    void sync_check();
+    void clear_pending_sync_responses();
+    std::optional<std::pair<SectionId, SectionId>> pending_sync_range(const Responder &responder,
+                                                                      const SectionId &to,
+                                                                      bool file_response) const;
+    void consume_pending_sync_response(const Responder &responder, bool file_response);
 
     std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
 

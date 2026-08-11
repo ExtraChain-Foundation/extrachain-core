@@ -289,52 +289,7 @@ void Dag::start() {
             if (token.stop_requested() || !started_.load()) {
                 return;
             }
-            // Report the Qt timer's health from a thread that cannot be silenced with
-            // it: on a six-node stand three nodes stopped printing the 10s status line
-            // while their event loops were provably alive (this watchdog kept running,
-            // inbound messages kept arriving). Knowing whether the timer is merely
-            // inactive or is active-but-not-delivering decides where to look next.
-            if (auto *timer = node->info_timer(); timer != nullptr) {
-                eLog("[Dag] Watchdog: info timer active={}, interval={}, thread_match={}",
-                     timer->isActive(),
-                     timer->interval(),
-                     timer->thread() == node->thread());
-            }
-
-            if (mode_ != DagMode::Full) {
-                continue;
-            }
-
-            if (status_ == DagStatus::Ready) {
-                stalled_sync_rounds_ = 0;
-                last_watchdog_section_ = current_section_;
-                this->start_check();
-                continue;
-            }
-
-            // Not Ready means a sync is in progress — normally leave it alone. But a
-            // sync that stops making progress is indistinguishable from a healthy one
-            // from the outside, and nothing else ever restarts it: measured a node that
-            // spent 510 status ticks in Sync against 37 in Ready, frozen at section 1942
-            // while the network reached 5157, because start_check refused to run in that
-            // state and no other trigger exists.
-            //
-            // So watch the height instead of trusting the status. Two rounds without a
-            // single new section (30s) is not a slow fetch, it is a stuck one.
-            if (current_section_ != last_watchdog_section_) {
-                last_watchdog_section_ = current_section_;
-                stalled_sync_rounds_   = 0;
-                continue;
-            }
-
-            if (++stalled_sync_rounds_ >= 2) {
-                eWarning("[Dag] Sync stalled at section {} for {} rounds — restarting the check",
-                         current_section_.to_string(),
-                         stalled_sync_rounds_);
-                stalled_sync_rounds_ = 0;
-                this->set_status(DagStatus::Ready);
-                this->start_check();
-            }
+            schedule_watchdog_tick();
         }
     });
 #endif
@@ -354,6 +309,8 @@ void Dag::stop() {
         watchdog_.request_stop();
         watchdog_.join();
     }
+    watchdog_tick_pending_.store(false);
+    sync_check_pending_.store(false);
 
     if (!was_started) {
         return;
@@ -378,6 +335,101 @@ void Dag::stop() {
     emit node->dagTimerStop();
 
     eLog("[Dag] stop");
+}
+
+void Dag::schedule_watchdog_tick() {
+    if (watchdog_tick_pending_.exchange(true)) {
+        return;
+    }
+    if (!QMetaObject::invokeMethod(node, &ExtraChainNode::dagWatchdogTick, Qt::QueuedConnection)) {
+        watchdog_tick_pending_.store(false);
+    }
+}
+
+void Dag::watchdog_tick() {
+    watchdog_tick_pending_.store(false);
+    if (!started_.load()) {
+        return;
+    }
+
+    if (auto *timer = node->info_timer(); timer != nullptr) {
+        eLog("[Dag] Watchdog: info timer active={}, interval={}, thread_match={}",
+             timer->isActive(),
+             timer->interval(),
+             timer->thread() == node->thread());
+    }
+
+    if (mode_ != DagMode::Full) {
+        return;
+    }
+    if (status_ == DagStatus::Ready) {
+        stalled_sync_rounds_ = 0;
+        if (current_section_ != last_watchdog_section_) {
+            last_watchdog_section_ = current_section_;
+            return;
+        }
+        start_check();
+        return;
+    }
+    if (status_ != DagStatus::Sync && status_ != DagStatus::Maybe && status_ != DagStatus::Timered) {
+        stalled_sync_rounds_ = 0;
+        return;
+    }
+    if (current_section_ != last_watchdog_section_) {
+        last_watchdog_section_ = current_section_;
+        stalled_sync_rounds_   = 0;
+        return;
+    }
+    if (++stalled_sync_rounds_ < 2) {
+        return;
+    }
+
+    eWarning("[Dag] Sync stalled at section {} for {} rounds — restarting the sync attempt",
+             current_section_.to_string(),
+             stalled_sync_rounds_);
+    stalled_sync_rounds_ = 0;
+    timer_tick();
+}
+
+void Dag::schedule_sync_check() {
+    if (sync_check_pending_.exchange(true)) {
+        return;
+    }
+    if (!QMetaObject::invokeMethod(node, &ExtraChainNode::dagSyncCheck, Qt::QueuedConnection)) {
+        sync_check_pending_.store(false);
+    }
+}
+
+void Dag::sync_check() {
+    sync_check_pending_.store(false);
+    if (started_.load() && mode_ == DagMode::Full && status_ == DagStatus::Ready) {
+        start_check();
+    }
+}
+
+void Dag::clear_pending_sync_responses() {
+    std::lock_guard lock(sync_response_request_mutex_);
+    pending_section_response_.reset();
+    pending_file_response_.reset();
+}
+
+std::optional<std::pair<SectionId, SectionId>> Dag::pending_sync_range(const Responder &responder,
+                                                                       const SectionId &to,
+                                                                       bool file_response) const {
+    std::lock_guard lock(sync_response_request_mutex_);
+    const auto     &pending = file_response ? pending_file_response_ : pending_section_response_;
+    if (!pending.has_value() || responder.message_id() != pending->message_id || to != pending->to) {
+        return std::nullopt;
+    }
+    return std::pair { pending->from, pending->to };
+}
+
+void Dag::consume_pending_sync_response(const Responder &responder, bool file_response) {
+    std::lock_guard lock(sync_response_request_mutex_);
+    auto           &pending = file_response ? pending_file_response_ : pending_section_response_;
+    if (pending.has_value() && responder.message_id() == pending->message_id) {
+        pending.reset();
+    }
 }
 
 bool Dag::is_accepting_messages() const {
@@ -439,6 +491,7 @@ void Dag::set_status(DagStatus status) {
     emit node->dagStatus(status_);
 
     if (status == DagStatus::Ready) {
+        clear_pending_sync_responses();
         emit node->dagTimerStop();
         min_req_count_ = 5;
     }
@@ -575,7 +628,8 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
             }
 
             // Update sync target if transaction section is ahead but within reasonable range
-            if (transaction.section() > sync_last_index_ && transaction.section() <= sync_last_index_ + 15) {
+            if (transaction.section() > sync_last_index_
+                && transaction.section() <= sync_last_index_ + SectionId(CACHE_LAG_SECTIONS)) {
                 sync_last_index_ = transaction.section();
                 emit node->dagSyncStart(current_section_, sync_last_index_);
             }
@@ -651,8 +705,11 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
                  this->status(),
                  transaction.section().to_string());
 
-            if (tx.section() < this->current_section()) {
-                // need sync?
+            if (tx.section() > this->current_section()) {
+                if (cached_txs_size() < node->runtime_limits().sync_transactions) {
+                    add_to_cached_tx(transaction);
+                }
+                schedule_sync_check();
             }
         }
     } else {
@@ -1164,6 +1221,7 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
 void Dag::timer_tick() {
     eLog("[Dag] Timer tick");
     this->timer_sync_->stop(); // no need emit?
+    clear_pending_sync_responses();
     this->set_status(DagStatus::Timered);
     this->sync_status_ = DagSyncStatus::None;
 
@@ -1464,7 +1522,7 @@ TransactionProveError Dag::prove_transaction_with_facts(
 
     // Keep the same bounded admission window for the stored or staged frontier.
     const auto current = validation_frontier != nullptr ? *validation_frontier : current_section_;
-    if ((current - tx.section()).abs() > 15) {
+    if (!transaction_section_is_open(current, tx.section())) {
         return TransactionProveError::TooSectionDiff;
     }
 
@@ -1904,6 +1962,7 @@ void Dag::start_sync() {
         }
         status_ = DagStatus::Sync;
     }
+    clear_pending_sync_responses();
     emit node->dagStatus(DagStatus::Sync);
 
     // if (mode_ == DagMode::Light) {
@@ -2087,6 +2146,10 @@ void Dag::request_sections(const SectionId &from, const SectionId &to, const Res
 
     auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
     auto responder_new = responder.with_new_message_id();
+    {
+        std::lock_guard lock(sync_response_request_mutex_);
+        pending_section_response_ = PendingSyncResponse { responder_new.message_id(), from, to };
+    }
     responder_new.send_response(range, MessageType::DagSections, SendMode::Focused, MessageStatus::Request);
 
     // if (status_ != DagStatus::Sync) {
@@ -2167,7 +2230,18 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             return;
         }
 
-        emit node->dagTimerStop();
+        const auto expected_range = pending_sync_range(responder, section_sync->to, false);
+        if (!expected_range.has_value()
+            || std::ranges::any_of(section_sync->txs, [&](const auto &transaction) {
+                   return transaction.section() < expected_range->first
+                          || transaction.section() > expected_range->second;
+               })
+            || std::ranges::any_of(section_sync->controls, [&](const auto &control) {
+                   return control.section_id < expected_range->first || control.section_id > expected_range->second;
+               })) {
+            eWarning("[Dag] Reject stale or out-of-range section response {}", responder.message_id());
+            return;
+        }
 
         if (!section_sync->txs.empty()) {
             auto res = this->save_transactions(section_sync->txs);
@@ -2186,6 +2260,9 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
             const auto &[min, max] = res.value();
         }
+
+        consume_pending_sync_response(responder, false);
+        emit node->dagTimerStop();
 
         if (section_sync->last_section > sync_last_index_) {
             sync_last_index_ = section_sync->last_section;
@@ -2377,6 +2454,15 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             return;
         }
 
+        const auto expected_range = pending_sync_range(responder, file_sync->to, true);
+        if (!expected_range.has_value()
+            || std::ranges::any_of(file_sync->sections, [&](const auto &section) {
+                   return section.section_id < expected_range->first || section.section_id > expected_range->second;
+               })) {
+            eWarning("[Dag] Reject stale or out-of-range file section response {}", responder.message_id());
+            return;
+        }
+
         const bool valid_hot_gap_response =
             hot_gap_request_.has_value() && file_sync->to == hot_gap_request_->second
             && std::ranges::any_of(file_sync->sections,
@@ -2433,6 +2519,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
         // The answer survived every check and is about to be applied — only now is it
         // safe to stop the retry clock. See the note at the top of this function.
+        consume_pending_sync_response(responder, true);
         emit node->dagTimerStop();
 
         if (!received_sections.empty() && (!hot_section_store_ || !hot_section_store_->is_open())) {
@@ -2542,6 +2629,10 @@ void Dag::request_file_sections(const SectionId &from, const SectionId &to, cons
     };
     auto range = SectionRange { .first = from == -1 ? std::string("0") : encode(from), .last = encode(to) };
     auto responder_new = responder.with_new_message_id();
+    {
+        std::lock_guard lock(sync_response_request_mutex_);
+        pending_file_response_ = PendingSyncResponse { responder_new.message_id(), from, to };
+    }
     responder_new.send_response(range, MessageType::DagFileSections, SendMode::Focused, MessageStatus::Request);
 
     eTemp("[Dag] Request file sections from {} to {}", range.first, range.last);
@@ -3003,7 +3094,10 @@ void Dag::handle_sync_request() {
 
     sync_last_index_ = nodes_by_block.front().second;
 
-    if (need_recontrol && mode_ == DagMode::Full) {
+    // A control mismatch can be a consequence of a missing section. Fetch the
+    // section first; accepting a peer control before its source data would hide
+    // the gap and leave this node unable to reproduce the control hash.
+    if (need_recontrol && !need_sync && !hot_gap_from.has_value() && mode_ == DagMode::Full) {
         if (!last_control.has_value()) {
             last_control = this->find_last_control(current_section_, true);
         }

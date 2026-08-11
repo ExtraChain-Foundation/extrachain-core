@@ -234,6 +234,10 @@ private:
         // why. The sender learns the verdict over the wire, but the log — where an
         // operator looks — said nothing at all.
         eWarning("[Dag] Admission rejected {}: {}", request->transaction.hash(), result);
+        if (result == TransactionProveError::TooSectionDiff
+            && request->transaction.section() > owner->current_section_) {
+            owner->schedule_sync_check();
+        }
         send_result(*request, result);
         complete(request->completion, std::unexpected(result), false);
     }

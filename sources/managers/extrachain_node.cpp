@@ -403,7 +403,8 @@ ExtraChainNode::~ExtraChainNode() {
 }
 
 void ExtraChainNode::cleanUp() {
-    delete dag_;
+    auto* dag = std::exchange(dag_, nullptr);
+    delete dag;
     network_manager_->deleteLater();
     dfs_->deleteLater();
     delete chat_manager_;
@@ -2384,5 +2385,19 @@ void ExtraChainNode::dagTimerStoping() {
 }
 
 void ExtraChainNode::dagTimerTick() {
-    dag_->timer_tick();
+    if (dag_ != nullptr) {
+        dag_->timer_tick();
+    }
+}
+
+void ExtraChainNode::dagWatchdogTick() {
+    if (dag_ != nullptr) {
+        dag_->watchdog_tick();
+    }
+}
+
+void ExtraChainNode::dagSyncCheck() {
+    if (dag_ != nullptr) {
+        dag_->sync_check();
+    }
 }
