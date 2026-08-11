@@ -19,12 +19,19 @@
 
 #pragma once
 
-#include <QRandomGenerator>
+#include <algorithm>
+#include <chrono>
+#include <stdexcept>
+#include <string>
+#include <unordered_set>
+#include <utility>
 
 #include <msgpack.hpp>
+#include <sodium.h>
 
 #include "chain/actor_id.h"
-#include "utils/exc_utils.h"
+#include "utils/hash.h"
+#include "utils/serialization.h"
 
 enum class MessageType {
     Custom     = 0,
@@ -159,7 +166,12 @@ struct MessageBody {
         uint8_t output[BLAKE3_OUT_LEN];
         blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
 
-        return fmt::format("{:02x}", fmt::join(std::span(output, BLAKE3_OUT_LEN), ""));
+        std::string hash;
+        hash.reserve(BLAKE3_OUT_LEN * 2);
+        for (const auto byte : output) {
+            hash += fmt::format("{:02x}", byte);
+        }
+        return hash;
     }
 
     std::string serialize() const {
@@ -203,15 +215,15 @@ struct CustomMessage {
 inline std::string generate_message_id(const std::string& body = std::string()) {
     // Seconds + bounded(100000) gave only 100k distinct ids per second NETWORK-WIDE;
     // two different messages colliding meant the second one was silently dropped by
-    // the receive dedup on every node (lost transactions under load). Mixing the
-    // message body makes a cross-content collision structurally impossible, and
-    // msecs + 64-bit random keep ids unique even for identical bodies. The wire
-    // format stays the same 15-hex id.
-    std::string message_id = Utils::calculate_hash(body
-                                                   + std::to_string(QDateTime::currentMSecsSinceEpoch())
-                                                   + std::to_string(QRandomGenerator::global()->generate64()))
-                                 .substr(0, 15);
-    return message_id;
+    // the receive dedup on every node (lost transactions under load). The message
+    // body, millisecond time, and 128 random bits reduce this collision risk. The
+    // wire format stays the same 15-hex id.
+    const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::system_clock::now().time_since_epoch())
+                               .count();
+    std::string random_bytes(16, '\0');
+    randombytes_buf(random_bytes.data(), random_bytes.size());
+    return Utils::calculate_hash(body + std::to_string(timestamp) + random_bytes).substr(0, 15);
 }
 
 inline MessageBody make_init_message(const std::string& data,
@@ -221,8 +233,14 @@ inline MessageBody make_init_message(const std::string& data,
                                      const ActorId&     sender,
                                      std::string        to_message_id,
                                      std::string        sender_identifier) {
-    if (!to_message_id.empty() && to_message_id.length() != 15) {
-        eFatal("make message error: incorrect message id size");
+    const auto valid_response_id = to_message_id.empty()
+                                   || (to_message_id.length() == 15
+                                       && std::ranges::all_of(to_message_id, [](char character) {
+                                              return (character >= '0' && character <= '9')
+                                                     || (character >= 'a' && character <= 'f');
+                                          }));
+    if (!valid_response_id) {
+        throw std::invalid_argument("Response message ID must contain 15 hexadecimal characters");
     }
 
     MessageBody message = { .send_type      = send_type,

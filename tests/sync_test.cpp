@@ -602,6 +602,47 @@ private slots:
         QCOMPARE(decoded->data, message.data);
         QCOMPARE(decoded->nodes_identifiers_to_ignore, message.nodes_identifiers_to_ignore);
         QCOMPARE(decoded->calculate_hash(), message.calculate_hash());
+        QCOMPARE(MessagePack::deserialize<MessageBody>(std::string()).error(),
+                 MessagePack::DeserializeError::EmptyData);
+        QCOMPARE(MessagePack::deserialize<MessageBody>(std::string("invalid")).error(),
+                 MessagePack::DeserializeError::DeserializationFailed);
+        QCOMPARE(MessagePack::deserialize<MessageBody>(serialized, serialized.size() - 1).error(),
+                 MessagePack::DeserializeError::DeserializationFailed);
+
+        std::unordered_set<std::string> generated_ids;
+        for (std::size_t index = 0; index < 1024; ++index) {
+            const auto id = generate_message_id("same-body");
+            QCOMPARE(id.size(), std::size_t(15));
+            QVERIFY(generated_ids.insert(id).second);
+        }
+
+        bool invalid_response_id_rejected = false;
+        try {
+            static_cast<void>(make_init_message("payload",
+                                                SendMode::Focused,
+                                                MessageType::Custom,
+                                                MessageStatus::Response,
+                                                sender,
+                                                "short",
+                                                "node-a"));
+        } catch (const std::invalid_argument &) {
+            invalid_response_id_rejected = true;
+        }
+        QVERIFY(invalid_response_id_rejected);
+
+        invalid_response_id_rejected = false;
+        try {
+            static_cast<void>(make_init_message("payload",
+                                                SendMode::Focused,
+                                                MessageType::Custom,
+                                                MessageStatus::Response,
+                                                sender,
+                                                "12345678901234g",
+                                                "node-a"));
+        } catch (const std::invalid_argument &) {
+            invalid_response_id_rejected = true;
+        }
+        QVERIFY(invalid_response_id_rejected);
     }
 
     void chatFolderSerializationRoundTrip() {

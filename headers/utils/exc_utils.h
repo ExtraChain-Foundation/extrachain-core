@@ -63,6 +63,7 @@ using namespace magic_enum::bitwise_operators;
 #include "utils/exc_utils_base64.h"
 #include "utils/fs_path.h"
 #include "utils/hash.h"
+#include "utils/serialization.h"
 
 namespace Network {
     Q_NAMESPACE
@@ -198,108 +199,6 @@ namespace Serialization {
     EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
     EXTRACHAIN_EXPORT std::vector<std::string> deserialize(const std::string &serialized);
 } // namespace Serialization
-
-namespace MessagePack {
-    template <class T>
-    std::string serialize(const T &t) {
-        msgpack::sbuffer buffer;
-        msgpack::pack(buffer, t);
-        return std::string(buffer.data(), buffer.size());
-    }
-
-    enum class DeserializeError {
-        EmptyData,
-        DeserializationFailed,
-    };
-
-    template <class T, class StringContainer>
-    std::expected<T, DeserializeError> deserialize(const StringContainer &data, std::size_t size = 0) {
-        if (data.empty()) {
-            eLog("[MessagePack] Empty deserialize {}", typeid(T).name());
-            return std::unexpected(DeserializeError::EmptyData);
-        }
-
-        try {
-            msgpack::object_handle oh           = msgpack::unpack(data.data(), data.size());
-            msgpack::object        deserialized = oh.get();
-            return deserialized.as<T>();
-        } catch (const std::exception &e) {
-            // eWarning("[MessagePack] Exception error: {}", e.what());
-
-            auto qt_bytes = QByteArray::fromStdString(data.data());
-            // eWarning("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
-
-            return std::unexpected(DeserializeError::DeserializationFailed);
-        }
-    }
-
-    template <class T>
-    std::vector<std::string> serialize_container(std::vector<T> &list) {
-        std::vector<std::string> result;
-        for (const auto &item : list) {
-            result.push_back(serialize(item));
-        }
-        return result;
-    }
-
-    template <class T>
-    std::expected<std::vector<T>, DeserializeError> deserialize_container(
-        const std::vector<std::string> dataContainer) {
-        std::vector<T> result;
-
-        for (const auto &data : dataContainer) {
-            const auto element = deserialize<T>(data);
-            if (!element.has_value())
-                continue;
-            result.push_back(element.value());
-        }
-
-        return result;
-    }
-} // namespace MessagePack
-
-namespace Json {
-    template <typename T>
-    boost::json::value serialize_value(const T &t) {
-        auto json = json_convert::to_json(t);
-        return json;
-    }
-
-    template <typename T>
-    std::string serialize(const T &t) {
-        auto json     = serialize_value(t);
-        auto json_str = boost::json::serialize(json);
-        return json_str;
-    }
-
-    template <typename T>
-    std::expected<T, std::string> deserialize(std::string_view data) {
-        try {
-            auto parsed = boost::json::parse(data);
-            return json_convert::from_json<T>(parsed);
-        } catch (const std::exception &e) {
-            eWarning("Json deserialize error: {}, data: {}", e.what(), data);
-            return std::unexpected(e.what());
-        }
-    }
-
-    template <typename T>
-    std::expected<T, std::string> deserialize(const std::string &data) {
-        return deserialize<T>(std::string_view(data));
-    }
-
-    template <typename T>
-    std::expected<T, std::string> deserialize(const std::vector<uint8_t> &data) {
-        return deserialize<T>(std::string_view(reinterpret_cast<const char *>(data.data()), data.size()));
-    }
-
-    template <typename T>
-    std::expected<T, std::string> _no_try_deserialize(std::string_view data) {
-        // for debug
-        auto parsed = boost::json::parse(data);
-        return json_convert::from_json<T>(parsed);
-    }
-} // namespace Json
 
 namespace Utils {
     EXTRACHAIN_EXPORT void prepare_extrachain();
