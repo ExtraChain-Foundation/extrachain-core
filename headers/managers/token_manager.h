@@ -19,12 +19,20 @@
 
 #pragma once
 
+#include <cstdint>
+#include <expected>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 #include <boost/describe/class.hpp>
 
 #include <QObject>
 
 #include "chain/actor.h"
 #include "contracts/toolchain_registry.h"
+#include "utils/bignumber_float.h"
 
 class ExtraChainNode;
 class Transaction;

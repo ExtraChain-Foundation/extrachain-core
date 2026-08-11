@@ -19,17 +19,22 @@
 
 #pragma once
 
-#include <QJsonArray>
-#include <QJsonDocument>
+#include <cstdint>
+#include <string>
+#include <string_view>
 #include <type_traits>
 
+#include <boost/json.hpp>
 #include <msgpack.hpp>
 
 #include "chain/actor_id.h"
+#include "core/byte_array.h"
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "extrachain_global.h"
-#include "utils/exc_utils.h"
+#include "utils/exc_logs.h"
+#include "utils/exc_utils_base64.h"
+#include "utils/hash.h"
 
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
@@ -115,8 +120,14 @@ public:
         return id_.is_zero();
     }
 
-    bool operator==(const Actor<T> &other) {
-        return this->id_ == other.id_ && *key_ == *other.key_ && type_ == other.type_;
+    bool operator==(const Actor<T> &other) const {
+        if (id_ != other.id_ || type_ != other.type_ || key_.public_key() != other.key_.public_key()) {
+            return false;
+        }
+        if constexpr (std::is_same_v<T, KeyPrivate>) {
+            return key_.secret_key() == other.key_.secret_key();
+        }
+        return true;
     }
 
     const ActorId &id() const {
@@ -146,14 +157,12 @@ public:
     }
 
     void set_secret_key(const PrivateKey &secretKey, const PublicKey &publicKey) {
-        bool isPrivate = std::is_same<T, KeyPrivate>::value;
-        Q_ASSERT(isPrivate);
+        static_assert(std::is_same_v<T, KeyPrivate>, "A secret key requires Actor<KeyPrivate>");
         key_ = KeyPrivate(secretKey, publicKey);
     }
 
     void set_public_key(const PublicKey &key) {
-        bool isPrivate = std::is_same<T, KeyPrivate>::value;
-        Q_ASSERT(!isPrivate);
+        static_assert(std::is_same_v<T, KeyPublic>, "A public key requires Actor<KeyPublic>");
         key_ = KeyPublic(key);
     }
 
@@ -161,72 +170,91 @@ public:
         type_ = type;
     }
 
-    QByteArray toJson() const {
-        auto       array  = toJsonArray();
-        QByteArray result = QJsonDocument(array).toJson(QJsonDocument::Compact);
-        return result;
-    }
-
-    QJsonArray toJsonArray() const {
+    [[nodiscard]] std::string toJson() const {
         if (empty()) {
-            eFatal("Why actor empty?");
+            eWarning("[Actor] Cannot serialize an empty actor");
+            return {};
         }
 
-        QJsonArray array;
-        QString    pub = QString::fromStdString(Utils::to_base64(key_.public_key()));
-
-        array << QString::fromStdString(id_.to_string()) << int(type_) << pub;
+        boost::json::array array;
+        array.emplace_back(id_.to_string());
+        array.emplace_back(static_cast<std::int64_t>(type_));
+        array.emplace_back(Utils::to_base64(key_.public_key()));
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            QString secret = QString::fromStdString(Utils::to_base64(key_.secret_key()));
-            array << secret;
+            array.emplace_back(Utils::to_base64(key_.secret_key()));
         }
 
-        return array;
+        return boost::json::serialize(array);
     }
 
-    static Actor<T> fromJson(const QByteArray &serialized) {
-        if (serialized.isEmpty()) {
-            eFatal("[Actor] json is empty");
+    [[nodiscard]] static Actor<T> fromJson(std::string_view serialized) {
+        if (serialized.empty()) {
+            eWarning("[Actor] JSON is empty");
+            return {};
+        }
+
+        boost::system::error_code error;
+        const auto                value = boost::json::parse(serialized, error);
+        if (error) {
+            eWarning("[Actor] Invalid JSON: {}", error.message());
+            return {};
+        }
+        if (!value.is_array()) {
+            eWarning("[Actor] JSON root is not an array");
+            return {};
+        }
+
+        const auto &array         = value.as_array();
+        const auto  expected_size = std::is_same_v<T, KeyPrivate> ? 4u : 3u;
+        if (array.size() != expected_size || !array[0].is_string() || !array[1].is_int64()
+            || !array[2].is_string()) {
+            eWarning("[Actor] Invalid JSON fields");
+            return {};
+        }
+        if constexpr (std::is_same_v<T, KeyPrivate>) {
+            if (!array[3].is_string()) {
+                eWarning("[Actor] Invalid private key field");
+                return {};
+            }
+        }
+
+        const auto id = ActorId::create(std::string(array[0].as_string()));
+        if (!id.has_value() || id->is_zero()) {
+            eWarning("[Actor] Invalid actor ID");
+            return {};
+        }
+
+        const auto actor_type = array[1].as_int64();
+        if (actor_type < static_cast<std::int64_t>(ActorType::User)
+            || actor_type > static_cast<std::int64_t>(ActorType::Service)) {
+            eWarning("[Actor] Invalid actor type: {}", actor_type);
+            return {};
+        }
+
+        const auto public_key = ByteArray::fromBase64(std::string(array[2].as_string()));
+        if (!public_key.has_value() || public_key->size() != crypto_sign_PUBLICKEYBYTES) {
+            eWarning("[Actor] Invalid public key");
+            return {};
         }
 
         Actor<T> actor;
-        auto     array = QJsonDocument::fromJson(serialized).array();
-        if (array.size() < 3) {
-            eFatal("?1");
-            return actor;
-        }
-        actor.set_id(ActorId(array[0].toString().toStdString()));
-        actor.set_type(ActorType(array[1].toInt()));
-        auto pub_decoded = ByteArray::fromBase64(array[2].toString().toStdString());
-        if (!pub_decoded.has_value()) {
-            eFatal("Invalid base64 in public key");
-            return actor;
-        }
-        auto pub = pub_decoded->toArray<crypto_sign_PUBLICKEYBYTES>();
+        actor.set_id(*id);
+        actor.set_type(static_cast<ActorType>(actor_type));
+        const auto public_key_value = public_key->template toArray<crypto_sign_PUBLICKEYBYTES>();
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
-            actor.set_public_key(pub);
-        }
-        if constexpr (std::is_same_v<T, KeyPrivate>) {
-            if (array.size() != 4) {
-                eFatal("?2");
-                return actor;
+            actor.set_public_key(public_key_value);
+        } else {
+            const auto private_key = ByteArray::fromBase64(std::string(array[3].as_string()));
+            if (!private_key.has_value() || private_key->size() != crypto_sign_SECRETKEYBYTES) {
+                eWarning("[Actor] Invalid private key");
+                return {};
             }
-            auto sec_decoded = ByteArray::fromBase64(array[3].toString().toStdString());
-            if (!sec_decoded.has_value()) {
-                eFatal("Invalid base64 in secret key");
-                return actor;
-            }
-            auto sec = sec_decoded->toArray<crypto_sign_SECRETKEYBYTES>();
-            actor.set_secret_key(sec, pub);
+            actor.set_secret_key(private_key->template toArray<crypto_sign_SECRETKEYBYTES>(), public_key_value);
         }
 
         return actor;
-    }
-
-    static Actor<T> fromJson(const std::string &serialized) {
-        return fromJson(QByteArray::fromStdString(serialized));
     }
 
     MSGPACK_DEFINE(id_, type_, key_)

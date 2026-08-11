@@ -644,7 +644,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(
     if (predefine_token_id.empty()) {
         token_actor = node->account_controller()->create_service();
     } else {
-        auto temp_actor = token_actor.fromJson(QByteArray::fromStdString(predefine_token_id));
+        auto temp_actor = token_actor.fromJson(predefine_token_id);
         token_actor     = node->account_controller()->create_service({}, temp_actor);
     }
     auto owner_actor = node->account_controller()->current_profile().get_actor(owner_id);

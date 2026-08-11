@@ -19,6 +19,8 @@
 
 #include "chain/transaction.h"
 
+#include "utils/exc_utils.h"
+
 namespace {
 
     void append_field(std::string &target, std::string_view value) {

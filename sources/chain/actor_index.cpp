@@ -74,7 +74,7 @@ Actor<KeyPublic> ActorIndex::read_actor_old(const ActorId &id) {
 
     QByteArray serializedActor = this->read_by_id(id);
     if (!serializedActor.isEmpty()) {
-        auto actor = Actor<KeyPublic>::fromJson(serializedActor);
+        auto actor = Actor<KeyPublic>::fromJson(serializedActor.toStdString());
         return actor;
     } else {
         this->send_get_actor_message(id);
@@ -372,7 +372,7 @@ std::expected<void, ActorSaveError> ActorIndex::network_store_new_actor(const Ac
 }
 
 std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic> &actor) {
-    auto result = this->add(actor.id(), actor.toJson());
+    auto result = this->add(actor.id(), QByteArray::fromStdString(actor.toJson()));
 
     if (!result.has_value()) {
         return std::unexpected(result.error());
@@ -401,7 +401,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actors() {
     int i          = 0;
     int to_records = 0;
     for (const auto &[id, actor] : actors_todo_map_) {
-        auto result = this->add(actor.id(), actor.toJson());
+        auto result = this->add(actor.id(), QByteArray::fromStdString(actor.toJson()));
         if (!result.has_value()) {
             // eWarning("[ActorIndex] Saving actor {} error: {}", actor.id(), result.error());
             continue;

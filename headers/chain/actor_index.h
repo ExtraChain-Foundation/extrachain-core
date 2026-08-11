@@ -22,8 +22,9 @@
 #include "extrachain_global.h"
 
 #include "chain/actor.h"
-#include "managers/extrachain_node.h"
 #include "chain/actor_filter.h"
+#include "managers/extrachain_node.h"
+#include "utils/exc_utils.h"
 
 class ExtraChainNode;
 class Responder;

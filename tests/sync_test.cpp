@@ -116,6 +116,43 @@ private slots:
         std::filesystem::remove_all(root);
     }
 
+    void actorJsonKeepsCompactStorageFormat() {
+        PublicKey public_key {};
+        public_key[0] = 1;
+
+        Actor<KeyPublic> actor;
+        actor.set_id(ActorId("abc"));
+        actor.set_type(ActorType::Service);
+        actor.set_public_key(public_key);
+
+        constexpr auto Expected =
+            R"(["0000000000000000000000000000000000000abc",2,"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"])";
+        const auto encoded = actor.toJson();
+        QCOMPARE(encoded, std::string(Expected));
+
+        const auto restored = Actor<KeyPublic>::fromJson(encoded);
+        QCOMPARE(restored.id(), actor.id());
+        QCOMPARE(restored.type(), actor.type());
+        QCOMPARE(restored.key().public_key(), actor.key().public_key());
+
+        PrivateKey private_key {};
+        private_key[0] = 2;
+        Actor<KeyPrivate> private_actor;
+        private_actor.set_id(actor.id());
+        private_actor.set_type(actor.type());
+        private_actor.set_secret_key(private_key, public_key);
+        const auto restored_private = Actor<KeyPrivate>::fromJson(private_actor.toJson());
+        QCOMPARE(restored_private.id(), private_actor.id());
+        QCOMPARE(restored_private.key().public_key(), public_key);
+        QCOMPARE(restored_private.key().secret_key(), private_key);
+
+        QVERIFY(Actor<KeyPublic>::fromJson("").empty());
+        QVERIFY(Actor<KeyPublic>::fromJson("not-json").empty());
+        QVERIFY(Actor<KeyPublic>::fromJson(R"(["abc",8,"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"])")
+                    .empty());
+        QVERIFY(Actor<KeyPublic>::fromJson(R"(["abc",2,"AQ"])").empty());
+    }
+
     void transactionAdmissionClosesAtCacheBoundary() {
         QVERIFY(transaction_section_is_open(SectionId(14), SectionId(0)));
         QVERIFY(!transaction_section_is_open(SectionId(15), SectionId(0)));

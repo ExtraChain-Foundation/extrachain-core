@@ -118,6 +118,7 @@ set_tests_properties(${EXTRACHAIN_TEST_NAMES} PROPERTIES
 )
 
 set(EXTRACHAIN_HEADER_CHECKS
+    chain/actor.h
     chain/dag.h
     chain/pack.h
     chain/pack_registry.h
