@@ -10,6 +10,7 @@
 
 #include "runtime/periodic_task.h"
 
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
 
@@ -25,16 +26,16 @@ namespace ExtraChain::Core {
             , handler(std::move(handler_value)) {
         }
 
-        void schedule() {
+        void schedule(std::uint64_t expected_generation) {
             timer.expires_after(interval);
             std::weak_ptr<State> weak = shared_from_this();
-            timer.async_wait([weak](const boost::system::error_code& error) {
+            timer.async_wait([weak, expected_generation](const boost::system::error_code& error) {
                 const auto self = weak.lock();
-                if (!self || !self->active.load(std::memory_order_acquire)) {
+                if (!self || !self->active.load(std::memory_order_acquire)
+                    || self->generation.load(std::memory_order_acquire) != expected_generation) {
                     return;
                 }
                 if (error == boost::asio::error::operation_aborted) {
-                    self->schedule();
                     return;
                 }
                 if (error) {
@@ -43,8 +44,9 @@ namespace ExtraChain::Core {
                 }
 
                 self->handler();
-                if (self->active.load(std::memory_order_acquire)) {
-                    self->schedule();
+                if (self->active.load(std::memory_order_acquire)
+                    && self->generation.load(std::memory_order_acquire) == expected_generation) {
+                    self->schedule(expected_generation);
                 }
             });
         }
@@ -54,6 +56,7 @@ namespace ExtraChain::Core {
         Duration                                          interval;
         Handler                                           handler;
         std::atomic_bool                                  active { false };
+        std::atomic_uint64_t                              generation { 0 };
     };
 
     std::shared_ptr<PeriodicTask> PeriodicTask::create(boost::asio::any_io_executor executor,
@@ -80,8 +83,13 @@ namespace ExtraChain::Core {
         if (state_->active.exchange(true, std::memory_order_acq_rel)) {
             return;
         }
-        boost::asio::dispatch(state_->strand, [state = state_] {
-            state->schedule();
+        const auto generation = state_->generation.fetch_add(1, std::memory_order_acq_rel) + 1;
+        boost::asio::dispatch(state_->strand, [state = state_, generation] {
+            if (state->active.load(std::memory_order_acquire)
+                && state->generation.load(std::memory_order_acquire) == generation) {
+                state->timer.cancel();
+                state->schedule(generation);
+            }
         });
     }
 
@@ -89,8 +97,11 @@ namespace ExtraChain::Core {
         if (!state_ || !state_->active.exchange(false, std::memory_order_acq_rel)) {
             return;
         }
-        boost::asio::dispatch(state_->strand, [state = state_] {
-            state->timer.cancel();
+        const auto generation = state_->generation.fetch_add(1, std::memory_order_acq_rel) + 1;
+        boost::asio::dispatch(state_->strand, [state = state_, generation] {
+            if (state->generation.load(std::memory_order_acquire) == generation) {
+                state->timer.cancel();
+            }
         });
     }
 
@@ -98,10 +109,15 @@ namespace ExtraChain::Core {
         if (interval <= Duration::zero()) {
             throw std::invalid_argument("PeriodicTask interval must be positive");
         }
-        boost::asio::dispatch(state_->strand, [state = state_, interval] {
+        const auto generation = state_->generation.fetch_add(1, std::memory_order_acq_rel) + 1;
+        boost::asio::dispatch(state_->strand, [state = state_, interval, generation] {
+            if (state->generation.load(std::memory_order_acquire) != generation) {
+                return;
+            }
             state->interval = interval;
             if (state->active.load(std::memory_order_acquire)) {
                 state->timer.cancel();
+                state->schedule(generation);
             }
         });
     }

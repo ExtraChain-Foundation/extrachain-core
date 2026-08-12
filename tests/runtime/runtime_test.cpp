@@ -149,6 +149,21 @@ int main() {
     std::this_thread::sleep_for(30ms);
     require(ticks.load(std::memory_order_acquire) == stopped_at, "stopped task must not execute again");
 
+    timer->start();
+    timer->stop();
+    timer->start();
+    const int restarted_at = ticks.load(std::memory_order_acquire);
+    {
+        std::unique_lock lock(mutex);
+        require(condition.wait_for(lock,
+                                   2s,
+                                   [&] {
+                                       return ticks.load(std::memory_order_acquire) > restarted_at;
+                                   }),
+                "rapidly restarted task must execute once scheduling settles");
+    }
+    timer->stop();
+
     std::atomic_int deadline_hits { 0 };
     const auto      deadline = DeadlineTask::create(runtime.executor(), [&] {
         deadline_hits.fetch_add(1, std::memory_order_acq_rel);

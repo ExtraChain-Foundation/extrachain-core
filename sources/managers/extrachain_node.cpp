@@ -29,7 +29,9 @@
 
 #include <QJsonObject>
 #include <QFile>
+#include <QPointer>
 #include <QThread>
+#include <QTimer>
 #include <msgpack.hpp>
 #include <sodium/core.h>
 
@@ -52,6 +54,8 @@
 #include "dfs/collection_template.h"
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
+#include "runtime/deadline_task.h"
+#include "runtime/periodic_task.h"
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
 #include "contracts/contract_manager.h"
@@ -253,19 +257,20 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     if (m_thread) {
         m_thread->quit();
         m_thread->wait();
-        node->deleteLater();
+        node = nullptr;
     } else {
         delete node;
+        node = nullptr;
     }
 }
 
 void ExtraChainNodeWrapper::init(bool makeAsync) {
     if (makeAsync) {
-        m_thread = new QThread();
+        m_thread = new QThread(this);
         node->moveToThread(m_thread);
         connect(m_thread, &QThread::started, node, &ExtraChainNode::process);
         connect(m_thread, &QThread::finished, node, &ExtraChainNode::cleanUp);
-        connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
+        connect(m_thread, &QThread::finished, node, &QObject::deleteLater);
         m_thread->start();
     } else {
         node->process();
@@ -337,6 +342,23 @@ void ExtraChainNode::process() {
     luminance_manager_  = new LuminanceManager(this);
     network_manager_    = new NetworkManager(this, ws_port);
     dag_                = new Dag(this);
+    const QPointer<ExtraChainNode> node(this);
+    dag_sync_timer_ = ExtraChain::Core::DeadlineTask::create(network_manager_->executor(), [node] {
+        if (!node.isNull()) {
+            QMetaObject::invokeMethod(node, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
+        }
+    });
+    const auto periodic_task = [this, node](std::chrono::milliseconds interval, auto handler) {
+        return ExtraChain::Core::PeriodicTask::create(network_manager_->executor(), interval, [node, handler] {
+            if (!node.isNull()) {
+                QMetaObject::invokeMethod(node, handler, Qt::QueuedConnection);
+            }
+        });
+    };
+    reward_timer_ = periodic_task(std::chrono::milliseconds(MINING_TIMER_TICK),
+                                  &ExtraChainNode::timer_reward_request);
+    info_timer_ = periodic_task(std::chrono::seconds(10), &ExtraChainNode::timer_info_print);
+    luminance_timer_ = periodic_task(std::chrono::seconds(30), &ExtraChainNode::timer_luminance_autoremove);
     dfs_                = new DfsController(this);
     contract_manager_   = std::make_unique<
           ExtraChain::Contracts::ContractManager>(std::make_unique<ExtraChain::Contracts::DfsContractStorage>(dfs_,
@@ -379,17 +401,10 @@ void ExtraChainNode::process() {
 
     // auto thread = ThreadPool::addThread(m_blockchain);
 
-    timer_reward_ = new QTimer(this);
-    connect(timer_reward_, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
-    timer_info_ = new QTimer(this);
-    connect(timer_info_, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
-
-    timer_luminance_ = new QTimer(this);
-    connect(timer_luminance_, &QTimer::timeout, this, &ExtraChainNode::timer_luminance_autoremove);
     if (runtime_profile_ == RuntimeProfile::FullNode) {
-        timer_reward_->start(MINING_TIMER_TICK);
-        timer_info_->start(10000);
-        timer_luminance_->start(30000);
+        reward_timer_->start();
+        info_timer_->start();
+        luminance_timer_->start();
     }
 
     init_public_ip_and_country_ = network_manager_->search_public_ip_and_country_();
@@ -403,6 +418,8 @@ void ExtraChainNode::process() {
 
 ExtraChainNode::~ExtraChainNode() {
     node_enabled.store(false);
+    stop_runtime_tasks();
+    release_core();
     eLog("ExtraChainNode::~ExtraChainNode");
     if (cleanup_callback_) {
         cleanup_callback_();
@@ -410,12 +427,31 @@ ExtraChainNode::~ExtraChainNode() {
     // ThreadPoolBoost::terminate();
 }
 
-void ExtraChainNode::cleanUp() {
+void ExtraChainNode::stop_runtime_tasks() {
+    if (dag_sync_timer_) {
+        dag_sync_timer_->cancel();
+    }
+    if (reward_timer_) {
+        reward_timer_->stop();
+    }
+    if (info_timer_) {
+        info_timer_->stop();
+    }
+    if (luminance_timer_) {
+        luminance_timer_->stop();
+    }
+}
+
+void ExtraChainNode::release_core() {
     auto* dag = std::exchange(dag_, nullptr);
     delete dag;
-    network_manager_->deleteLater();
-    dfs_->deleteLater();
-    delete chat_manager_;
+    auto* chat_manager = std::exchange(chat_manager_, nullptr);
+    delete chat_manager;
+}
+
+void ExtraChainNode::cleanUp() {
+    stop_runtime_tasks();
+    release_core();
 }
 
 bool ExtraChainNode::create_new_network(const std::string& login, const std::string& password) {
@@ -1070,6 +1106,10 @@ RuntimeActivity ExtraChainNode::runtime_activity() const {
     return runtime_activity_.load();
 }
 
+bool ExtraChainNode::info_timer_active() const {
+    return info_timer_ && info_timer_->active();
+}
+
 RuntimeLimits ExtraChainNode::runtime_limits() const {
     const auto activity = runtime_activity_.load();
     switch (runtime_profile_) {
@@ -1140,11 +1180,11 @@ void ExtraChainNode::set_runtime_activity(RuntimeActivity activity) {
     runtime_activity_.store(activity);
     if (runtime_profile_ == RuntimeProfile::FullNode) {
         if (activity == RuntimeActivity::Background) {
-            if (timer_info_) {
-                timer_info_->stop();
+            if (info_timer_) {
+                info_timer_->stop();
             }
-        } else if (timer_info_ && !timer_info_->isActive()) {
-            timer_info_->start(10000);
+        } else if (info_timer_ && !info_timer_->active()) {
+            info_timer_->start();
         }
     }
     if (activity == RuntimeActivity::Background) {
@@ -2079,15 +2119,15 @@ void ExtraChainNode::timer_reward_request() {
 
 void ExtraChainNode::start_mining() {
     dag_->force_full_mode();
-    if (timer_reward_ && !timer_reward_->isActive()) {
-        timer_reward_->start(MINING_TIMER_TICK);
+    if (reward_timer_) {
+        reward_timer_->start();
     }
     eLog("[Mining] Started");
 }
 
 void ExtraChainNode::stop_mining() {
-    if (timer_reward_ && timer_reward_->isActive()) {
-        timer_reward_->stop();
+    if (reward_timer_) {
+        reward_timer_->stop();
     }
     dag_->force_light_mode();
     eLog("[Mining] Stopped");
@@ -2303,7 +2343,6 @@ void ExtraChainNode::connect_signals() {
 
     connect(this, &ExtraChainNode::dagTimerStart, this, &ExtraChainNode::dagTimerStarting, Qt::QueuedConnection);
     connect(this, &ExtraChainNode::dagTimerStop, this, &ExtraChainNode::dagTimerStoping, Qt::QueuedConnection);
-    connect(dag_->timer_sync_, &QTimer::timeout, this, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
 
     connect(dfs_, &DfsController::waitDownloaded, [this](ActorId actor_id, Dfs::DirRow dir_row) {
         if (dir_row.file_id == renames_file_id_waiting_) {
@@ -2386,13 +2425,16 @@ void ExtraChainNode::dagTimerStarting(int ms) {
     if (runtime_activity_.load() == RuntimeActivity::Background) {
         return;
     }
-    dag_->timer_sync_->stop();
-    dag_->timer_sync_->start(ms);
+    if (dag_sync_timer_) {
+        dag_sync_timer_->schedule_after(std::chrono::milliseconds(ms));
+    }
 }
 
 void ExtraChainNode::dagTimerStoping() {
     // eLog("[Dag] Timer stop");
-    dag_->timer_sync_->stop();
+    if (dag_sync_timer_) {
+        dag_sync_timer_->cancel();
+    }
 }
 
 void ExtraChainNode::dagTimerTick() {

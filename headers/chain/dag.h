@@ -30,7 +30,6 @@
 #include <unordered_set>
 
 #include <boost/describe.hpp>
-#include <QTimer>
 
 #include "utils/bignumber.h"
 #include "chain/transaction.h"
@@ -790,7 +789,6 @@ private:
     int                                          requests_count_ = 0; // Number of outstanding requests
     int                                          min_req_count_  = 5;
     std::unordered_map<std::string, DagLastInfo> last_info_;  // Last chain info from peers
-    QTimer                                      *timer_sync_; // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
     bool                                         search_control_              = false;
     bool                                         light_requested_             = false;

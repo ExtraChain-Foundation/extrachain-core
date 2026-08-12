@@ -481,6 +481,7 @@ public:
     SafePtr<std::map<NetworkReconnect, std::string>> reconnections();
 
     CalculateTraffic* calculate_traffic() const;
+    [[nodiscard]] boost::asio::any_io_executor executor() const;
 
     std::string public_ip() const;
     void        set_public_ip(const std::string& newPublic_ip);

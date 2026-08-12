@@ -30,7 +30,6 @@ class QThread;
 #include <QCoreApplication>
 #include <QMap>
 #include <QObject>
-#include <QTimer>
 
 #include "chain/actor_index.h"
 #include "chat/chat.h"
@@ -70,6 +69,10 @@ namespace ExtraChain::Contracts {
     class ContractManager;
     class ToolchainRegistry;
 } // namespace ExtraChain::Contracts
+namespace ExtraChain::Core {
+    class DeadlineTask;
+    class PeriodicTask;
+}
 
 enum class ImportProfileError {
     DataEmpty,
@@ -167,9 +170,13 @@ private:
     std::unique_ptr<ExtraChain::Contracts::ToolchainRegistry>                      toolchain_registry_;
     std::mutex                                                                     pending_contracts_mutex_;
     std::unordered_map<std::string, ExtraChain::Contracts::PreparedContractChange> pending_contracts_;
-    QTimer*                                                                        timer_reward_    = nullptr;
-    QTimer*                                                                        timer_info_      = nullptr;
-    QTimer*                                                                        timer_luminance_ = nullptr;
+    std::shared_ptr<ExtraChain::Core::DeadlineTask>                                dag_sync_timer_;
+    std::shared_ptr<ExtraChain::Core::PeriodicTask>                                reward_timer_;
+    std::shared_ptr<ExtraChain::Core::PeriodicTask>                                info_timer_;
+    std::shared_ptr<ExtraChain::Core::PeriodicTask>                                luminance_timer_;
+
+    void stop_runtime_tasks();
+    void release_core();
 
     bool                         started_               = false;
     bool                         is_client_application_ = false;
@@ -224,11 +231,7 @@ public:
     RuntimeProfile  runtime_profile() const;
     RuntimeActivity runtime_activity() const;
 
-    // Diagnostic only: lets the DAG watchdog report whether the 10s status timer is
-    // still armed, from a thread that cannot stall with it.
-    QTimer* info_timer() const {
-        return timer_info_;
-    }
+    [[nodiscard]] bool info_timer_active() const;
     RuntimeLimits runtime_limits() const;
     void          set_runtime_activity(RuntimeActivity activity);
 

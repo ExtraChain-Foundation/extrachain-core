@@ -59,8 +59,6 @@ Dag::Dag(ExtraChainNode *node)
     , transaction_cache_(node, nullptr)
     , cache_(node, this)
     , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
-    timer_sync_ = new QTimer();
-
     bool storage_reset = false;
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
     std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
@@ -250,7 +248,6 @@ Dag::~Dag() {
     stop();
     admission_state_.reset();
     cache_.dag = nullptr;
-    timer_sync_->deleteLater();
 }
 
 void Dag::start() {
@@ -329,9 +326,6 @@ void Dag::stop() {
 
     update_range(true);
 
-    if (timer_sync_) {
-        QMetaObject::invokeMethod(timer_sync_, "stop", Qt::QueuedConnection);
-    }
     emit node->dagTimerStop();
 
     eLog("[Dag] stop");
@@ -352,12 +346,7 @@ void Dag::watchdog_tick() {
         return;
     }
 
-    if (auto *timer = node->info_timer(); timer != nullptr) {
-        eLog("[Dag] Watchdog: info timer active={}, interval={}, thread_match={}",
-             timer->isActive(),
-             timer->interval(),
-             timer->thread() == node->thread());
-    }
+    eLog("[Dag] Watchdog: info timer active={}", node->info_timer_active());
 
     if (mode_ != DagMode::Full) {
         return;
@@ -1220,7 +1209,7 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
 
 void Dag::timer_tick() {
     eLog("[Dag] Timer tick");
-    this->timer_sync_->stop(); // no need emit?
+    emit node->dagTimerStop();
     clear_pending_sync_responses();
     this->set_status(DagStatus::Timered);
     this->sync_status_ = DagSyncStatus::None;

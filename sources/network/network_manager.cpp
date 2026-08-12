@@ -158,6 +158,10 @@ CalculateTraffic *NetworkManager::calculate_traffic() const {
     return calculate_traffic_;
 }
 
+boost::asio::any_io_executor NetworkManager::executor() const {
+    return network_runtime_->executor();
+}
+
 std::string NetworkManager::public_ip() const {
     return public_ip_;
 }
