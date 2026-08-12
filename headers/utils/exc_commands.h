@@ -48,7 +48,7 @@ public:
     // suitable for running under Docker or as a daemon without a controlling tty.
     static SimpleConsole* start(std::function<void(const std::string&)> commandHandler,
                                 bool interactive = true) {
-        static SimpleConsole* instance = nullptr;
+        auto& instance = instance_storage();
         if (!instance) {
             instance                   = new SimpleConsole();
             instance->m_commandHandler = commandHandler;
@@ -59,7 +59,7 @@ public:
 
     // Functions for logging
     static void preserveInput() {
-        static SimpleConsole* instance = getInstance();
+        SimpleConsole* instance = getInstance();
         if (instance) {
             QMutexLocker locker(&instance->m_mutex);
             printf("\r\033[K");
@@ -68,7 +68,7 @@ public:
     }
 
     static void restoreInput() {
-        static SimpleConsole* instance = getInstance();
+        SimpleConsole* instance = getInstance();
         if (instance) {
             QMutexLocker locker(&instance->m_mutex);
             printf("> ");
@@ -96,6 +96,10 @@ private:
     SimpleConsole() = default;
 
     static SimpleConsole* getInstance() {
+        return instance_storage();
+    }
+
+    static SimpleConsole*& instance_storage() {
         static SimpleConsole* instance = nullptr;
         return instance;
     }

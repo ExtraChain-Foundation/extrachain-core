@@ -89,7 +89,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/token_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thoth_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/janus_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
@@ -119,7 +118,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_filter.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_commands.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_extra.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_msgpack_describe.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
@@ -242,6 +240,8 @@ if(EXTRACHAIN_BUILD_QT_COMPAT)
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/byte_array_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/network_status_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_commands.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/actor_id_adapter.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/byte_array_adapter.cpp

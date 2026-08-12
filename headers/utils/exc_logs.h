@@ -31,8 +31,6 @@
 #include <filesystem>
 #include <sstream>
 
-#include "utils/exc_commands.h"
-
 #ifdef _WIN32
     #include <windows.h>
     #include <crtdbg.h>
@@ -476,9 +474,7 @@ namespace detail {
             if (Logger::instance().is_compact_console()) {
                 // Compact: only time and message
                 auto msg_view = fmt::string_view(msg_buffer.data(), msg_buffer.size());
-                SimpleConsole::preserveInput();
                 fmt::print(stdout, get_level_style(level), "[{}] {}\n", get_current_time(), msg_view);
-                SimpleConsole::restoreInput();
             } else {
                 // Full format
                 fmt::print(stdout, get_level_style(level), "{}\n", log_view);
