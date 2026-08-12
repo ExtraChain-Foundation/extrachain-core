@@ -19,8 +19,10 @@
 
 #pragma once
 
-#include <string>
+#include <algorithm>
 #include <expected>
+#include <string>
+#include <type_traits>
 
 #include "cpp-base64/base64.h"
 
@@ -52,6 +54,26 @@ namespace Utils {
     template <typename Container = std::string>
     std::expected<Container, Base64Error> from_base64(const std::string &input) {
         try {
+            const auto padding = input.find('=');
+            const auto encoded_size = padding == std::string::npos ? input.size() : padding;
+            if (encoded_size % 4 == 1) {
+                return std::unexpected(Base64Error::InvalidPadding);
+            }
+            if (padding != std::string::npos
+                && (input.size() % 4 != 0 || input.size() - padding > 2
+                    || !std::ranges::all_of(input.substr(padding), [](char character) {
+                           return character == '=';
+                       }))) {
+                return std::unexpected(Base64Error::InvalidPadding);
+            }
+            if (!std::ranges::all_of(input.substr(0, encoded_size), [](unsigned char character) {
+                    return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z')
+                           || (character >= '0' && character <= '9') || character == '+' || character == '/'
+                           || character == '-' || character == '_';
+                })) {
+                return std::unexpected(Base64Error::InvalidInput);
+            }
+
             std::string base64 = input;
             for (char &c : base64) {
                 if (c == '-')
@@ -70,6 +92,13 @@ namespace Utils {
                 decoded = base64_decode(base64);
             } catch (...) {
                 return std::unexpected(Base64Error::DecodingError);
+            }
+
+            std::string canonical_input = input.substr(0, encoded_size);
+            std::ranges::replace(canonical_input, '+', '-');
+            std::ranges::replace(canonical_input, '/', '_');
+            if (to_base64(decoded) != canonical_input) {
+                return std::unexpected(Base64Error::InvalidPadding);
             }
 
             if constexpr (std::is_same_v<Container, std::string>) {

@@ -15,8 +15,9 @@
 #include <boost/json.hpp>
 #include <msgpack.hpp>
 
-#include <QByteArray>
 #include "contracts/contract_hash.h"
+#include "utils/exc_utils_base64.h"
+
 namespace ExtraChain::Contracts::Codec {
     namespace {
 
@@ -82,19 +83,12 @@ namespace ExtraChain::Contracts::Codec {
                 const auto &object       = value.as_object();
                 const auto  binary_value = object.if_contains("$binary");
                 if (object.size() == 1 && binary_value != nullptr && binary_value->is_string()) {
-                    const auto decoded =
-                        QByteArray::fromBase64Encoding(QByteArray(binary_value->as_string().data(),
-                                                                  static_cast<qsizetype>(
-                                                                      binary_value->as_string().size())),
-                                                       QByteArray::Base64UrlEncoding
-                                                           | QByteArray::AbortOnBase64DecodingErrors);
-                    if (!decoded) {
+                    const auto decoded = Utils::from_base64<std::vector<std::uint8_t>>(
+                        std::string(binary_value->as_string()));
+                    if (!decoded.has_value()) {
                         throw std::invalid_argument("Invalid $binary value");
                     }
-                    const auto &bytes = decoded.decoded;
-                    pack_binary(packer,
-                                std::span(reinterpret_cast<const std::uint8_t *>(bytes.constData()),
-                                          static_cast<std::size_t>(bytes.size())));
+                    pack_binary(packer, *decoded);
                     return;
                 }
                 packer.pack_map(static_cast<std::uint32_t>(object.size()));
@@ -123,10 +117,7 @@ namespace ExtraChain::Contracts::Codec {
             case msgpack::type::BIN: {
                 const auto          bytes = binary(value);
                 boost::json::object object;
-                object["$binary"] =
-                    QByteArray(reinterpret_cast<const char *>(bytes.data()), static_cast<qsizetype>(bytes.size()))
-                        .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals)
-                        .toStdString();
+                object["$binary"] = Utils::to_base64(bytes);
                 return object;
             }
             case msgpack::type::ARRAY: {

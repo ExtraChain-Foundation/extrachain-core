@@ -1052,6 +1052,8 @@ namespace {
         const auto binary_json = ExtraChain::Contracts::Codec::decode_json(*binary);
         require(binary_json.has_value() && *binary_json == R"({"$binary":"AQID"})",
                 "Extended JSON binary value did not round-trip");
+        require(!ExtraChain::Contracts::Codec::encode_json(R"({"$binary":"AQ!D"})").has_value(),
+                "Invalid extended JSON binary value was accepted");
 
         const auto oversized = ExtraChain::Contracts::Codec::encode_json(
             std::string(ExtraChain::Contracts::ExecutionLimits {}.input_bytes + 1, ' '));

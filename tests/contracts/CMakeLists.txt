@@ -13,6 +13,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/ExtraChainWamr.cmake)
 
 add_executable(extrachain-contract-tests
     contract_runtime_test.cpp
+    ../../sources/utils/base64.cpp
     ../../sources/contracts/contract_codec.cpp
     ../../sources/contracts/contract_manager.cpp
     ../../sources/contracts/contract_module.cpp

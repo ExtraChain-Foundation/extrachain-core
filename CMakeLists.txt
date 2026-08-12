@@ -116,6 +116,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_iterator.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils_base64.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/serialization.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_filter.h
@@ -172,7 +173,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/luminance_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/token_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thoth_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/janus_manager.cpp
@@ -184,6 +184,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/base64.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/fs_path.cpp
@@ -192,7 +193,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_schema.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_iterator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp

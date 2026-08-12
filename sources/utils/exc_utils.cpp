@@ -43,8 +43,6 @@
 // #include "boost/asio.hpp" // need qmake fix
 #include "boost/version.hpp"
 
-#include "cpp-base64/base64.cpp"
-
 #include "extrachain_version.h"
 #include "encryption/encryption_tools.h"
 // #include "managers/data_mining_manager.h"
