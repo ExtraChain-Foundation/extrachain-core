@@ -348,6 +348,11 @@ void ExtraChainNode::process() {
             QMetaObject::invokeMethod(node, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
         }
     });
+    dag_peer_info_timer_ = ExtraChain::Core::DeadlineTask::create(network_manager_->executor(), [node] {
+        if (!node.isNull()) {
+            QMetaObject::invokeMethod(node, &ExtraChainNode::dagPeerInfoTimerTick, Qt::QueuedConnection);
+        }
+    });
     const auto periodic_task = [this, node](std::chrono::milliseconds interval, auto handler) {
         return ExtraChain::Core::PeriodicTask::create(network_manager_->executor(), interval, [node, handler] {
             if (!node.isNull()) {
@@ -430,6 +435,9 @@ ExtraChainNode::~ExtraChainNode() {
 void ExtraChainNode::stop_runtime_tasks() {
     if (dag_sync_timer_) {
         dag_sync_timer_->cancel();
+    }
+    if (dag_peer_info_timer_) {
+        dag_peer_info_timer_->cancel();
     }
     if (reward_timer_) {
         reward_timer_->stop();
@@ -2440,6 +2448,24 @@ void ExtraChainNode::dagTimerStoping() {
 void ExtraChainNode::dagTimerTick() {
     if (dag_ != nullptr) {
         dag_->timer_tick();
+    }
+}
+
+void ExtraChainNode::schedule_dag_peer_info_collection(std::chrono::milliseconds delay) {
+    if (dag_peer_info_timer_) {
+        dag_peer_info_timer_->schedule_after(delay);
+    }
+}
+
+void ExtraChainNode::cancel_dag_peer_info_collection() {
+    if (dag_peer_info_timer_) {
+        dag_peer_info_timer_->cancel();
+    }
+}
+
+void ExtraChainNode::dagPeerInfoTimerTick() {
+    if (dag_ != nullptr) {
+        dag_->continue_with_collected_peer_info();
     }
 }
 

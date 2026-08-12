@@ -29,6 +29,7 @@
 #include <QStringList>
 #include <QtEndian>
 
+#include <chrono>
 #include <cctype>
 #include <limits>
 
@@ -40,7 +41,7 @@
 
 static constexpr int SYNC_SECTIONS_BATCH   = 2100;
 static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
-static constexpr int SYNC_LAST_INFO_COLLECTION_MS = 250;
+static constexpr auto SYNC_LAST_INFO_COLLECTION_DELAY = std::chrono::milliseconds(250);
 
 // Pack files are shipped in fixed-size chunks so neither side holds a whole pack
 // in memory and large packs stay well under the socket buffer limit.
@@ -2099,34 +2100,34 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
-    const auto continue_with_collected_info = [this]() {
-        if (last_info_.empty())
-            return;
-        if (sync_status_ == DagSyncStatus::LastInfo) {
-            set_sync_status(DagSyncStatus::Sections);
-            check_status_ = DagSyncStatus::None;
-            eLog("BC 6 sync status");
-            this->handle_sync_request();
-            return;
-        }
-        if (check_status_ == DagSyncStatus::LastInfo) {
-            check_status_ = DagSyncStatus::Sections;
-            eLog("BC 7 check status");
-            this->handle_sync_request();
-        }
-    };
-
     // A dense network must not synchronize from whichever peer answers first.
     // Give the other active peers a short bounded window, then let
     // handle_sync_request() select the responder with the highest section.
     if (last_info_.size() == 1) {
-        QTimer::singleShot(SYNC_LAST_INFO_COLLECTION_MS, node, [this, continue_with_collected_info]() {
-            std::lock_guard timer_lock(sync_last_info_mutex_);
-            continue_with_collected_info();
-        });
+        node->schedule_dag_peer_info_collection(SYNC_LAST_INFO_COLLECTION_DELAY);
     }
     if (last_info_.size() >= static_cast<std::size_t>(requests_count_)) {
-        continue_with_collected_info();
+        node->cancel_dag_peer_info_collection();
+        continue_with_collected_peer_info();
+    }
+}
+
+void Dag::continue_with_collected_peer_info() {
+    std::lock_guard sync_lock(sync_last_info_mutex_);
+    if (last_info_.empty()) {
+        return;
+    }
+    if (sync_status_ == DagSyncStatus::LastInfo) {
+        set_sync_status(DagSyncStatus::Sections);
+        check_status_ = DagSyncStatus::None;
+        eLog("BC 6 sync status");
+        handle_sync_request();
+        return;
+    }
+    if (check_status_ == DagSyncStatus::LastInfo) {
+        check_status_ = DagSyncStatus::Sections;
+        eLog("BC 7 check status");
+        handle_sync_request();
     }
 }
 

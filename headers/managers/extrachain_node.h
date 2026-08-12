@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <functional>
 #include <expected>
@@ -171,12 +172,15 @@ private:
     std::mutex                                                                     pending_contracts_mutex_;
     std::unordered_map<std::string, ExtraChain::Contracts::PreparedContractChange> pending_contracts_;
     std::shared_ptr<ExtraChain::Core::DeadlineTask>                                dag_sync_timer_;
+    std::shared_ptr<ExtraChain::Core::DeadlineTask>                                dag_peer_info_timer_;
     std::shared_ptr<ExtraChain::Core::PeriodicTask>                                reward_timer_;
     std::shared_ptr<ExtraChain::Core::PeriodicTask>                                info_timer_;
     std::shared_ptr<ExtraChain::Core::PeriodicTask>                                luminance_timer_;
 
     void stop_runtime_tasks();
     void release_core();
+    void schedule_dag_peer_info_collection(std::chrono::milliseconds delay);
+    void cancel_dag_peer_info_collection();
 
     bool                         started_               = false;
     bool                         is_client_application_ = false;
@@ -415,6 +419,7 @@ public slots:
     void dagTimerStarting(int ms);
     void dagTimerStoping();
     void dagTimerTick();
+    void dagPeerInfoTimerTick();
     void dagWatchdogTick();
     void dagSyncCheck();
 

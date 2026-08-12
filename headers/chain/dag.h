@@ -813,6 +813,8 @@ private:
     std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;
     std::recursive_mutex                           sync_last_info_mutex_;
 
+    void continue_with_collected_peer_info();
+
     struct PendingSyncResponse {
         std::string message_id;
         SectionId  from;
