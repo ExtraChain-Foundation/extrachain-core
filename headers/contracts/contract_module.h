@@ -10,10 +10,11 @@
 
 #pragma once
 
+#include <cstdint>
 #include <expected>
 #include <span>
 #include <string>
-#include <vector>
+#include <string_view>
 
 #include "extrachain_global.h"
 

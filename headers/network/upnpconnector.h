@@ -22,10 +22,13 @@
 #include <QObject>
 #include <QUdpSocket>
 #include <QNetworkAccessManager>
+#include <QNetworkAddressEntry>
 #include <QNetworkReply>
 #include <QTimer>
 #include <QUrl>
 #include <QHostAddress>
+
+#include <memory>
 
 class UPnPConnector : public QObject {
     Q_OBJECT

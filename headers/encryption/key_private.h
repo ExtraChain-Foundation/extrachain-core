@@ -19,14 +19,11 @@
 
 #pragma once
 
+#include <boost/describe/class.hpp>
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"
 #include "core/byte_array.h"
-
-#include <boost/core/demangle.hpp>
-#include <msgpack.hpp>
-
 #include "encryption/encryption_tools.h"
 
 class EXTRACHAIN_EXPORT KeyPrivate {

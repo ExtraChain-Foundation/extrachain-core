@@ -127,6 +127,7 @@ set(EXTRACHAIN_HEADER_CHECKS
     managers/extrachain_node.h
     network/network_manager.h
     network/message_body.h
+    utils/exc_logs.h
     utils/exc_utils_base64.h
     utils/hash.h
     utils/serialization.h

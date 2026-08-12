@@ -5,6 +5,7 @@
 #include <filesystem>
 
 #include "chain/control_index.h"
+#include "utils/exc_utils_base64.h"
 
 int main(int argc, char *argv[]) {
     QCoreApplication app(argc, argv);
@@ -21,15 +22,17 @@ int main(int argc, char *argv[]) {
     std::printf("after 3 puts rows=%llu\n", (unsigned long long)ci.row_count());
 
     auto g = ci.get(SectionId(40));
-    std::printf("get(40)=%s\n", g.has_value() ? g->c_str() : "MISSING");
+    std::printf("get(40)=%s\n", g.has_value() ? g.value().c_str() : "MISSING");
 
     auto l = ci.last_at_or_below(SectionId(55));
-    std::printf("last<=55: %s -> %s\n", l.has_value() ? l->first.to_string().c_str() : "?",
-                l.has_value() ? l->second.c_str() : "MISSING");
+    std::printf("last<=55: %s -> %s\n",
+                l.has_value() ? l.value().first.to_string().c_str() : "?",
+                l.has_value() ? l.value().second.c_str() : "MISSING");
 
     auto top = ci.last_at_or_below(SectionId(-1));
-    std::printf("last<=top: %s -> %s\n", top.has_value() ? top->first.to_string().c_str() : "?",
-                top.has_value() ? top->second.c_str() : "MISSING");
+    std::printf("last<=top: %s -> %s\n",
+                top.has_value() ? top.value().first.to_string().c_str() : "?",
+                top.has_value() ? top.value().second.c_str() : "MISSING");
 
     ci.erase(SectionId(40));
     std::printf("after erase(40) get(40)=%s rows=%llu\n",
@@ -41,11 +44,23 @@ int main(int argc, char *argv[]) {
     std::printf("overwrite get(20)=%s\n", ci.get(SectionId(20)).value_or("?").c_str());
 
     // --- edge cases ---
-    int pass = 0, fail = 0;
+    int  pass = 0, fail = 0;
     auto check = [&](const char *name, bool ok) {
         std::printf("  [%s] %s\n", ok ? "PASS" : "FAIL", name);
         ok ? pass++ : fail++;
     };
+
+    const std::string base64_binary("\0\x01\xfb\xff", 4);
+    const auto        base64_encoded = Utils::to_base64(base64_binary);
+    const auto        base64_decoded = Utils::from_base64(base64_encoded);
+    check("base64 URL-safe encoding", base64_encoded == "AAH7_w");
+    check("base64 URL-safe round-trip", base64_decoded.has_value() && base64_decoded.value() == base64_binary);
+    const auto standard_base64 = Utils::from_base64("AAH7/w==");
+    check("base64 standard alphabet compatibility",
+          standard_base64.has_value() && standard_base64.value() == base64_binary);
+    const auto empty_base64 = Utils::from_base64("");
+    check("base64 empty value round-trip", empty_base64.has_value() && empty_base64.value().empty());
+    check("base64 invalid padding rejected", !Utils::from_base64("A===").has_value());
 
     // state now: {20:hash20b, 60:hash60} (40 erased)
     check("get missing -> nullopt", !ci.get(SectionId(99)).has_value());

@@ -128,8 +128,6 @@
     #include <magic_enum/magic_enum.hpp>
     #include <magic_enum/magic_enum_iostream.hpp>
 
-    #include "cpp-base64/base64.h"
-
     #include <boost/generator_iterator.hpp>
     #include <boost/random.hpp>
     #include <boost/core/demangle.hpp>
@@ -151,4 +149,6 @@
 
     #include <QtCore>
     #include <QtNetwork>
+
+    #include "adapters/qt/logging_adapter.h"
 #endif

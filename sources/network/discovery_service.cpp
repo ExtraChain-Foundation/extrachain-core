@@ -19,6 +19,7 @@
 
 #include "network/discovery_service.h"
 
+#include "adapters/qt/logging_adapter.h"
 #include "utils/exc_logs.h"
 
 DiscoveryService::DiscoveryService(quint16 discoveryPort, quint16 networkPort, QNetworkAddressEntry *local)

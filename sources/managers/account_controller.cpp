@@ -19,6 +19,8 @@
 
 #include "managers/account_controller.h"
 
+#include <QJsonArray>
+
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_controller.h"
 

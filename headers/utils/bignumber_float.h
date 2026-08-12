@@ -52,8 +52,8 @@ public:
 private:
     cpp_dec_float_exc m_data = 0;
 
-#ifdef QT_DEBUG
-    std::string qdata;
+#ifndef NDEBUG
+    std::string debug_value;
 #endif
 
 public:
@@ -119,13 +119,5 @@ public:
         *this = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? from_hex(num) : BigNumberFloat(num);
     }
 };
-
-inline size_t qHash(const BigNumberFloat &key, size_t seed) {
-    std::string s = key.to_string();
-    size_t      h = seed;
-    for (char c : s)
-        h = (h * 131) ^ static_cast<unsigned char>(c);
-    return h;
-}
 
 MAKE_CUSTOM_MAGICAL(BigNumberFloat)

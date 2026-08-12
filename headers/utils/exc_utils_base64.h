@@ -23,8 +23,9 @@
 #include <expected>
 #include <string>
 #include <type_traits>
+#include <vector>
 
-#include "cpp-base64/base64.h"
+#include <sodium.h>
 
 enum class Base64Error {
     InvalidPadding,
@@ -35,26 +36,27 @@ enum class Base64Error {
 namespace Utils {
     template <typename Container>
     std::string to_base64(const Container &input) {
-        std::string result = base64_encode(reinterpret_cast<const unsigned char *>(input.data()), input.size());
-
-        for (char &c : result) {
-            if (c == '+')
-                c = '-';
-            else if (c == '/')
-                c = '_';
-            else if (c == '=') {
-                result.resize(result.find('='));
-                break;
-            }
+        const auto encoded_size =
+            sodium_base64_encoded_len(input.size(), sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+        std::string result(encoded_size, '\0');
+        sodium_bin2base64(result.data(),
+                          result.size(),
+                          reinterpret_cast<const unsigned char *>(input.data()),
+                          input.size(),
+                          sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+        if (!result.empty()) {
+            result.resize(result.size() - 1);
         }
-
         return result;
     }
 
     template <typename Container = std::string>
     std::expected<Container, Base64Error> from_base64(const std::string &input) {
         try {
-            const auto padding = input.find('=');
+            if (input.empty()) {
+                return Container {};
+            }
+            const auto padding      = input.find('=');
             const auto encoded_size = padding == std::string::npos ? input.size() : padding;
             if (encoded_size % 4 == 1) {
                 return std::unexpected(Base64Error::InvalidPadding);
@@ -74,35 +76,36 @@ namespace Utils {
                 return std::unexpected(Base64Error::InvalidInput);
             }
 
-            std::string base64 = input;
-            for (char &c : base64) {
-                if (c == '-')
-                    c = '+';
-                else if (c == '_')
-                    c = '/';
+            std::string canonical_input = input.substr(0, encoded_size);
+            for (char &character : canonical_input) {
+                if (character == '+') {
+                    character = '-';
+                } else if (character == '/') {
+                    character = '_';
+                }
             }
 
-            if (base64.size() % 4 != 0) {
-                int padding = (4 - (base64.size() % 4)) % 4;
-                base64.append(padding, '=');
-            }
-
-            std::string decoded;
-            try {
-                decoded = base64_decode(base64);
-            } catch (...) {
+            std::vector<unsigned char> decoded(canonical_input.size());
+            std::size_t                decoded_size = 0;
+            if (sodium_base642bin(decoded.data(),
+                                  decoded.size(),
+                                  canonical_input.data(),
+                                  canonical_input.size(),
+                                  nullptr,
+                                  &decoded_size,
+                                  nullptr,
+                                  sodium_base64_VARIANT_URLSAFE_NO_PADDING)
+                != 0) {
                 return std::unexpected(Base64Error::DecodingError);
             }
+            decoded.resize(decoded_size);
 
-            std::string canonical_input = input.substr(0, encoded_size);
-            std::ranges::replace(canonical_input, '+', '-');
-            std::ranges::replace(canonical_input, '/', '_');
             if (to_base64(decoded) != canonical_input) {
                 return std::unexpected(Base64Error::InvalidPadding);
             }
 
             if constexpr (std::is_same_v<Container, std::string>) {
-                return decoded;
+                return std::string(decoded.begin(), decoded.end());
             }
             return Container(decoded.begin(), decoded.end());
         } catch (...) {

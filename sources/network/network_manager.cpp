@@ -134,7 +134,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
     , node(node)
     , network_runtime_(std::make_unique<ExtraChain::Core::NetworkRuntime>(ExtraChain::Core::RuntimeConfig {
           .io_threads       = node->runtime_profile() == RuntimeProfile::MobileLight ? 1U : 2U,
-          .blocking_threads = 1U,
+          .blocking_threads = node->runtime_profile() == RuntimeProfile::FullNode ? 2U : 1U,
       }))
     , network_status_adapter_(std::make_unique<QtNetworkStatusAdapter>(network_status_))
     , ws_port(port) {
@@ -690,7 +690,7 @@ void NetworkManager::start_network() {
                 return;
             }
 
-            auto service = WebSocketService::from_accepted(network_runtime_->executor(), std::move(socket), node);
+            auto service = WebSocketService::from_accepted(*network_runtime_, std::move(socket), node);
             service->set_direction(SocketDirection::Incoming);
             connectWsService(service);
             boost::asio::co_spawn(network_runtime_->executor(), service->run(true), boost::asio::detached);
@@ -708,8 +708,7 @@ boost::asio::awaitable<void> NetworkManager::connect_websocket(std::string   ip,
                                                                bool          request_list_nodes,
                                                                bool          is_constant,
                                                                bool          is_light) {
-    auto result =
-        co_await WebSocketService::connect(network_runtime_->executor(), ip, port, node, is_constant, is_light);
+    auto result = co_await WebSocketService::connect(*network_runtime_, ip, port, node, is_constant, is_light);
     if (!result.has_value()) {
         const auto detail = result.error();
         QMetaObject::invokeMethod(

@@ -19,6 +19,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -48,35 +49,38 @@ namespace ExtraChain::Core {
         NetworkRuntime(NetworkRuntime&&)                 = delete;
         NetworkRuntime& operator=(NetworkRuntime&&)      = delete;
 
-        [[nodiscard]] std::expected<std::uint16_t, std::string> listen(std::uint16_t port,
-                                                                       AcceptHandler handler);
-        void stop_listening();
-        void stop();
+        [[nodiscard]] std::expected<std::uint16_t, std::string> listen(std::uint16_t port, AcceptHandler handler);
+        void                                                    stop_listening();
+        void                                                    stop();
 
-        [[nodiscard]] bool listening() const noexcept;
+        [[nodiscard]] bool              listening() const noexcept;
         [[nodiscard]] Runtime::Executor executor();
 
-        void async_probe(std::string host,
-                         std::uint16_t port,
-                         std::chrono::milliseconds timeout,
-                         ProbeHandler handler);
-        [[nodiscard]] static std::expected<void, std::string> probe(
-            std::string_view host,
-            std::uint16_t port,
-            std::chrono::milliseconds timeout);
+        template <typename Function>
+        [[nodiscard]] auto async_blocking(Function function) {
+            return runtime_.async_blocking(std::move(function));
+        }
+
+        void                                                  async_probe(std::string               host,
+                                                                          std::uint16_t             port,
+                                                                          std::chrono::milliseconds timeout,
+                                                                          ProbeHandler              handler);
+        [[nodiscard]] static std::expected<void, std::string> probe(std::string_view          host,
+                                                                    std::uint16_t             port,
+                                                                    std::chrono::milliseconds timeout);
 
     private:
-        [[nodiscard]] bool open_acceptor(const Tcp& protocol,
-                                         std::uint16_t port,
-                                         boost::system::error_code& error);
+        [[nodiscard]] bool           open_acceptor(const Tcp&                 protocol,
+                                                   std::uint16_t              port,
+                                                   boost::system::error_code& error);
         boost::asio::awaitable<void> accept_loop();
 
-        Runtime                       runtime_;
+        Runtime                        runtime_;
         std::unique_ptr<Tcp::acceptor> acceptor_;
-        AcceptHandler                 accept_handler_;
-        mutable std::mutex            accept_handler_mutex_;
-        std::atomic_bool              listening_ { false };
-        std::atomic_bool              stopping_ { false };
+        AcceptHandler                  accept_handler_;
+        mutable std::mutex             accept_handler_mutex_;
+        std::atomic_bool               listening_ { false };
+        std::atomic_bool               stopping_ { false };
     };
 
 } // namespace ExtraChain::Core

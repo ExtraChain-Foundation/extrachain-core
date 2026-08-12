@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <QObject>
+
 #include "chain/actor.h"
 #include "chain/private_profile.h"
 #include "utils/autologinhash.h"

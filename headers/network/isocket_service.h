@@ -137,7 +137,9 @@ public:
 protected:
     bool check_first_message(const HandshakeMessage& message);
     Data generate_first_message();
+    Data prepare_send_message(const Data& message);
     Data prepare_send_message(std::span<const std::uint8_t> message);
+    Data prepare_receive_message(const Data& message);
     Data prepare_receive_message(std::span<const std::uint8_t> message);
 
     ExtraChainNode*           node_ = nullptr;

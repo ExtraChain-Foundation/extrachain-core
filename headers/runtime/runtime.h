@@ -14,10 +14,15 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <type_traits>
+#include <utility>
 
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 namespace ExtraChain::Core {
 
@@ -48,10 +53,40 @@ namespace ExtraChain::Core {
         void run();
         void stop();
 
-        [[nodiscard]] bool running() const noexcept;
-        [[nodiscard]] Executor executor();
-        [[nodiscard]] boost::asio::io_context& io_context() noexcept;
+        [[nodiscard]] bool                      running() const noexcept;
+        [[nodiscard]] Executor                  executor();
+        [[nodiscard]] boost::asio::io_context&  io_context() noexcept;
         [[nodiscard]] boost::asio::thread_pool& blocking_pool() noexcept;
+
+        /**
+         * Run blocking work on the bounded worker pool.
+         *
+         * The coroutine resumes on its original executor. This keeps database,
+         * filesystem, and WebAssembly work away from network and timer threads.
+         */
+        template <typename Function>
+        [[nodiscard]] boost::asio::awaitable<std::invoke_result_t<Function&>> async_blocking(Function function) {
+            using Result = std::invoke_result_t<Function&>;
+            static_assert(!std::is_reference_v<Result>, "async_blocking does not return references");
+
+            if constexpr (std::is_void_v<Result>) {
+                co_await boost::asio::co_spawn(
+                    blocking_pool(),
+                    [function = std::move(function)]() mutable -> boost::asio::awaitable<void> {
+                        std::invoke(function);
+                        co_return;
+                    },
+                    boost::asio::use_awaitable);
+                co_return;
+            } else {
+                co_return co_await boost::asio::co_spawn(
+                    blocking_pool(),
+                    [function = std::move(function)]() mutable -> boost::asio::awaitable<Result> {
+                        co_return std::invoke(function);
+                    },
+                    boost::asio::use_awaitable);
+            }
+        }
 
     private:
         struct State;

@@ -21,7 +21,7 @@
 
 #include <string>
 
-#include <boost/core/demangle.hpp>
+#include <boost/describe/class.hpp>
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"

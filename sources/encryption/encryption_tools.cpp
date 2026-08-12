@@ -18,6 +18,9 @@
  */
 
 #include "encryption/encryption_tools.h"
+
+#include <fstream>
+
 #include "core/container.h"
 
 #include <bip3x/bip3x_mnemonic.h>

@@ -4,9 +4,12 @@
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
+#include <stdexcept>
 #include <thread>
 
 #include <boost/asio/post.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
 
 #include "network/network_runtime.h"
 #include "network/network_status.h"
@@ -83,6 +86,43 @@ int main() {
     runtime.start();
     timer->start();
 
+    std::atomic_bool blocking_complete { false };
+    std::atomic_bool blocking_exception_caught { false };
+    std::thread::id  blocking_thread;
+    boost::asio::co_spawn(
+        runtime.executor(),
+        [&]() -> boost::asio::awaitable<void> {
+            const auto answer = co_await runtime.async_blocking([&]() {
+                blocking_thread = std::this_thread::get_id();
+                return 42;
+            });
+            require(answer == 42, "blocking work must return its result");
+            require(std::this_thread::get_id() != blocking_thread,
+                    "blocking work must return to the I/O executor");
+            try {
+                co_await runtime.async_blocking([]() -> void {
+                    throw std::runtime_error("expected runtime test error");
+                });
+            } catch (const std::runtime_error&) {
+                blocking_exception_caught.store(true, std::memory_order_release);
+            }
+            blocking_complete.store(true, std::memory_order_release);
+            condition.notify_one();
+        },
+        boost::asio::detached);
+
+    {
+        std::unique_lock lock(mutex);
+        require(condition.wait_for(lock,
+                                   2s,
+                                   [&] {
+                                       return blocking_complete.load(std::memory_order_acquire);
+                                   }),
+                "blocking work must complete through the coroutine bridge");
+    }
+    require(blocking_exception_caught.load(std::memory_order_acquire),
+            "blocking work must propagate exceptions on the I/O executor");
+
     {
         std::unique_lock lock(mutex);
         require(condition.wait_for(lock,
@@ -132,13 +172,13 @@ int main() {
     });
     require(listen_port.has_value(), "network runtime must bind an ephemeral listener");
 
-    const auto sync_probe = NetworkRuntime::probe("127.0.0.1", *listen_port, 1s);
+    const auto sync_probe = NetworkRuntime::probe("127.0.0.1", listen_port.value(), 1s);
     require(sync_probe.has_value(), "synchronous probe must reach the Boost listener");
-    const auto hostname_probe = NetworkRuntime::probe("localhost", *listen_port, 1s);
+    const auto hostname_probe = NetworkRuntime::probe("localhost", listen_port.value(), 1s);
     require(hostname_probe.has_value(), "synchronous probe must resolve a host name");
 
     std::atomic_bool async_probe_ok { false };
-    network.async_probe("127.0.0.1", *listen_port, 1s, [&](bool connected, std::string) {
+    network.async_probe("127.0.0.1", listen_port.value(), 1s, [&](bool connected, std::string) {
         async_probe_ok.store(connected, std::memory_order_release);
         condition.notify_one();
     });

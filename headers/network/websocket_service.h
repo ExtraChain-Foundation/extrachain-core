@@ -26,6 +26,7 @@
 #include <expected>
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -37,6 +38,10 @@
 
 #include "extrachain_global.h"
 
+namespace ExtraChain::Core {
+    class NetworkRuntime;
+}
+
 class EXTRACHAIN_EXPORT WebSocketService final : public SocketService {
 public:
     using Tcp           = boost::asio::ip::tcp;
@@ -44,13 +49,15 @@ public:
     using Service       = std::shared_ptr<WebSocketService>;
     using ConnectResult = std::expected<Service, std::string>;
 
-    static boost::asio::awaitable<ConnectResult> connect(boost::asio::any_io_executor executor,
-                                                         std::string                  host,
-                                                         std::uint16_t                port,
-                                                         ExtraChainNode*              node,
-                                                         bool                         is_constant = false,
-                                                         bool                         is_light    = false);
-    static Service from_accepted(boost::asio::any_io_executor executor, Tcp::socket socket, ExtraChainNode* node);
+    static boost::asio::awaitable<ConnectResult> connect(ExtraChain::Core::NetworkRuntime& runtime,
+                                                         std::string                       host,
+                                                         std::uint16_t                     port,
+                                                         ExtraChainNode*                   node,
+                                                         bool                              is_constant = false,
+                                                         bool                              is_light    = false);
+    static Service                               from_accepted(ExtraChain::Core::NetworkRuntime& runtime,
+                                                               Tcp::socket                       socket,
+                                                               ExtraChainNode*                   node);
 
     ~WebSocketService() override;
 
@@ -68,7 +75,7 @@ public:
     [[nodiscard]] std::int64_t pending_bytes() const noexcept override;
 
 private:
-    explicit WebSocketService(boost::asio::any_io_executor executor, ExtraChainNode* node);
+    explicit WebSocketService(ExtraChain::Core::NetworkRuntime& runtime, ExtraChainNode* node);
 
     boost::asio::awaitable<std::expected<void, std::string>> open(std::string host, std::uint16_t port);
     boost::asio::awaitable<void>                             run_on_strand(bool accepted_socket);
@@ -78,12 +85,15 @@ private:
     boost::asio::awaitable<void>                             write_loop();
     boost::asio::awaitable<bool>                             write_text(std::string_view text);
     boost::asio::awaitable<std::optional<std::string>>       read_text();
-    void                                                     process_binary(std::span<const std::uint8_t> message);
+    boost::asio::awaitable<Data>                             prepare_send_async(Data message);
+    boost::asio::awaitable<Data>                             prepare_receive_async(Data message);
+    boost::asio::awaitable<void>                             process_binary(std::vector<std::uint8_t> message);
     void report_error(Network::SocketServiceError code, std::string detail = {});
     void finish_close();
     void operation_finished();
 
     boost::asio::strand<boost::asio::any_io_executor> strand_;
+    ExtraChain::Core::NetworkRuntime&                 runtime_;
     std::unique_ptr<WebSocket>                        websocket_;
     boost::asio::steady_timer                         queue_signal_;
     std::atomic_bool                                  running_ { false };

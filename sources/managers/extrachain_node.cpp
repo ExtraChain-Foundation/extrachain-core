@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     #include <malloc.h>
@@ -220,12 +221,13 @@ namespace {
     }
 } // namespace
 
-ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject*      parent,
-                                             bool          is_client_application,
-                                             bool          is_custom_app,
-                                             std::uint16_t ws_port)
+ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject*                      parent,
+                                             bool                          is_client_application,
+                                             bool                          is_custom_app,
+                                             std::uint16_t                 ws_port,
+                                             std::optional<RuntimeProfile> runtime_profile)
     : QObject(parent)
-    , node(new ExtraChainNode(is_client_application, is_custom_app, ws_port)) {
+    , node(new ExtraChainNode(is_client_application, is_custom_app, ws_port, runtime_profile)) {
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
@@ -270,16 +272,23 @@ void ExtraChainNodeWrapper::init(bool makeAsync) {
     }
 }
 
-ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app, std::uint16_t port)
+ExtraChainNode::ExtraChainNode(bool                          is_client_application,
+                               bool                          is_custom_app,
+                               std::uint16_t                 port,
+                               std::optional<RuntimeProfile> runtime_profile)
     : is_client_application_(is_client_application)
     , is_custom_app_(is_custom_app)
     , ws_port(port) {
     initialize_contract_resources();
+    if (runtime_profile.has_value()) {
+        runtime_profile_ = runtime_profile.value();
+    } else {
 #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-    runtime_profile_ = is_client_application_ ? RuntimeProfile::MobileLight : RuntimeProfile::FullNode;
+        runtime_profile_ = is_client_application_ ? RuntimeProfile::MobileLight : RuntimeProfile::FullNode;
 #else
-    runtime_profile_ = is_client_application_ ? RuntimeProfile::DesktopLight : RuntimeProfile::FullNode;
+        runtime_profile_ = is_client_application_ ? RuntimeProfile::DesktopLight : RuntimeProfile::FullNode;
 #endif
+    }
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
 }
 
@@ -616,65 +625,70 @@ bool ExtraChainNode::create_token_allocations() {
 }
 
 void ExtraChainNode::backfill_token_allocations() {
-    QThreadPool::globalInstance()->start([this]() {
-        QThread::sleep(10);
-
-        auto network_id = actor_index()->network_id();
-        auto alloc_row =
-            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
-                                                                              network_id,
-                                                                              Dfs::Basic::TEMPLATE_DICTIONARY,
-                                                                              "token_allocations");
-        if (!alloc_row.has_value()) {
-            eWarning("[Node] token_allocations backfill: dictionary not found");
-            return;
-        }
-
-        constexpr std::uint64_t               cutoff_ms = 1743458400000ULL; // 2026-04-01 00:00:00 UTC
-        std::map<std::string, BigNumberFloat> totals;
-
-        SectionId start_section = dag_->current_section();
-        SectionId section_id    = start_section;
-        SectionId min_section   = SectionId(BigNumber::from_hex("a05133"));
-        eLog("[Node] token_allocations backfill: starting from section {}", section_id);
-
-        while (section_id >= min_section) {
-            eLog("[Node] token_allocations backfill: section {}", section_id);
-
-            auto section = dag_->read_section(section_id);
-            if (!section.has_value()) {
-                section_id = section_id - SectionId(1);
-                continue;
+    QTimer::singleShot(std::chrono::seconds(10), this, [this]() {
+        ThreadPoolBoost::instance()->post([this]() {
+            auto network_id = actor_index()->network_id();
+            auto alloc_row =
+                Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                                  network_id,
+                                                                                  Dfs::Basic::TEMPLATE_DICTIONARY,
+                                                                                  "token_allocations");
+            if (!alloc_row.has_value()) {
+                eWarning("[Node] token_allocations backfill: dictionary not found");
+                return;
             }
 
-            if (!section->transactions.empty()) {
-                eLog("[Node] token_allocations backfill: section {} middle={} cutoff={}",
-                     section_id,
-                     section->middle(),
-                     cutoff_ms);
-                if (section->middle() < cutoff_ms) {
-                    eLog("[Node] token_allocations backfill: reached cutoff at section {}", section_id);
-                    break;
+            constexpr std::uint64_t               cutoff_ms = 1743458400000ULL; // 2026-04-01 00:00:00 UTC
+            std::map<std::string, BigNumberFloat> totals;
+
+            SectionId start_section = dag_->current_section();
+            SectionId section_id    = start_section;
+            SectionId min_section   = SectionId(BigNumber::from_hex("a05133"));
+            eLog("[Node] token_allocations backfill: starting from section {}", section_id);
+
+            while (section_id >= min_section) {
+                eLog("[Node] token_allocations backfill: section {}", section_id);
+
+                auto section = dag_->read_section(section_id);
+                if (!section.has_value()) {
+                    section_id = section_id - SectionId(1);
+                    continue;
+                }
+
+                const auto& section_value = section.value();
+                if (!section_value.transactions.empty()) {
+                    eLog("[Node] token_allocations backfill: section {} middle={} cutoff={}",
+                         section_id,
+                         section_value.middle(),
+                         cutoff_ms);
+                    if (section_value.middle() < cutoff_ms) {
+                        eLog("[Node] token_allocations backfill: reached cutoff at section {}", section_id);
+                        break;
+                    }
+                }
+
+                for (const auto& tx : section_value.transactions) {
+                    if (tx.type() != TransactionType::Minting)
+                        continue;
+                    std::string key = fmt::format("{}:{}", tx.receiver().to_string(), tx.token().to_string());
+                    totals[key] += tx.amount();
+                }
+
+                section_id = section_id - SectionId(1);
+            }
+
+            for (const auto& [key, amount] : totals) {
+                if (dfs_->dictionary_set_value(network_id,
+                                               alloc_row.value().file_id,
+                                               key,
+                                               amount.to_string(),
+                                               network_id)) {
+                    dag_->invalidate_token_allocations();
                 }
             }
 
-            for (const auto& tx : section->transactions) {
-                if (tx.type() != TransactionType::Minting)
-                    continue;
-                std::string key = fmt::format("{}:{}", tx.receiver().to_string(), tx.token().to_string());
-                totals[key] += tx.amount();
-            }
-
-            section_id = section_id - SectionId(1);
-        }
-
-        for (const auto& [key, amount] : totals) {
-            if (dfs_->dictionary_set_value(network_id, alloc_row->file_id, key, amount.to_string(), network_id)) {
-                dag_->invalidate_token_allocations();
-            }
-        }
-
-        eSuccess("[Node] token_allocations backfill complete: {} entries", totals.size());
+            eSuccess("[Node] token_allocations backfill complete: {} entries", totals.size());
+        });
     });
 }
 
@@ -962,7 +976,7 @@ void ExtraChainNode::start() {
 
     // Version compatibility: 0.17.0 (temp)
 #ifdef IS_APP_UI_CLIENT
-    QThreadPool::globalInstance()->start([this]() {
+    ThreadPoolBoost::instance()->post([this]() {
         auto system_id     = account_controller_->system_actor().id();
         auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
@@ -999,7 +1013,7 @@ void ExtraChainNode::start() {
 
     // Version compatibility: 0.19.2 (temp)
 #ifdef IS_APP_UI_CLIENT
-    QThreadPool::globalInstance()->start([this]() {
+    ThreadPoolBoost::instance()->post([this]() {
         auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
@@ -1038,7 +1052,7 @@ void ExtraChainNode::start() {
 #endif
 
     // Version compatibility: 0.20.0
-    QThreadPool::globalInstance()->start([this]() {
+    ThreadPoolBoost::instance()->post([this]() {
         QDir("blocks").removeRecursively();
     });
 }

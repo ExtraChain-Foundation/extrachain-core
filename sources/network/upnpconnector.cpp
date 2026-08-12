@@ -19,6 +19,7 @@
 #include "network/upnpconnector.h"
 #include <QDebug>
 #include <QNetworkRequest>
+#include <QXmlStreamReader>
 #include <iostream>
 
 UPnPConnector::UPnPConnector(std::shared_ptr<QNetworkAddressEntry> local, QObject *parent)
@@ -216,16 +217,16 @@ void UPnPConnector::retrieveDeviceDescription(const QUrl &deviceDescriptionUrl) 
             xml.readNext();
             if (xml.isStartElement()) {
                 // Look for a service element
-                if (xml.name() == "service") {
+                if (xml.name() == u"service") {
                     QString serviceType;
                     QString serviceControlURL;
                     // Process the inner elements of <service>
-                    while (!(xml.isEndElement() && xml.name() == "service")) {
+                    while (!(xml.isEndElement() && xml.name() == u"service")) {
                         xml.readNext();
                         if (xml.isStartElement()) {
-                            if (xml.name() == "serviceType") {
+                            if (xml.name() == u"serviceType") {
                                 serviceType = xml.readElementText();
-                            } else if (xml.name() == "controlURL") {
+                            } else if (xml.name() == u"controlURL") {
                                 serviceControlURL = xml.readElementText().trimmed();
                             }
                         }

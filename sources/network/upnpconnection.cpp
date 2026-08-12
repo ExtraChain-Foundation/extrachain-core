@@ -19,6 +19,7 @@
 
 #include "network/upnpconnection.h"
 
+#include "adapters/qt/logging_adapter.h"
 #include "utils/exc_logs.h"
 
 QHostAddress UPNPConnection::getExternalAddress() const {

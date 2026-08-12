@@ -28,8 +28,14 @@
 
 using boost::multiprecision::cpp_int;
 
+#ifndef NDEBUG
+    #define UPDATE_DEBUG_VALUE() debug_value = to_string();
+#else
+    #define UPDATE_DEBUG_VALUE()
+#endif
+
 BigNumber::BigNumber()
-    : m_data(0) { UPDATE_DEBUG() }
+    : m_data(0) { UPDATE_DEBUG_VALUE() }
 
     BigNumber::BigNumber(const std::string &bigNumber) {
     if (bigNumber == "inf")
@@ -58,7 +64,7 @@ BigNumber::BigNumber()
         this->m_data = -100000;
     }
 
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base)
@@ -67,17 +73,17 @@ BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base)
 
 BigNumber::BigNumber(const BigNumber &other) {
     this->m_data = other.data();
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumber::BigNumber(BigNumber &&other) noexcept {
     this->m_data = std::move(other.m_data);
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumber::BigNumber(const cpp_int &number) {
     this->m_data = number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumber BigNumber::operator&(const BigNumber &value) {
@@ -93,7 +99,7 @@ BigNumber BigNumber::operator>>(const std::uint32_t &value) {
 BigNumber BigNumber::operator>>=(const std::uint32_t &value) {
     BigNumber ret(m_data >> value);
     m_data = ret.data();
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
@@ -139,97 +145,97 @@ BigNumber BigNumber::operator%(long long number) const {
 
 BigNumber &BigNumber::operator=(const BigNumber &bigNumber) {
     m_data = bigNumber.data();
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator=(long long number) {
     m_data = number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator++() {
     *this = *this + 1;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber BigNumber::operator++(int) {
     ++m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return BigNumber(m_data);
 }
 
 BigNumber &BigNumber::operator--() {
     m_data--;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber BigNumber::operator--(int) {
     --m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return BigNumber(m_data);
 }
 
 BigNumber &BigNumber::operator+=(const BigNumber &bigNumber) {
     this->m_data += bigNumber.m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator+=(long long number) {
     this->m_data += number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator-=(const BigNumber &bigNumber) {
     this->m_data -= bigNumber.data();
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator-=(long long number) {
     this->m_data -= number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator*=(const BigNumber &bigNumber) {
     this->m_data *= bigNumber.m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator*=(long long number) {
     this->m_data *= number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator/=(const BigNumber &bigNumber) {
     this->m_data /= bigNumber.m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator/=(long long number) {
     this->m_data /= number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator%=(const BigNumber &bigNumber) {
     this->m_data %= bigNumber.m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumber &BigNumber::operator%=(long long number) {
     this->m_data %= number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
@@ -424,3 +430,5 @@ namespace magic {
                                                                     : BigNumber(value);
     }
 } // namespace magic
+
+#undef UPDATE_DEBUG_VALUE

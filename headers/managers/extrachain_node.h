@@ -23,6 +23,7 @@
 #include <functional>
 #include <expected>
 #include <atomic>
+#include <optional>
 
 class QThread;
 
@@ -130,10 +131,11 @@ class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
 public:
-    ExtraChainNodeWrapper(QObject*      parent,
-                          bool          is_client_application = false,
-                          bool          is_custom_app         = false,
-                          std::uint16_t ws_port               = 17593);
+    ExtraChainNodeWrapper(QObject*                      parent,
+                          bool                          is_client_application = false,
+                          bool                          is_custom_app         = false,
+                          std::uint16_t                 ws_port               = 17593,
+                          std::optional<RuntimeProfile> runtime_profile       = std::nullopt);
 
     ~ExtraChainNodeWrapper();
 
@@ -227,8 +229,8 @@ public:
     QTimer* info_timer() const {
         return timer_info_;
     }
-    RuntimeLimits   runtime_limits() const;
-    void            set_runtime_activity(RuntimeActivity activity);
+    RuntimeLimits runtime_limits() const;
+    void          set_runtime_activity(RuntimeActivity activity);
 
     std::pair<QString, QString> init_public_ip_and_country() const;
 
@@ -336,7 +338,10 @@ public:
                                                                   const TokenId&     token_id);
 
 private:
-    ExtraChainNode(bool is_client_application = false, bool is_custom_app = false, std::uint16_t port = 17593);
+    ExtraChainNode(bool                          is_client_application = false,
+                   bool                          is_custom_app         = false,
+                   std::uint16_t                 port                  = 17593,
+                   std::optional<RuntimeProfile> runtime_profile       = std::nullopt);
 
     /**
      * @brief Connect signals between NetworkManager and

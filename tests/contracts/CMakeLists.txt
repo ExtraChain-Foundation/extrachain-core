@@ -9,11 +9,11 @@ find_package(Qt6 COMPONENTS Core REQUIRED)
 find_package(Boost CONFIG REQUIRED COMPONENTS describe json)
 find_package(msgpack-cxx CONFIG REQUIRED)
 find_package(blake3 CONFIG REQUIRED)
+find_package(unofficial-sodium CONFIG REQUIRED)
 include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/ExtraChainWamr.cmake)
 
 add_executable(extrachain-contract-tests
     contract_runtime_test.cpp
-    ../../sources/utils/base64.cpp
     ../../sources/contracts/contract_codec.cpp
     ../../sources/contracts/contract_manager.cpp
     ../../sources/contracts/contract_module.cpp
@@ -24,7 +24,7 @@ target_include_directories(extrachain-contract-tests PRIVATE
     ../../headers
     ../../../extrachain-3rdparty/msgpack/include)
 target_link_libraries(extrachain-contract-tests PRIVATE
-    Qt6::Core Boost::describe Boost::json msgpack-cxx BLAKE3::blake3 extrachain-wamr)
+    Qt6::Core Boost::describe Boost::json msgpack-cxx BLAKE3::blake3 unofficial-sodium::sodium extrachain-wamr)
 if(UNIX AND NOT APPLE)
     target_link_options(extrachain-contract-tests PRIVATE "-Wl,-z,noexecstack")
 endif()

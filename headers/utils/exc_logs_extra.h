@@ -19,12 +19,17 @@
 
 #pragma once
 
+#include <atomic>
+#include <expected>
+#include <filesystem>
+#include <optional>
+#include <string_view>
+#include <type_traits>
+#include <typeinfo>
+#include <variant>
+
 #include <fmt/format.h>
 #include <fmt/ranges.h>
-#include <optional>
-#include <expected>
-#include <variant>
-#include <filesystem>
 #include <boost/chrono.hpp>
 #include <boost/chrono/time_point.hpp>
 #include <boost/chrono/chrono_io.hpp>
@@ -149,191 +154,5 @@ struct fmt::formatter<std::atomic<T>> : fmt::formatter<T> {
     template <typename FormatContext>
     auto format(const std::atomic<T>& value, FormatContext& ctx) const {
         return fmt::formatter<T>::format(value.load(), ctx);
-    }
-};
-
-//
-// Qt types support for fmt
-//
-
-#include <QString>
-#include <QVariant>
-#include <QDateTime>
-#include <QUrl>
-#include <QMap>
-#include <QHash>
-#include <QNetworkInterface>
-#include <QNetworkAddressEntry>
-#include <QHostAddress>
-
-#include <fmt/ranges.h>
-
-// Qt basic types support for fmt
-template <>
-struct fmt::formatter<QString> {
-    constexpr auto parse(format_parse_context& ctx) const {
-        return ctx.begin();
-    }
-
-    template <typename FormatContext>
-    auto format(const QString& str, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{}", str.toStdString());
-    }
-};
-
-template <>
-struct fmt::formatter<QByteArray> {
-    constexpr auto parse(format_parse_context& ctx) const {
-        return ctx.begin();
-    }
-
-    template <typename FormatContext>
-    auto format(const QByteArray& bytes, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{}", bytes.toStdString());
-    }
-};
-
-template <>
-struct fmt::formatter<QVariant> {
-    constexpr auto parse(format_parse_context& ctx) const {
-        return ctx.begin();
-    }
-
-    template <typename FormatContext>
-    auto format(const QVariant& var, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{}", var.toString().toStdString());
-    }
-};
-
-template <>
-struct fmt::formatter<QVariantMap> {
-    constexpr auto parse(format_parse_context& ctx) {
-        return ctx.end();
-    }
-
-    template <typename FormatContext>
-    auto format(const QVariantMap& m, FormatContext& ctx) const {
-        if (m.isEmpty())
-            return fmt::format_to(ctx.out(), "{{}}");
-
-        fmt::format_to(ctx.out(), "{{ ");
-        for (auto it = m.begin(); it != m.end(); ++it) {
-            if (it != m.begin())
-                fmt::format_to(ctx.out(), ", ");
-            fmt::format_to(ctx.out(), "{}: {}", it.key().toStdString(), it.value());
-        }
-        return fmt::format_to(ctx.out(), " }}");
-    }
-};
-
-template <>
-struct fmt::formatter<QTime> {
-    constexpr auto parse(format_parse_context& ctx) const {
-        return ctx.begin();
-    }
-
-    template <typename FormatContext>
-    auto format(const QTime& time, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{}", time.toString("HH:mm:ss.zzz").toStdString());
-    }
-};
-
-template <>
-struct fmt::formatter<QDate> {
-    constexpr auto parse(format_parse_context& ctx) const {
-        return ctx.begin();
-    }
-
-    template <typename FormatContext>
-    auto format(const QDate& date, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{}", date.toString("yyyy-MM-dd").toStdString());
-    }
-};
-
-template <>
-struct fmt::formatter<QDateTime> {
-    constexpr auto parse(format_parse_context& ctx) const {
-        return ctx.begin();
-    }
-
-    template <typename FormatContext>
-    auto format(const QDateTime& dt, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{}", dt.toString("yyyy-MM-dd HH:mm:ss.zzz").toStdString());
-    }
-};
-
-template <>
-struct fmt::formatter<QUrl> {
-    constexpr auto parse(format_parse_context& ctx) const {
-        return ctx.begin();
-    }
-
-    template <typename FormatContext>
-    auto format(const QUrl& url, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "{}", url.toString().toStdString());
-    }
-};
-
-template <>
-struct fmt::formatter<QNetworkInterface> {
-    constexpr auto parse(format_parse_context& ctx) {
-        return ctx.end();
-    }
-
-    template <typename FormatContext>
-    auto format(const QNetworkInterface& iface, FormatContext& ctx) const {
-        std::string flags;
-        if (iface.flags() & QNetworkInterface::IsUp)
-            flags += "Up|";
-        if (iface.flags() & QNetworkInterface::IsRunning)
-            flags += "Running|";
-        if (iface.flags() & QNetworkInterface::CanBroadcast)
-            flags += "Broadcast|";
-        if (iface.flags() & QNetworkInterface::IsLoopBack)
-            flags += "Loopback|";
-        if (!flags.empty())
-            flags.pop_back();
-
-        return fmt::format_to(ctx.out(),
-                              "{}[{}]: {} -> {}",
-                              iface.name().toStdString(),
-                              iface.hardwareAddress().toStdString(),
-                              flags,
-                              fmt::join(iface.addressEntries(), ", "));
-    }
-};
-
-template <>
-struct fmt::formatter<QNetworkAddressEntry> {
-    constexpr auto parse(format_parse_context& ctx) {
-        return ctx.end();
-    }
-
-    template <typename FormatContext>
-    auto format(const QNetworkAddressEntry& addr, FormatContext& ctx) const {
-        const auto& broadcast = addr.broadcast();
-        if (broadcast.isNull()) {
-            return fmt::format_to(ctx.out(), "{}/{}", addr.ip().toString().toStdString(), addr.prefixLength());
-        }
-        return fmt::format_to(ctx.out(),
-                              "{}/{} (broadcast: {})",
-                              addr.ip().toString().toStdString(),
-                              addr.prefixLength(),
-                              broadcast.toString().toStdString());
-    }
-};
-
-template <>
-struct fmt::formatter<QHostAddress> {
-    constexpr auto parse(format_parse_context& ctx) {
-        return ctx.end();
-    }
-
-    template <typename FormatContext>
-    auto format(const QHostAddress& addr, FormatContext& ctx) const {
-        if (addr.isNull()) {
-            return fmt::format_to(ctx.out(), "null");
-        }
-        return fmt::format_to(ctx.out(), "{}", addr.toString().toStdString());
     }
 };

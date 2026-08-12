@@ -75,7 +75,7 @@ class Logger {
 #else
         localtime_r(&timer, &bt);
 #endif
-        auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
         return fmt::format("{}-{:04d}.{:02d}.{:02d}_{:02d}-{:02d}-{:02d}.log",
                            instance().file_name,
@@ -110,7 +110,7 @@ class Logger {
         std::error_code ec;
         auto            now = std::filesystem::file_time_type::clock::now();
 
-        for (const auto &entry : std::filesystem::directory_iterator(logs_directory, ec)) {
+        for (const auto& entry : std::filesystem::directory_iterator(logs_directory, ec)) {
             if (!entry.is_regular_file() || entry.path().extension() != ".log")
                 continue;
 
@@ -527,21 +527,5 @@ namespace detail {
 #define eLog(...)      eDebug(__VA_ARGS__)
 #define eUnimplemented eFatal("Unimplemented function: {}", std::source_location::current().function_name())
 #define eTemp(...)     eDebug(__VA_ARGS__)
-
-inline void reset_qt_log_handler() {
-    qInstallMessageHandler(nullptr);
-}
-
-inline void install_qt_log_handler() {
-    std::ios_base::sync_with_stdio(false);
-    qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &ctx, const QString &msg) {
-        auto level = type == QtDebugMsg      ? LogLevel::Debug
-                     : type == QtWarningMsg  ? LogLevel::Debug
-                     : type == QtCriticalMsg ? LogLevel::Critical
-                     : type == QtFatalMsg    ? LogLevel::Fatal
-                                             : LogLevel::Info;
-        detail::println_impl(level, ctx.file ? ctx.file : "FromQt", ctx.line, "{}", msg.toStdString());
-    });
-}
 
 #include "utils/exc_logs_extra.h"

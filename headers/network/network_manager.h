@@ -35,6 +35,7 @@
 
 #include <boost/asio/awaitable.hpp>
 
+#include "adapters/qt/logging_adapter.h"
 #include "adapters/qt/network_status_adapter.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"

@@ -30,10 +30,10 @@
 #include "utils/exc_magic.h"
 #include "extrachain_global.h"
 
-#ifdef QT_DEBUG
-    #define UPDATE_DEBUG() qdata = to_string();
+#ifndef NDEBUG
+    #define UPDATE_DEBUG_VALUE() debug_value = to_string();
 #else
-    #define UPDATE_DEBUG()
+    #define UPDATE_DEBUG_VALUE()
 #endif
 
 enum class BigNumberError {
@@ -64,7 +64,7 @@ public:
     template <typename T>
     explicit BigNumber(T number, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
         this->m_data = boost::multiprecision::cpp_int(number);
-        UPDATE_DEBUG()
+        UPDATE_DEBUG_VALUE()
     }
 
     ~BigNumber() = default;
@@ -72,8 +72,8 @@ public:
 private:
     boost::multiprecision::cpp_int m_data = 0;
 
-#ifdef QT_DEBUG
-    std::string qdata;
+#ifndef NDEBUG
+    std::string debug_value;
 #endif
 
 public:
@@ -152,3 +152,5 @@ public:
 MAKE_CUSTOM_MAGICAL(BigNumber)
 
 using SectionId = BigNumber;
+
+#undef UPDATE_DEBUG_VALUE

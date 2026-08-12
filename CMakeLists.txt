@@ -179,7 +179,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/base64.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/fs_path.cpp
@@ -237,7 +236,9 @@ option(EXTRACHAIN_BUILD_QT_COMPAT "Build the Qt compatibility layer" ON)
 if(EXTRACHAIN_BUILD_QT_COMPAT)
     add_library(extrachain-qt-compat STATIC
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/actor_id_adapter.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/bignumber_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/byte_array_adapter.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/logging_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/network_status_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
@@ -300,12 +301,21 @@ execute_process(
 string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
 
-if(MSVC)
-    target_compile_options(extrachain PRIVATE
-        "/FI${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h"
-        /bigobj)
-else()
+option(EXTRACHAIN_ENABLE_PCH "Use precompiled headers for ExtraChain Core" ON)
+
+if(EXTRACHAIN_ENABLE_PCH)
     target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
+endif()
+if(MSVC)
+    target_compile_options(extrachain PRIVATE /bigobj)
+    target_compile_definitions(extrachain PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
+    if(EXTRACHAIN_ENABLE_PCH)
+        set_source_files_properties(
+            ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/dfs_contract_storage.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/toolchain_registry.cpp
+            ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thoth_manager.cpp
+            PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+    endif()
 endif()
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 

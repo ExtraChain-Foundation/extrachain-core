@@ -24,7 +24,8 @@
 #include "managers/extrachain_node.h"
 
 TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
-    : node(node) {
+    : QObject(parent)
+    , node(node) {
     connect(this, &TransactionCache::add, this, &TransactionCache::adding);
     connect(this, &TransactionCache::request, this, &TransactionCache::prepare);
     connect(this, &TransactionCache::make_cache, this, &TransactionCache::cache);

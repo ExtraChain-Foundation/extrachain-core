@@ -27,10 +27,10 @@
 
 #include "utils/exc_logs.h"
 
-#ifdef QT_DEBUG
-    #define UPDATE_DEBUG() qdata = to_string();
+#ifndef NDEBUG
+    #define UPDATE_DEBUG_VALUE() debug_value = to_string();
 #else
-    #define UPDATE_DEBUG()
+    #define UPDATE_DEBUG_VALUE()
 #endif
 
 namespace {
@@ -74,7 +74,7 @@ BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat) {
         assert(false);
     }
 
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base)
@@ -83,37 +83,37 @@ BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat, NumeralBase ba
 
 BigNumberFloat::BigNumberFloat(const BigNumberFloat &other) {
     this->m_data = other.data();
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumberFloat::BigNumberFloat(BigNumberFloat &&other) noexcept {
     this->m_data = std::move(other.m_data);
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumberFloat::BigNumberFloat(const BigNumber &other) {
     this->m_data = cpp_dec_float_exc(other.data());
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumberFloat::BigNumberFloat(const cpp_dec_float_exc &number) {
     this->m_data = number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumberFloat::BigNumberFloat(int number) {
     this->m_data = cpp_dec_float_exc(number);
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumberFloat::BigNumberFloat(long long number) {
     this->m_data = cpp_dec_float_exc(number);
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumberFloat::BigNumberFloat(std::uint64_t number) {
     this->m_data = cpp_dec_float_exc(number);
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
 }
 
 BigNumberFloat BigNumberFloat::operator+(const BigNumberFloat &bigNumberFloat) const {
@@ -154,85 +154,85 @@ BigNumberFloat BigNumberFloat::operator/(long long number) const {
 
 BigNumberFloat &BigNumberFloat::operator=(const BigNumberFloat &bigNumberFloat) {
     m_data = bigNumberFloat.data();
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator=(long long number) {
     m_data = number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator++() {
     *this = *this + 1;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat BigNumberFloat::operator++(int) {
     ++m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return BigNumberFloat(m_data);
 }
 
 BigNumberFloat &BigNumberFloat::operator--() {
     m_data--;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat BigNumberFloat::operator--(int) {
     --m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return BigNumberFloat(m_data);
 }
 
 BigNumberFloat &BigNumberFloat::operator+=(const BigNumberFloat &bigNumberFloat) {
     this->m_data += bigNumberFloat.m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator+=(long long number) {
     this->m_data += number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator-=(const BigNumberFloat &bigNumberFloat) {
     this->m_data -= bigNumberFloat.data();
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator-=(long long number) {
     this->m_data -= number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator*=(const BigNumberFloat &bigNumberFloat) {
     this->m_data *= bigNumberFloat.m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator*=(long long number) {
     this->m_data *= number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator/=(const BigNumberFloat &bigNumberFloat) {
     this->m_data /= bigNumberFloat.m_data;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator/=(long long number) {
     this->m_data /= number;
-    UPDATE_DEBUG()
+    UPDATE_DEBUG_VALUE()
     return *this;
 }
 
@@ -387,3 +387,5 @@ namespace magic {
                                                                     : BigNumberFloat(value);
     }
 } // namespace magic
+
+#undef UPDATE_DEBUG_VALUE

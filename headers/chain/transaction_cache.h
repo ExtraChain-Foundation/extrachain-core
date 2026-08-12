@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <QObject>
+
 #include "chain/actor_id.h"
 #include "chain/transaction.h"
 

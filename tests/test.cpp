@@ -24,6 +24,7 @@
 #include "managers/extrachain_node.h"
 #include "utils/compression.h"
 #include "utils/exc_logs.h"
+#include "adapters/qt/logging_adapter.h"
 #include <QtTest/QtTest>
 #include <algorithm>
 #include <filesystem>

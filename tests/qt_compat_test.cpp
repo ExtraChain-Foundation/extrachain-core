@@ -1,8 +1,13 @@
 #include <cstdlib>
 #include <iostream>
 
+#include <QCoreApplication>
+
 #include "adapters/qt/actor_id_adapter.h"
+#include "adapters/qt/bignumber_adapter.h"
 #include "adapters/qt/byte_array_adapter.h"
+#include "adapters/qt/logging_adapter.h"
+#include "managers/extrachain_node.h"
 #include "utils/variant_model.h"
 
 namespace {
@@ -14,7 +19,9 @@ namespace {
     }
 } // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+    QCoreApplication app(argc, argv);
+
     const ActorId actor_id("abc");
     const auto    text  = ExtraChain::QtCompat::to_qstring(actor_id);
     const auto    bytes = ExtraChain::QtCompat::to_qbyte_array(actor_id);
@@ -35,6 +42,16 @@ int main() {
             "Empty ByteArray conversion must stay empty");
     require(ExtraChain::QtCompat::byte_array_from_qbyte_array(QByteArray()).empty(),
             "Empty QByteArray conversion must stay empty");
+
+    const BigNumberFloat amount("12.25");
+    require(qHash(amount, 7) == qHash(amount, 7), "Qt BigNumber hash must be stable");
+    require(fmt::format("{}", QString("qt-compat")) == "qt-compat", "Qt log formatting must preserve text");
+
+    ExtraChainNodeWrapper mobile_node(&app, true, false, 0, RuntimeProfile::MobileLight);
+    require(mobile_node.node->runtime_profile() == RuntimeProfile::MobileLight,
+            "Explicit mobile profile must override the desktop platform default");
+    require(mobile_node.node->runtime_limits().general_workers == 1,
+            "Mobile profile must keep the bounded worker limit");
 
     VariantModel model(nullptr, { "name", "value" });
     model.append({ { "name", "first" }, { "value", 1 } });

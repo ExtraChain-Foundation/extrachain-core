@@ -56,7 +56,7 @@ static constexpr long long RANGE_PERSIST_INTERVAL = 256;
 
 Dag::Dag(ExtraChainNode *node)
     : node(node)
-    , transaction_cache_(node, node)
+    , transaction_cache_(node, nullptr)
     , cache_(node, this)
     , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
     timer_sync_ = new QTimer();
@@ -2233,11 +2233,12 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         const auto expected_range = pending_sync_range(responder, section_sync->to, false);
         if (!expected_range.has_value()
             || std::ranges::any_of(section_sync->txs, [&](const auto &transaction) {
-                   return transaction.section() < expected_range->first
-                          || transaction.section() > expected_range->second;
+                   return transaction.section() < expected_range.value().first
+                          || transaction.section() > expected_range.value().second;
                })
             || std::ranges::any_of(section_sync->controls, [&](const auto &control) {
-                   return control.section_id < expected_range->first || control.section_id > expected_range->second;
+                   return control.section_id < expected_range.value().first
+                          || control.section_id > expected_range.value().second;
                })) {
             eWarning("[Dag] Reject stale or out-of-range section response {}", responder.message_id());
             return;
@@ -2457,7 +2458,8 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         const auto expected_range = pending_sync_range(responder, file_sync->to, true);
         if (!expected_range.has_value()
             || std::ranges::any_of(file_sync->sections, [&](const auto &section) {
-                   return section.section_id < expected_range->first || section.section_id > expected_range->second;
+                   return section.section_id < expected_range.value().first
+                          || section.section_id > expected_range.value().second;
                })) {
             eWarning("[Dag] Reject stale or out-of-range file section response {}", responder.message_id());
             return;
@@ -2969,25 +2971,33 @@ void Dag::handle_sync_request() {
             }
 
             eLog("____ {} {} {} {}",
-                 last_control->section_id,
+                 last_control.value().section_id,
                  info.last_control_section_id,
-                 last_control->control,
+                 last_control.value().control,
                  info.last_control_hash);
             eLog("____ {} {} {} {}",
-                 last_control->section_id.to_string(),
+                 last_control.value().section_id.to_string(),
                  info.last_control_section_id.to_string(),
-                 last_control->control,
+                 last_control.value().control,
                  info.last_control_hash);
 
-            if (last_control->section_id < info.last_control_section_id
+            if (last_control.value().section_id < info.last_control_section_id
                 && info.last_control_section_id <= current_section_) {
-                // this->start_control(true);
-                need_recontrol = true;
-                break;
+                // Build the missing controls from local sections before a peer request.
+                // The local result must still match the control reported by the peer.
+                this->start_control(Force::Active);
+                last_control = this->find_last_control();
+
+                if (!last_control.has_value() || last_control.value().section_id < info.last_control_section_id
+                    || (last_control.value().section_id == info.last_control_section_id
+                        && last_control.value().control != info.last_control_hash)) {
+                    need_recontrol = true;
+                    break;
+                }
             }
 
-            if (last_control->section_id == info.last_control_section_id
-                && last_control->control != info.last_control_hash) {
+            if (last_control.value().section_id == info.last_control_section_id
+                && last_control.value().control != info.last_control_hash) {
                 need_recontrol = true;
                 break;
             }

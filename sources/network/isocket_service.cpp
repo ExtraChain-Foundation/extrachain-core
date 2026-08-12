@@ -271,23 +271,31 @@ SocketService::Data SocketService::generate_first_message() {
 }
 
 SocketService::Data SocketService::prepare_send_message(std::span<const std::uint8_t> message) {
+    return prepare_send_message(Data(message.begin(), message.end()));
+}
+
+SocketService::Data SocketService::prepare_send_message(const Data& message) {
     if (public_key_.empty()) {
         return {};
     }
-    const auto encrypted = private_key_.encrypt(Data(message.begin(), message.end()), public_key_.public_key());
+    const auto encrypted = private_key_.encrypt(message, public_key_.public_key());
     if (!encrypted.has_value()) {
         return {};
     }
-    bytes_outgoing_.fetch_add(static_cast<std::int64_t>(encrypted->size()), std::memory_order_relaxed);
+    bytes_outgoing_.fetch_add(static_cast<std::int64_t>(encrypted.value().size()), std::memory_order_relaxed);
     return std::move(encrypted.value());
 }
 
 SocketService::Data SocketService::prepare_receive_message(std::span<const std::uint8_t> message) {
+    return prepare_receive_message(Data(message.begin(), message.end()));
+}
+
+SocketService::Data SocketService::prepare_receive_message(const Data& message) {
     if (public_key_.empty()) {
         return {};
     }
-    const auto decrypted = private_key_.decrypt(Data(message.begin(), message.end()), public_key_.public_key());
-    if (!decrypted.has_value() || decrypted->empty()) {
+    const auto decrypted = private_key_.decrypt(message, public_key_.public_key());
+    if (!decrypted.has_value() || decrypted.value().empty()) {
         return {};
     }
     bytes_incoming_.fetch_add(static_cast<std::int64_t>(message.size()), std::memory_order_relaxed);

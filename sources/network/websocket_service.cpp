@@ -13,6 +13,7 @@
 #include <utility>
 
 #include <boost/asio/connect.hpp>
+#include <boost/asio/buffer.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/dispatch.hpp>
@@ -27,6 +28,7 @@
 
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
+#include "network/network_runtime.h"
 #include "utils/exc_logs.h"
 #include "utils/exc_utils_base64.h"
 
@@ -35,12 +37,14 @@ namespace beast     = boost::beast;
 namespace websocket = beast::websocket;
 
 namespace {
-    constexpr std::size_t MAX_INBOUND_MESSAGE_BYTES = 72 * 1024 * 1024;
-}
+    constexpr std::size_t MAX_INBOUND_MESSAGE_BYTES    = 72 * 1024 * 1024;
+    constexpr std::size_t ASYNC_CRYPTO_THRESHOLD_BYTES = 64 * 1024;
+} // namespace
 
-WebSocketService::WebSocketService(asio::any_io_executor executor, ExtraChainNode* node)
+WebSocketService::WebSocketService(ExtraChain::Core::NetworkRuntime& runtime, ExtraChainNode* node)
     : SocketService(node)
-    , strand_(asio::make_strand(std::move(executor)))
+    , strand_(asio::make_strand(runtime.executor()))
+    , runtime_(runtime)
     , queue_signal_(strand_) {
 }
 
@@ -48,13 +52,14 @@ WebSocketService::~WebSocketService() {
     eLog("[WS] Destroyed: {}", ip_);
 }
 
-asio::awaitable<WebSocketService::ConnectResult> WebSocketService::connect(asio::any_io_executor executor,
-                                                                           std::string           host,
-                                                                           std::uint16_t         port,
-                                                                           ExtraChainNode*       node,
-                                                                           bool                  is_constant,
-                                                                           bool                  is_light) {
-    auto service = std::shared_ptr<WebSocketService>(new WebSocketService(std::move(executor), node));
+asio::awaitable<WebSocketService::ConnectResult> WebSocketService::connect(
+    ExtraChain::Core::NetworkRuntime& runtime,
+    std::string                       host,
+    std::uint16_t                     port,
+    ExtraChainNode*                   node,
+    bool                              is_constant,
+    bool                              is_light) {
+    auto service = std::shared_ptr<WebSocketService>(new WebSocketService(runtime, node));
     service->set_constant(is_constant);
     service->mode_      = is_light ? SocketMode::Light : SocketMode::Full;
     service->ip_        = host;
@@ -68,10 +73,10 @@ asio::awaitable<WebSocketService::ConnectResult> WebSocketService::connect(asio:
     co_return service;
 }
 
-WebSocketService::Service WebSocketService::from_accepted(asio::any_io_executor executor,
-                                                          Tcp::socket           socket,
-                                                          ExtraChainNode*       node) {
-    auto service        = std::shared_ptr<WebSocketService>(new WebSocketService(std::move(executor), node));
+WebSocketService::Service WebSocketService::from_accepted(ExtraChain::Core::NetworkRuntime& runtime,
+                                                          Tcp::socket                       socket,
+                                                          ExtraChainNode*                   node) {
+    auto service        = std::shared_ptr<WebSocketService>(new WebSocketService(runtime, node));
     service->timestamp_ = Utils::current_date_ms();
 
     boost::system::error_code error;
@@ -177,7 +182,7 @@ asio::awaitable<void> WebSocketService::run_on_strand(bool accepted_socket) {
 }
 
 asio::awaitable<bool> WebSocketService::exchange_keys() {
-    const auto encoded_key = Utils::to_base64(ByteArray(private_key_.public_key()).toString());
+    const auto encoded_key = Utils::to_base64(private_key_.public_key());
     if (!co_await write_text(encoded_key)) {
         report_error(Network::SocketServiceError::IncorrectPublicKey, "public key write failed");
         co_return false;
@@ -188,20 +193,27 @@ asio::awaitable<bool> WebSocketService::exchange_keys() {
         report_error(Network::SocketServiceError::IncorrectPublicKey, "public key read failed");
         co_return false;
     }
-    const auto decoded = Utils::from_base64(*received);
+    auto decoded = Utils::from_base64<std::vector<std::uint8_t>>(received.value());
     if (!decoded.has_value()) {
         report_error(Network::SocketServiceError::IncorrectPublicKey, "invalid public key encoding");
         co_return false;
     }
 
-    public_key_          = KeyPublic(ByteArray(*decoded).toArray<crypto_sign_PUBLICKEYBYTES>());
+    public_key_          = KeyPublic(ByteArray(std::move(decoded.value())).toArray<crypto_sign_PUBLICKEYBYTES>());
     public_key_received_ = true;
     co_return true;
 }
 
 asio::awaitable<bool> WebSocketService::exchange_handshake() {
-    const auto encrypted = prepare_send_message(generate_first_message());
-    if (encrypted.empty() || !co_await write_text(Utils::to_base64(ByteArray(encrypted).toString()))) {
+    Data encrypted;
+    try {
+        auto first_message = generate_first_message();
+        encrypted          = co_await prepare_send_async(std::move(first_message));
+    } catch (const std::exception& exception) {
+        report_error(Network::SocketServiceError::IncorrectHandshake, exception.what());
+        co_return false;
+    }
+    if (encrypted.empty() || !co_await write_text(Utils::to_base64(encrypted))) {
         report_error(Network::SocketServiceError::IncorrectHandshake, "handshake write failed");
         co_return false;
     }
@@ -211,18 +223,24 @@ asio::awaitable<bool> WebSocketService::exchange_handshake() {
         report_error(Network::SocketServiceError::IncorrectFirstMessage, "handshake read failed");
         co_return false;
     }
-    const auto decoded = Utils::from_base64(*received);
+    auto decoded = Utils::from_base64<std::vector<std::uint8_t>>(received.value());
     if (!decoded.has_value()) {
         report_error(Network::SocketServiceError::IncorrectFirstMessage, "invalid handshake encoding");
         co_return false;
     }
-    const auto decrypted = prepare_receive_message(ByteArray(*decoded).bytes());
+    Data decrypted;
+    try {
+        decrypted = co_await prepare_receive_async(std::move(decoded.value()));
+    } catch (const std::exception& exception) {
+        report_error(Network::SocketServiceError::IncorrectFirstMessage, exception.what());
+        co_return false;
+    }
     if (decrypted.empty()) {
         report_error(Network::SocketServiceError::IncorrectFirstMessage, "handshake decrypt failed");
         co_return false;
     }
 
-    const auto text = ByteArray(decrypted).toString();
+    const std::string text(reinterpret_cast<const char*>(decrypted.data()), decrypted.size());
     if (text.starts_with("Error ")) {
         co_return false;
     }
@@ -231,7 +249,7 @@ asio::awaitable<bool> WebSocketService::exchange_handshake() {
         report_error(Network::SocketServiceError::IncorrectFirstMessage, handshake.error());
         co_return false;
     }
-    co_return check_first_message(*handshake);
+    co_return check_first_message(handshake.value());
 }
 
 asio::awaitable<bool> WebSocketService::write_text(std::string_view text) {
@@ -274,9 +292,14 @@ asio::awaitable<void> WebSocketService::read_loop() {
         if (websocket_->got_text()) {
             eWarning("[WS] Unexpected text message after activation from {}", ip_);
         } else {
-            const auto raw = beast::buffers_to_string(buffer.data());
-            process_binary(
-                std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(raw.data()), raw.size()));
+            std::vector<std::uint8_t> raw(buffer.size());
+            asio::buffer_copy(asio::buffer(raw), buffer.data());
+            try {
+                co_await process_binary(std::move(raw));
+            } catch (const std::exception& exception) {
+                report_error(Network::SocketServiceError::Unknown, exception.what());
+                break;
+            }
         }
         buffer.consume(buffer.size());
     }
@@ -312,7 +335,13 @@ asio::awaitable<void> WebSocketService::write_loop() {
             continue;
         }
 
-        auto encrypted = prepare_send_message(data);
+        Data encrypted;
+        try {
+            encrypted = co_await prepare_send_async(std::move(data));
+        } catch (const std::exception& exception) {
+            report_error(Network::SocketServiceError::CantSend, exception.what());
+            break;
+        }
         if (encrypted.empty()) {
             report_error(Network::SocketServiceError::CantSend, "message encryption failed");
             break;
@@ -334,17 +363,38 @@ asio::awaitable<void> WebSocketService::write_loop() {
     close_connection();
 }
 
-void WebSocketService::process_binary(std::span<const std::uint8_t> message) {
-    const auto decrypted = prepare_receive_message(message);
+asio::awaitable<WebSocketService::Data> WebSocketService::prepare_send_async(Data message) {
+    if (message.size() < ASYNC_CRYPTO_THRESHOLD_BYTES) {
+        co_return prepare_send_message(message);
+    }
+    const auto self = std::static_pointer_cast<WebSocketService>(shared_from_this());
+    co_return co_await runtime_.async_blocking([self, message = std::move(message)]() mutable {
+        return self->prepare_send_message(message);
+    });
+}
+
+asio::awaitable<WebSocketService::Data> WebSocketService::prepare_receive_async(Data message) {
+    if (message.size() < ASYNC_CRYPTO_THRESHOLD_BYTES) {
+        co_return prepare_receive_message(message);
+    }
+    const auto self = std::static_pointer_cast<WebSocketService>(shared_from_this());
+    co_return co_await runtime_.async_blocking([self, message = std::move(message)]() mutable {
+        return self->prepare_receive_message(message);
+    });
+}
+
+asio::awaitable<void> WebSocketService::process_binary(std::vector<std::uint8_t> message) {
+    auto decrypted = co_await prepare_receive_async(std::move(message));
     if (decrypted.empty()) {
         report_error(Network::SocketServiceError::EmptyMessage, "message decrypt failed");
-        return;
+        co_return;
     }
     if (!node_enabled) {
-        return;
+        co_return;
     }
     if (on_message) {
-        on_message(shared_from_this(), ByteArray(decrypted).toString(), ip_, identifier_);
+        std::string text(reinterpret_cast<const char*>(decrypted.data()), decrypted.size());
+        on_message(shared_from_this(), std::move(text), ip_, identifier_);
     }
 }
 
