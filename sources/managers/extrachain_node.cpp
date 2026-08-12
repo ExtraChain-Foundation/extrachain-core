@@ -54,6 +54,7 @@
 #include "dfs/collection_template.h"
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
+#include "network/network_runtime.h"
 #include "runtime/deadline_task.h"
 #include "runtime/periodic_task.h"
 #include "chat/chat_manager.h"
@@ -340,21 +341,25 @@ void ExtraChainNode::process() {
     actor_index_        = new ActorIndex(this);
     account_controller_ = new AccountController(this);
     luminance_manager_  = new LuminanceManager(this);
-    network_manager_    = new NetworkManager(this, ws_port);
+    runtime_            = std::make_unique<ExtraChain::Core::NetworkRuntime>(ExtraChain::Core::RuntimeConfig {
+        .io_threads       = runtime_profile_ == RuntimeProfile::MobileLight ? 1U : 2U,
+        .blocking_threads = runtime_profile_ == RuntimeProfile::FullNode ? 2U : 1U,
+    });
+    network_manager_    = new NetworkManager(this, *runtime_, ws_port);
     dag_                = new Dag(this);
     const QPointer<ExtraChainNode> node(this);
-    dag_sync_timer_ = ExtraChain::Core::DeadlineTask::create(network_manager_->executor(), [node] {
+    dag_sync_timer_ = ExtraChain::Core::DeadlineTask::create(runtime_->executor(), [node] {
         if (!node.isNull()) {
             QMetaObject::invokeMethod(node, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
         }
     });
-    dag_peer_info_timer_ = ExtraChain::Core::DeadlineTask::create(network_manager_->executor(), [node] {
+    dag_peer_info_timer_ = ExtraChain::Core::DeadlineTask::create(runtime_->executor(), [node] {
         if (!node.isNull()) {
             QMetaObject::invokeMethod(node, &ExtraChainNode::dagPeerInfoTimerTick, Qt::QueuedConnection);
         }
     });
     const auto periodic_task = [this, node](std::chrono::milliseconds interval, auto handler) {
-        return ExtraChain::Core::PeriodicTask::create(network_manager_->executor(), interval, [node, handler] {
+        return ExtraChain::Core::PeriodicTask::create(runtime_->executor(), interval, [node, handler] {
             if (!node.isNull()) {
                 QMetaObject::invokeMethod(node, handler, Qt::QueuedConnection);
             }
@@ -451,10 +456,21 @@ void ExtraChainNode::stop_runtime_tasks() {
 }
 
 void ExtraChainNode::release_core() {
-    auto* dag = std::exchange(dag_, nullptr);
+    auto* dag          = std::exchange(dag_, nullptr);
     delete dag;
     auto* chat_manager = std::exchange(chat_manager_, nullptr);
     delete chat_manager;
+    auto* network_manager = std::exchange(network_manager_, nullptr);
+    delete network_manager;
+    if (runtime_) {
+        dag_sync_timer_.reset();
+        dag_peer_info_timer_.reset();
+        reward_timer_.reset();
+        info_timer_.reset();
+        luminance_timer_.reset();
+        runtime_->stop();
+        runtime_.reset();
+    }
 }
 
 void ExtraChainNode::cleanUp() {

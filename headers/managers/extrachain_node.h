@@ -72,6 +72,7 @@ namespace ExtraChain::Contracts {
 } // namespace ExtraChain::Contracts
 namespace ExtraChain::Core {
     class DeadlineTask;
+    class NetworkRuntime;
     class PeriodicTask;
 }
 
@@ -171,6 +172,7 @@ private:
     std::unique_ptr<ExtraChain::Contracts::ToolchainRegistry>                      toolchain_registry_;
     std::mutex                                                                     pending_contracts_mutex_;
     std::unordered_map<std::string, ExtraChain::Contracts::PreparedContractChange> pending_contracts_;
+    std::unique_ptr<ExtraChain::Core::NetworkRuntime>                              runtime_;
     std::shared_ptr<ExtraChain::Core::DeadlineTask>                                dag_sync_timer_;
     std::shared_ptr<ExtraChain::Core::DeadlineTask>                                dag_peer_info_timer_;
     std::shared_ptr<ExtraChain::Core::PeriodicTask>                                reward_timer_;

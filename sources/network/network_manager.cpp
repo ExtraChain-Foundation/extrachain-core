@@ -158,10 +158,6 @@ CalculateTraffic *NetworkManager::calculate_traffic() const {
     return calculate_traffic_;
 }
 
-boost::asio::any_io_executor NetworkManager::executor() const {
-    return network_runtime_->executor();
-}
-
 std::string NetworkManager::public_ip() const {
     return public_ip_;
 }
@@ -261,13 +257,12 @@ bool NetworkManager::peer_processing_enabled() const {
     return node_enabled.load(std::memory_order_acquire);
 }
 
-NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
+NetworkManager::NetworkManager(ExtraChainNode*                  node,
+                               ExtraChain::Core::NetworkRuntime& runtime,
+                               std::uint16_t                     port)
     : QObject(node)
     , node(node)
-    , network_runtime_(std::make_unique<ExtraChain::Core::NetworkRuntime>(ExtraChain::Core::RuntimeConfig {
-          .io_threads       = node->runtime_profile() == RuntimeProfile::MobileLight ? 1U : 2U,
-          .blocking_threads = node->runtime_profile() == RuntimeProfile::FullNode ? 2U : 1U,
-      }))
+    , network_runtime_(&runtime)
     , network_status_adapter_(std::make_unique<QtNetworkStatusAdapter>(network_status_))
     , ws_port(port) {
     if (!first_nodes_.empty()) {
@@ -744,7 +739,6 @@ NetworkManager::~NetworkManager() {
             eWarning("[NetworkManager] Timed out while closing {}", connection->ip());
         }
     }
-    network_runtime_->stop();
     {
         auto locked = *connections_;
         locked->clear();

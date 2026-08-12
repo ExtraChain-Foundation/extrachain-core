@@ -220,7 +220,7 @@ private:
 
     ExtraChainNode*                                           node;
     std::string                                               local_ip_;
-    std::unique_ptr<ExtraChain::Core::NetworkRuntime>         network_runtime_;
+    ExtraChain::Core::NetworkRuntime*                         network_runtime_ = nullptr;
     SafePtr<std::set<SocketService::Ptr>>                     connections_;
     SafePtr<std::map<NetworkReconnect, std::string>>          reconnections_to_identifier_;
     ExtraChain::Core::NetworkStatus                           network_status_;
@@ -263,7 +263,9 @@ private:
     std::string first_node_;
 
 public:
-    explicit NetworkManager(ExtraChainNode* node, std::uint16_t port);
+    explicit NetworkManager(ExtraChainNode*                  node,
+                            ExtraChain::Core::NetworkRuntime& runtime,
+                            std::uint16_t                     port);
     ~NetworkManager();
     void                        local_inizialization();
     void                        probe_first_node_candidate(std::size_t index);
@@ -481,8 +483,6 @@ public:
     SafePtr<std::map<NetworkReconnect, std::string>> reconnections();
 
     CalculateTraffic* calculate_traffic() const;
-    [[nodiscard]] boost::asio::any_io_executor executor() const;
-
     std::string public_ip() const;
     void        set_public_ip(const std::string& newPublic_ip);
 
