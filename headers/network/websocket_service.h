@@ -52,12 +52,12 @@ public:
     static boost::asio::awaitable<ConnectResult> connect(ExtraChain::Core::NetworkRuntime& runtime,
                                                          std::string                       host,
                                                          std::uint16_t                     port,
-                                                         ExtraChainNode*                   node,
+                                                         PeerContext&                      context,
                                                          bool                              is_constant = false,
                                                          bool                              is_light    = false);
     static Service                               from_accepted(ExtraChain::Core::NetworkRuntime& runtime,
                                                                Tcp::socket                       socket,
-                                                               ExtraChainNode*                   node);
+                                                               PeerContext&                      context);
 
     ~WebSocketService() override;
 
@@ -75,7 +75,7 @@ public:
     [[nodiscard]] std::int64_t pending_bytes() const noexcept override;
 
 private:
-    explicit WebSocketService(ExtraChain::Core::NetworkRuntime& runtime, ExtraChainNode* node);
+    explicit WebSocketService(ExtraChain::Core::NetworkRuntime& runtime, PeerContext& context);
 
     boost::asio::awaitable<std::expected<void, std::string>> open(std::string host, std::uint16_t port);
     boost::asio::awaitable<void>                             run_on_strand(bool accepted_socket);

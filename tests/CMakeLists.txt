@@ -127,10 +127,13 @@ set(EXTRACHAIN_HEADER_CHECKS
     managers/extrachain_node.h
     network/network_manager.h
     network/message_body.h
+    network/network_runtime.h
+    network/peer_context.h
     utils/exc_logs.h
     utils/exc_utils_base64.h
     utils/hash.h
     utils/serialization.h
+    utils/version.h
 )
 set(EXTRACHAIN_HEADER_CHECK_TARGETS)
 foreach(header IN LISTS EXTRACHAIN_HEADER_CHECKS)

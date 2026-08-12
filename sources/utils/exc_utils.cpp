@@ -1205,60 +1205,6 @@ bool Utils::write_settings(const ExtraChainSettings &settings) {
     return true;
 }
 
-Utils::VersionCompareResult Utils::compare_versions(const std::string &current, const std::string &latest) {
-    std::vector<int> current_components;
-    std::vector<int> latest_components;
-
-    auto parse_version = [](const std::string &version, std::vector<int> &components) {
-        std::istringstream stream(version);
-        std::string        component;
-
-        while (std::getline(stream, component, '.')) {
-            try {
-                components.push_back(std::stoi(component));
-            } catch (const std::exception &) {
-                components.push_back(0);
-            }
-        }
-
-        // Ensure at least 3 components (pad with zeros if needed)
-        while (components.size() < 3) {
-            components.push_back(0);
-        }
-    };
-
-    parse_version(current, current_components);
-    parse_version(latest, latest_components);
-
-    // Compare first three components (higher priority)
-    for (size_t i = 0; i < 3; ++i) {
-        if (latest_components[i] > current_components[i]) {
-            return VersionCompareResult::Newer;
-        }
-        if (latest_components[i] < current_components[i]) {
-            return VersionCompareResult::Older;
-        }
-    }
-
-    // If first three components are equal, compare the fourth component (if present)
-    int current_fourth = (current_components.size() > 3) ? current_components[3] : 0;
-    int latest_fourth  = (latest_components.size() > 3) ? latest_components[3] : 0;
-
-    if (latest_fourth > current_fourth) {
-        return VersionCompareResult::Newer;
-    }
-    if (latest_fourth < current_fourth) {
-        return VersionCompareResult::Older;
-    }
-
-    // All components are equal
-    return VersionCompareResult::Same;
-}
-
-bool Utils::is_newer_version(const std::string &current, const std::string &latest) {
-    return compare_versions(current, latest) == VersionCompareResult::Newer;
-}
-
 void Utils::prepare_extrachain() {
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     sigset_t set;

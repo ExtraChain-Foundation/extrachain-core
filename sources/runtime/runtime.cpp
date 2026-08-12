@@ -57,7 +57,7 @@ namespace ExtraChain::Core {
     }
 
     void Runtime::start() {
-        const auto state = state_;
+        const auto       state = state_;
         std::scoped_lock lock(state->lifecycle_mutex);
         if (state->stopped) {
             throw std::logic_error("ExtraChain Core runtime cannot restart after stop");
@@ -90,7 +90,7 @@ namespace ExtraChain::Core {
     }
 
     void Runtime::stop() {
-        const auto state = state_;
+        const auto                state = state_;
         std::vector<std::jthread> threads;
         {
             std::scoped_lock lock(state->lifecycle_mutex);
@@ -100,7 +100,6 @@ namespace ExtraChain::Core {
             state->stopped = true;
             state->running.store(false, std::memory_order_release);
             state->work_guard.reset();
-            state->io_context.stop();
             threads.swap(state->io_threads);
         }
 
@@ -112,7 +111,6 @@ namespace ExtraChain::Core {
                 thread.join();
             }
         }
-        state->blocking_pool.stop();
         state->blocking_pool.join();
     }
 

@@ -23,8 +23,6 @@
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
 #include "managers/luminance_manager.h"
-#include "network/upnpconnection.h"
-#include "network/upnpconnector.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
 #include "dfs/historical_collection.h"
@@ -38,8 +36,8 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/ip/address.hpp>
 
-#include <QJsonObject>
 #include <QMetaObject>
 #include <QPointer>
 #include <QThread>
@@ -50,6 +48,25 @@ namespace {
     constexpr std::size_t LIVE_DAG_BATCH_MAX_TRANSACTIONS = 64;
     constexpr std::size_t LIVE_DAG_BATCH_MAX_BYTES        = 128 * 1024;
     constexpr int         LIVE_DAG_BATCH_DELAY_MS         = 5;
+
+    bool is_public_address(std::string_view value) {
+        boost::system::error_code error;
+        const auto                address = boost::asio::ip::make_address(value, error);
+        if (error || address.is_unspecified() || address.is_loopback() || address.is_multicast()) {
+            return false;
+        }
+        if (address.is_v6()) {
+            const auto ipv6         = address.to_v6();
+            const auto bytes        = ipv6.to_bytes();
+            const bool site_local   = bytes[0] == 0xfeU && (bytes[1] & 0xc0U) == 0xc0U;
+            const bool unique_local = (bytes[0] & 0xfeU) == 0xfcU;
+            return !ipv6.is_link_local() && !site_local && !unique_local;
+        }
+
+        const auto bytes = address.to_v4().to_bytes();
+        return bytes[0] != 10 && bytes[0] != 127 && !(bytes[0] == 169 && bytes[1] == 254)
+               && !(bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) && !(bytes[0] == 192 && bytes[1] == 168);
+    }
 } // namespace
 
 SafePtr<std::set<SocketService::Ptr>> NetworkManager::connections() const {
@@ -84,20 +101,57 @@ void NetworkManager::connect_network() {
         return;
     }
 
-    for (const auto &node_address : first_nodes_) {
-        QString node = QString::fromStdString(node_address);
-        if (this->check_port_sync(node, Network::Protocol::WebSocket, false, true)) {
-            eLog("[Network] Reconnect to first node candidate {}", node_address);
-            this->save_first_node(node_address);
-            emit this->connect_to_node(node, Network::Protocol::WebSocket);
-            return;
-        }
+    if (first_node_probe_active_.exchange(true, std::memory_order_acq_rel)) {
+        return;
     }
-
-    eLog("[Network] First nodes unavailable, waiting for next retry...");
+    probe_first_node_candidate(0);
 }
 
-SafePtr<std::map<NetworkReconnect, QString>> NetworkManager::reconnections() {
+void NetworkManager::probe_first_node_candidate(std::size_t index) {
+    if (offline_ || index >= first_nodes_.size()) {
+        first_node_probe_active_.store(false, std::memory_order_release);
+        if (!offline_) {
+            eLog("[Network] First nodes unavailable, waiting for next retry...");
+        }
+        return;
+    }
+
+    const auto                     address = first_nodes_[index];
+    const QPointer<NetworkManager> manager(this);
+    network_runtime_
+        ->async_probe(address,
+                      ws_port,
+                      std::chrono::milliseconds(1600),
+                      [manager, address, index](bool connected, std::string) {
+                          if (manager.isNull()) {
+                              return;
+                          }
+                          QMetaObject::invokeMethod(
+                              manager,
+                              [manager, address, index, connected] {
+                                  if (manager.isNull()) {
+                                      return;
+                                  }
+                                  if (manager->offline_) {
+                                      manager->first_node_probe_active_.store(false, std::memory_order_release);
+                                      return;
+                                  }
+                                  if (!connected) {
+                                      manager->probe_first_node_candidate(index + 1);
+                                      return;
+                                  }
+
+                                  manager->first_node_probe_active_.store(false, std::memory_order_release);
+                                  eLog("[Network] Reconnect to first node candidate {}", address);
+                                  manager->save_first_node(address);
+                                  emit manager->connect_to_node(QString::fromStdString(address),
+                                                                Network::Protocol::WebSocket);
+                              },
+                              Qt::QueuedConnection);
+                      });
+}
+
+SafePtr<std::map<NetworkReconnect, std::string>> NetworkManager::reconnections() {
     return reconnections_to_identifier_;
 }
 CalculateTraffic *NetworkManager::calculate_traffic() const {
@@ -113,8 +167,7 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
         return;
     }
 
-    QHostAddress address(QString::fromStdString(new_public_ip));
-    if (address.isNull() || address.isSiteLocal() || address.isLoopback()) {
+    if (!is_public_address(new_public_ip)) {
         return;
     }
 
@@ -127,6 +180,81 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
     if (node->init_public_ip_and_country().first.isEmpty()) {
         node->init_public_ip_and_country_ = { QString::fromStdString(public_ip_), "Security" };
     }
+}
+
+ActorId NetworkManager::local_network_id() const {
+    return node->actor_index()->network_id();
+}
+
+void NetworkManager::adopt_network_id(const ActorId &network_id) {
+    node->actor_index()->set_network_id(network_id);
+}
+
+std::string NetworkManager::local_node_identifier() const {
+    return node->node_identifier();
+}
+
+DfsMode NetworkManager::local_dfs_mode() const {
+    return node->dfs()->mode();
+}
+
+bool NetworkManager::has_active_duplicate(std::string_view identifier, const SocketService *candidate) {
+    auto locked = *connections_;
+    for (const auto &connection : *locked) {
+        if (connection.get() == candidate || connection->identifier() != identifier) {
+            continue;
+        }
+        if (connection->is_active()) {
+            return true;
+        }
+        connection->close_connection();
+        return false;
+    }
+    return false;
+}
+
+int NetworkManager::active_peer_count() const {
+    int  count  = 0;
+    auto locked = *connections_;
+    for (const auto &connection : *locked) {
+        if (connection->is_active()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int NetworkManager::peer_limit() const {
+    return max_connections();
+}
+
+std::set<PeerConnection> NetworkManager::shareable_peers(std::string_view remote_ip) const {
+    std::set<PeerConnection> result;
+    auto                     locked = *connections_;
+    for (const auto &connection : *locked) {
+        const auto &connection_ip = connection->ip();
+        if (connection_ip.empty() || connection_ip == remote_ip || connection_ip == "127.0.0.1"
+            || !connection->is_active()) {
+            continue;
+        }
+        result.insert(PeerConnection { connection_ip, connection->identifier() });
+    }
+    return result;
+}
+
+void NetworkManager::peer_authenticated(std::string_view identifier, std::string_view public_ip) {
+    Responder responder(this);
+    responder.add_identifier(std::string(identifier));
+    node->actor_index()->send_system_actor(responder);
+    set_public_ip(std::string(public_ip));
+}
+
+std::uint16_t NetworkManager::local_server_port() const {
+    return ws_port;
+}
+
+bool NetworkManager::peer_processing_enabled() const {
+    return node_enabled.load(std::memory_order_acquire);
 }
 
 NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
@@ -267,6 +395,7 @@ void NetworkManager::schedule_reconnection(int delay_ms) {
 
 void NetworkManager::go_offline() {
     offline_ = true;
+    first_node_probe_active_.store(false, std::memory_order_release);
     reconnect_timer_->cancel();
     live_dag_batch_timer_->cancel();
     live_dag_peer_queues_.clear();
@@ -285,23 +414,16 @@ bool NetworkManager::is_own_address(const std::string &ip) const {
     if (ip.empty()) {
         return false;
     }
-    QHostAddress target(QString::fromStdString(ip));
-    if (target.isNull()) {
+    boost::system::error_code error;
+    const auto                target = boost::asio::ip::make_address(ip, error);
+    if (error) {
         return false;
     }
     // A first_node equal to one of this host's own interface addresses means this
     // node is the seed. Loopback is deliberately NOT treated as "self" here: on a
     // single-host test mesh several nodes share 127.0.0.x and must still dial each
     // other; a genuine self-loop there is caught by the network-id check instead.
-    for (const QHostAddress &addr : QNetworkInterface::allAddresses()) {
-        if (addr.isLoopback()) {
-            continue;
-        }
-        if (addr.isEqual(target, QHostAddress::TolerantConversion)) {
-            return true;
-        }
-    }
-    return false;
+    return !target.is_loopback() && !local_ip_.empty() && target.to_string() == local_ip_;
 }
 
 void NetworkManager::reconnection() {
@@ -586,24 +708,6 @@ void NetworkManager::check_port(const QString     ip,
                                   });
 }
 
-bool NetworkManager::check_port_sync(const QString    &ip,
-                                     Network::Protocol protocol,
-                                     const bool        request,
-                                     const bool        isConstant) {
-    Q_UNUSED(protocol);
-    Q_UNUSED(request);
-    Q_UNUSED(isConstant);
-
-    const auto result =
-        ExtraChain::Core::NetworkRuntime::probe(ip.toStdString(), ws_port, std::chrono::milliseconds(1600));
-    if (!result.has_value()) {
-        eLog("[Network] Failed to connect to {}:{} - {}", ip.toStdString(), ws_port, result.error());
-        return false;
-    }
-
-    return true;
-}
-
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", connections_->size());
 
@@ -670,9 +774,8 @@ void NetworkManager::start_network() {
         return;
     }
 
-    if (!local_) {
-        eLog("[NetworkManager] Can't detect local ip");
-        return;
+    if (local_ip_.empty()) {
+        eWarning("[NetworkManager] Local address is unavailable; listener will use the wildcard address");
     }
 
     if (!Network::isStartedServer)
@@ -690,7 +793,7 @@ void NetworkManager::start_network() {
                 return;
             }
 
-            auto service = WebSocketService::from_accepted(*network_runtime_, std::move(socket), node);
+            auto service = WebSocketService::from_accepted(*network_runtime_, std::move(socket), *this);
             service->set_direction(SocketDirection::Incoming);
             connectWsService(service);
             boost::asio::co_spawn(network_runtime_->executor(), service->run(true), boost::asio::detached);
@@ -708,7 +811,7 @@ boost::asio::awaitable<void> NetworkManager::connect_websocket(std::string   ip,
                                                                bool          request_list_nodes,
                                                                bool          is_constant,
                                                                bool          is_light) {
-    auto result = co_await WebSocketService::connect(*network_runtime_, ip, port, node, is_constant, is_light);
+    auto result = co_await WebSocketService::connect(*network_runtime_, ip, port, *this, is_constant, is_light);
     if (!result.has_value()) {
         const auto detail = result.error();
         QMetaObject::invokeMethod(
@@ -726,7 +829,7 @@ boost::asio::awaitable<void> NetworkManager::connect_websocket(std::string   ip,
     QMetaObject::invokeMethod(
         this,
         [this, ip, port] {
-            reconnections_to_identifier_->emplace(NetworkReconnect { .ip       = QString::fromStdString(ip),
+            reconnections_to_identifier_->emplace(NetworkReconnect { .ip       = ip,
                                                                      .port     = port,
                                                                      .protocol = Network::Protocol::WebSocket },
                                                   "");
@@ -831,12 +934,12 @@ void NetworkManager::connect_to_websocket(const QString &ip,
 }
 
 void NetworkManager::clear_network_caches() {
+    const auto now = std::chrono::steady_clock::now();
     {
         auto network_forwarded_messages_locked = *forwarded_messages_;
         for (auto it = network_forwarded_messages_locked->begin();
              it != network_forwarded_messages_locked->end();) {
-            QDateTime currentTime = QDateTime::currentDateTime();
-            if (it->second.second.secsTo(currentTime) >= 120) {
+            if (now - it->second.second >= std::chrono::minutes(2)) {
                 it = network_forwarded_messages_locked->erase(it);
             } else
                 ++it;
@@ -846,8 +949,7 @@ void NetworkManager::clear_network_caches() {
     {
         auto messages_locked = *messages_;
         for (auto it = messages_locked->begin(); it != messages_locked->end();) {
-            QDateTime currentTime = QDateTime::currentDateTime();
-            if (it->second.second.secsTo(currentTime) >= 120) {
+            if (now - it->second.second >= std::chrono::minutes(2)) {
                 // eTemp("MessageID erased: {}", it->first);
                 it = messages_locked->erase(it);
             } else
@@ -856,9 +958,8 @@ void NetworkManager::clear_network_caches() {
     }
 
     {
-        qint64 now = QDateTime::currentSecsSinceEpoch();
         for (auto it = msg_hash_list_.begin(); it != msg_hash_list_.end();) {
-            if (now - it.value().second >= 120) {
+            if (now - it->second.second >= std::chrono::minutes(2)) {
                 it = msg_hash_list_.erase(it);
             } else {
                 ++it;
@@ -1443,7 +1544,7 @@ void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage 
 
     network_forwarded_messages_locked->emplace(message_edited.message_id,
                                                std::make_pair(package_data.prev_identifier,
-                                                              QDateTime::currentDateTime()));
+                                                              std::chrono::steady_clock::now()));
     const auto max_entries = node->runtime_limits().cached_transactions;
     while (network_forwarded_messages_locked->size() > max_entries) {
         network_forwarded_messages_locked->erase(network_forwarded_messages_locked->begin());
@@ -1628,18 +1729,18 @@ bool NetworkManager::check_message_count(const std::string &msg) {
     auto        it          = msg_hash_list_.find(hashMsg);
 
     if (it == msg_hash_list_.end()) {
-        msg_hash_list_.insert(hashMsg, { 0, QDateTime::currentSecsSinceEpoch() });
-        const auto max_entries = static_cast<qsizetype>(node->runtime_limits().cached_transactions);
+        msg_hash_list_.emplace(hashMsg, std::make_pair(0, std::chrono::steady_clock::now()));
+        const auto max_entries = node->runtime_limits().cached_transactions;
         while (msg_hash_list_.size() > max_entries) {
             msg_hash_list_.erase(msg_hash_list_.begin());
         }
         schedule_cache_cleanup();
     } else {
-        if (connections_->empty() || it.value().first == connections_->size() - 1) {
+        if (connections_->empty() || it->second.first == connections_->size() - 1) {
             msg_hash_list_.erase(it);
             flag_result = false;
         } else {
-            it.value().first++;
+            it->second.first++;
             flag_result = true;
         }
     }
@@ -1724,7 +1825,7 @@ void NetworkManager::message_received(const std::string &message,
             }
 
             auto res =
-                messages_locked->emplace(message_id, std::make_pair(identifier, QDateTime::currentDateTime()));
+                messages_locked->emplace(message_id, std::make_pair(identifier, std::chrono::steady_clock::now()));
             if (!res.second) {
                 return;
             }
@@ -2789,80 +2890,17 @@ void NetworkManager::local_inizialization() {
         }
     });
 
-    local_ = std::make_shared<QNetworkAddressEntry>(Utils::findLocalIp(Utils::PrintDebug::Off));
-    eLog("[NetworkManager] Found local IP: {}", local_->ip().toString());
-
-    if (!local_) {
-        eLog("[NetworkManager] Local not found");
+    const auto address = ExtraChain::Core::NetworkRuntime::local_address();
+    if (!address.has_value()) {
+        eWarning("[NetworkManager] Local address is unavailable: {}", address.error());
         return;
     }
-
-    bool sub = local_->ip().isInSubnet(QHostAddress::parseSubnet("192.168.0.0/16"));
-    eLog("Sub: {}", sub);
-
-    if (!sub) {
-        // startDiscovery();
-        return;
-    }
-
-    upnp_dis_ = std::make_unique<UPNPConnection>(local_);
-    upnp_net_ = std::make_unique<UPNPConnection>(local_);
-    // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::);
-    // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
-    connect(upnp_net_.get(), &UPNPConnection::upnpError, [](QString msg) {
-        eLog("[NetworkManager] UPnP error: {}", msg);
-    });
-    connect(upnp_dis_.get(), &UPNPConnection::upnpError, [](QString msg) {
-        eLog("[NetworkManager] UPnP Discovery error: {}", msg);
-    });
-    // eLog("Tunnel creation started!");
-    // upnpDis->makeTunnel(extPort, extPort, " UDP ", "Discovery tunnel of ExtraChain ");
-    // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
-
-    // UPnP v2
-    upnp_connector_ = std::make_unique<UPnPConnector>(local_);
-    QObject::connect(upnp_connector_.get(),
-                     &UPnPConnector::deviceDiscovered,
-                     [&](const QHostAddress &address, const QString &location) {
-                         std::cout << "Discovered device at " << address.toString().toStdString()
-                                   << " with location: " << location.toStdString() << std::endl;
-                         // Now retrieve and parse the device description.
-                         upnp_connector_->retrieveDeviceDescription(QUrl(location));
-                     });
-
-    QObject::connect(upnp_connector_.get(), &UPnPConnector::errorOccurred, [](const QString &errorMessage) {
-        std::cout << "Error: " << errorMessage.toStdString() << std::endl;
-    });
-
-    QObject::connect(upnp_connector_.get(), &UPnPConnector::soapResponseReceived, [this](const QString &response) {
-        std::cout << "SOAP response: " << response.toStdString() << std::endl;
-    });
-
-    QObject::connect(upnp_connector_.get(), &UPnPConnector::controlURLFound, [this](const QString &response) {
-        // Example parameters:
-        QUrl    controlUrl(response);
-        int     internalPort   = 8080;  // The port on your internal application
-        int     externalPort   = 8080;  // The external port on your router
-        QString protocol       = "TCP"; // Typically TCP
-        QString description    = "MyApp Tunnel";
-        QString internalClient = local_->ip().toString(); // Your internal IP address
-
-        // Call addPortMapping to establish the tunnel.
-        upnp_connector_
-            ->addPortMapping(controlUrl, internalPort, externalPort, protocol, description, internalClient);
-        // Call getSpecificPortMappingEntry to check if port has been mapped.
-        upnp_connector_->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
-
-        // upnpConnector->removePortMapping(controlUrl, externalPort, protocol);
-        // upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
-    });
-
-    // Uncomment to start UPnP connection
-    // upnpConnector->discoverDevices();
+    local_ip_ = address.value();
+    eLog("[NetworkManager] Found local IP: {}", local_ip_);
 }
 
 QString NetworkManager::local_ip() {
-    return local_->ip().toString();
+    return QString::fromStdString(local_ip_);
 }
 
 void NetworkManager::initialize_first_node() {
@@ -2965,8 +3003,8 @@ QString NetworkManager::found_current_identifier(QString ip, quint16 port) {
     auto    m_reconnectionsToIdentifierLocked = *reconnections_to_identifier_;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
          ++it) {
-        if (it->first.ip == ip && it->first.port == port) {
-            res = it->second;
+        if (it->first.ip == ip.toStdString() && it->first.port == port) {
+            res = QString::fromStdString(it->second);
             break;
         }
     }
@@ -2974,102 +3012,65 @@ QString NetworkManager::found_current_identifier(QString ip, quint16 port) {
 }
 
 std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const QString &ip, bool alt) {
-    static QMap<QString, QString> cache;
-    if (!ip.isEmpty() && cache.contains(ip)) {
-        return { ip, cache[ip] };
+    (void)alt;
+    refresh_public_ip_and_country(ip.toStdString());
+    const auto current = node->init_public_ip_and_country();
+    if (!current.first.isEmpty()) {
+        return current;
     }
+    return { ip.isEmpty() ? QString::fromStdString(public_ip_) : ip, "Security" };
+}
 
-    try {
-        QString query = alt ? "https://freeipapi.com/api/json" : "http://ip-api.com/json";
-        if (!ip.isEmpty()) {
-            query += "/" + ip;
-        }
+void NetworkManager::refresh_public_ip_and_country(std::string ip) {
+    const auto                     target = ip.empty() ? std::string("/json") : "/json/" + ip;
+    const QPointer<NetworkManager> manager(this);
+    network_runtime_
+        ->async_http_get("ip-api.com",
+                         80,
+                         target,
+                         std::chrono::seconds(5),
+                         [manager, requested_ip = std::move(ip)](
+                             ExtraChain::Core::NetworkRuntime::HttpResult result) mutable {
+                             if (manager.isNull()) {
+                                 return;
+                             }
+                             if (!result.has_value()) {
+                                 eWarning("[NetworkManager] Public IP lookup failed: {}", result.error());
+                                 return;
+                             }
 
-        QUrl                  url(query);
-        QNetworkAccessManager manager;
-        QNetworkRequest       request(url);
-#ifdef IS_APP_UI_CLIENT
-        request.setTransferTimeout(4000);
-#else
-        request.setTransferTimeout(5000);
-#endif
-        QNetworkReply *reply = manager.get(request);
+                             boost::system::error_code parse_error;
+                             auto                      document = boost::json::parse(result.value(), parse_error);
+                             if (parse_error || !document.is_object()) {
+                                 eWarning("[NetworkManager] Public IP response is invalid: {}",
+                                          parse_error.message());
+                                 return;
+                             }
+                             const auto &object        = document.as_object();
+                             const auto *ip_value      = object.if_contains("query");
+                             const auto *country_value = object.if_contains("country");
+                             if (ip_value == nullptr || country_value == nullptr || !ip_value->is_string()
+                                 || !country_value->is_string()) {
+                                 eWarning("[NetworkManager] Public IP response has no required fields");
+                                 return;
+                             }
 
-        QString    ip, country, output;
-        QEventLoop loop;
-        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-        QString errorText;
-        QObject::connect(reply, &QNetworkReply::finished, [&]() {
-            if (reply->error() != QNetworkReply::NoError) {
-                errorText = reply->errorString();
-                return;
-            }
-            output = reply->readAll();
-        });
-        loop.exec();
-        reply->deleteLater();
-
-        if (!errorText.isEmpty())
-            throw std::runtime_error(errorText.toStdString());
-
-        QJsonParseError parseError;
-        QJsonDocument   jsonDoc = QJsonDocument::fromJson(output.toUtf8(), &parseError);
-
-        if (parseError.error != QJsonParseError::NoError)
-            throw std::runtime_error("Failed to parse JSON:" + parseError.errorString().toStdString());
-        if (!jsonDoc.isObject())
-            throw std::runtime_error("JSON is not an object");
-
-        QJsonObject jsonObj = jsonDoc.object();
-
-        ip      = jsonObj.value(alt ? "ipAddress" : "query").toString();
-        country = jsonObj.value(alt ? "countryName" : "country").toString();
-
-        if (country.contains("United Kingdom")) {
-            country = "United Kingdom";
-        }
-
-        if (country == "United States of America") {
-            country = "United States";
-        }
-
-        if (country == "The Netherlands") {
-            country = "Netherlands";
-        }
-
-        if (country == "Türkiye") {
-            country = "Turkey";
-        }
-
-        eLog("Country: {}", country);
-        cache.insert(ip, country);
-        return { ip, country };
-    } catch (const std::exception &error) {
-        eCritical("Get public ip error: {}", error.what());
-
-        if (!alt) {
-            return search_public_ip_and_country_(ip, true);
-        }
-
-#ifdef Q_OS_LINUX
-        return {};
-#endif
-
-        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
-    } catch (...) {
-        eCritical("Get public ip error unknown");
-
-        if (!alt) {
-            return search_public_ip_and_country_(ip, true);
-        }
-
-#ifdef Q_OS_LINUX
-        return {};
-#endif
-
-        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
-    }
+                             std::string resolved_ip =
+                                 requested_ip.empty() ? std::string(ip_value->as_string()) : requested_ip;
+                             std::string country(country_value->as_string());
+                             QMetaObject::invokeMethod(
+                                 manager,
+                                 [manager, resolved_ip = std::move(resolved_ip), country = std::move(country)] {
+                                     if (manager.isNull()) {
+                                         return;
+                                     }
+                                     manager->node->init_public_ip_and_country_ = {
+                                         QString::fromStdString(resolved_ip),
+                                         QString::fromStdString(country)
+                                     };
+                                 },
+                                 Qt::QueuedConnection);
+                         });
 }
 
 NetworkPackageStorage::NetworkPackageStorage(const MessageBody &body,

@@ -10,20 +10,43 @@
 
 #include "network/network_runtime.h"
 
+#include <algorithm>
 #include <utility>
 
 #include <boost/asio/connect.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/ip/address.hpp>
+#include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ip/v6_only.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
+#include <boost/beast/core/flat_buffer.hpp>
+#include <boost/beast/http.hpp>
 
 namespace ExtraChain::Core {
+
+    struct NetworkRuntime::AsyncOperation final {
+        explicit AsyncOperation(std::function<void()> cancel_handler)
+            : cancel_handler(std::move(cancel_handler)) {
+        }
+
+        void cancel() {
+            if (!finished.exchange(true, std::memory_order_acq_rel)) {
+                cancel_handler();
+            }
+        }
+
+        void complete() {
+            finished.store(true, std::memory_order_release);
+        }
+
+        std::function<void()> cancel_handler;
+        std::atomic_bool      finished { false };
+    };
 
     NetworkRuntime::NetworkRuntime(RuntimeConfig config)
         : runtime_(config) {
@@ -130,6 +153,7 @@ namespace ExtraChain::Core {
             return;
         }
         stop_listening();
+        cancel_operations();
         runtime_.stop();
     }
 
@@ -141,6 +165,31 @@ namespace ExtraChain::Core {
         return runtime_.executor();
     }
 
+    void NetworkRuntime::register_operation(const std::shared_ptr<AsyncOperation>& operation) {
+        std::scoped_lock lock(operations_mutex_);
+        std::erase_if(operations_, [](const auto& current) {
+            return current.expired();
+        });
+        operations_.push_back(operation);
+    }
+
+    void NetworkRuntime::cancel_operations() {
+        std::vector<std::shared_ptr<AsyncOperation>> operations;
+        {
+            std::scoped_lock lock(operations_mutex_);
+            operations.reserve(operations_.size());
+            for (const auto& weak : operations_) {
+                if (auto operation = weak.lock()) {
+                    operations.push_back(std::move(operation));
+                }
+            }
+            operations_.clear();
+        }
+        for (const auto& operation : operations) {
+            operation->cancel();
+        }
+    }
+
     void NetworkRuntime::async_probe(std::string               host,
                                      std::uint16_t             port,
                                      std::chrono::milliseconds timeout,
@@ -150,27 +199,144 @@ namespace ExtraChain::Core {
             return;
         }
 
+        const auto resolver = std::make_shared<Tcp::resolver>(runtime_.executor());
+        const auto stream   = std::make_shared<boost::beast::tcp_stream>(runtime_.executor());
+        const auto operation =
+            std::make_shared<AsyncOperation>([executor = runtime_.executor(), resolver, stream] {
+                boost::asio::dispatch(executor, [resolver, stream] {
+                    resolver->cancel();
+                    boost::system::error_code ignored;
+                    stream->cancel();
+                    stream->socket().close(ignored);
+                });
+            });
+        register_operation(operation);
         boost::asio::co_spawn(
             runtime_.executor(),
-            [host = std::move(host), port, timeout, handler = std::move(handler)]() mutable
-            -> boost::asio::awaitable<void> {
-                const auto               executor = co_await boost::asio::this_coro::executor;
-                Tcp::resolver            resolver(executor);
-                boost::beast::tcp_stream stream(executor);
-                stream.expires_after(timeout);
+            [host = std::move(host),
+             port,
+             timeout,
+             handler = std::move(handler),
+             resolver,
+             stream,
+             operation]() mutable -> boost::asio::awaitable<void> {
+                const auto                executor = co_await boost::asio::this_coro::executor;
+                boost::asio::steady_timer resolve_timeout(executor);
+                resolve_timeout.expires_after(timeout);
+                resolve_timeout.async_wait([resolver](const boost::system::error_code& timer_error) {
+                    if (!timer_error) {
+                        resolver->cancel();
+                    }
+                });
+                stream->expires_after(timeout);
                 boost::system::error_code error;
                 const auto                endpoints =
-                    co_await resolver.async_resolve(host,
-                                                    std::to_string(port),
-                                                    boost::asio::redirect_error(boost::asio::use_awaitable,
-                                                                                error));
+                    co_await resolver->async_resolve(host,
+                                                     std::to_string(port),
+                                                     boost::asio::redirect_error(boost::asio::use_awaitable,
+                                                                                 error));
+                resolve_timeout.cancel();
                 if (!error) {
-                    co_await stream.async_connect(endpoints,
-                                                  boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    co_await stream->async_connect(endpoints,
+                                                   boost::asio::redirect_error(boost::asio::use_awaitable, error));
                 }
                 boost::system::error_code ignored;
-                stream.socket().close(ignored);
+                stream->socket().close(ignored);
+                operation->complete();
                 handler(!error, error.message());
+            },
+            boost::asio::detached);
+    }
+
+    void NetworkRuntime::async_http_get(std::string               host,
+                                        std::uint16_t             port,
+                                        std::string               target,
+                                        std::chrono::milliseconds timeout,
+                                        HttpHandler               handler) {
+        if (stopping_.load(std::memory_order_acquire)) {
+            handler(std::unexpected("network runtime is stopping"));
+            return;
+        }
+
+        const auto resolver = std::make_shared<Tcp::resolver>(runtime_.executor());
+        const auto stream   = std::make_shared<boost::beast::tcp_stream>(runtime_.executor());
+        const auto operation =
+            std::make_shared<AsyncOperation>([executor = runtime_.executor(), resolver, stream] {
+                boost::asio::dispatch(executor, [resolver, stream] {
+                    resolver->cancel();
+                    boost::system::error_code ignored;
+                    stream->cancel();
+                    stream->socket().close(ignored);
+                });
+            });
+        register_operation(operation);
+        boost::asio::co_spawn(
+            runtime_.executor(),
+            [host = std::move(host),
+             port,
+             target = std::move(target),
+             timeout,
+             handler = std::move(handler),
+             resolver,
+             stream,
+             operation]() mutable -> boost::asio::awaitable<void> {
+                namespace http = boost::beast::http;
+
+                const auto                executor = co_await boost::asio::this_coro::executor;
+                boost::asio::steady_timer resolve_timeout(executor);
+                resolve_timeout.expires_after(timeout);
+                resolve_timeout.async_wait([resolver](const boost::system::error_code& timer_error) {
+                    if (!timer_error) {
+                        resolver->cancel();
+                    }
+                });
+                boost::system::error_code error;
+                const auto                endpoints =
+                    co_await resolver->async_resolve(host,
+                                                     std::to_string(port),
+                                                     boost::asio::redirect_error(boost::asio::use_awaitable,
+                                                                                 error));
+                resolve_timeout.cancel();
+                if (!error) {
+                    stream->expires_after(timeout);
+                    co_await stream->async_connect(endpoints,
+                                                   boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                }
+
+                http::request<http::empty_body> request(http::verb::get, target, 11);
+                request.set(http::field::host, host);
+                request.set(http::field::user_agent, "ExtraChain-Core");
+                if (!error) {
+                    co_await http::async_write(*stream,
+                                               request,
+                                               boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                }
+
+                boost::beast::flat_buffer                buffer;
+                http::response_parser<http::string_body> parser;
+                parser.body_limit(1024 * 1024);
+                if (!error) {
+                    co_await http::async_read(*stream,
+                                              buffer,
+                                              parser,
+                                              boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                }
+
+                boost::system::error_code ignored;
+                stream->socket().shutdown(Tcp::socket::shutdown_both, ignored);
+                stream->socket().close(ignored);
+                operation->complete();
+                if (error) {
+                    handler(std::unexpected(error.message()));
+                    co_return;
+                }
+
+                auto response = parser.release();
+                if (response.result() != http::status::ok) {
+                    handler(std::unexpected("HTTP status " + std::to_string(response.result_int())));
+                    co_return;
+                }
+                handler(std::move(response.body()));
             },
             boost::asio::detached);
     }
@@ -211,6 +377,27 @@ namespace ExtraChain::Core {
             return std::unexpected(connect_error.message());
         }
         return {};
+    }
+
+    std::expected<std::string, std::string> NetworkRuntime::local_address() {
+        boost::asio::io_context      io_context;
+        boost::asio::ip::udp::socket socket(io_context);
+        boost::system::error_code    error;
+        socket.open(boost::asio::ip::udp::v4(), error);
+        if (error) {
+            return std::unexpected(error.message());
+        }
+
+        socket.connect({ boost::asio::ip::make_address_v4("8.8.8.8"), 53 }, error);
+        if (error) {
+            return std::unexpected(error.message());
+        }
+
+        const auto endpoint = socket.local_endpoint(error);
+        if (error) {
+            return std::unexpected(error.message());
+        }
+        return endpoint.address().to_string();
     }
 
 } // namespace ExtraChain::Core

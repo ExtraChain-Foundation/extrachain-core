@@ -20,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -40,6 +41,8 @@ namespace ExtraChain::Core {
         using Tcp           = boost::asio::ip::tcp;
         using AcceptHandler = std::function<void(Tcp::socket)>;
         using ProbeHandler  = std::function<void(bool, std::string)>;
+        using HttpResult    = std::expected<std::string, std::string>;
+        using HttpHandler   = std::function<void(HttpResult)>;
 
         explicit NetworkRuntime(RuntimeConfig config = {});
         ~NetworkRuntime();
@@ -61,26 +64,38 @@ namespace ExtraChain::Core {
             return runtime_.async_blocking(std::move(function));
         }
 
-        void                                                  async_probe(std::string               host,
-                                                                          std::uint16_t             port,
-                                                                          std::chrono::milliseconds timeout,
-                                                                          ProbeHandler              handler);
-        [[nodiscard]] static std::expected<void, std::string> probe(std::string_view          host,
-                                                                    std::uint16_t             port,
-                                                                    std::chrono::milliseconds timeout);
+        void                                                         async_probe(std::string               host,
+                                                                                 std::uint16_t             port,
+                                                                                 std::chrono::milliseconds timeout,
+                                                                                 ProbeHandler              handler);
+        void                                                         async_http_get(std::string               host,
+                                                                                    std::uint16_t             port,
+                                                                                    std::string               target,
+                                                                                    std::chrono::milliseconds timeout,
+                                                                                    HttpHandler               handler);
+        [[nodiscard]] static std::expected<void, std::string>        probe(std::string_view          host,
+                                                                           std::uint16_t             port,
+                                                                           std::chrono::milliseconds timeout);
+        [[nodiscard]] static std::expected<std::string, std::string> local_address();
 
     private:
+        struct AsyncOperation;
+
+        void                         register_operation(const std::shared_ptr<AsyncOperation>& operation);
+        void                         cancel_operations();
         [[nodiscard]] bool           open_acceptor(const Tcp&                 protocol,
                                                    std::uint16_t              port,
                                                    boost::system::error_code& error);
         boost::asio::awaitable<void> accept_loop();
 
-        Runtime                        runtime_;
-        std::unique_ptr<Tcp::acceptor> acceptor_;
-        AcceptHandler                  accept_handler_;
-        mutable std::mutex             accept_handler_mutex_;
-        std::atomic_bool               listening_ { false };
-        std::atomic_bool               stopping_ { false };
+        Runtime                                    runtime_;
+        std::unique_ptr<Tcp::acceptor>             acceptor_;
+        AcceptHandler                              accept_handler_;
+        mutable std::mutex                         accept_handler_mutex_;
+        std::mutex                                 operations_mutex_;
+        std::vector<std::weak_ptr<AsyncOperation>> operations_;
+        std::atomic_bool                           listening_ { false };
+        std::atomic_bool                           stopping_ { false };
     };
 
 } // namespace ExtraChain::Core

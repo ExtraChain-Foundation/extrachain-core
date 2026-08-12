@@ -10,6 +10,9 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/read_until.hpp>
+#include <boost/asio/streambuf.hpp>
+#include <boost/asio/write.hpp>
 
 #include "network/network_runtime.h"
 #include "network/network_status.h"
@@ -19,6 +22,7 @@
 #include "runtime/periodic_task.h"
 #include "runtime/runtime.h"
 #include "utils/thread_pool_boost.h"
+#include "utils/version.h"
 
 namespace {
     void require(bool condition, const char* message) {
@@ -38,6 +42,13 @@ int main() {
     using ExtraChain::Core::PeriodicTask;
     using ExtraChain::Core::Runtime;
     using ExtraChain::Core::TrafficMeter;
+
+    require(Utils::compare_versions("0.25.0", "0.26.0") == Utils::VersionCompareResult::Newer,
+            "version comparison must detect a newer peer");
+    require(Utils::compare_versions("0.26", "0.26.0") == Utils::VersionCompareResult::Same,
+            "version comparison must treat missing components as zero");
+    require(Utils::compare_versions("0.26.invalid", "0.26.0") == Utils::VersionCompareResult::Same,
+            "version comparison must preserve invalid-component compatibility");
 
     Event<int> event;
     int        observed = 0;
@@ -162,6 +173,16 @@ int main() {
     runtime.stop();
     require(!runtime.running(), "runtime must report the stopped state");
 
+    Runtime          draining_runtime({ .io_threads = 1, .blocking_threads = 1 });
+    std::atomic_bool drained { false };
+    const auto       draining_task = DeadlineTask::create(draining_runtime.executor(), [&] {
+        drained.store(true, std::memory_order_release);
+    });
+    draining_runtime.start();
+    draining_task->schedule_after(10ms);
+    draining_runtime.stop();
+    require(drained.load(std::memory_order_acquire), "runtime stop must drain accepted asynchronous work");
+
     NetworkRuntime  network({ .io_threads = 1, .blocking_threads = 1 });
     std::atomic_int accepted { 0 };
     const auto      listen_port = network.listen(0, [&](NetworkRuntime::Tcp::socket socket) {
@@ -176,6 +197,44 @@ int main() {
     require(sync_probe.has_value(), "synchronous probe must reach the Boost listener");
     const auto hostname_probe = NetworkRuntime::probe("localhost", listen_port.value(), 1s);
     require(hostname_probe.has_value(), "synchronous probe must resolve a host name");
+
+    boost::asio::io_context       http_context;
+    NetworkRuntime::Tcp::acceptor http_acceptor(http_context, { boost::asio::ip::address_v4::loopback(), 0 });
+    const auto                    http_port = http_acceptor.local_endpoint().port();
+    std::thread                   http_server([&] {
+        NetworkRuntime::Tcp::socket socket(http_context);
+        boost::system::error_code   error;
+        http_acceptor.accept(socket, error);
+        if (error) {
+            return;
+        }
+        boost::asio::streambuf request;
+        boost::asio::read_until(socket, request, "\r\n\r\n", error);
+        if (error) {
+            return;
+        }
+        const std::string response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK";
+        boost::asio::write(socket, boost::asio::buffer(response), error);
+    });
+
+    std::atomic_bool http_complete { false };
+    std::atomic_bool http_ok { false };
+    network.async_http_get("127.0.0.1", http_port, "/runtime", 1s, [&](NetworkRuntime::HttpResult result) {
+        http_ok.store(result.has_value() && result.value() == "OK", std::memory_order_release);
+        http_complete.store(true, std::memory_order_release);
+        condition.notify_one();
+    });
+    {
+        std::unique_lock lock(mutex);
+        require(condition.wait_for(lock,
+                                   2s,
+                                   [&] {
+                                       return http_complete.load(std::memory_order_acquire);
+                                   }),
+                "asynchronous HTTP request must complete");
+    }
+    http_server.join();
+    require(http_ok.load(std::memory_order_acquire), "asynchronous HTTP request must return the response body");
 
     std::atomic_bool async_probe_ok { false };
     network.async_probe("127.0.0.1", listen_port.value(), 1s, [&](bool connected, std::string) {
@@ -192,8 +251,47 @@ int main() {
                                    }),
                 "asynchronous probe and accept callback must complete");
     }
+
+    boost::asio::io_context       stalled_context;
+    NetworkRuntime::Tcp::acceptor stalled_acceptor(stalled_context,
+                                                   { boost::asio::ip::address_v4::loopback(), 0 });
+    std::atomic_bool              stalled_accepted { false };
+    std::atomic_bool              cancelled_request_complete { false };
+    std::thread                   stalled_server([&] {
+        NetworkRuntime::Tcp::socket socket(stalled_context);
+        boost::system::error_code   error;
+        stalled_acceptor.accept(socket, error);
+        if (!error) {
+            stalled_accepted.store(true, std::memory_order_release);
+            condition.notify_one();
+            std::this_thread::sleep_for(500ms);
+        }
+    });
+    network.async_http_get("127.0.0.1",
+                           stalled_acceptor.local_endpoint().port(),
+                           "/stalled",
+                           5s,
+                           [&](NetworkRuntime::HttpResult result) {
+                               cancelled_request_complete.store(!result.has_value(), std::memory_order_release);
+                               condition.notify_one();
+                           });
+    {
+        std::unique_lock lock(mutex);
+        require(condition.wait_for(lock,
+                                   2s,
+                                   [&] {
+                                       return stalled_accepted.load(std::memory_order_acquire);
+                                   }),
+                "stalled HTTP server must accept the request");
+    }
+    const auto stop_started = std::chrono::steady_clock::now();
     network.stop();
+    const auto stop_duration = std::chrono::steady_clock::now() - stop_started;
+    stalled_server.join();
     require(!network.listening(), "stopped network runtime must close its listener");
+    require(cancelled_request_complete.load(std::memory_order_acquire),
+            "network stop must cancel an active HTTP request");
+    require(stop_duration < 1s, "network stop must not wait for an active HTTP timeout");
 
     std::atomic_int pool_tasks { 0 };
     auto            pool = ThreadPoolBoost::instance(2);

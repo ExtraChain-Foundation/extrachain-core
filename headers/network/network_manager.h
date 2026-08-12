@@ -19,12 +19,9 @@
 
 #pragma once
 
-#include <QtCore/QMutex>
-#include <QtCore/QRandomGenerator>
-#include <QtNetwork/QNetworkAddressEntry>
-#include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkProxy>
 #include <deque>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -52,16 +49,12 @@
 
 class SocketService;
 class WebSocketService;
-class UPNPConnection;
-class UPnPConnector;
-
 using CalculateTraffic = ExtraChain::Core::TrafficMeter;
 
 struct NetworkReconnect {
-    QString           ip;
-    quint16           port;
+    std::string       ip;
+    std::uint16_t     port;
     Network::Protocol protocol;
-    // quint64 lastTry;
 
     auto operator==(const NetworkReconnect& reconnect) const {
         return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
@@ -81,30 +74,14 @@ struct NetworkReconnect {
     }
 
     static NetworkReconnect fromWsConnection(const DfsP::WSConnection& wsConnection) {
-        return NetworkReconnect { .ip       = QString::fromStdString(wsConnection.address),
-                                  .port     = static_cast<quint16>(wsConnection.port),
+        return NetworkReconnect { .ip       = wsConnection.address,
+                                  .port     = static_cast<std::uint16_t>(wsConnection.port),
                                   .protocol = Network::Protocol::WebSocket };
     }
 
     void print() const {
         eLog("[NetworkReconnect] ip: {}, port: {}", ip, port);
     }
-};
-
-inline size_t qHash(const NetworkReconnect& reconnect) {
-    return qHash(reconnect.ip) + qHash(reconnect.port) + qHash(int(reconnect.protocol));
-}
-
-struct MessageIdDataWaiting {
-    std::string identifier;
-    qint64      time;
-    std::string cached_message;
-    // msg type
-};
-
-struct MessageIdDataReceived {
-    std::string identifier;
-    qint64      time;
 };
 
 static const std::string NetworkCacheFile = "tmp/network.cache";
@@ -216,10 +193,12 @@ private:
  * @brief The NetworkManager class
  * Creates Discovery, Server and Sockets services
  */
-class EXTRACHAIN_EXPORT NetworkManager : public QObject {
+class EXTRACHAIN_EXPORT NetworkManager : public QObject, public PeerContext {
     Q_OBJECT
 
 private:
+    using CacheTime = std::chrono::steady_clock::time_point;
+
     enum class PeerSelection {
         All,
         LegacyDag
@@ -235,37 +214,33 @@ private:
         std::size_t                   bytes = 0;
     };
 
-    bool                                      active_ = false;
-    std::set<std::string>                     failed_ips_;
-    std::unique_ptr<UPNPConnection>           upnp_dis_;
-    std::unique_ptr<UPNPConnection>           upnp_net_;
-    std::unique_ptr<UPnPConnector>            upnp_connector_;
-    QMap<std::string, std::pair<int, qint64>> msg_hash_list_ = {};
+    bool                                                       active_ = false;
+    std::set<std::string>                                      failed_ips_;
+    std::unordered_map<std::string, std::pair<int, CacheTime>> msg_hash_list_;
 
     ExtraChainNode*                                           node;
-    std::shared_ptr<QNetworkAddressEntry>                     local_;
+    std::string                                               local_ip_;
     std::unique_ptr<ExtraChain::Core::NetworkRuntime>         network_runtime_;
     SafePtr<std::set<SocketService::Ptr>>                     connections_;
-    SafePtr<std::map<NetworkReconnect, QString>>              reconnections_to_identifier_;
+    SafePtr<std::map<NetworkReconnect, std::string>>          reconnections_to_identifier_;
     ExtraChain::Core::NetworkStatus                           network_status_;
     ExtraChain::Core::NetworkStatus::ChangedEvent::Connection network_status_connection_;
     std::unique_ptr<QtNetworkStatusAdapter>                   network_status_adapter_;
 
     struct ReconnEntry {
-        uint64_t attempts        = 0;
-        qint64   next_attempt_ms = 0;
+        uint64_t     attempts        = 0;
+        std::int64_t next_attempt_ms = 0;
     };
     std::map<std::string, ReconnEntry> reconn_;
 
-    SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           messages_;
-    std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;
-    std::map<std::string, MessageIdDataReceived>                                messages_received_;
+    SafePtr<std::map<std::string, std::pair<std::string, CacheTime>>>           messages_;
     std::shared_ptr<ExtraChain::Core::DeadlineTask>                             reconnect_timer_;
     std::atomic_bool                                                            offline_ { false };
+    std::atomic_bool                                                            first_node_probe_active_ { false };
     std::shared_ptr<ExtraChain::Core::DeadlineTask>                             clear_network_caches_timer_;
     std::shared_ptr<ExtraChain::Core::DeadlineTask>                             live_dag_batch_timer_;
     CalculateTraffic*                                                           calculate_traffic_;
-    SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> forwarded_messages_;
+    SafePtr<std::unordered_map<std::string, std::pair<std::string, CacheTime>>> forwarded_messages_;
     std::unordered_map<std::string, LiveDagPeerQueue>                           live_dag_peer_queues_;
     std::mutex                                                                  recent_dag_hashes_mutex_;
     std::unordered_set<std::string>                                             recent_dag_hashes_;
@@ -291,6 +266,7 @@ public:
     explicit NetworkManager(ExtraChainNode* node, std::uint16_t port);
     ~NetworkManager();
     void                        local_inizialization();
+    void                        probe_first_node_candidate(std::size_t index);
     std::pair<QString, QString> search_public_ip_and_country_(const QString& ip = "", bool alt = false);
 
     bool remove_one_connection();
@@ -330,6 +306,7 @@ private:
     void schedule_reconnection(int delay_ms);
 
     void add_all_services_identifiers_to_message(MessageBody& msg);
+    void refresh_public_ip_and_country(std::string ip = {});
 
 public:
     bool                                  is_first_node(const std::string& identifier); // detect for safety
@@ -347,7 +324,6 @@ public:
 public slots:
     void remove_connection(const QString& identifier);
     void check_port(const QString ip, Network::Protocol protocol, const bool request, const bool isConstant);
-    bool check_port_sync(const QString& ip, Network::Protocol protocol, const bool request, const bool isConstant);
     void connect_to_endpoint(const QString& ip,
                              quint16        port,
                              bool           requestListNodes = false,
@@ -502,12 +478,24 @@ public:
         return message_id;
     }
 
-    SafePtr<std::map<NetworkReconnect, QString>> reconnections();
+    SafePtr<std::map<NetworkReconnect, std::string>> reconnections();
 
     CalculateTraffic* calculate_traffic() const;
 
     std::string public_ip() const;
     void        set_public_ip(const std::string& newPublic_ip);
+
+    [[nodiscard]] ActorId     local_network_id() const override;
+    void                      adopt_network_id(const ActorId& network_id) override;
+    [[nodiscard]] std::string local_node_identifier() const override;
+    [[nodiscard]] DfsMode     local_dfs_mode() const override;
+    [[nodiscard]] bool has_active_duplicate(std::string_view identifier, const SocketService* candidate) override;
+    [[nodiscard]] int  active_peer_count() const override;
+    [[nodiscard]] int  peer_limit() const override;
+    [[nodiscard]] std::set<PeerConnection> shareable_peers(std::string_view remote_ip) const override;
+    void peer_authenticated(std::string_view identifier, std::string_view public_ip) override;
+    [[nodiscard]] std::uint16_t local_server_port() const override;
+    [[nodiscard]] bool          peer_processing_enabled() const override;
 
 signals:
     void newSocketActivated();

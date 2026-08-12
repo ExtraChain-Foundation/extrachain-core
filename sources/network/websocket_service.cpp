@@ -26,11 +26,10 @@
 #include <boost/beast/websocket/error.hpp>
 #include <boost/beast/websocket/stream_base.hpp>
 
-#include "managers/extrachain_node.h"
-#include "network/network_manager.h"
 #include "network/network_runtime.h"
 #include "utils/exc_logs.h"
 #include "utils/exc_utils_base64.h"
+#include "utils/serialization.h"
 
 namespace asio      = boost::asio;
 namespace beast     = boost::beast;
@@ -39,10 +38,16 @@ namespace websocket = beast::websocket;
 namespace {
     constexpr std::size_t MAX_INBOUND_MESSAGE_BYTES    = 72 * 1024 * 1024;
     constexpr std::size_t ASYNC_CRYPTO_THRESHOLD_BYTES = 64 * 1024;
+
+    std::uint64_t current_time_ms() {
+        return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              std::chrono::system_clock::now().time_since_epoch())
+                                              .count());
+    }
 } // namespace
 
-WebSocketService::WebSocketService(ExtraChain::Core::NetworkRuntime& runtime, ExtraChainNode* node)
-    : SocketService(node)
+WebSocketService::WebSocketService(ExtraChain::Core::NetworkRuntime& runtime, PeerContext& context)
+    : SocketService(context)
     , strand_(asio::make_strand(runtime.executor()))
     , runtime_(runtime)
     , queue_signal_(strand_) {
@@ -56,14 +61,14 @@ asio::awaitable<WebSocketService::ConnectResult> WebSocketService::connect(
     ExtraChain::Core::NetworkRuntime& runtime,
     std::string                       host,
     std::uint16_t                     port,
-    ExtraChainNode*                   node,
+    PeerContext&                      context,
     bool                              is_constant,
     bool                              is_light) {
-    auto service = std::shared_ptr<WebSocketService>(new WebSocketService(runtime, node));
+    auto service = std::shared_ptr<WebSocketService>(new WebSocketService(runtime, context));
     service->set_constant(is_constant);
     service->mode_      = is_light ? SocketMode::Light : SocketMode::Full;
     service->ip_        = host;
-    service->timestamp_ = Utils::current_date_ms();
+    service->timestamp_ = current_time_ms();
 
     auto opened =
         co_await asio::co_spawn(service->strand_, service->open(std::move(host), port), asio::use_awaitable);
@@ -75,9 +80,9 @@ asio::awaitable<WebSocketService::ConnectResult> WebSocketService::connect(
 
 WebSocketService::Service WebSocketService::from_accepted(ExtraChain::Core::NetworkRuntime& runtime,
                                                           Tcp::socket                       socket,
-                                                          ExtraChainNode*                   node) {
-    auto service        = std::shared_ptr<WebSocketService>(new WebSocketService(runtime, node));
-    service->timestamp_ = Utils::current_date_ms();
+                                                          PeerContext&                      context) {
+    auto service        = std::shared_ptr<WebSocketService>(new WebSocketService(runtime, context));
+    service->timestamp_ = current_time_ms();
 
     boost::system::error_code error;
     const auto                endpoint = socket.remote_endpoint(error);
@@ -389,7 +394,7 @@ asio::awaitable<void> WebSocketService::process_binary(std::vector<std::uint8_t>
         report_error(Network::SocketServiceError::EmptyMessage, "message decrypt failed");
         co_return;
     }
-    if (!node_enabled) {
+    if (!context_.peer_processing_enabled()) {
         co_return;
     }
     if (on_message) {
@@ -418,7 +423,7 @@ std::uint16_t WebSocketService::port() const {
 }
 
 std::uint16_t WebSocketService::server_port() const {
-    return node_->network()->ws_port;
+    return context_.local_server_port();
 }
 
 void WebSocketService::send_message(std::span<const std::uint8_t> data, Priority priority) {

@@ -10,15 +10,13 @@
 
 #include "network/isocket_service.h"
 
-#include "chain/actor_index.h"
-#include "dfs/dfs_controller.h"
 #include "extrachain_version.h"
-#include "managers/extrachain_node.h"
-#include "network/network_manager.h"
-#include "utils/exc_utils.h"
+#include "utils/exc_logs.h"
+#include "utils/serialization.h"
+#include "utils/version.h"
 
-SocketService::SocketService(ExtraChainNode* node)
-    : node_(node) {
+SocketService::SocketService(PeerContext& context)
+    : context_(context) {
     private_key_.generate_random();
 }
 
@@ -88,10 +86,7 @@ std::int64_t SocketService::pending_bytes() const noexcept {
 }
 
 bool SocketService::check_first_message(const HandshakeMessage& handshake) {
-    eLog("[Socket] First message: {} | IP: {} | network id: {}",
-         direction_,
-         ip_,
-         node_->actor_index()->network_id());
+    eLog("[Socket] First message: {} | IP: {} | network id: {}", direction_, ip_, context_.local_network_id());
 
     identifier_      = handshake.identifier;
     dfs_mode_socket_ = handshake.dfs_mode;
@@ -124,11 +119,11 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
         return false;
     }
 
-    const auto local_network = node_->actor_index()->network_id();
-    if (local_network.is_zero() && !remote_network->is_zero()) {
-        node_->actor_index()->set_network_id(*remote_network);
+    const auto local_network = context_.local_network_id();
+    if (local_network.is_zero() && !remote_network.value().is_zero()) {
+        context_.adopt_network_id(remote_network.value());
     }
-    if (!local_network.is_zero() && !remote_network->is_zero() && local_network != *remote_network) {
+    if (!local_network.is_zero() && !remote_network.value().is_zero() && local_network != remote_network.value()) {
         if (on_error) {
             on_error(shared_from_this(),
                      Network::SocketServiceError::IncompatibleNetwork,
@@ -140,7 +135,7 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
         return false;
     }
 
-    if (handshake.identifier == node_->node_identifier()) {
+    if (handshake.identifier == context_.local_node_identifier()) {
         if (on_error) {
             on_error(shared_from_this(),
                      Network::SocketServiceError::IncompatibleIdentifier,
@@ -152,22 +147,7 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
         return false;
     }
 
-    bool duplicate = false;
-    {
-        auto connections = *node_->network()->connections();
-        for (const auto& connection : *connections) {
-            if (connection.get() == this || connection->identifier() != identifier_) {
-                continue;
-            }
-            if (connection->is_active()) {
-                duplicate = true;
-            } else {
-                connection->close_connection();
-            }
-            break;
-        }
-    }
-    if (duplicate) {
+    if (context_.has_active_duplicate(identifier_, this)) {
         if (on_error) {
             on_error(shared_from_this(),
                      Network::SocketServiceError::DuplicateIdentifier,
@@ -185,7 +165,7 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
     if (!is_constant() && handshake.is_constant) {
         set_constant(true);
     }
-    if (node_->network()->active_connections_count() >= node_->network()->max_connections()) {
+    if (context_.active_peer_count() >= context_.peer_limit()) {
         if (on_error) {
             on_error(shared_from_this(),
                      Network::SocketServiceError::MaxConnections,
@@ -212,16 +192,13 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
     }
 
     activated_.store(true, std::memory_order_release);
-    Responder responder(node_->network());
-    responder.add_identifier(identifier_);
-    node_->actor_index()->send_system_actor(responder);
+    context_.peer_authenticated(identifier_, handshake.your_ip);
     if (on_activated) {
         on_activated(shared_from_this());
     }
     if (on_share_connections) {
         on_share_connections(shared_from_this(), handshake.connections);
     }
-    node_->network()->set_public_ip(handshake.your_ip);
     return true;
 }
 
@@ -239,33 +216,23 @@ bool SocketService::wait_closed(std::chrono::milliseconds) {
 
 SocketService::Data SocketService::generate_first_message() {
     HandshakeMessage message {
-        .network_id   = node_->actor_index()->network_id().to_string(),
+        .network_id   = context_.local_network_id().to_string(),
         .version      = extrachain_version,
-        .identifier   = node_->node_identifier(),
+        .identifier   = context_.local_node_identifier(),
         .your_ip      = ip_,
         .connections  = {},
         .is_available = true,
         .is_constant  = is_constant(),
         .socket_mode  = mode_,
-        .dfs_mode     = node_->dfs()->mode(),
+        .dfs_mode     = context_.local_dfs_mode(),
         .dag_version  = CURRENT_DAG_VERSION,
         .node_version = extrachain_node_version,
         .capabilities = std::set<std::string> { std::string(DAG_TX_BATCH_CAPABILITY) },
     };
 
-    {
-        auto connections = *node_->network()->connections();
-        for (const auto& connection : *connections) {
-            const auto& connection_ip = connection->ip();
-            if (connection_ip.empty() || connection_ip == ip_ || connection_ip == "127.0.0.1"
-                || !connection->is_active()) {
-                continue;
-            }
-            message.connections.insert(SocketPair { connection_ip, connection->identifier() });
-        }
-    }
+    message.connections = context_.shareable_peers(ip_);
 
-    message.is_available  = node_->network()->active_connections_count() < node_->network()->max_connections();
+    message.is_available  = context_.active_peer_count() < context_.peer_limit();
     const auto serialized = Json::serialize(message);
     return { serialized.begin(), serialized.end() };
 }

@@ -2174,9 +2174,7 @@ void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
 }
 
 std::string ExtraChainNode::generate_node_identifier() {
-    std::string node_identifier =
-        Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                              + std::to_string(QRandomGenerator::global()->bounded(100000)));
+    std::string node_identifier = Utils::generate_random_hex(64);
 
     auto settings            = Utils::read_settings();
     settings.node_identifier = node_identifier;

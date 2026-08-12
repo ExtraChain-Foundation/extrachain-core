@@ -27,13 +27,11 @@
 
 #include <boost/describe.hpp>
 
-#include "core/types.h"
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "extrachain_global.h"
+#include "network/peer_context.h"
 #include "network/peer_meta.h"
-
-class ExtraChainNode;
 
 enum class SocketMode {
     Full,
@@ -50,16 +48,7 @@ public:
     using Data = std::vector<std::uint8_t>;
     using Ptr  = std::shared_ptr<SocketService>;
 
-    struct SocketPair {
-        std::string ip;
-        std::string identifier;
-
-        bool operator==(const SocketPair&) const = default;
-
-        bool operator<(const SocketPair& other) const {
-            return std::tie(ip, identifier) < std::tie(other.ip, other.identifier);
-        }
-    };
+    using SocketPair = PeerConnection;
 
     struct HandshakeMessage {
         std::string                          network_id;
@@ -83,7 +72,7 @@ public:
         High
     };
 
-    explicit SocketService(ExtraChainNode* node);
+    explicit SocketService(PeerContext& context);
     virtual ~SocketService() = default;
 
     SocketService(const SocketService&)            = delete;
@@ -142,7 +131,7 @@ protected:
     Data prepare_receive_message(const Data& message);
     Data prepare_receive_message(std::span<const std::uint8_t> message);
 
-    ExtraChainNode*           node_ = nullptr;
+    PeerContext&              context_;
     std::string               identifier_;
     std::string               ip_;
     std::uint16_t             port_         = 0;
@@ -187,4 +176,4 @@ BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
                        node_version,
                        capabilities))
 
-BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
+BOOST_DESCRIBE_STRUCT(PeerConnection, (), (ip, identifier))

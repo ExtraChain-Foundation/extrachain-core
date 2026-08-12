@@ -90,15 +90,13 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thoth_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/janus_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/message_body.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/peer_context.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/peer_meta.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/wire_format.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/event.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/deadline_task.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/periodic_task.h
@@ -171,13 +169,10 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/token_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thoth_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/janus_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/wire_format.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp
@@ -216,6 +211,7 @@ add_library(extrachain-runtime STATIC
     ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/periodic_task.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/runtime/runtime.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/thread_pool_boost.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/version.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/traffic_meter.cpp
@@ -223,6 +219,7 @@ add_library(extrachain-runtime STATIC
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/periodic_task.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/thread_pool_boost.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/version.cpp
 )
 target_include_directories(extrachain-runtime PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 target_link_libraries(extrachain-runtime PUBLIC Boost::boost Boost::system Boost::thread)
@@ -240,6 +237,9 @@ if(EXTRACHAIN_BUILD_QT_COMPAT)
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/byte_array_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/logging_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/network_status_adapter.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnector.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_commands.h
@@ -247,11 +247,14 @@ if(EXTRACHAIN_BUILD_QT_COMPAT)
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/actor_id_adapter.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/byte_array_adapter.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/network_status_adapter.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnector.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     )
     target_include_directories(extrachain-qt-compat PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
-    target_link_libraries(extrachain-qt-compat PUBLIC extrachain-runtime Qt6::Core Qt6::Network)
+    target_link_libraries(extrachain-qt-compat PUBLIC extrachain-runtime Qt6::Core Qt6::Network fmt::fmt-header-only)
     target_compile_features(extrachain-qt-compat PUBLIC cxx_std_23)
     set_property(TARGET extrachain-qt-compat PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()

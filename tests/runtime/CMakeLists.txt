@@ -10,6 +10,7 @@ add_executable(extrachain-runtime-tests
     ../../sources/runtime/deadline_task.cpp
     ../../sources/runtime/periodic_task.cpp
     ../../sources/runtime/runtime.cpp
+    ../../sources/utils/version.cpp
 )
 target_include_directories(extrachain-runtime-tests PRIVATE ../../headers)
 target_link_libraries(extrachain-runtime-tests PRIVATE Boost::boost Boost::system Boost::thread)
