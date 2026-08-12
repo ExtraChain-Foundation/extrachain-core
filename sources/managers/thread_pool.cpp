@@ -19,5 +19,6 @@
 
 #include "managers/thread_pool.h"
 
-bool                ThreadPool::is_first = true;
+bool                ThreadPool::shutdown_connected = false;
+std::mutex          ThreadPool::threads_mutex;
 std::set<QThread *> ThreadPool::threads  = {};

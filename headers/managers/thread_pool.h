@@ -21,6 +21,7 @@
 
 #include <QCoreApplication>
 #include <QThread>
+#include <mutex>
 #include <set>
 
 #include "utils/exc_logs.h"
@@ -37,37 +38,41 @@ public:
 
         QObject::connect(thread, &QThread::started, worker, &Worker::process);
         QObject::connect(worker, &Worker::finished, thread, &QThread::quit);
-        // QObject::connect(thread, &QThread::finished, worker, &Worker::deleteLater);
-        // QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
+        QObject::connect(worker, &Worker::finished, worker, &Worker::deleteLater);
         QObject::connect(thread, &QThread::finished, [thread, worker]() {
-            if (!threads.contains(thread)) {
-                eLog("[ThreadPool] Ignore", fmt::ptr(worker));
-                return;
+            {
+                std::scoped_lock lock(threads_mutex);
+                if (threads.erase(thread) == 0) {
+                    eLog("[ThreadPool] Ignore {}", fmt::ptr(worker));
+                    return;
+                }
             }
-            // eLog("[ThreadPool] Remove thread for {}", worker);
-            // eLog("[ThreadPool] Remove thread {} for {} {} to {}", thread, worker, //
-            // threads.removeAll(thread)
-            //, threads.length());
-            if (worker)
-                worker->deleteLater();
             if (thread)
                 thread->deleteLater();
         });
 
-        if (is_first) {
-            eLog("[ThreadPool] Connected with qApp");
-            QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
-                eLog("[ThreadPool] Threads count: {}", threads.size());
+        {
+            std::scoped_lock lock(threads_mutex);
+            if (!shutdown_connected) {
+                eLog("[ThreadPool] Connected with qApp");
+                QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
+                    std::set<QThread *> active_threads;
+                    {
+                        std::scoped_lock lock(threads_mutex);
+                        active_threads.swap(threads);
+                    }
 
-                for (QThread *thread : threads) {
-                    eLog("[ThreadPool] Remove thread {}", fmt::ptr(thread));
-                    thread->quit();
-                    thread->wait(2000);
-                }
-                threads.clear();
-            });
+                    eLog("[ThreadPool] Threads count: {}", active_threads.size());
 
-            is_first = false;
+                    for (QThread *thread : active_threads) {
+                        eLog("[ThreadPool] Remove thread {}", fmt::ptr(thread));
+                        thread->quit();
+                        thread->wait(2000);
+                    }
+                });
+
+                shutdown_connected = true;
+            }
         }
 
         // eLog("[ThreadPool] Move for {}", worker);
@@ -75,8 +80,10 @@ public:
         worker->moveToThread(thread);
 
         if (!thread->isRunning()) {
-            // eLog("[ThreadPool] Start {}", thread);
-            threads.insert(thread);
+            {
+                std::scoped_lock lock(threads_mutex);
+                threads.insert(thread);
+            }
             thread->start();
         } else {
             // eLog("[ThreadPool] Ignore start {}", thread);
@@ -86,6 +93,7 @@ public:
     }
 
 private:
-    static bool                is_first;
+    static bool                shutdown_connected;
+    static std::mutex          threads_mutex;
     static std::set<QThread *> threads;
 };

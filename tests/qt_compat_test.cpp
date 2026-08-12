@@ -3,6 +3,7 @@
 
 #include "adapters/qt/actor_id_adapter.h"
 #include "adapters/qt/byte_array_adapter.h"
+#include "utils/variant_model.h"
 
 namespace {
     void require(bool condition, const char* message) {
@@ -34,6 +35,15 @@ int main() {
             "Empty ByteArray conversion must stay empty");
     require(ExtraChain::QtCompat::byte_array_from_qbyte_array(QByteArray()).empty(),
             "Empty QByteArray conversion must stay empty");
+
+    VariantModel model(nullptr, { "name", "value" });
+    model.append({ { "name", "first" }, { "value", 1 } });
+    model.append({ { "name", "second" }, { "value", 2 } });
+    model.remove(1, 8);
+    require(model.count() == 1, "Variant model removal must clamp the requested range");
+    require(model.get(0).value("name").toString() == "first", "Variant model must preserve remaining rows");
+    require(!model.setData(model.index(0), "invalid", Qt::UserRole + 99),
+            "Variant model must reject an unknown role");
 
     std::cout << "PASS: Qt compatibility conversions\n";
 }

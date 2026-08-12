@@ -84,7 +84,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/luminance_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_data_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/token_manager.h
@@ -123,7 +122,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_commands.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_extra.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_msgpack_describe.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/compression.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
@@ -172,7 +170,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/luminance_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/token_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thoth_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/janus_manager.cpp
@@ -193,7 +190,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_schema.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_iterator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
@@ -245,9 +241,13 @@ if(EXTRACHAIN_BUILD_QT_COMPAT)
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/actor_id_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/byte_array_adapter.h
         ${CMAKE_CURRENT_LIST_DIR}/headers/adapters/qt/network_status_adapter.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
+        ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/actor_id_adapter.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/byte_array_adapter.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/adapters/qt/network_status_adapter.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     )
     target_include_directories(extrachain-qt-compat PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
     target_link_libraries(extrachain-qt-compat PUBLIC extrachain-runtime Qt6::Core Qt6::Network)

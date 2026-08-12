@@ -18,7 +18,8 @@
  */
 
 #include "utils/variant_model.h"
-#include "utils/exc_logs.h"
+
+#include <algorithm>
 
 VariantModel::VariantModel(QAbstractListModel *parent, const QList<QByteArray> &list)
     : QAbstractListModel(parent) {
@@ -60,7 +61,12 @@ QVariant VariantModel::data(const QModelIndex &index, int role) const {
 }
 
 bool VariantModel::setData(const QModelIndex &index, const QVariant &value, int role) {
-    set(index.row(), m_roles[role], value);
+    const auto role_name = m_roles.constFind(role);
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_datas.size() || role_name == m_roles.cend()) {
+        return false;
+    }
+
+    set(index.row(), role_name.value(), value);
 
     return true;
 }
@@ -167,14 +173,17 @@ void VariantModel::remove(int index, int count) {
         return;
     }
 
-    beginRemoveRows(QModelIndex(), index, index + count - 1);
-    while (count--)
+    const int available    = static_cast<int>(m_datas.count()) - index;
+    const int remove_count = (std::min)(count, available);
+    beginRemoveRows(QModelIndex(), index, index + remove_count - 1);
+    for (int removed = 0; removed < remove_count; ++removed) {
         m_datas.removeAt(index);
+    }
     endRemoveRows();
     setCount(m_datas.count());
 }
 
-QVariantMap VariantModel::get(int index) {
+QVariantMap VariantModel::get(int index) const {
     if (index < 0 || index >= m_datas.size())
         return {};
     return m_datas[index];
@@ -216,6 +225,7 @@ QList<QByteArray> VariantModel::modelRoles() const {
 
 void VariantModel::setModelRoles(const QList<QByteArray> &value) {
     m_modelRoles = value;
+    m_roles.clear();
 
     int roleCount = Qt::UserRole;
     for (auto &&role : m_modelRoles)
@@ -252,7 +262,7 @@ void VariantModel::insertFromJson(int index, const QString &fileName) {
     }
 }
 
-QVariantMap VariantModel::loadJson(const QString &fileName) {
+QVariantMap VariantModel::loadJson(const QString &fileName) const {
     QFile       file(fileName);
     QVariantMap map;
 

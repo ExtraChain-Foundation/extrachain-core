@@ -54,7 +54,7 @@ public:
     Q_INVOKABLE void        move(int from, int to, int n);
     Q_INVOKABLE void        remove(int index, int count);
     Q_INVOKABLE void        clear();
-    Q_INVOKABLE QVariantMap get(int index);
+    Q_INVOKABLE QVariantMap get(int index) const;
     Q_INVOKABLE void        set(int indx, const QByteArray &role, const QVariant &value);
 
     QList<QByteArray> modelRoles() const;
@@ -62,7 +62,7 @@ public:
 
     void        appendFromJson(const QString &fileName);
     void        insertFromJson(int index, const QString &fileName);
-    QVariantMap loadJson(const QString &fileName);
+    QVariantMap loadJson(const QString &fileName) const;
 
     const QList<QVariantMap> &list() const;
 

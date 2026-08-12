@@ -48,7 +48,6 @@
 #include "managers/token_manager.h"
 #include "managers/thoth_manager.h"
 #include "managers/janus_manager.h"
-#include "managers/thread_pool.h"
 #include "dfs/collection_template.h"
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
