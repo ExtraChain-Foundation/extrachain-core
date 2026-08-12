@@ -57,13 +57,15 @@ struct ControlIndex::Impl {
     ExtraChainNode *node = nullptr;
     sqlite3        *db   = nullptr;
 
-    sqlite3_stmt *stmt_put   = nullptr;
-    sqlite3_stmt *stmt_erase = nullptr;
-    sqlite3_stmt *stmt_get   = nullptr;
-    sqlite3_stmt *stmt_last  = nullptr;
-    sqlite3_stmt *stmt_count = nullptr;
+    sqlite3_stmt *stmt_put      = nullptr;
+    sqlite3_stmt *stmt_erase    = nullptr;
+    sqlite3_stmt *stmt_get      = nullptr;
+    sqlite3_stmt *stmt_last     = nullptr;
+    sqlite3_stmt *stmt_count    = nullptr;
+    sqlite3_stmt *stmt_count_to = nullptr;
 
     mutable std::mutex mutex;
+    bool               rebuild_required = true;
 
     ~Impl() {
         auto finalize = [](sqlite3_stmt *&s) {
@@ -76,7 +78,11 @@ struct ControlIndex::Impl {
         finalize(stmt_get);
         finalize(stmt_last);
         finalize(stmt_count);
+        finalize(stmt_count_to);
         if (db) {
+            exec(
+                "INSERT INTO control_meta(key,value) VALUES('clean_shutdown',1)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value");
             sqlite3_wal_checkpoint_v2(db, nullptr, SQLITE_CHECKPOINT_TRUNCATE, nullptr, nullptr);
             sqlite3_close(db);
         }
@@ -132,6 +138,18 @@ struct ControlIndex::Impl {
 
         if (!exec(SCHEMA_SQL))
             return false;
+        if (!exec("CREATE TABLE IF NOT EXISTS control_meta ("
+                  "key TEXT PRIMARY KEY, value INTEGER NOT NULL) WITHOUT ROWID"))
+            return false;
+
+        sqlite3_stmt *clean_state = prepare("SELECT value FROM control_meta WHERE key='clean_shutdown'");
+        rebuild_required          = clean_state == nullptr || sqlite3_step(clean_state) != SQLITE_ROW
+                           || sqlite3_column_int(clean_state, 0) != 1;
+        if (clean_state != nullptr)
+            sqlite3_finalize(clean_state);
+        if (!exec("INSERT INTO control_meta(key,value) VALUES('clean_shutdown',0)"
+                  " ON CONFLICT(key) DO UPDATE SET value=excluded.value"))
+            return false;
 
         stmt_put = prepare(
             "INSERT INTO control_index (section, hash) VALUES (?, ?)"
@@ -141,9 +159,10 @@ struct ControlIndex::Impl {
         stmt_last  = prepare(
             "SELECT section, hash FROM control_index WHERE section <= ?"
              " ORDER BY section DESC LIMIT 1");
-        stmt_count = prepare("SELECT COUNT(*) FROM control_index");
+        stmt_count    = prepare("SELECT COUNT(*) FROM control_index");
+        stmt_count_to = prepare("SELECT COUNT(*) FROM control_index WHERE section <= ?");
 
-        return stmt_put && stmt_erase && stmt_get && stmt_last && stmt_count;
+        return stmt_put && stmt_erase && stmt_get && stmt_last && stmt_count && stmt_count_to;
     }
 };
 
@@ -239,6 +258,27 @@ std::uint64_t ControlIndex::row_count() const {
     return result;
 }
 
+std::uint64_t ControlIndex::row_count_at_or_below(const SectionId &section_id) const {
+    if (!impl_->db || !impl_->stmt_count_to)
+        return 0;
+    std::lock_guard lock(impl_->mutex);
+    sqlite3_reset(impl_->stmt_count_to);
+    sqlite3_clear_bindings(impl_->stmt_count_to);
+    sqlite3_bind_int64(impl_->stmt_count_to, 1, static_cast<sqlite3_int64>(section_to_u64(section_id)));
+    if (sqlite3_step(impl_->stmt_count_to) != SQLITE_ROW) {
+        sqlite3_reset(impl_->stmt_count_to);
+        return 0;
+    }
+    const auto result = static_cast<std::uint64_t>(sqlite3_column_int64(impl_->stmt_count_to, 0));
+    sqlite3_reset(impl_->stmt_count_to);
+    return result;
+}
+
+bool ControlIndex::rebuild_required() const {
+    std::lock_guard lock(impl_->mutex);
+    return impl_->rebuild_required;
+}
+
 void ControlIndex::rebuild_from_dag() {
     if (!impl_->db || !impl_->node)
         return;
@@ -273,5 +313,6 @@ void ControlIndex::rebuild_from_dag() {
         impl_->exec("ROLLBACK");
         return;
     }
+    impl_->rebuild_required = false;
     eLog("[ControlIndex] rebuilt: {} control points [{}..{}]", added, first, last);
 }

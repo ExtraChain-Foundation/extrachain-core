@@ -68,6 +68,8 @@ int main(int argc, char *argv[]) {
     check("last<=exact boundary 60", ci.last_at_or_below(SectionId(60)).value().first == SectionId(60));
     check("last<=between 20 and 60 -> 20", ci.last_at_or_below(SectionId(59)).value().first == SectionId(20));
     check("last<=above-all -> top 60", ci.last_at_or_below(SectionId(1000)).value().first == SectionId(60));
+    check("count through 40", ci.row_count_at_or_below(SectionId(40)) == 1);
+    check("count through 60", ci.row_count_at_or_below(SectionId(60)) == 2);
     check("erased 40 skipped: last<=50 -> 20", ci.last_at_or_below(SectionId(50)).value().first == SectionId(20));
     check("erase non-existent is safe", (ci.erase(SectionId(12345)), true));
     ci.put(SectionId(0), "genesis");
@@ -76,6 +78,22 @@ int main(int argc, char *argv[]) {
     ci.clear();
     check("clear empties", ci.row_count() == 0);
     check("get after clear -> nullopt", !ci.get(SectionId(20)).has_value());
+
+    const auto original_path = QDir::currentPath();
+    std::filesystem::remove_all("/tmp/ci-clean-state");
+    std::filesystem::create_directories("/tmp/ci-clean-state");
+    QDir::setCurrent("/tmp/ci-clean-state");
+    {
+        ControlIndex first_open(nullptr);
+        check("new index requires rebuild", first_open.rebuild_required());
+    }
+    {
+        ControlIndex clean_reopen(nullptr);
+        check("cleanly closed index skips rebuild", !clean_reopen.rebuild_required());
+    }
+    QDir::setCurrent(original_path);
+    std::filesystem::remove_all("/tmp/ci-unit");
+    std::filesystem::remove_all("/tmp/ci-clean-state");
 
     std::printf("EDGE: %d pass, %d fail\n", pass, fail);
     return fail == 0 ? 0 : 1;

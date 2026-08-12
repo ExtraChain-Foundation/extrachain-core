@@ -71,6 +71,8 @@ public:
     void clear();
 
     std::uint64_t row_count() const;
+    std::uint64_t row_count_at_or_below(const SectionId &section_id) const;
+    bool          rebuild_required() const;
 
 private:
     struct Impl;

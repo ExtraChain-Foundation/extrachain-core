@@ -862,6 +862,7 @@ private:
     // and cheap once warm. Called from control lookups so it is independent of
     // construction/load order.
     void ensure_control_index();
+    void repair_control_chain();
 
     // Lifecycle flags:
     //   started_ — set by start(), cleared by stop(). Guards double-start.

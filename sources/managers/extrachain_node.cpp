@@ -397,6 +397,7 @@ void ExtraChainNode::process() {
     connect_signals();
 
     node_enabled = true;
+    dag_->repair_control_chain();
     emit nodeInitialised();
 }
 

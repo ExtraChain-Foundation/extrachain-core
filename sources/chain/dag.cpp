@@ -2514,10 +2514,18 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             received_sections.insert_or_assign(section_data.section_id, std::move(disk_bytes));
         }
 
-        if (!received_sections.empty() && hot_section_store_ && hot_section_store_->is_open()
-            && !hot_section_store_->put_many(received_sections)) {
-            eWarning("[Dag] Failed to store a section sync batch");
-            return;
+        if (!received_sections.empty() && hot_section_store_ && hot_section_store_->is_open()) {
+            const auto received_first  = received_sections.begin()->first;
+            const auto received_last   = received_sections.rbegin()->first;
+            const auto committed_first = first_saved_section_ < SectionId(0)
+                                             ? received_first
+                                             : std::min(first_saved_section_, received_first);
+            const auto committed_last  = std::max(current_section_, received_last);
+            if (!hot_section_store_->commit_batch(received_sections,
+                                                  std::pair { committed_first, committed_last })) {
+                eWarning("[Dag] Failed to store a section sync batch");
+                return;
+            }
         }
         // The answer survived every check and is about to be applied — only now is it
         // safe to stop the retry clock. See the note at the top of this function.
@@ -2593,6 +2601,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 cache_.reset_db();
                 cache_.init_db();
                 cache_.check_and_update_cache_thread(current_section_);
+                repair_control_chain();
 #endif
             }
 
@@ -3519,6 +3528,7 @@ void Dag::issue_next_pack_request(const Responder &responder) {
             cache_.reset_db();
             cache_.init_db();
             cache_.check_and_update_cache_thread(current_section_);
+            repair_control_chain();
             try_pack_hot();
 
             if (installed_any && chain_index_enabled_ && chain_index_) {
@@ -4451,10 +4461,55 @@ void Dag::ensure_control_index() {
     }
     // First control lookup with a chain present: populate the index once from disk
     // if it is cold, then latch ready so this runs only once.
-    if (control_index_->row_count() == 0) {
+    if (control_index_->row_count() == 0 || control_index_->rebuild_required()) {
         control_index_->rebuild_from_dag();
     }
     control_index_ready_.store(true);
+}
+
+void Dag::repair_control_chain() {
+    if (mode_ != DagMode::Full || !control_index_) {
+        return;
+    }
+
+    const auto closed_tip = align_down20(std::min(current_section_, cache_.section()));
+    if (closed_tip < SectionId(0)) {
+        return;
+    }
+
+    ensure_control_index();
+    const auto closed_value = closed_tip.to_int();
+    if (!closed_value.has_value()) {
+        return;
+    }
+    const auto expected_controls = static_cast<std::uint64_t>(closed_value.value() / CONTROL_INTERVAL_MOD + 1);
+    if (control_index_->row_count_at_or_below(closed_tip) == expected_controls) {
+        return;
+    }
+
+    std::optional<SectionId> missing_control;
+    for (SectionId section_id(0); section_id <= closed_tip; section_id += CONTROL_INTERVAL) {
+        const auto section = read_section(section_id);
+        if (!section.has_value() || !section->control.has_value()) {
+            missing_control = section_id;
+            break;
+        }
+    }
+    if (!missing_control.has_value()) {
+        control_index_->rebuild_from_dag();
+        control_index_ready_.store(true);
+        return;
+    }
+
+    eWarning("[Dag] Repair control chain from section {}", missing_control.value());
+    clear_controls(missing_control.value());
+    control_index_->clear();
+    control_index_ready_.store(true);
+    const auto generation_start =
+        missing_control.value() == SectionId(0) ? SectionId(0) : missing_control.value() - CONTROL_INTERVAL_DIFF;
+    if (!generate_hash_from_section(generation_start, Force::Active, Force::None).has_value()) {
+        eWarning("[Dag] Control chain repair deferred from section {}", missing_control.value());
+    }
 }
 
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
@@ -4800,14 +4855,19 @@ void Dag::start_control(Force force, Force qt_signals) {
 
 void Dag::clear_controls(const SectionId &from) {
     eLog("[Dag] Clear controls from {}...", from);
-    for (SectionId i = from; i <= current_section_; i++) {
-        auto section = read_section(i);
+    auto       section_id = from;
+    const auto remainder  = section_id % CONTROL_INTERVAL;
+    if (remainder != SectionId(0)) {
+        section_id += CONTROL_INTERVAL - remainder;
+    }
+    for (; section_id <= current_section_; section_id += CONTROL_INTERVAL) {
+        auto section = read_section(section_id);
         if (!section.has_value()) {
             continue;
         }
 
         if (section->control.has_value()) {
-            this->remove_control(i);
+            this->remove_control(section_id);
         }
     }
 }
