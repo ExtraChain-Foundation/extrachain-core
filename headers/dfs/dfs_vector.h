@@ -19,8 +19,11 @@
 
 #pragma once
 
-#include "managers/extrachain_node.h"
 #include "dfs/dfs_utils.h"
+
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 
 enum class DfsVectorError {
     Unknown,
@@ -36,7 +39,7 @@ enum class DfsVectorError {
 
 class DfsVector {
 private:
-    ExtraChainNode*         node;
+    ExtraChain::Core::ExtraChainNode* node;
     FsPath                  file_path_;
     FsPath                  vector_path_;
     Actor<KeyPrivate>       actor_;
@@ -49,13 +52,13 @@ private:
     bool                    is_encrypted_;
 
     DfsVector() = default;
-    DfsVector(ExtraChainNode*              node,
-              const Actor<KeyPrivate>&     actor,
-              const ActorId&               file_actor_id,
-              const std::string&           file_id,
-              Dfs::DataSecurity            data_security,
-              const Dfs::DataSecurityData& security_data,
-              Dfs::FileType                file_type = Dfs::FileType::Vector);
+    DfsVector(ExtraChain::Core::ExtraChainNode* node,
+              const Actor<KeyPrivate>&          actor,
+              const ActorId&                    file_actor_id,
+              const std::string&                file_id,
+              Dfs::DataSecurity                 data_security,
+              const Dfs::DataSecurityData&      security_data,
+              Dfs::FileType                     file_type = Dfs::FileType::Vector);
 
 public:
     // Returns a negative value when lhs is older, zero when rows are equal,
@@ -64,7 +67,7 @@ public:
     static int compare_row_revisions(const DbRow& lhs, const DbRow& rhs);
 
     // static std::expected<DfsVector, DfsVectorError> create(
-    //     ExtraChainNode*              node,
+    //     ExtraChain::Core::ExtraChainNode*              node,
     //     const Actor<KeyPrivate>&     main_actor,
     //     const ActorId&               file_actor_id,
     //     const std::string&           file_id,
@@ -73,32 +76,32 @@ public:
     //     Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
     //     const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
     static std::expected<DfsVector, DfsVectorError> create(
-        ExtraChainNode*                node,
-        const Actor<KeyPrivate>&       main_actor,
-        const ActorId&                 file_actor_id,
-        const std::string&             file_id,
-        const Dfs::DfsTemplateVariant& variant_template,
-        Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData&   security_data = Dfs::DataSecurityData(),
-        Dfs::FileType                  file_type     = Dfs::FileType::Vector);
+        ExtraChain::Core::ExtraChainNode* node,
+        const Actor<KeyPrivate>&          main_actor,
+        const ActorId&                    file_actor_id,
+        const std::string&                file_id,
+        const Dfs::DfsTemplateVariant&    variant_template,
+        Dfs::DataSecurity                 data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&      security_data = Dfs::DataSecurityData(),
+        Dfs::FileType                     file_type     = Dfs::FileType::Vector);
 
     static std::expected<DfsVector, DfsVectorError> load(
-        ExtraChainNode*              node,
-        const Actor<KeyPrivate>&     actor,
-        const ActorId&               file_actor_id,
-        const std::string&           file_id,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData(),
-        Dfs::FileType                file_type     = Dfs::FileType::Vector);
+        ExtraChain::Core::ExtraChainNode* node,
+        const Actor<KeyPrivate>&          actor,
+        const ActorId&                    file_actor_id,
+        const std::string&                file_id,
+        Dfs::DataSecurity                 data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&      security_data = Dfs::DataSecurityData(),
+        Dfs::FileType                     file_type     = Dfs::FileType::Vector);
 
     static std::expected<DfsVector, DfsVectorError> load_network(
-        ExtraChainNode*              node,
-        const Actor<KeyPrivate>&     actor,
-        const ActorId&               file_actor_id,
-        const std::string&           file_id,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData(),
-        Dfs::FileType                file_type     = Dfs::FileType::Vector);
+        ExtraChain::Core::ExtraChainNode* node,
+        const Actor<KeyPrivate>&          actor,
+        const ActorId&                    file_actor_id,
+        const std::string&                file_id,
+        Dfs::DataSecurity                 data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&      security_data = Dfs::DataSecurityData(),
+        Dfs::FileType                     file_type     = Dfs::FileType::Vector);
 
     std::expected<DbRow, DfsVectorError> read_row(const std::string& primary_data);
 

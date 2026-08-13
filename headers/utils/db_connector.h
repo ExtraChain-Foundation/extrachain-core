@@ -24,10 +24,7 @@
 #include <utility>
 #include <vector>
 
-#include <QByteArray>
-#include <QJsonDocument>
-#include <QMutex>
-
+#include <boost/json/object.hpp>
 #include <boost/describe.hpp>
 #include <boost/mp11.hpp>
 #include <boost/core/demangle.hpp>
@@ -169,7 +166,7 @@ public:
     ~DbConnector();
 
 public:
-    static QString sqlite_version();
+    static std::string sqlite_version();
 
     bool                        open(bool create_if_missing = true);
     bool                        close();
@@ -196,8 +193,8 @@ public:
 
 public:
     bool          query(std::string query);
-    QJsonObject   toJsonObject();
-    QJsonDocument toJsonDocument();
+    boost::json::object to_json_object();
+    std::string         to_json();
 
 public:
     sqlite3 *getDb() const;

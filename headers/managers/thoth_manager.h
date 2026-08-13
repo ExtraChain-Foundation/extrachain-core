@@ -20,14 +20,18 @@
 #pragma once
 
 #include <algorithm>
+#include <mutex>
 
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
+#include "runtime/event.h"
 
 #include <vector>
 
-class QNetworkAccessManager;
-class QTimer;
+namespace ExtraChain::Core {
+    class DeadlineTask;
+    class PeriodicTask;
+} // namespace ExtraChain::Core
 
 namespace Chat {
 struct Chat;
@@ -108,7 +112,9 @@ struct ThothDeviceInfo {
     std::size_t   chats      = 0;
 };
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 
 enum class ThothType {
     ChatMessage
@@ -120,11 +126,10 @@ struct ThothPendingRecord {
     std::string custom;
 };
 
-class ThothManager : public QObject {
-    Q_OBJECT
-
+class ThothManager {
 public:
-    ThothManager(ExtraChainNode* node, QObject* parent = nullptr);
+    ThothManager(ExtraChain::Core::ExtraChainNode* node, std::string application_version);
+    ~ThothManager();
 
     // Creates the current Thoth key-value registry. The legacy "Thoth" vector is not used.
     bool create_thoth_dictionary();
@@ -137,12 +142,19 @@ public:
 
     void start();
     void stop();
+    void prepare_shutdown();
 
     // for users
     bool add_thoth_record(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
     // bool remove_thoth_record(const ActorId& owner_id, const std::string& file_id)
 
     bool send_to_service(const ThothInfo& info, const std::string& username);
+
+    ExtraChain::Core::Event<std::string>& send_success_event() noexcept;
+    ExtraChain::Core::Event<std::string>& send_failed_event() noexcept;
+    ExtraChain::Core::Event<>&            device_revoked_event() noexcept;
+
+    void on_registry_file_downloaded(const ActorId& owner_id, const Dfs::DirRow& dir_row);
 
     // Platform-neutral alias: stores the device push token (APNS on iOS, FCM on Android).
     void        set_device_token(const std::string& token);
@@ -152,7 +164,7 @@ public:
     // to a random id persisted in the data dir (test/dev fallback only).
     void        set_device_id(const std::string& id);
 
-    // Human-readable name written into this device's records (defaults from QSysInfo).
+    // Human-readable name written into this device's records.
     void        set_device_name(const std::string& name);
 
     // Current device id (ensures it is loaded/created first).
@@ -167,7 +179,8 @@ public:
     std::string read_username(const ActorId& actor_id);
 
 private:
-    ExtraChainNode* node;
+    ExtraChain::Core::ExtraChainNode* node;
+    mutable std::recursive_mutex      state_mutex_;
 
     bool          enabled_ = false;
     std::uint16_t port_    = 5425;
@@ -178,9 +191,7 @@ private:
     std::string                                  usernames_file_id_;
     std::vector<ThothPendingRecord>              pending_records_;
 
-    // #ifdef Q_OS_IOS
     std::string ios_token_;
-    // #endif
 
     // Reconcile anti-spam guard: redo only when the token or the chat count changed.
     std::string reconciled_token_;
@@ -211,8 +222,10 @@ private:
     // Periodic pull of the registry (dirs refresh of the network actor) so a
     // revocation reaches an idle device even without a broadcast (e.g. relay
     // dedup by node identifier). Stopped permanently once revoked.
-    QTimer* revocation_watchdog_ = nullptr;
+    std::shared_ptr<ExtraChain::Core::PeriodicTask> revocation_watchdog_;
+    std::shared_ptr<ExtraChain::Core::DeadlineTask> registration_verifier_;
     std::atomic_bool enabled_watchdog_ { false };
+    std::atomic_bool                                stopping_ { false };
     void load_my_revocations();
     void persist_my_revocations();
     // Applies my_revocations_ to reg (erase records, union tombstones);
@@ -223,20 +236,15 @@ private:
     std::string effective_device_name();
     static std::string detect_os();
 
-signals:
-    void sendSuccess(const QString& response);
-    void sendFailed(const QString& error);
-    // This device found itself in the registry's revoked list: it was signed
-    // out remotely. The app should log out (wipe local data).
-    void deviceRevoked();
-
 private:
-    QNetworkAccessManager* m_networkManager;
+    std::string                          application_version_;
+    ExtraChain::Core::Event<std::string> send_success_event_;
+    ExtraChain::Core::Event<std::string> send_failed_event_;
+    ExtraChain::Core::Event<>            device_revoked_event_;
 
     void enqueue_thoth_record(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
     void flush_pending_records();
     void apply_thoth_row(const DbRow& row);
     void remove_thoth_info(const std::string& id);
     std::string device_id_;
-
 };

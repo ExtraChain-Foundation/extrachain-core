@@ -73,6 +73,13 @@ namespace ExtraChain::Core {
                                                                                     std::string               target,
                                                                                     std::chrono::milliseconds timeout,
                                                                                     HttpHandler               handler);
+        void                                                         async_http_post(std::string               host,
+                                                                                     std::uint16_t             port,
+                                                                                     std::string               target,
+                                                                                     std::string               content_type,
+                                                                                     std::string               body,
+                                                                                     std::chrono::milliseconds timeout,
+                                                                                     HttpHandler               handler);
         [[nodiscard]] static std::expected<void, std::string>        probe(std::string_view          host,
                                                                            std::uint16_t             port,
                                                                            std::chrono::milliseconds timeout);

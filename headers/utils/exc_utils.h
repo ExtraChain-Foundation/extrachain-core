@@ -30,11 +30,8 @@
 #include <concepts>
 #include <random>
 
-#include <QFile>
-#include <QObject>
-#include <QtNetwork/QNetworkAddressEntry>
-
 #include "extrachain_global.h"
+#include "chain/transaction_status.h"
 #include "core/byte_array.h"
 #include "core/types.h"
 #include "utils/exc_logs.h"
@@ -65,12 +62,6 @@ using namespace magic_enum::bitwise_operators;
 #include "utils/hash.h"
 #include "utils/serialization.h"
 #include "utils/version.h"
-
-namespace Network {
-    Q_NAMESPACE
-    Q_ENUM_NS(Protocol)
-    Q_ENUM_NS(SocketServiceError)
-} // namespace Network
 
 namespace Config {
     const int NECESSARY_SAME_TX = 1;
@@ -286,7 +277,7 @@ namespace Utils {
         FieldNotFound
     };
 
-#ifdef Q_OS_WIN
+#ifdef _WIN32
     static const std::wstring filePrefix = L"file:///";
 #else
     static const std::wstring filePrefix = L"file://";
@@ -302,10 +293,9 @@ namespace Utils {
         return std::string(magic_enum::enum_name(value));
     }
 
-    EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
-    EXTRACHAIN_EXPORT qint64  diskAvailableMemory();
-    EXTRACHAIN_EXPORT qint64  diskFreeMemory();
-    EXTRACHAIN_EXPORT qint64  diskTotalMemory();
+    EXTRACHAIN_EXPORT std::uintmax_t diskAvailableMemory();
+    EXTRACHAIN_EXPORT std::uintmax_t diskFreeMemory();
+    EXTRACHAIN_EXPORT std::uintmax_t diskTotalMemory();
 
     std::optional<uint64_t> read_file_creation_time_ms(const std::filesystem::path &filepath);
 
@@ -318,9 +308,7 @@ namespace Utils {
     bool                          is_hex_string(const std::string &str);
     bool                          is_hex_string_lower(const std::string &str);
 
-    QByteArray                       intToByteArray(const int &number, const int &size);
     std::string                      intToStdString(const int &number, const int &size);
-    int                              qByteArrayToInt(const QByteArray &number);
     typedef std::vector<std::string> MerkleDataBlocks;
 
     EXTRACHAIN_EXPORT void rootMerkleHash(std::vector<std::string>      &listHashes,
@@ -437,9 +425,6 @@ namespace Utils {
         return is_container_value(container, std::ranges::range_value_t<C> { '\0' });
     }
 
-    QString fileMimeType(const QString &filePath);
-    QString fileMimeSuffix(const QString &filePath);
-
     std::vector<std::string> split(const std::string &s, char c);
 
     /**
@@ -450,14 +435,11 @@ namespace Utils {
     // unlike wipeDataFiles which is debug-gated).
     EXTRACHAIN_EXPORT void wipeSessionKeys();
 
-    EXTRACHAIN_EXPORT QString              detect_compiler();
-    EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
-    EXTRACHAIN_EXPORT QString fix_file_name(const QString &fileName, const QString &replaceSymbol = "_");
-    EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
+    EXTRACHAIN_EXPORT std::string detect_compiler();
+    EXTRACHAIN_EXPORT std::string fix_file_name(std::string_view file_name, std::string_view replace_symbol = "_");
 
     EXTRACHAIN_EXPORT bool is_valid_domain(const std::string_view domain);
     EXTRACHAIN_EXPORT bool is_valid_ip(const std::string_view ip);
-    EXTRACHAIN_EXPORT bool is_external_ip(const QString &ip);
     EXTRACHAIN_EXPORT bool is_external_ip(const std::string &ip);
 
     EXTRACHAIN_EXPORT void benchmark(std::function<void(void)> func, int count = 1000);
@@ -620,59 +602,11 @@ struct EXTRACHAIN_EXPORT Notification {
 
     std::uint64_t time;
     NotifyType    type;
-    QByteArray    data = "";
+    std::string   data;
 };
 
-struct EXTRACHAIN_EXPORT StatusTrx {
-    enum StatusTrxType {
-        None = -1,
-        Approved,
-        Processing,
-        Failed
-    };
-
-    static StatusTrxType fromInt(int value) {
-        switch (value) {
-        case 0:
-            return Approved;
-        case 1:
-            return Processing;
-        case 2:
-            return Failed;
-        }
-        return None;
-    }
-
-    static int toInt(StatusTrxType value) {
-        switch (value) {
-        case Approved:
-            return 0;
-        case Processing:
-            return 1;
-        case Failed:
-            return 2;
-        case None:
-            return -1;
-        }
-        return -1;
-    }
-
-    static std::string toString(int value) {
-        switch (value) {
-        case 0:
-            return "Approved";
-        case 1:
-            return "Processing";
-        case 2:
-            return "Failed";
-        case None:
-            return "-1";
-        }
-        return "";
-    }
-};
-
-#define TIMER_START(name)                                                                                         \
-    QElapsedTimer name;                                                                                           \
-    name.start();
-#define TIMER_END(name) eInfo("{} ms for timer {}", name.elapsed(), #name);
+#define TIMER_START(name) const auto name = std::chrono::steady_clock::now();
+#define TIMER_END(name)                                                                                           \
+    eInfo("{} ms for timer {}",                                                                                   \
+          std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - name).count(), \
+          #name);

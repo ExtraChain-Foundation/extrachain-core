@@ -19,23 +19,13 @@
 
 #include "utils/exc_utils.h"
 
-#include <QCoreApplication>
-#include <QCryptographicHash>
-#include <QElapsedTimer>
-#include <QHostAddress>
-#include <QMimeDatabase>
-#include <QNetworkInterface>
-#include <QRegularExpression>
-#include <QStandardPaths>
-#include <QStorageInfo>
-#include <QTcpSocket>
-
+#include <boost/asio/ip/address.hpp>
+#include <chrono>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <random>
 #include <limits>
-
-#include "adapters/qt/logging_adapter.h"
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
@@ -50,7 +40,7 @@
 // #include "managers/data_mining_manager.h"
 #include "dfs/dfs_utils.h"
 
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+#if defined(__linux__) && !defined(__ANDROID__)
     #include <signal.h>
 #endif
 
@@ -143,12 +133,10 @@ std::string Utils::sanitize_text(const std::string &input) {
         } else if (seq_len == 2) {
             cp = (byte & 0x1F) << 6 | (static_cast<unsigned char>(input[i + 1]) & 0x3F);
         } else if (seq_len == 3) {
-            cp = (byte & 0x0F) << 12
-                 | (static_cast<unsigned char>(input[i + 1]) & 0x3F) << 6
+            cp = (byte & 0x0F) << 12 | (static_cast<unsigned char>(input[i + 1]) & 0x3F) << 6
                  | (static_cast<unsigned char>(input[i + 2]) & 0x3F);
         } else {
-            cp = (byte & 0x07) << 18
-                 | (static_cast<unsigned char>(input[i + 1]) & 0x3F) << 12
+            cp = (byte & 0x07) << 18 | (static_cast<unsigned char>(input[i + 1]) & 0x3F) << 12
                  | (static_cast<unsigned char>(input[i + 2]) & 0x3F) << 6
                  | (static_cast<unsigned char>(input[i + 3]) & 0x3F);
         }
@@ -164,8 +152,7 @@ std::string Utils::sanitize_text(const std::string &input) {
             continue;
         }
 
-        if ((cp >= 0x01 && cp <= 0x1F && cp != 0x0A && cp != 0x0D)
-            || (cp >= 0x7F && cp <= 0x9F)) {
+        if ((cp >= 0x01 && cp <= 0x1F && cp != 0x0A && cp != 0x0D) || (cp >= 0x7F && cp <= 0x9F)) {
             i += seq_len;
             continue;
         }
@@ -175,16 +162,12 @@ std::string Utils::sanitize_text(const std::string &input) {
             continue;
         }
 
-        if ((cp >= 0xFDD0 && cp <= 0xFDEF)
-            || (cp & 0xFFFF) == 0xFFFE
-            || (cp & 0xFFFF) == 0xFFFF) {
+        if ((cp >= 0xFDD0 && cp <= 0xFDEF) || (cp & 0xFFFF) == 0xFFFE || (cp & 0xFFFF) == 0xFFFF) {
             i += seq_len;
             continue;
         }
 
-        if ((seq_len == 2 && cp < 0x80)
-            || (seq_len == 3 && cp < 0x800)
-            || (seq_len == 4 && cp < 0x10000)) {
+        if ((seq_len == 2 && cp < 0x80) || (seq_len == 3 && cp < 0x800) || (seq_len == 4 && cp < 0x10000)) {
             i += seq_len;
             continue;
         }
@@ -239,35 +222,12 @@ bool Utils::is_hex_string_lower(const std::string &str) {
     });
 }
 
-QByteArray Utils::intToByteArray(const int &number, const int &size) {
-    auto num = QByteArray::number(number);
-    Q_ASSERT(num.size() <= size);
-    auto res = QByteArray(size - num.size(), '0') + num;
-    return res;
-}
-
 std::string Utils::intToStdString(const int &number, const int &size) {
     auto num = std::to_string(number);
-    Q_ASSERT(num.size() <= size);
+    if (size < 0 || num.size() > static_cast<std::size_t>(size)) {
+        throw std::invalid_argument("Number does not fit the requested width");
+    }
     auto res = std::string(size - num.size(), '0') + num;
-    return res;
-}
-
-int Utils::qByteArrayToInt(const QByteArray &number) {
-    QByteArray num = "";
-    int        i   = 0;
-    //    bool flag = false;
-    while (i < number.size()) {
-        if (number[i] == '0')
-            i++;
-        else
-            break;
-    }
-    while (i < number.size()) {
-        num += number[i];
-        i++;
-    }
-    int res = num.toInt();
     return res;
 }
 
@@ -359,18 +319,6 @@ std::string Utils::merkleFormula(const std::string &hash1, const std::string &ha
     return Utils::calculate_hash(hash1 + hash2);
 }
 
-QString Utils::fileMimeType(const QString &filePath) {
-    QMimeDatabase db;
-    QMimeType     type = db.mimeTypeForFile(filePath);
-    return type.name();
-}
-
-QString Utils::fileMimeSuffix(const QString &filePath) {
-    QMimeDatabase db;
-    QMimeType     type = db.mimeTypeForFile(filePath);
-    return type.preferredSuffix();
-}
-
 std::string Serialization::serialize(const std::vector<std::string> &list) {
     std::string              res;
     std::vector<std::string> reslist;
@@ -399,78 +347,47 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
 }
 
 void Utils::wipeDataFiles() {
-    // No QT_DEBUG gate: every caller is an explicit, user-confirmed wipe flow
-    // (logout / remote revocation) and release builds must actually erase data.
-    // QString current = QDir::currentPath();
-
-    QDir(QString::fromStdString(ChainConst::ACTORS_FOLDER)).removeRecursively();
-    QDir(QString::fromStdString(ChainConst::DAG_FOLDER)).removeRecursively();
-    QDir(QString::fromStdString(DfsB::DFS_FOLDER)).removeRecursively();
-    QDir(QString::fromStdString(Profiles::folder)).removeRecursively();
-    QDir("tmp").removeRecursively();
-    QDir("encrypt").removeRecursively();
-    QDir("tokens").removeRecursively();
-    QFile(".auth_hash").remove();
-    // (endif of the former QT_DEBUG gate removed together with the gate)
-
-    // QDir dir(QDir::currentPath());
-    // dir.cdUp();
-    // QDir::setCurrent(dir.canonicalPath());
-    // QString dataName = Utils::dataDir();
-    // QDir(dataName).removeRecursively();
-    // QDir().mkpath(dataName);
-
-    // QString shareFolder = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) +
-    // "/Share"; QDir(shareFolder).removeRecursively();
-
-    // QDir::setCurrent(current);
+    for (const auto &path : { ChainConst::ACTORS_FOLDER,
+                              ChainConst::DAG_FOLDER,
+                              DfsB::DFS_FOLDER,
+                              Profiles::folder,
+                              std::string("tmp"),
+                              std::string("encrypt"),
+                              std::string("tokens") }) {
+        std::error_code error;
+        std::filesystem::remove_all(path, error);
+    }
+    std::error_code error;
+    std::filesystem::remove(".auth_hash", error);
 }
 
 void Utils::wipeSessionKeys() {
-    QDir(QString::fromStdString(ChainConst::ACTORS_FOLDER)).removeRecursively();
-    QDir(QString::fromStdString(Profiles::folder)).removeRecursively();
-    QFile(".auth_hash").remove();
-    // Device identity must not survive a logout: a re-login with the old id
-    // would immediately match its own revocation tombstone.
-    QFile(".thoth_device_id").remove();
-    QFile(".thoth_device_token").remove();
-    QFile(".thoth_revoked").remove();
+    std::error_code error;
+    std::filesystem::remove_all(ChainConst::ACTORS_FOLDER, error);
+    error.clear();
+    std::filesystem::remove_all(Profiles::folder, error);
+    for (const auto path : { ".auth_hash", ".thoth_device_id", ".thoth_device_token", ".thoth_revoked" }) {
+        error.clear();
+        std::filesystem::remove(path, error);
+    }
 }
 
-qint64 Utils::diskAvailableMemory() {
-#ifdef Q_OS_ANDROID
-    QStorageInfo x(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
-#else
-    QStorageInfo x(qApp->applicationDirPath());
-#endif
-    return x.bytesAvailable();
+std::uintmax_t Utils::diskAvailableMemory() {
+    std::error_code error;
+    const auto      info = std::filesystem::space(std::filesystem::current_path(), error);
+    return error ? 0 : info.available;
 }
 
-qint64 Utils::diskFreeMemory() {
-#ifdef Q_OS_ANDROID
-    QStorageInfo x(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
-#else
-    QStorageInfo x(qApp->applicationDirPath());
-#endif
-    return x.bytesFree();
+std::uintmax_t Utils::diskFreeMemory() {
+    std::error_code error;
+    const auto      info = std::filesystem::space(std::filesystem::current_path(), error);
+    return error ? 0 : info.free;
 }
 
-qint64 Utils::diskTotalMemory() {
-#ifdef Q_OS_ANDROID
-    QStorageInfo x(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
-#else
-    QStorageInfo x(qApp->applicationDirPath());
-#endif
-    return x.bytesTotal();
-}
-
-QString Utils::dataDir(const QString &newDir) {
-    static QString current = "extrachain-data";
-
-    if (!newDir.isEmpty())
-        current = Utils::fix_file_name(newDir);
-
-    return current;
+std::uintmax_t Utils::diskTotalMemory() {
+    std::error_code error;
+    const auto      info = std::filesystem::space(std::filesystem::current_path(), error);
+    return error ? 0 : info.capacity;
 }
 
 std::string Utils::to_hex(const std::string &data) {
@@ -515,134 +432,92 @@ std::string Utils::generate_random_hex(size_t length) {
     return result;
 }
 
-QString Utils::detect_compiler() {
-#ifdef __clang__
+std::string Utils::detect_compiler() {
+#if defined(__clang__)
     #if __clang_major__ < 11
         #error "Clang must be version 11 or higher"
     #endif
-#elif __GNUC__
+    std::string compiler = fmt::format("Clang {}.{}.{}", __clang_major__, __clang_minor__, __clang_patchlevel__);
+    #if defined(__APPLE__)
+    compiler.insert(0, "Apple ");
+    #endif
+    #if defined(_MSC_VER) && !defined(__INTEL_COMPILER)
+    compiler += fmt::format(" (MSVC {})", _MSC_FULL_VER);
+    #endif
+    return compiler;
+#elif defined(__GNUC__)
     #if __GNUC__ < 12
         #error "GCC must be version 12 or higher"
     #endif
-#elif _MSC_VER && !__INTEL_COMPILER
+    std::string compiler = "GCC";
+    #if defined(__MINGW32__)
+    compiler = "MinGW";
+    #endif
+    return fmt::format("{} {}.{}.{}", compiler, __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+#elif defined(_MSC_VER) && !defined(__INTEL_COMPILER)
+    return fmt::format("MSVC {}", _MSC_FULL_VER);
 #else
     #error "Compiler not supported"
 #endif
-
-#if __GNUC__ > 4
-    QString gcc = "GCC";
-    #ifdef __MINGW32__
-    gcc = "MinGW";
-    #endif
-    return QString("%4 %1.%2.%3").arg(__GNUC__).arg(__GNUC_MINOR__).arg(__GNUC_PATCHLEVEL__).arg(gcc);
-#endif
-
-#if _MSC_VER && !__INTEL_COMPILER
-    QString msvcVersion;
-    msvcVersion = "MSVC " + QString::number(_MSC_FULL_VER);
-    msvcVersion.insert(7, ".");
-    msvcVersion.insert(10, ".");
-#endif
-
-#ifdef __clang__
-    QString compiler =
-        QString("Clang %1.%2.%3").arg(__clang_major__).arg(__clang_minor__).arg(__clang_patchlevel__);
-    #if __APPLE__
-    compiler.prepend("Apple ");
-    #endif
-    #if _MSC_VER && !__INTEL_COMPILER
-    compiler += " (" + msvcVersion + ")";
-    #endif
-    return compiler;
-#endif
-
-#if _MSC_VER && !__INTEL_COMPILER
-    return msvcVersion;
-#else
-    return "unknown";
-#endif
 }
 
-QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
-    const auto                allInterfaces = QNetworkInterface::allInterfaces();
-    const QHostAddress       &localhost     = QHostAddress(QHostAddress::LocalHost);
-    std::vector<QHostAddress> localIpNotConnect;
-
-    for (const QNetworkInterface &networkInterface : allInterfaces) {
-        const auto entries = networkInterface.addressEntries();
-
-        for (const QNetworkAddressEntry &address : entries) {
-            if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost) {
-                if (debug == PrintDebug::On) {
-                    eLog("[FindLocalIp] Find local ip candidate: {}", networkInterface);
-                }
-
-                localIpNotConnect.push_back(address.ip());
+std::string Utils::fix_file_name(std::string_view file_name, std::string_view replace_symbol) {
+    static constexpr std::string_view invalid_ascii = "+%@!:*?/\"<>|\\";
+    static constexpr std::string_view left_quote    = "\xC2\xAB";
+    static constexpr std::string_view right_quote   = "\xC2\xBB";
+    std::string                       result;
+    result.reserve(file_name.size());
+    bool        pending_space   = false;
+    bool        pending_invalid = false;
+    std::size_t index           = 0;
+    while (index < file_name.size()) {
+        const auto character = static_cast<unsigned char>(file_name[index]);
+        if (std::isspace(character)) {
+            if (pending_invalid) {
+                result.append(replace_symbol);
+                pending_invalid = false;
             }
+            pending_space = !result.empty();
+            ++index;
+            continue;
         }
-    }
-
-    for (const QNetworkInterface &networkInterface : allInterfaces) {
-        const auto entries = networkInterface.addressEntries();
-
-        for (const QNetworkAddressEntry &entry : entries) {
-            const auto flags = networkInterface.flags();
-
-            bool isLoopBack     = flags.testFlag(QNetworkInterface::IsLoopBack);
-            bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
-            bool isRunning      = flags.testFlag(QNetworkInterface::IsRunning);
-            if (!isRunning || !networkInterface.isValid() || isLoopBack || isPointToPoint)
-                continue;
-
-            auto socket = std::make_unique<QTcpSocket>();
-            socket->bind(entry.ip());
-            socket->connectToHost("8.8.8.8", 53);
-            if (!socket->waitForConnected(1000)) {
-                socket->connectToHost("1.1.1.1", 53);
-                if (!socket->waitForConnected(1000))
-                    continue;
-            }
-
-            if (Utils::vector_contains(localIpNotConnect, entry.ip())) {
-                QString name = networkInterface.name();
-
-                if (name.left(2) == "vm")
-                    continue;
-                if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(2) == "en"
-                    || name.left(8) == "wireless") {
-                    return entry;
-                }
-            }
+        if (pending_space) {
+            result.push_back(' ');
+            pending_space = false;
         }
+        const auto remaining = file_name.substr(index);
+        if (invalid_ascii.contains(static_cast<char>(character))) {
+            pending_invalid = true;
+            ++index;
+            continue;
+        }
+        if (remaining.starts_with(left_quote) || remaining.starts_with(right_quote)) {
+            pending_invalid = true;
+            index += 2;
+            continue;
+        }
+        if (pending_invalid) {
+            result.append(replace_symbol);
+            pending_invalid = false;
+        }
+        result.push_back(static_cast<char>(character));
+        ++index;
     }
-
-    eCritical("[Network] Can't find local ip, set 0.0.0.0");
-    QNetworkAddressEntry entry;
-    entry.setIp(QHostAddress::AnyIPv4);
-    return entry;
-}
-
-QString Utils::fix_file_name(const QString &fileName, const QString &replaceSymbol) {
-    QString fixedName = fileName.simplified();
-    fixedName         = fixedName.replace(QRegularExpression("[+%@!:*?/\"<>|«»]+"), replaceSymbol);
-    fixedName         = fixedName.replace("\\", replaceSymbol);
-    return fixedName;
-}
-
-bool Utils::isValidIp(const QString &ip) {
-    QHostAddress address(ip);
-    return address.protocol() == QAbstractSocket::IPv4Protocol
-        || address.protocol() == QAbstractSocket::IPv6Protocol;
+    if (pending_invalid) {
+        result.append(replace_symbol);
+    }
+    return result;
 }
 
 void Utils::benchmark(std::function<void()> func, int count) {
     while (true) {
-        QElapsedTimer timer;
-        timer.start();
+        const auto started = std::chrono::steady_clock::now();
         for (int i = 0; i != count; i++) {
             func();
         }
-        eLog("{} ms", timer.elapsed());
+        eLog("{} ms",
+             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started)
+                 .count());
     }
 }
 
@@ -1039,7 +914,7 @@ std::expected<void, Utils::FileError> Utils::write_file_chunk(const FsPath      
 }
 
 std::optional<uint64_t> Utils::read_file_creation_time_ms(const std::filesystem::path &filepath) {
-#if defined(Q_OS_MAC) || defined(Q_OS_ANDROID)
+#if defined(__APPLE__) || defined(__ANDROID__)
     try {
         auto file_time = std::filesystem::last_write_time(filepath);
         auto sys_time  = std::chrono::file_clock::to_sys(file_time);
@@ -1079,96 +954,37 @@ bool Utils::is_valid_ip(const std::string_view ip) {
 
     static const std::regex ipv6_regex(
         "^("
-        "([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|"          // full
-        "([0-9a-fA-F]{1,4}:){1,7}:|"                         // trailing ::
+        "([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|"           // full
+        "([0-9a-fA-F]{1,4}:){1,7}:|"                        // trailing ::
         "([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|"        // ::x
         "([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|" // ::x:x
         "([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|"
         "([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|"
         "([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|"
         "[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|"
-        ":((:[0-9a-fA-F]{1,4}){1,7}|:)"                      // ::...
+        ":((:[0-9a-fA-F]{1,4}){1,7}|:)" // ::...
         ")$");
 
     return std::regex_match(ip.begin(), ip.end(), ipv4_regex)
-        || std::regex_match(ip.begin(), ip.end(), ipv6_regex);
-}
-
-bool Utils::is_external_ip(const QString &ip) {
-    QHostAddress addr(ip);
-
-    if (addr.isNull()) {
-        return false; // Invalid IP
-    }
-
-    if (addr.protocol() == QAbstractSocket::IPv4Protocol) {
-        quint32 ip = addr.toIPv4Address();
-
-        // Local IPv4 ranges:
-        // 127.0.0.0/8 (127.0.0.0 - 127.255.255.255) - Loopback
-        if ((ip & 0xFF000000) == 0x7F000000)
-            return false;
-
-        // 10.0.0.0/8 (10.0.0.0 - 10.255.255.255) - Private Class A
-        if ((ip & 0xFF000000) == 0x0A000000)
-            return false;
-
-        // 172.16.0.0/12 (172.16.0.0 - 172.31.255.255) - Private Class B
-        if ((ip & 0xFFF00000) == 0xAC100000)
-            return false;
-
-        // 192.168.0.0/16 (192.168.0.0 - 192.168.255.255) - Private Class C
-        if ((ip & 0xFFFF0000) == 0xC0A80000)
-            return false;
-
-        // 169.254.0.0/16 (169.254.0.0 - 169.254.255.255) - Link-local
-        if ((ip & 0xFFFF0000) == 0xA9FE0000)
-            return false;
-
-        // 0.0.0.0/8 (0.0.0.0 - 0.255.255.255) - Current network
-        if ((ip & 0xFF000000) == 0x00000000)
-            return false;
-
-        // 100.64.0.0/10 (100.64.0.0 - 100.127.255.255) - Carrier-grade NAT
-        if ((ip & 0xFFC00000) == 0x64400000)
-            return false;
-
-        // 224.0.0.0/4 (224.0.0.0 - 239.255.255.255) - Multicast
-        if ((ip & 0xF0000000) == 0xE0000000)
-            return false;
-
-        // 240.0.0.0/4 (240.0.0.0 - 255.255.255.255) - Reserved
-        if ((ip & 0xF0000000) == 0xF0000000)
-            return false;
-
-        return true; // External IPv4
-    }
-
-    if (addr.protocol() == QAbstractSocket::IPv6Protocol) {
-        // Loopback ::1
-        if (addr == QHostAddress::LocalHostIPv6)
-            return false;
-
-        // Link-local fe80::/10
-        if (addr.isInSubnet(QHostAddress::parseSubnet("fe80::/10")))
-            return false;
-
-        // Unique local fc00::/7 (fc00::/7 and fd00::/8)
-        if (addr.isInSubnet(QHostAddress::parseSubnet("fc00::/7")))
-            return false;
-
-        // Multicast ff00::/8
-        if (addr.isInSubnet(QHostAddress::parseSubnet("ff00::/8")))
-            return false;
-
-        return true; // External IPv6
-    }
-
-    return false; // Unknown protocol
+           || std::regex_match(ip.begin(), ip.end(), ipv6_regex);
 }
 
 bool Utils::is_external_ip(const std::string &ip) {
-    return is_external_ip(QString::fromStdString(ip));
+    boost::system::error_code error;
+    const auto                address = boost::asio::ip::make_address(ip, error);
+    if (error || address.is_unspecified() || address.is_loopback() || address.is_multicast()) {
+        return false;
+    }
+    if (address.is_v4()) {
+        const auto bytes = address.to_v4().to_bytes();
+        return bytes[0] != 0 && bytes[0] != 10 && bytes[0] != 127 && bytes[0] < 224
+               && !(bytes[0] == 100 && (bytes[1] & 0xc0U) == 0x40U) && !(bytes[0] == 169 && bytes[1] == 254)
+               && !(bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) && !(bytes[0] == 192 && bytes[1] == 168);
+    }
+    const auto bytes        = address.to_v6().to_bytes();
+    const bool link_local   = bytes[0] == 0xfe && (bytes[1] & 0xc0U) == 0x80U;
+    const bool unique_local = (bytes[0] & 0xfeU) == 0xfcU;
+    return !link_local && !unique_local;
 }
 
 ExtraChainSettings Utils::read_settings() {
@@ -1206,7 +1022,7 @@ bool Utils::write_settings(const ExtraChainSettings &settings) {
 }
 
 void Utils::prepare_extrachain() {
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+#if defined(__linux__) && !defined(__ANDROID__)
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGPIPE);

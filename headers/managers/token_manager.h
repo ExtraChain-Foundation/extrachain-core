@@ -28,13 +28,14 @@
 
 #include <boost/describe/class.hpp>
 
-#include <QObject>
-
 #include "chain/actor.h"
 #include "contracts/toolchain_registry.h"
+#include "runtime/event.h"
 #include "utils/bignumber_float.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 class Transaction;
 
 struct TokenData {
@@ -84,11 +85,9 @@ enum class CreateTokenError {
     InvalidOwnerId
 };
 
-class TokenManager : public QObject {
-    Q_OBJECT
-
+class TokenManager {
 public:
-    TokenManager(ExtraChainNode *node);
+    TokenManager(ExtraChain::Core::ExtraChainNode *node);
     ~TokenManager() = default;
 
     bool token_exists(const std::string &name, const std::string &ticker);
@@ -135,21 +134,20 @@ public:
     static bool is_valid_token_name(const std::string &name);
     static bool id_valid_token_ticker(const std::string &ticker);
 
+    ExtraChain::Core::Event<std::string>      &validation_error_event() noexcept;
+    ExtraChain::Core::Event<ActorId, TokenId> &added_event() noexcept;
+
 private:
     std::optional<std::string> registry_file_id() const;
     bool                       registry_row_valid(TokenData &token_data) const;
     void                       track_token_creation(const Transaction &transaction, TokenData token_data);
 
-    ExtraChainNode                            *node;
+    ExtraChain::Core::ExtraChainNode          *node;
     mutable std::mutex                         cache_creation_mutex_;
     std::unordered_map<std::string, TokenData> cache_creation_; // TODO: also save to temp file
     mutable std::mutex                         legacy_cache_mutex_;
     mutable std::optional<SectionId>           legacy_cache_section_;
     mutable std::vector<TokenData>             legacy_cache_;
-
-signals:
-    void verifyActor(Actor<KeyPublic> actor);
-    void errorNameTokenExist(const QString &);
-    void errorTickerTokenExist(const QString &);
-    void added(const ActorId &owner, const TokenId &token);
+    ExtraChain::Core::Event<std::string>       validation_error_event_;
+    ExtraChain::Core::Event<ActorId, TokenId>  added_event_;
 };

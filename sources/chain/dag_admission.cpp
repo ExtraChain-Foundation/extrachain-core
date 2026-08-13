@@ -15,9 +15,9 @@
 #include <future>
 #include <thread>
 
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "network/message_body.h"
-#include "network/network_manager.h"
+#include "network/network_service.h"
 #include "network/wire_format.h"
 #include "utils/exc_utils.h"
 
@@ -62,15 +62,15 @@ struct Dag::AdmissionState {
         const auto worker_count = owner->node->runtime_limits().admission_prevalidation_workers;
         prevalidation_workers.reserve(worker_count);
         for (std::size_t index = 0; index < worker_count; ++index) {
-            prevalidation_workers.emplace_back([this](std::stop_token token) {
-                run_prevalidation(token);
+            prevalidation_workers.emplace_back([this]() {
+                run_prevalidation();
             });
         }
-        worker         = std::jthread([this](std::stop_token token) {
-            run(token);
+        worker         = std::thread([this]() {
+            run();
         });
-        derived_worker = std::jthread([this](std::stop_token token) {
-            run_derived(token);
+        derived_worker = std::thread([this]() {
+            run_derived();
         });
     }
 
@@ -79,7 +79,6 @@ struct Dag::AdmissionState {
             std::lock_guard lock(mutex);
             stopping = true;
         }
-        worker.request_stop();
         condition.notify_all();
         if (worker.joinable())
             worker.join();
@@ -87,8 +86,6 @@ struct Dag::AdmissionState {
             std::lock_guard lock(prevalidation_mutex);
             prevalidation_stopping = true;
         }
-        for (auto &prevalidation_worker : prevalidation_workers)
-            prevalidation_worker.request_stop();
         prevalidation_condition.notify_all();
         for (auto &prevalidation_worker : prevalidation_workers) {
             if (prevalidation_worker.joinable())
@@ -98,7 +95,6 @@ struct Dag::AdmissionState {
             std::lock_guard lock(derived_mutex);
             derived_stopping = true;
         }
-        derived_worker.request_stop();
         derived_condition.notify_all();
         if (derived_worker.joinable())
             derived_worker.join();
@@ -151,9 +147,9 @@ struct Dag::AdmissionState {
         // without clearing it. Under a steady transaction flow the queue is almost
         // never empty, so the flag stayed set and flush() never returned.
         //
-        // The caller here is the node thread, inside onBinaryMessage: it was stuck in
+        // The caller here is the serial node path, inside onBinaryMessage: it was stuck in
         // network_transaction_result -> save_transaction -> write_section ->
-        // flush_admission, holding the Qt event loop hostage. Measured on a six-node
+        // flush_admission, holding all ordered node work. Measured on a six-node
         // stand: three nodes printed 3-4 of the expected 49 status ticks, stopped
         // reading inbound messages, and every peer writing to them filled its send
         // queue until locally created transactions were dropped outright.
@@ -266,15 +262,15 @@ private:
             owner->check_self(transaction);
     }
 
-    void run_prevalidation(std::stop_token token) {
+    void run_prevalidation() {
         while (true) {
             std::function<void()> job;
             {
                 std::unique_lock lock(prevalidation_mutex);
                 prevalidation_condition.wait(lock, [&] {
-                    return prevalidation_stopping || token.stop_requested() || !prevalidation_jobs.empty();
+                    return prevalidation_stopping || !prevalidation_jobs.empty();
                 });
-                if ((prevalidation_stopping || token.stop_requested()) && prevalidation_jobs.empty())
+                if (prevalidation_stopping && prevalidation_jobs.empty())
                     return;
                 job = std::move(prevalidation_jobs.front());
                 prevalidation_jobs.pop_front();
@@ -471,15 +467,15 @@ private:
         }
     }
 
-    void run_derived(std::stop_token token) {
+    void run_derived() {
         while (true) {
             DerivedBatch batch;
             {
                 std::unique_lock lock(derived_mutex);
                 derived_condition.wait(lock, [&] {
-                    return derived_stopping || token.stop_requested() || !derived_queue.empty();
+                    return derived_stopping || !derived_queue.empty();
                 });
-                if ((derived_stopping || token.stop_requested()) && derived_queue.empty())
+                if (derived_stopping && derived_queue.empty())
                     break;
                 derived_processing = true;
                 batch              = std::move(derived_queue.front());
@@ -506,22 +502,22 @@ private:
         derived_condition.notify_all();
     }
 
-    void run(std::stop_token token) {
+    void run() {
         IsAdmissionWorker = true;
         while (true) {
             std::vector<std::shared_ptr<Request>> requests;
             bool                                  batch = false;
             {
                 std::unique_lock lock(mutex);
-                while (queue.empty() && !stopping && !token.stop_requested()) {
+                while (queue.empty() && !stopping) {
                     if (!cache_catchup_pending) {
                         condition.wait(lock, [&] {
-                            return stopping || token.stop_requested() || !queue.empty() || cache_catchup_pending;
+                            return stopping || !queue.empty() || cache_catchup_pending;
                         });
                         continue;
                     }
                     const bool interrupted = condition.wait_until(lock, cache_catchup_due, [&] {
-                        return stopping || token.stop_requested() || !queue.empty();
+                        return stopping || !queue.empty();
                     });
                     // Give up the catch-up once its deadline has passed, even if work
                     // arrived first. Without this the flag survived every interruption
@@ -543,14 +539,14 @@ private:
                     processing = false;
                     condition.notify_all();
                 }
-                if ((stopping || token.stop_requested()) && queue.empty())
+                if (stopping && queue.empty())
                     break;
 
                 batch               = can_batch(*queue.front());
                 const auto deadline = queue.front()->queued_at + AdmissionDelay;
-                if (batch && queue.size() < AdmissionBatchSize && !stopping && !token.stop_requested()) {
+                if (batch && queue.size() < AdmissionBatchSize && !stopping) {
                     condition.wait_until(lock, deadline, [&] {
-                        return stopping || token.stop_requested() || queue.size() >= AdmissionBatchSize;
+                        return stopping || queue.size() >= AdmissionBatchSize;
                     });
                 }
 
@@ -605,12 +601,12 @@ private:
     std::size_t                                  derived_section_count = 0;
     bool                                         derived_processing    = false;
     bool                                         derived_stopping      = false;
-    std::jthread                                 worker;
-    std::jthread                                 derived_worker;
+    std::thread                                  worker;
+    std::thread                                  derived_worker;
     std::mutex                                   prevalidation_mutex;
     std::condition_variable                      prevalidation_condition;
     std::deque<std::function<void()>>            prevalidation_jobs;
-    std::vector<std::jthread>                    prevalidation_workers;
+    std::vector<std::thread>                     prevalidation_workers;
     bool                                         prevalidation_stopping = false;
 };
 

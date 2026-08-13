@@ -73,7 +73,14 @@ int main(int argc, char *argv[]) {
         listen_port = static_cast<std::uint16_t>(std::atoi(argv[5]));
     }
 
-    QDir::setCurrent(QString::fromStdString(home)); // node data is cwd-relative
+    std::error_code directory_error;
+    std::filesystem::create_directories(home, directory_error);
+    if (directory_error || !QDir::setCurrent(QString::fromStdString(home))) {
+        std::printf("[node-run] cannot use node home %s: %s\n",
+                    home.c_str(),
+                    directory_error ? directory_error.message().c_str() : "setCurrent failed");
+        return 73;
+    }
 
     // For a joining node, point first_node at the peer and force a fresh node id
     // BEFORE the node initialises (initialize_first_node reads settings on init).
@@ -133,7 +140,7 @@ int main(int argc, char *argv[]) {
     if (mode == "join") {
         const long long   target     = std::atoll(argv[4]);
         const auto        peer_port  = static_cast<std::uint16_t>(argc > 6 ? std::atoi(argv[6]) : 17593);
-        const QString     peer_ip    = QString::fromUtf8(argv[3]);
+        const std::string peer_ip    = argv[3];
         const bool        verify_dfs = argc > 9;
         const ActorId     dfs_owner  = verify_dfs ? ActorId(argv[7]) : ActorId();
         const std::string dfs_name   = verify_dfs ? argv[8] : std::string();
@@ -154,7 +161,7 @@ int main(int argc, char *argv[]) {
         // Kick off the outbound connection to the peer (reconnect timer is not
         // wired in this build path, so dial explicitly).
         QTimer::singleShot(500, [node, peer_ip, peer_port]() {
-            node->network()->connect_to_endpoint(peer_ip, peer_port, true, true);
+            node->network()->request_endpoint(peer_ip, peer_port, true, true);
         });
 
         // Poll sync progress; exit when we reach the target or time out.
@@ -197,7 +204,7 @@ int main(int argc, char *argv[]) {
             }
             if (conns == 0) {
                 if (ticks % 3 == 0) {
-                    node->network()->connect_to_endpoint(peer_ip, peer_port, true, true);
+                    node->network()->request_endpoint(peer_ip, peer_port, true, true);
                 }
                 return;
             }

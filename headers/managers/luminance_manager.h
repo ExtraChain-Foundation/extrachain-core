@@ -26,13 +26,15 @@
 
 #include <boost/describe/class.hpp>
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 class DbConnector;
 struct NodeId;
 
 class LuminanceManager {
 public:
-    LuminanceManager(ExtraChainNode *node);
+    LuminanceManager(ExtraChain::Core::ExtraChainNode *node);
     ~LuminanceManager() = default;
 
     bool init_db();
@@ -62,7 +64,7 @@ private:
     // Every inbound network message calls read_luminance, and broadcasts also call
     // increment — two sqlite round trips per message, each taking the global db mutex
     // that serialises every database in the process. Under a normal transaction flow
-    // that starved the Qt event loop outright: on a six-node stand the 10-second status
+    // that starved ordered node work outright: on a six-node stand the 10-second status
     // timer stopped firing altogether while the node kept accepting console input, so
     // no periodic work ran and nodes silently stopped syncing.
     //
@@ -74,5 +76,5 @@ private:
 
     void load_cache();
 
-    ExtraChainNode *node;
+    ExtraChain::Core::ExtraChainNode *node;
 };

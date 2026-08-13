@@ -22,14 +22,14 @@
 #include <blake3.h>
 
 #include "chain/actor_index.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "utils/db_connector.h"
 
-HistoricalCollection::HistoricalCollection(ExtraChainNode              *node,
-                                           const Actor<KeyPrivate>     &actor,
-                                           const ActorId               &file_actor_id,
-                                           const std::string           &file_id,
+HistoricalCollection::HistoricalCollection(ExtraChain::Core::ExtraChainNode *node,
+                                           const Actor<KeyPrivate>          &actor,
+                                           const ActorId                    &file_actor_id,
+                                           const std::string                &file_id,
                                            Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
                                            const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
     this->node               = node;
@@ -44,14 +44,14 @@ HistoricalCollection::HistoricalCollection(ExtraChainNode              *node,
 }
 
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::create(
-    ExtraChainNode              *node,
-    const Actor<KeyPrivate>     &main_actor,
-    const ActorId               &file_actor_id,
-    const std::string           &file_id,
-    const ActorId               &template_actor_id,
-    const std::string           &template_file_id,
-    Dfs::DataSecurity            data_security,
-    const Dfs::DataSecurityData &security_data) {
+    ExtraChain::Core::ExtraChainNode *node,
+    const Actor<KeyPrivate>          &main_actor,
+    const ActorId                    &file_actor_id,
+    const std::string                &file_id,
+    const ActorId                    &template_actor_id,
+    const std::string                &template_file_id,
+    Dfs::DataSecurity                 data_security,
+    const Dfs::DataSecurityData      &security_data) {
     HistoricalCollection chain(node, main_actor, file_actor_id, file_id, data_security, security_data);
 
     DbConnector db(chain.historical_path_);
@@ -83,13 +83,13 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::creat
 }
 
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::create(
-    ExtraChainNode                *node,
-    const Actor<KeyPrivate>       &main_actor,
-    const ActorId                 &file_actor_id,
-    const std::string             &file_id,
-    const Dfs::CollectionTemplate &collection_template,
-    Dfs::DataSecurity              data_security,
-    const Dfs::DataSecurityData   &security_data) {
+    ExtraChain::Core::ExtraChainNode *node,
+    const Actor<KeyPrivate>          &main_actor,
+    const ActorId                    &file_actor_id,
+    const std::string                &file_id,
+    const Dfs::CollectionTemplate    &collection_template,
+    Dfs::DataSecurity                 data_security,
+    const Dfs::DataSecurityData      &security_data) {
     HistoricalCollection chain(node, main_actor, file_actor_id, file_id, data_security, security_data);
 
     DbConnector db(chain.historical_path_);
@@ -121,12 +121,12 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::creat
 }
 
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::load(
-    ExtraChainNode              *node,
-    const Actor<KeyPrivate>     &main_actor,
-    const ActorId               &file_actor_id,
-    const std::string           &file_id,
-    Dfs::DataSecurity            data_security,
-    const Dfs::DataSecurityData &security_data) {
+    ExtraChain::Core::ExtraChainNode *node,
+    const Actor<KeyPrivate>          &main_actor,
+    const ActorId                    &file_actor_id,
+    const std::string                &file_id,
+    Dfs::DataSecurity                 data_security,
+    const Dfs::DataSecurityData      &security_data) {
     HistoricalCollection chain(node, main_actor, file_actor_id, file_id, data_security, security_data);
 
     if (!chain.historical_path_.exists_and_size_not_zero()) {

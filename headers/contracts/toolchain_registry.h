@@ -12,17 +12,17 @@
 
 #include <cstdint>
 #include <expected>
-#include <map>
 #include <span>
 #include <string>
 #include <vector>
 
-#include <QString>
 #include <boost/describe/class.hpp>
 
 #include "extrachain_global.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 
 namespace ExtraChain::Contracts {
 
@@ -111,7 +111,7 @@ namespace ExtraChain::Contracts {
 
     class EXTRACHAIN_EXPORT ToolchainRegistry {
     public:
-        explicit ToolchainRegistry(ExtraChainNode* node);
+        explicit ToolchainRegistry(ExtraChain::Core::ExtraChainNode* node);
 
         std::expected<ToolchainManifest, ToolchainFailure> manifest(
             ToolchainLanguage language,
@@ -135,68 +135,7 @@ namespace ExtraChain::Contracts {
         std::expected<void, ToolchainFailure> publish_manifest(const ToolchainManifest& manifest) const;
 
     private:
-        ExtraChainNode* node_;
-    };
-
-    struct ToolchainInstallation {
-        ToolchainManifest manifest;
-        QString           path;
-    };
-
-    struct ContractComponent {
-        std::string              id;
-        std::string              name;
-        std::string              description;
-        std::string              category;
-        std::string              rust_import;
-        std::string              source_import;
-        std::vector<std::string> dependencies;
-        std::vector<std::string> conflicts;
-    };
-    BOOST_DESCRIBE_STRUCT(ContractComponent,
-                          (),
-                          (id, name, description, category, rust_import, source_import, dependencies, conflicts))
-
-    struct ContractParameter {
-        std::string id;
-        std::string name;
-        std::string type;
-        std::string default_value;
-        bool        required = false;
-    };
-    BOOST_DESCRIBE_STRUCT(ContractParameter, (), (id, name, type, default_value, required))
-
-    struct ContractBlueprint {
-        std::string                    id;
-        std::string                    name;
-        std::string                    description;
-        std::vector<std::string>       components;
-        std::vector<ContractParameter> parameters;
-    };
-    BOOST_DESCRIBE_STRUCT(ContractBlueprint, (), (id, name, description, components, parameters))
-
-    class EXTRACHAIN_EXPORT ToolchainInstaller {
-    public:
-        ToolchainInstaller(ExtraChainNode* node, QString root_path);
-        ToolchainInstaller(ExtraChainNode* node, QString root_path, ToolchainLanguage language);
-
-        std::expected<ToolchainInstallation, ToolchainFailure> install_stable(bool allow_first_install);
-        std::expected<ToolchainInstallation, ToolchainFailure> current() const;
-        std::expected<QString, ToolchainFailure>               build_contract(const QString& source,
-                                                                              const QString& project_name,
-                                                                              int            timeout_ms = 120000) const;
-        [[nodiscard]] std::vector<ContractComponent>           component_catalog() const;
-        [[nodiscard]] std::vector<ContractBlueprint>           contract_blueprints() const;
-        [[nodiscard]] std::expected<QString, ToolchainFailure> compose_contract(
-            std::span<const std::string>              component_ids,
-            std::string_view                          blueprint_id,
-            const std::map<std::string, std::string>& parameters,
-            const QString&                            project_name) const;
-
-    private:
-        ExtraChainNode*   node_;
-        QString           root_path_;
-        ToolchainLanguage language_ = ToolchainLanguage::Rust;
+        ExtraChain::Core::ExtraChainNode* node_;
     };
 
 } // namespace ExtraChain::Contracts

@@ -19,36 +19,18 @@
 
 #include "chain/actor_index.h"
 
-#include <QDir>
-#include <QThread>
+#include <thread>
 
-#include "network/network_manager.h"
+#include "network/network_service.h"
+#include "utils/file_io.h"
 #include "utils/thread_pool_boost.h"
 
 ActorId ActorIndex::network_id() {
-    /*
-    if (network_id_.is_zero()) {
-        QFile nid(".network_id");
-        if (!nid.exists()) {
-            return network_id_;
-        }
-
-        nid.open(QFile::ReadOnly);
-        auto bytes = nid.readAll().toStdString();
-        auto actor_id = ActorId::create(bytes);
-        if (!actor_id.has_value()) {
-            return network_id_;
-        }
-        return actor_id.value();
-    }
-    */
-
     return network_id_;
 }
 
-ActorIndex::ActorIndex(ExtraChainNode *node)
-    : QObject(node)
-    , node(node) {
+ActorIndex::ActorIndex(ExtraChain::Core::ExtraChainNode *node)
+    : node(node) {
     DbConnector db(folder_path_ + "actors");
     bool        isDbOpen   = db.open();
     bool        isDbCreate = db.create_table(Config::DataStorage::actorsTableCreate);
@@ -66,15 +48,35 @@ ActorIndex::ActorIndex(ExtraChainNode *node)
     }
 }
 
+ExtraChain::Core::Event<ActorId> &ActorIndex::new_actor_saved_event() {
+    return new_actor_saved_event_;
+}
+
+ExtraChain::Core::Event<ActorId> &ActorIndex::actor_saved_event() {
+    return actor_saved_event_;
+}
+
+ExtraChain::Core::Event<> &ActorIndex::first_sync_started_event() {
+    return first_sync_started_event_;
+}
+
+ExtraChain::Core::Event<> &ActorIndex::first_sync_ended_event() {
+    return first_sync_ended_event_;
+}
+
+ExtraChain::Core::Event<int, int> &ActorIndex::first_sync_progress_event() {
+    return first_sync_progress_event_;
+}
+
 Actor<KeyPublic> ActorIndex::read_actor_old(const ActorId &id) {
     if (id.is_zero()) {
         eWarning("[ActorIndex] Error: try get actor with id: {}", id);
         return Actor<KeyPublic>();
     }
 
-    QByteArray serializedActor = this->read_by_id(id);
-    if (!serializedActor.isEmpty()) {
-        auto actor = Actor<KeyPublic>::fromJson(serializedActor.toStdString());
+    const auto serialized_actor = this->read_by_id(id);
+    if (!serialized_actor.empty()) {
+        auto actor = Actor<KeyPublic>::fromJson(serialized_actor);
         return actor;
     } else {
         this->send_get_actor_message(id);
@@ -89,7 +91,7 @@ std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::read_actor(const Ac
         return std::unexpected(ActorIndexError::ZeroActor);
     }
 
-    std::string serialized_actor = this->read_by_id(id).toStdString();
+    std::string serialized_actor = this->read_by_id(id);
     if (!serialized_actor.empty()) {
         auto actor = Actor<KeyPublic>::fromJson(serialized_actor);
         return actor;
@@ -151,14 +153,24 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
         // eLog("[ActorIndex] ---> {} {}", synch_count, actors_todo_map_.size());
         if (synch_count_
             <= std::max(actors_todo_map_.size() + std::size_t(records_), actors_todo_map_.size()) + 15) {
+            auto save_result = save_actors();
+            if (!save_result.has_value()) {
+                eWarning("[ActorIndex] Cannot finish actor sync: error {}", static_cast<int>(save_result.error()));
+                return;
+            }
+
             sync_first_done_ = true;
-            this->save_actors();
             node->account_controller()->dogenerate();
-            emit this->firstSyncEnded();
+            first_sync_ended_event_.publish();
         }
     } else {
         for (const auto &actor : actors) {
-            this->save_actor(actor);
+            auto save_result = save_actor(actor);
+            if (!save_result.has_value() && save_result.error() != ActorSaveError::AlreadyExists) {
+                eWarning("[ActorIndex] Cannot save actor {}: error {}",
+                         actor.id(),
+                         static_cast<int>(save_result.error()));
+            }
 
             if (!node_enabled.load()) {
                 return;
@@ -185,7 +197,7 @@ void ActorIndex::request_actors_hash(const Responder &responder) {
     // }
 
     if (!sync_first_done_) {
-        emit this->firstSyncStarted();
+        first_sync_started_event_.publish();
     }
 
     responder.with_new_message_id().send_response(std::pair { records_, sync_request },
@@ -206,7 +218,7 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
 
     if (records_ + 1 >= count) {
         if (!sync_first_done_) {
-            emit this->firstSyncEnded();
+            first_sync_ended_event_.publish();
         }
 
         sync_first_done_ = true;
@@ -234,7 +246,7 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
                                                               SendMode::Focused,
                                                               MessageStatus::Response);
                 actors.clear();
-                QThread::msleep(2);
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
             }
         }
 
@@ -259,20 +271,12 @@ std::string ActorIndex::folder_path() const {
     return folder_path_;
 }
 
-QString ActorIndex::build_file_path(const ActorId &id) const {
-    QByteArray Id = QByteArray::fromStdString(id.to_string());
-
-    QByteArray section      = Id.right(SECTION_NAME_SIZE);
-    QString    pathToFolder = QString::fromStdString(folder_path_) + section;
-
-    QDir dir(pathToFolder);
-    if (!dir.exists()) {
-        // eLog("[ActorIndex] Creating dir: {}", pathToFolder);
-        dir = QDir();
-        dir.mkpath(pathToFolder);
-    }
-
-    return pathToFolder + "/" + Id;
+std::filesystem::path ActorIndex::build_file_path(const ActorId &id) const {
+    const auto &actor_id = id.to_string();
+    const auto folder = std::filesystem::path(folder_path_) / actor_id.substr(actor_id.size() - SECTION_NAME_SIZE);
+    std::error_code error;
+    std::filesystem::create_directories(folder, error);
+    return folder / actor_id;
 }
 
 std::string ActorIndex::build_actor_path(const ActorId &id) const {
@@ -296,24 +300,18 @@ std::size_t ActorIndex::records() const {
     return records_;
 }
 
-std::expected<void, ActorSaveError> ActorIndex::add(const ActorId &id, const QByteArray &data) {
-    QString path = build_file_path(id);
-    QFile   file(path);
-
-    if (file.exists()) {
+std::expected<void, ActorSaveError> ActorIndex::add(const ActorId &id, std::string_view data) {
+    const auto      path = build_file_path(id);
+    std::error_code error;
+    if (std::filesystem::exists(path, error)) {
         // eLog("[ActorIndex] Can't save file {}: already exist", path);
         return std::unexpected(ActorSaveError::AlreadyExists);
     }
 
-    if (!file.open(QIODevice::WriteOnly)) {
+    if (!FileIo::write_atomic(path, data).has_value()) {
         eLog("[ActorIndex] Can't save file {}: not opened", path);
         return std::unexpected(ActorSaveError::NotOpened);
     }
-
-    // eLog("[ActorIndex] Saving the file: {}", path);
-    file.write(data);
-    file.flush();
-    file.close();
     return {};
 }
 
@@ -328,20 +326,8 @@ void ActorIndex::send_get_actor_message(const ActorId &actorId) {
                                   MessageStatus::Request);
 }
 
-QByteArray ActorIndex::read_by_id(const ActorId &id) const {
-    QString filePath = QString::fromStdString(build_actor_path(id));
-    QFile   file(filePath);
-    if (!file.exists()) {
-        // eLog("[ActorIndex] File with path {} not found", filePath);
-        return QByteArray();
-    }
-    bool is_open = file.open(QIODevice::ReadOnly);
-    if (!is_open) {
-        return QByteArray();
-    }
-    QByteArray data = file.readAll();
-    file.close();
-    return data;
+std::string ActorIndex::read_by_id(const ActorId &id) const {
+    return FileIo::read_all(build_actor_path(id)).value_or(std::string {});
 }
 
 std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyPublic> &actor) {
@@ -350,12 +336,12 @@ std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyP
         return std::unexpected(result.error());
     }
 
-    emit newActorSaved(actor.id());
+    new_actor_saved_event_.publish(actor.id());
 
     if (node->network()->is_active_connection_exists()) {
         node->network()->send_broadcast(actor, MessageType::NewActor);
     } else {
-        node->actors_broadcast_.push_back(actor);
+        node->queue_actor_broadcast(actor);
     }
 
     return result;
@@ -367,12 +353,12 @@ std::expected<void, ActorSaveError> ActorIndex::network_store_new_actor(const Ac
         return std::unexpected(result.error());
     }
 
-    emit newActorSaved(actor.id());
+    new_actor_saved_event_.publish(actor.id());
     return result;
 }
 
 std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic> &actor) {
-    auto result = this->add(actor.id(), QByteArray::fromStdString(actor.toJson()));
+    auto result = this->add(actor.id(), actor.toJson());
 
     if (!result.has_value()) {
         return std::unexpected(result.error());
@@ -384,7 +370,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic
     }
 
     synch_.apply_received_ids({ actor.id() });
-    emit actorSaved(actor.id());
+    actor_saved_event_.publish(actor.id());
     return {};
 }
 
@@ -396,19 +382,18 @@ std::expected<void, ActorSaveError> ActorIndex::save_actors() {
 
     db.query("BEGIN TRANSACTION");
 
-    // QElapsedTimer timer;
-    // timer.start();
     int i          = 0;
     int to_records = 0;
     for (const auto &[id, actor] : actors_todo_map_) {
-        auto result = this->add(actor.id(), QByteArray::fromStdString(actor.toJson()));
+        auto result = this->add(actor.id(), actor.toJson());
         if (!result.has_value()) {
             // eWarning("[ActorIndex] Saving actor {} error: {}", actor.id(), result.error());
             continue;
         }
 
-        if (i++ % 100) {
-            emit this->firstSyncProgress(i, synch_count_);
+        ++i;
+        if (i % 100 == 0) {
+            first_sync_progress_event_.publish(i, static_cast<int>(synch_count_));
         }
 
         bool dbInsert =

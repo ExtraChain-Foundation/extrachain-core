@@ -20,13 +20,11 @@
 #pragma once
 
 #include "chain/actor.h"
+#include "runtime/event.h"
 
-#include <QObject>
+#include <boost/json/array.hpp>
+#include <boost/json/object.hpp>
 #include <vector>
-
-class QJsonDocument;
-class QJsonObject;
-class QJsonArray;
 
 static const char *name_file = "name_file";
 static const char *path_file = "path_file";
@@ -45,23 +43,18 @@ struct FileData {
     FileStatus  status   = FileStatus::None;
 };
 
-class FileDataManager : public QObject {
-    Q_OBJECT
-
+class FileDataManager {
 public:
-    FileDataManager(QObject *parent = nullptr);
-    QJsonDocument getFileTree(ActorId actorId = ActorId(), const bool &shouldUpdateList = false);
-    bool          updateStatusByNameStatus(const std::string &nameFile, const FileStatus &newStatus);
-    QJsonObject   getFileDataByName(const std::string &nameFile, const bool &shouldUpdateList = false);
-    QJsonDocument getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList = false);
+    FileDataManager();
+    boost::json::array  get_file_tree(ActorId actor_id = ActorId(), bool update = false);
+    bool                update_status(std::string_view name, FileStatus status);
+    boost::json::object get_file_data(std::string_view name, bool update = false);
+    boost::json::array  get_files_by_status(FileStatus status, bool update = false);
     void          setActorId(const ActorId &actorId);
     void          updateAllTree();
 
     const std::map<ActorId, std::vector<FileData>> &getCachedData() const;
-
-signals:
-    void structuraChanged(FileData fileStruct);
-    void statusChanged(FileData fileStruct);
+    ExtraChain::Core::Event<FileData>              &status_changed_event() noexcept;
 
 protected:
     std::vector<FileData> updateFileList(const ActorId &actorId);
@@ -70,4 +63,5 @@ private:
     std::vector<FileData>                    files;
     std::map<ActorId, std::vector<FileData>> cachedData;
     ActorId                                  savedActorId;
+    ExtraChain::Core::Event<FileData>        status_changed_event_;
 };

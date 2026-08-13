@@ -17,6 +17,7 @@
     "magic-enum",
     "msgpack",
     "sqlite3",
+    "zlib",
     "zstd"
   ]
 }

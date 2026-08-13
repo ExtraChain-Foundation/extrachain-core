@@ -19,7 +19,8 @@
 
 #include "dfs/dfs_vector.h"
 
-#include "dfs/dfs_controller.h"
+#include "dfs/dfs_service.h"
+#include "core/extrachain_node.h"
 #include "utils/exc_utils.h"
 
 #include <charconv>
@@ -99,13 +100,13 @@ int DfsVector::compare_row_revisions(const DbRow &lhs, const DbRow &rhs) {
     return lhs_hash.compare(rhs_hash);
 }
 
-DfsVector::DfsVector(ExtraChainNode              *node,
-                     const Actor<KeyPrivate>     &actor,
-                     const ActorId               &file_actor_id,
-                     const std::string           &file_id,
-                     Dfs::DataSecurity            data_security,
-                     const Dfs::DataSecurityData &security_data,
-                     Dfs::FileType                file_type) {
+DfsVector::DfsVector(ExtraChain::Core::ExtraChainNode *node,
+                     const Actor<KeyPrivate>          &actor,
+                     const ActorId                    &file_actor_id,
+                     const std::string                &file_id,
+                     Dfs::DataSecurity                 data_security,
+                     const Dfs::DataSecurityData      &security_data,
+                     Dfs::FileType                     file_type) {
     this->node       = node;
     this->file_path_ = Dfs::Path::file_path(file_actor_id, file_id).value();
     this->file_type_ = file_type;
@@ -123,7 +124,7 @@ DfsVector::DfsVector(ExtraChainNode              *node,
         data_security != Dfs::DataSecurity::Public || !std::holds_alternative<std::monostate>(security_data_);
 }
 
-// std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode              *node,
+// std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChain::Core::ExtraChainNode*node,
 //                                                            const Actor<KeyPrivate>     &main_actor,
 //                                                            const ActorId               &file_actor_id,
 //                                                            const std::string           &file_id,
@@ -162,14 +163,14 @@ DfsVector::DfsVector(ExtraChainNode              *node,
 //     return std::unexpected(DfsVectorError::Unknown);
 // }
 
-std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode                *node,
-                                                           const Actor<KeyPrivate>       &main_actor,
-                                                           const ActorId                 &file_actor_id,
-                                                           const std::string             &file_id,
-                                                           const Dfs::DfsTemplateVariant &variant_template,
-                                                           Dfs::DataSecurity              data_security,
-                                                           const Dfs::DataSecurityData   &security_data,
-                                                           Dfs::FileType                  file_type) {
+std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChain::Core::ExtraChainNode *node,
+                                                           const Actor<KeyPrivate>          &main_actor,
+                                                           const ActorId                    &file_actor_id,
+                                                           const std::string                &file_id,
+                                                           const Dfs::DfsTemplateVariant    &variant_template,
+                                                           Dfs::DataSecurity                 data_security,
+                                                           const Dfs::DataSecurityData      &security_data,
+                                                           Dfs::FileType                     file_type) {
     DfsVector dfs_vector(node, main_actor, file_actor_id, file_id, data_security, security_data, file_type);
 
     // Own the directory this vector lives in rather than relying on someone having
@@ -261,13 +262,13 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
     return dfs_vector;
 }
 
-std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode              *node,
-                                                         const Actor<KeyPrivate>     &actor,
-                                                         const ActorId               &file_actor_id,
-                                                         const std::string           &file_id,
-                                                         Dfs::DataSecurity            data_security,
-                                                         const Dfs::DataSecurityData &security_data,
-                                                         Dfs::FileType                file_type) {
+std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChain::Core::ExtraChainNode *node,
+                                                         const Actor<KeyPrivate>          &actor,
+                                                         const ActorId                    &file_actor_id,
+                                                         const std::string                &file_id,
+                                                         Dfs::DataSecurity                 data_security,
+                                                         const Dfs::DataSecurityData      &security_data,
+                                                         Dfs::FileType                     file_type) {
     if (file_actor_id.is_zero() || file_id.empty()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
@@ -289,13 +290,13 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
     return dfs_vector;
 }
 
-std::expected<DfsVector, DfsVectorError> DfsVector::load_network(ExtraChainNode              *node,
-                                                                 const Actor<KeyPrivate>     &actor,
-                                                                 const ActorId               &file_actor_id,
-                                                                 const std::string           &file_id,
-                                                                 Dfs::DataSecurity            data_security,
-                                                                 const Dfs::DataSecurityData &security_data,
-                                                                 Dfs::FileType                file_type) {
+std::expected<DfsVector, DfsVectorError> DfsVector::load_network(ExtraChain::Core::ExtraChainNode *node,
+                                                                 const Actor<KeyPrivate>          &actor,
+                                                                 const ActorId                    &file_actor_id,
+                                                                 const std::string                &file_id,
+                                                                 Dfs::DataSecurity                 data_security,
+                                                                 const Dfs::DataSecurityData      &security_data,
+                                                                 Dfs::FileType                     file_type) {
     DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data, file_type);
     return dfs_vector;
 }

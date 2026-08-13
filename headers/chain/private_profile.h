@@ -56,26 +56,30 @@ BOOST_DESCRIBE_STRUCT(ImportedUser,
                       (),
                       (date, system, main, actors, imports, wallet_names, creation_date, modified_date))
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
     PrivateProfile() = default; // only for json
-    static PrivateProfile                                         create(const Actor<KeyPrivate> &system_actor,
-                                                                         const Actor<KeyPrivate> &main_actor,
-                                                                         const std::string       &hash,
-                                                                         ExtraChainNode          *node,
-                                                                         bool                     is_save = true);
+    static PrivateProfile                                         create(const Actor<KeyPrivate>          &system_actor,
+                                                                         const Actor<KeyPrivate>          &main_actor,
+                                                                         const std::string                &hash,
+                                                                         ExtraChain::Core::ExtraChainNode *node,
+                                                                         bool                              is_save = true);
     static std::expected<PrivateProfile, PrivateProfileReadError> read(
-        const ActorId                &actor_id,
-        const std::string            &hash,
-        ExtraChainNode               *node,
-        const std::optional<KeyPass> &key = std::nullopt);
-    static PrivateProfile load(const ActorId                &actor_id,
-                               const std::string            &hash,
-                               ExtraChainNode               *node,
-                               const std::optional<KeyPass> &key = std::nullopt);
-    static PrivateProfile import(const ImportedUser &imported_user, const std::string &hash, ExtraChainNode *node);
+        const ActorId                    &actor_id,
+        const std::string                &hash,
+        ExtraChain::Core::ExtraChainNode *node,
+        const std::optional<KeyPass>     &key = std::nullopt);
+    static PrivateProfile load(const ActorId                    &actor_id,
+                               const std::string                &hash,
+                               ExtraChain::Core::ExtraChainNode *node,
+                               const std::optional<KeyPass>     &key = std::nullopt);
+    static PrivateProfile import(const ImportedUser               &imported_user,
+                                 const std::string                &hash,
+                                 ExtraChain::Core::ExtraChainNode *node);
 
     const Actor<KeyPrivate>              &system() const;
     const Actor<KeyPrivate>              &current() const;
@@ -129,7 +133,7 @@ private:
     std::uint64_t                            creation_date_ = 0;
     std::uint64_t                            modified_date_ = 0;
 
-    ExtraChainNode *node;
+    ExtraChain::Core::ExtraChainNode *node;
 
     BOOST_DESCRIBE_CLASS(PrivateProfile,
                          (),
@@ -146,7 +150,7 @@ public:
         const std::variant<std::string, KeyPass> &key_or_password);
 
     void                           generate();
-    std::vector<Actor<KeyPrivate>> generate_other(ExtraChainNode *node);
+    std::vector<Actor<KeyPrivate>> generate_other(ExtraChain::Core::ExtraChainNode *node);
 
     MasterSeed seed() {
         return seed_;

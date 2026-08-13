@@ -19,14 +19,20 @@
 
 #pragma once
 
+#include <filesystem>
+#include <string_view>
+
 #include "extrachain_global.h"
 
 #include "chain/actor.h"
 #include "chain/actor_filter.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
+#include "runtime/event.h"
 #include "utils/exc_utils.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 class Responder;
 
 enum class ActorIndexError {
@@ -50,11 +56,9 @@ enum class ActorGetType {
 /**
  * @brief Actors that stored in chain
  */
-class EXTRACHAIN_EXPORT ActorIndex : public QObject {
-    Q_OBJECT
-
+class EXTRACHAIN_EXPORT ActorIndex {
 private:
-    ExtraChainNode *node;
+    ExtraChain::Core::ExtraChainNode *node;
 
     const std::string folder_path_      = fmt::format("{}/", ChainConst::ACTORS_FOLDER);
     const int16_t     SECTION_NAME_SIZE = 2;
@@ -71,7 +75,7 @@ public:
     /**
      * @brief ActorIndex
      */
-    explicit ActorIndex(ExtraChainNode *node);
+    explicit ActorIndex(ExtraChain::Core::ExtraChainNode *node);
     /**
      * @brief ~ActorIndex
      */
@@ -83,7 +87,7 @@ private:
      * @param id
      * @return
      */
-    QString     build_file_path(const ActorId &id) const;
+    std::filesystem::path build_file_path(const ActorId &id) const;
     std::string build_actor_path(const ActorId &id) const;
 
     /**
@@ -92,7 +96,7 @@ private:
      * @param data
      * @return
      */
-    std::expected<void, ActorSaveError> add(const ActorId &id, const QByteArray &data);
+    std::expected<void, ActorSaveError> add(const ActorId &id, std::string_view data);
     void                                send_get_actor_message(const ActorId &actorId);
     bool                                save_actor_index(const Actor<KeyPublic> &actor);
 
@@ -121,7 +125,7 @@ public:
      * @param id
      * @return
      */
-    QByteArray read_by_id(const ActorId &id) const;
+    std::string read_by_id(const ActorId &id) const;
 
     std::size_t records() const;
     std::string folder_path() const;
@@ -152,10 +156,16 @@ public:
                                      const std::vector<uint8_t> &bits,
                                      const Responder            &responder);
 
-signals:
-    void newActorSaved(ActorId actor_id);
-    void actorSaved(ActorId actor_id);
-    void firstSyncStarted();
-    void firstSyncEnded();
-    void firstSyncProgress(int progress, int all);
+    ExtraChain::Core::Event<ActorId>  &new_actor_saved_event();
+    ExtraChain::Core::Event<ActorId>  &actor_saved_event();
+    ExtraChain::Core::Event<>         &first_sync_started_event();
+    ExtraChain::Core::Event<>         &first_sync_ended_event();
+    ExtraChain::Core::Event<int, int> &first_sync_progress_event();
+
+private:
+    ExtraChain::Core::Event<ActorId>  new_actor_saved_event_;
+    ExtraChain::Core::Event<ActorId>  actor_saved_event_;
+    ExtraChain::Core::Event<>         first_sync_started_event_;
+    ExtraChain::Core::Event<>         first_sync_ended_event_;
+    ExtraChain::Core::Event<int, int> first_sync_progress_event_;
 };

@@ -25,7 +25,7 @@
 #include <mutex>
 
 #include "chain/dag.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "utils/exc_logs.h"
 #include "utils/exc_utils.h"
 
@@ -54,7 +54,7 @@ namespace {
 } // namespace
 
 struct ControlIndex::Impl {
-    ExtraChainNode *node = nullptr;
+    ExtraChain::Core::ExtraChainNode *node = nullptr;
     sqlite3        *db   = nullptr;
 
     sqlite3_stmt *stmt_put      = nullptr;
@@ -166,7 +166,7 @@ struct ControlIndex::Impl {
     }
 };
 
-ControlIndex::ControlIndex(ExtraChainNode *node)
+ControlIndex::ControlIndex(ExtraChain::Core::ExtraChainNode *node)
     : impl_(std::make_unique<Impl>()) {
     impl_->node = node;
     if (!impl_->open()) {

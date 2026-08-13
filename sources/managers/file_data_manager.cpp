@@ -20,22 +20,27 @@
 #include "managers/file_data_manager.h"
 #include "chain/actor.h"
 #include "dfs/dfs_utils.h"
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 
-FileDataManager::FileDataManager(QObject *parent)
-    : QObject(parent) {
+namespace {
+    boost::json::object to_json(const FileData &file) {
+        return {
+            { name_file, file.nameFile },
+            { path_file, file.pathFile },
+            { status, static_cast<std::int64_t>(file.status) },
+        };
+    }
+} // namespace
+
+FileDataManager::FileDataManager() {
     updateAllTree();
 }
 
-QJsonDocument FileDataManager::getFileTree(ActorId actorId, const bool &shouldUpdateList) {
-    QJsonDocument document;
-    QJsonArray    array;
+boost::json::array FileDataManager::get_file_tree(ActorId actorId, bool shouldUpdateList) {
+    boost::json::array array;
 
     if (actorId.is_zero() && savedActorId.is_zero()) {
         eWarning("ActorId and saved ActorId are empty");
-        return document;
+        return array;
     }
 
     if (actorId.is_zero()) {
@@ -50,15 +55,9 @@ QJsonDocument FileDataManager::getFileTree(ActorId actorId, const bool &shouldUp
     }
 
     for (const auto &file : files) {
-        QJsonObject object;
-        object.insert(name_file, QString::fromStdString(file.nameFile));
-        object.insert(path_file, QString::fromStdString(file.pathFile));
-        object.insert(status, file.status);
-        array.push_back(object);
+        array.push_back(to_json(file));
     }
-    document.setArray(array);
-
-    return document;
+    return array;
 }
 
 std::vector<FileData> FileDataManager::updateFileList(const ActorId &actorId) {
@@ -108,20 +107,20 @@ const std::map<ActorId, std::vector<FileData>> &FileDataManager::getCachedData()
     return cachedData;
 }
 
-bool FileDataManager::updateStatusByNameStatus(const std::string &nameFile, const FileStatus &newStatus) {
+bool FileDataManager::update_status(std::string_view nameFile, FileStatus newStatus) {
     const auto fileData = std::find_if(files.begin(), files.end(), [&nameFile](const FileData &fileStruct) {
         return nameFile == fileStruct.nameFile;
     });
 
     if (fileData != files.end()) {
         fileData->status = newStatus;
-        emit statusChanged(*fileData);
+        status_changed_event_.publish(*fileData);
         return true;
     }
     return false;
 }
 
-QJsonObject FileDataManager::getFileDataByName(const std::string &nameFile, const bool &shouldUpdateList) {
+boost::json::object FileDataManager::get_file_data(std::string_view nameFile, bool shouldUpdateList) {
     if (shouldUpdateList)
         files = updateFileList(savedActorId);
 
@@ -129,32 +128,22 @@ QJsonObject FileDataManager::getFileDataByName(const std::string &nameFile, cons
         return nameFile == fileStruct.nameFile;
     });
 
-    QJsonObject object;
-    object.insert(name_file, QString::fromStdString(fileData->nameFile));
-    object.insert(path_file, QString::fromStdString(fileData->pathFile));
-    object.insert(status, fileData->status);
-    return object;
+    return fileData == files.end() ? boost::json::object {} : to_json(*fileData);
 }
 
-QJsonDocument FileDataManager::getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList) {
+boost::json::array FileDataManager::get_files_by_status(FileStatus fileStatus, bool shouldUpdateList) {
     if (shouldUpdateList)
         files = updateFileList(savedActorId);
 
-    QJsonDocument document;
-    QJsonArray    array;
+    boost::json::array array;
 
     for (const auto &file : files) {
         if (file.status != fileStatus)
             continue;
 
-        QJsonObject object;
-        object.insert(name_file, QString::fromStdString(file.nameFile));
-        object.insert(path_file, QString::fromStdString(file.pathFile));
-        object.insert(status, file.status);
-        array.push_back(object);
+        array.push_back(to_json(file));
     }
-    document.setArray(array);
-    return document;
+    return array;
 }
 
 void FileDataManager::setActorId(const ActorId &actorId) {
@@ -162,10 +151,17 @@ void FileDataManager::setActorId(const ActorId &actorId) {
 }
 
 void FileDataManager::updateAllTree() {
-    for (const auto &entry : std::filesystem::directory_iterator(DfsB::DFS_FOLDER)) {
+    std::error_code error;
+    for (std::filesystem::directory_iterator iterator(DfsB::DFS_FOLDER, error), end; !error && iterator != end;
+         iterator.increment(error)) {
+        const auto &entry = *iterator;
         if (entry.is_directory()) {
             const auto actorId = ActorId(entry.path().filename().string());
             updateFileList(actorId);
         }
     }
+}
+
+ExtraChain::Core::Event<FileData> &FileDataManager::status_changed_event() noexcept {
+    return status_changed_event_;
 }

@@ -19,9 +19,8 @@
 
 #include "utils/autologinhash.h"
 
-#include <QFile>
-
 #include "utils/exc_logs.h"
+#include "utils/file_io.h"
 
 bool AutologinHash::enabled_ = false;
 
@@ -38,18 +37,12 @@ bool AutologinHash::load() {
         return false;
     }
 
-    if (!QFile::exists(".auth_hash")) {
-        return false;
-    }
-
-    QFile file(".auth_hash");
-    if (!file.open(QFile::ReadOnly)) {
+    const auto content = FileIo::read_all(".auth_hash");
+    if (!content.has_value()) {
         eLog("[Autologin Hash] Can't read auth hash file");
         return false;
     }
-
-    hash_ = file.read(64);
-    file.close();
+    hash_ = content->substr(0, 64);
     return hash_.size() == 64;
 }
 
@@ -58,16 +51,10 @@ void AutologinHash::save(const std::string& hash) {
         return;
     }
 
-    auto  hash_bytes = QByteArray::fromStdString(hash);
-    QFile file(".auth_hash");
-
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+    if (!FileIo::write_atomic(".auth_hash", hash).has_value()) {
         eFatal("[Autologin Hash] Can't write to auth hash file");
         return;
     }
-
-    file.write(hash_bytes);
-    file.close();
 
     hash_ = hash;
 }

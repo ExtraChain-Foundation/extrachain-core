@@ -52,7 +52,7 @@ public:
     template <std::size_t N>
     [[nodiscard]] std::array<std::uint8_t, N> toArray() const {
         std::array<std::uint8_t, N> result {};
-        std::copy_n(data_.begin(), std::min(N, data_.size()), result.begin());
+        std::copy_n(data_.begin(), (std::min)(N, data_.size()), result.begin());
         return result;
     }
 
@@ -77,8 +77,8 @@ public:
     }
 
     [[nodiscard]] ByteArray slice(std::size_t start, std::size_t length) const {
-        const auto first = std::min(start, data_.size());
-        const auto last  = first + std::min(length, data_.size() - first);
+        const auto first = (std::min)(start, data_.size());
+        const auto last  = first + (std::min)(length, data_.size() - first);
         return ByteArray(std::vector<std::uint8_t>(data_.begin() + first, data_.begin() + last));
     }
 

@@ -20,8 +20,8 @@
 #include "chat/chat_profile.h"
 
 #include "chat/chat_manager.h"
-#include "dfs/dfs_controller.h"
-#include "managers/extrachain_node.h"
+#include "dfs/dfs_service.h"
+#include "core/extrachain_node.h"
 
 ChatProfile::ChatProfile(ChatManager* owner)
     : owner_(owner) {
@@ -45,7 +45,8 @@ std::expected<Dfs::DirRow, ChatError> ChatProfile::ensure_storage_row() {
 
 // All ChatProfile copies, best-first: profiles got fragmented across duplicates,
 // so reads must fall through older copies for missing keys
-static std::vector<Dfs::DirRow> profile_storage_rows(ExtraChainNode* node, const ActorId& chat_main_id) {
+static std::vector<Dfs::DirRow> profile_storage_rows(ExtraChain::Core::ExtraChainNode* node,
+                                                     const ActorId&                    chat_main_id) {
     std::vector<Dfs::DirRow> out;
     if (chat_main_id.is_zero()) {
         return out;

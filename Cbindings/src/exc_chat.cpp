@@ -4,7 +4,7 @@
 
 #include "exc_internal.h"
 
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "chat/chat_manager.h"
 #include "chat/chat.h"
 #include "chat/message.h"

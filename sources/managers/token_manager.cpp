@@ -19,12 +19,12 @@
 
 #include "managers/token_manager.h"
 
-#include "dfs/dfs_controller.h"
-#include "managers/extrachain_node.h"
+#include "dfs/dfs_service.h"
+#include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "chain/transaction.h"
 #include "chain/dag.h"
-#include "network/network_manager.h"
+#include "network/network_service.h"
 #include "network/wire_format.h"
 #include "utils/exc_utils.h"
 #include "contracts/contract_manager.h"
@@ -32,7 +32,6 @@
 #include "contracts/contract_transaction.h"
 #include "contracts/standard_token.h"
 
-#include <QFile>
 #include <msgpack.hpp>
 
 namespace {
@@ -188,9 +187,8 @@ namespace {
 
 } // namespace
 
-TokenManager::TokenManager(ExtraChainNode *node)
-    : node(node)
-    , QObject(node) {
+TokenManager::TokenManager(ExtraChain::Core::ExtraChainNode *node)
+    : node(node) {
 }
 
 std::unordered_map<ActorId, std::string> TokenManager::read_tokens() {
@@ -621,7 +619,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(
              is_valid_token_name(token_name),
              id_valid_token_ticker(ticker));
         eLog("[TokenManager] Incorrect name. Name: {} | ticker: {}", token_name, ticker);
-        emit errorNameTokenExist("name");
+        validation_error_event_.publish("name");
         return std::unexpected(CreateTokenError::InvalidName);
     }
 
@@ -629,7 +627,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(
     auto tickerSymbol   = Utils::str_to_upper(ticker);
     if (upperTokenName == "EXTRACOIN" || tickerSymbol == "EXC" || token_exists(token_name, ticker)) {
         eLog("[TokenManager] Name or ticker exists");
-        emit errorNameTokenExist("exists");
+        validation_error_event_.publish("exists");
         return std::unexpected(CreateTokenError::ExistToken);
     }
 
@@ -867,7 +865,15 @@ void TokenManager::final_token_creation(const Transaction &transaction) {
         return;
     }
 
-    emit added(owner_id, token_id);
+    added_event_.publish(owner_id, token_id);
+}
+
+ExtraChain::Core::Event<std::string> &TokenManager::validation_error_event() noexcept {
+    return validation_error_event_;
+}
+
+ExtraChain::Core::Event<ActorId, TokenId> &TokenManager::added_event() noexcept {
+    return added_event_;
 }
 
 bool TokenManager::is_valid_token_name(const std::string &name) {

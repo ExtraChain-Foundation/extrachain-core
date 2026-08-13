@@ -4,7 +4,7 @@
 
 #include "exc_internal.h"
 
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "managers/token_manager.h"
 #include "utils/bignumber_float.h"

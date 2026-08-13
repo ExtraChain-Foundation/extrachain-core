@@ -20,9 +20,9 @@
 #include "chat/chat_manager.h"
 
 #include "chat/chat.h"
-#include "dfs/dfs_controller.h"
+#include "dfs/dfs_service.h"
 #include "encryption/encryption_tools.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "chain/actor_index.h"
 #include "managers/thoth_manager.h"
@@ -39,119 +39,114 @@ bool same_chat_link(const Chat::Chat& lhs, const Chat::Chat& rhs) {
 }
 } // namespace
 
-ChatManager::ChatManager(ExtraChainNode* node)
+ChatManager::ChatManager(ExtraChain::Core::ExtraChainNode* node)
     : node(node) {
-    QObject::connect(node->dfs(), &DfsController::downloaded, [this](ActorId owner_id, Dfs::DirRow dir_row) {
-        if (!this->activated_) {
-            return;
+}
+
+void ChatManager::on_file_downloaded(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
+    if (activated_ && owner_id == current_chat_actor_id()) {
+        auto my_chats = read_my_chats_row();
+        if (my_chats.has_value() && my_chats->file_id == dir_row.file_id) {
+            chats_loaded_event_.publish();
+        } else {
+            parse_invite(owner_id, dir_row);
+        }
+    }
+
+    for (const auto& chat : std::as_const(chats_)) {
+        if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id) && chat.file_id == dir_row.file_id) {
+            chat_updated_event_.publish(chat);
+        }
+    }
+}
+
+void ChatManager::on_vector_row_added(const ActorId& owner_id, const Dfs::DirRow& dir_row, const DbRow& row) {
+    const auto status = row.find("status");
+    const auto id     = row.find("id");
+    if (status == row.end() || id == row.end() || status->second != "1") {
+        return;
+    }
+
+    for (auto& chat : chats_) {
+        if ((chat.owner_id != owner_id && chat.chat.peer_id != owner_id) || chat.file_id != dir_row.file_id) {
+            continue;
         }
 
-        auto chat_actor_id = this->current_chat_actor_id();
-        if (owner_id != chat_actor_id) {
-            return;
+        bool encryption = chat.chat_key.has_value();
+        if (chat.chat.chat_type == Chat::ChatType::Channel) {
+            encryption = false;
         }
 
-        auto my_chats = this->read_my_chats_row();
-        if (my_chats.has_value()) {
-            if (my_chats->file_id == dir_row.file_id) {
-                emit this->node->chatsLoaded();
-                return;
+        Dfs::DataSecurityData security;
+        if (encryption) {
+            security = Dfs::DataSecurityKey { .key = chat.chat_key.value() };
+        }
+
+        auto message_row = node->dfs()->read_vector_row(owner_id, dir_row.file_id, id->second, security);
+        if (!message_row.has_value()) {
+            continue;
+        }
+
+        message_row->erase("sign");
+        message_row->erase("status");
+        auto message = Utils::from_dbrow<Chat::Message>(message_row.value());
+        if (!message.has_value()) {
+            continue;
+        }
+
+        if (message->message.type == Chat::MessageType::Join && !chat.peer_per_chat.has_value()
+            && chat.peer_chat_main_id.has_value() && message->message.data.has_value()) {
+            auto join = Json::deserialize<Chat::MessageJoinData>(message->message.data.value());
+            if (join.has_value()) {
+                auto peer_main = node->actor_index()->read_actor(chat.peer_chat_main_id.value());
+                if (peer_main.has_value()) {
+                    auto bind_data = ByteArray(join->per_chat.key().public_key()).toBytes();
+                    auto verify    = peer_main->key().verify(bind_data, join->bind_signature);
+                    if (verify.has_value() && verify.value()) {
+                        chat.peer_per_chat       = join->per_chat;
+                        chat.peer_bind_signature = join->bind_signature;
+                        if (!update_chat_in_mychats(chat).has_value()) {
+                            eWarning("[Chat] Failed to persist peer key for {}", chat.file_id);
+                        }
+                    }
+                }
             }
         }
 
-        this->parse_invite(owner_id, dir_row);
-    });
+        message_added_event_.publish(owner_id, dir_row.file_id, message.value());
+    }
+}
 
-    QObject::connect(node->dfs(), &DfsController::downloaded, [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
-        for (const auto& chat : std::as_const(chats_)) {
-            if ((chat.owner_id != owner_id && chat.chat.peer_id != owner_id)
-                || chat.file_id != dir_row.file_id) {
-                continue;
-            }
-
-            emit node->chatUpdated(chat);
+void ChatManager::on_vector_row_removed(const ActorId& owner_id, const Dfs::DirRow& dir_row, const DbRow& row) {
+    const auto id = row.find("id");
+    if (id == row.end()) {
+        return;
+    }
+    for (const auto& chat : std::as_const(chats_)) {
+        if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id) && chat.file_id == dir_row.file_id) {
+            message_removed_event_.publish(owner_id, dir_row.file_id, id->second);
         }
-    });
+    }
+}
 
-    QObject::connect(node->dfs(),
-                     &DfsController::vectorRowAdded,
-                     [this](ActorId owner_id, Dfs::DirRow dir_row, DbRow row) {
-                         if (row["status"] != "1") {
-                             return;
-                         }
+ExtraChain::Core::Event<>& ChatManager::chats_loaded_event() noexcept {
+    return chats_loaded_event_;
+}
 
-                         for (auto& chat : chats_) {
-                             if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id)
-                                 && chat.file_id == dir_row.file_id) {
-                                 bool encryption = chat.chat_key.has_value();
-                                 if (chat.chat.chat_type.has_value()
-                                     && chat.chat.chat_type == Chat::ChatType::Channel) {
-                                     encryption = false;
-                                 }
+ChatManager::ChatEvent& ChatManager::chat_added_event() noexcept {
+    return chat_added_event_;
+}
 
-                                 Dfs::DataSecurityData security;
-                                 if (encryption) {
-                                     security = Dfs::DataSecurityKey { .key = chat.chat_key.value() };
-                                 }
+ChatManager::ChatEvent& ChatManager::chat_updated_event() noexcept {
+    return chat_updated_event_;
+}
 
-                                 auto message_row = this->node->dfs()->read_vector_row(owner_id,
-                                                                                        dir_row.file_id,
-                                                                                        row["id"],
-                                                                                        security);
-                                 if (!message_row.has_value()) {
-                                     return;
-                                 }
+ChatManager::MessageEvent& ChatManager::message_added_event() noexcept {
+    return message_added_event_;
+}
 
-                                 message_row->erase("sign");
-                                 message_row->erase("status");
-                                 auto message = Utils::from_dbrow<Chat::Message>(message_row.value());
-                                 if (!message.has_value()) {
-                                     return;
-                                 }
-
-                                 // Capture peer's per_chat from Join message if not yet known.
-                                 if (message->message.type == Chat::MessageType::Join
-                                     && !chat.peer_per_chat.has_value()
-                                     && chat.peer_chat_main_id.has_value()
-                                     && message->message.data.has_value()) {
-                                     auto join = Json::deserialize<Chat::MessageJoinData>(
-                                         message->message.data.value());
-                                     if (join.has_value()) {
-                                         auto peer_main = this->node->actor_index()->read_actor(
-                                             chat.peer_chat_main_id.value());
-                                         if (peer_main.has_value()) {
-                                             auto bind_data =
-                                                 ByteArray(join->per_chat.key().public_key()).toBytes();
-                                             auto verify = peer_main->key().verify(bind_data,
-                                                                                    join->bind_signature);
-                                             if (verify.has_value() && verify.value()) {
-                                                 chat.peer_per_chat       = join->per_chat;
-                                                 chat.peer_bind_signature = join->bind_signature;
-                                                 auto updated = this->update_chat_in_mychats(chat);
-                                                 if (!updated.has_value()) {
-                                                     eWarning("[Chat] Failed to persist peer key for {}",
-                                                              chat.file_id);
-                                                 }
-                                             }
-                                         }
-                                     }
-                                 }
-
-                                 emit this->node->messageAdded(owner_id, dir_row.file_id, message.value());
-                             }
-                         }
-                     });
-
-    QObject::connect(node->dfs(),
-                     &DfsController::vectorRowRemoved,
-                     [this](ActorId owner_id, Dfs::DirRow dir_row, DbRow row) {
-                         for (const auto& chat : std::as_const(chats_)) {
-                             if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id)
-                                 && chat.file_id == dir_row.file_id) {
-                                 emit this->node->messageRemoved(owner_id, dir_row.file_id, row["id"]);
-                             }
-                         }
-                     });
+ChatManager::MessageRemovedEvent& ChatManager::message_removed_event() noexcept {
+    return message_removed_event_;
 }
 
 void ChatManager::set_mode(ChatMode mode) {
@@ -508,11 +503,11 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> ChatManager::channels_vector_row() {
-    return Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
-        node->dfs()->get_db_instance(),
-        ActorId(CHAT_SERVICE_ACTOR),
-        Dfs::Basic::TEMPLATE_VECTOR,
-        ExtraChainNode::CHANNELS_VECTOR_NAME);
+    return Dfs::Tables::DirsFile::ActorSpace::
+        search_file_by_folder_and_name(node->dfs()->get_db_instance(),
+                                       ActorId(CHAT_SERVICE_ACTOR),
+                                       Dfs::Basic::TEMPLATE_VECTOR,
+                                       ExtraChain::Core::ExtraChainNode::CHANNELS_VECTOR_NAME);
 }
 
 bool ChatManager::publish_channel(const Chat::Chat &chat, const std::string &name) {
@@ -852,7 +847,7 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
         return std::unexpected(ChatError::Unknown);
     }
 
-    // TODO: emit messageAdded locally so the sender sees its own message before sync.
+    // TODO: publish message_added_event_ locally so the sender sees its own message before sync.
     return res;
 }
 
@@ -1035,7 +1030,7 @@ std::expected<bool, ChatError> ChatManager::remove_message(const ActorId&     ow
         return std::unexpected(ChatError::Unknown);
     }
 
-    emit node->messageRemoved(owner_id, file_id, message_id);
+    message_removed_event_.publish(owner_id, file_id, message_id);
     return res;
 }
 
@@ -1200,7 +1195,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::insert_chat_to_mychats(const C
                 && same_chat_link(existing.value(), chat)) {
                 chats_.push_back(existing.value());
                 mark_chat_priority(existing.value());
-                emit node->chatAdded(existing.value());
+                chat_added_event_.publish(existing.value());
                 return existing.value();
             }
         }
@@ -1220,7 +1215,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::insert_chat_to_mychats(const C
 
     mark_chat_priority(chat_new);
     chats_.push_back(chat_new);
-    emit node->chatAdded(chat_new);
+    chat_added_event_.publish(chat_new);
 
     return chat_new;
 }
@@ -1257,7 +1252,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::update_chat_in_mychats(const C
     } else {
         chats_.push_back(chat);
     }
-    emit node->chatUpdated(chat);
+    chat_updated_event_.publish(chat);
     return chat;
 }
 

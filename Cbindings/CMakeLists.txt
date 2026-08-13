@@ -30,15 +30,11 @@ target_include_directories(extrachainc
         ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/headers
-        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../headers
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 
-target_link_libraries(extrachainc PRIVATE extrachain)
-
-target_precompile_headers(extrachainc PRIVATE
-    "${CMAKE_SOURCE_DIR}/headers/precompiled.h"
-)
+target_link_libraries(extrachainc PRIVATE extrachain-core)
 
 set_target_properties(extrachainc PROPERTIES
     C_STANDARD 11

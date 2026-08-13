@@ -28,14 +28,14 @@ namespace ExtraChain::Core {
             , blocking_pool(runtime_config.blocking_threads) {
         }
 
-        RuntimeConfig             config;
-        boost::asio::io_context   io_context;
-        std::optional<WorkGuard>  work_guard;
-        boost::asio::thread_pool  blocking_pool;
-        std::vector<std::jthread> io_threads;
-        std::mutex                lifecycle_mutex;
-        std::atomic_bool          running { false };
-        bool                      stopped = false;
+        RuntimeConfig            config;
+        boost::asio::io_context  io_context;
+        std::optional<WorkGuard> work_guard;
+        boost::asio::thread_pool blocking_pool;
+        std::vector<std::thread> io_threads;
+        std::mutex               lifecycle_mutex;
+        std::atomic_bool         running { false };
+        bool                     stopped = false;
     };
 
     namespace {
@@ -69,7 +69,7 @@ namespace ExtraChain::Core {
         state->work_guard.emplace(boost::asio::make_work_guard(state->io_context));
         state->io_threads.reserve(state->config.io_threads);
         for (std::size_t index = 0; index < state->config.io_threads; ++index) {
-            state->io_threads.emplace_back([state](std::stop_token) {
+            state->io_threads.emplace_back([state]() {
                 state->io_context.run();
             });
         }
@@ -90,8 +90,8 @@ namespace ExtraChain::Core {
     }
 
     void Runtime::stop() {
-        const auto                state = state_;
-        std::vector<std::jthread> threads;
+        const auto               state = state_;
+        std::vector<std::thread> threads;
         {
             std::scoped_lock lock(state->lifecycle_mutex);
             if (state->stopped) {

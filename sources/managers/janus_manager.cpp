@@ -19,12 +19,31 @@
 
 #include "managers/janus_manager.h"
 
-#include "dfs/dfs_controller.h"
+#include "dfs/dfs_service.h"
 #include "dfs/collection_template.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 
-JanusManager::JanusManager(ExtraChainNode *node)
+JanusManager::JanusManager(ExtraChain::Core::ExtraChainNode *node)
     : node(node) {
+}
+
+std::optional<std::string> JanusManager::place_bid_row(const ActorId     &item_owner_id,
+                                                       const std::string &item_file_id,
+                                                       DbRow              bid) {
+    auto file_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(),
+                                                                   item_owner_id,
+                                                                   item_file_id);
+    if (!file_row.has_value() || file_row->state != Dfs::FileState::Ready) {
+        return std::nullopt;
+    }
+
+    const auto main_id = node->account_controller()->current_profile().main_id();
+    bid["timestamp"]   = std::to_string(Utils::current_date_ms());
+    bid["actor"]       = main_id.to_string();
+    if (!node->dfs()->add_vector_row(item_owner_id, item_file_id, std::move(bid), main_id)) {
+        return std::nullopt;
+    }
+    return "";
 }
 
 bool JanusManager::create_bid_template(const std::string &template_name, const Dfs::CollectionTemplate &tmpl) {

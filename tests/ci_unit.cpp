@@ -1,17 +1,20 @@
 // Tiny unit check for ControlIndex put/get/last/erase, no full node.
-#include <QCoreApplication>
-#include <QDir>
 #include <cstdio>
 #include <filesystem>
+#include <string_view>
 
 #include "chain/control_index.h"
+#include "utils/exc_utils.h"
 #include "utils/exc_utils_base64.h"
+#include "utils/file_io.h"
+#include "utils/legacy_compression.h"
 
 int main(int argc, char *argv[]) {
-    QCoreApplication app(argc, argv);
+    (void)argc;
+    (void)argv;
     std::filesystem::remove_all("/tmp/ci-unit");
     std::filesystem::create_directories("/tmp/ci-unit");
-    QDir::setCurrent("/tmp/ci-unit");
+    std::filesystem::current_path("/tmp/ci-unit");
 
     ControlIndex ci(nullptr);
     std::printf("initial rows=%llu\n", (unsigned long long)ci.row_count());
@@ -61,6 +64,37 @@ int main(int argc, char *argv[]) {
     const auto empty_base64 = Utils::from_base64("");
     check("base64 empty value round-trip", empty_base64.has_value() && empty_base64.value().empty());
     check("base64 invalid padding rejected", !Utils::from_base64("A===").has_value());
+    check("file name whitespace normalization", Utils::fix_file_name("  alpha   beta  ") == "alpha beta");
+    check("file name invalid run replacement", Utils::fix_file_name("a+%b") == "a_b");
+    check("file name quote replacement", Utils::fix_file_name("a«b»c") == "a_b_c");
+
+    constexpr std::string_view legacy_payload = "ExtraChain legacy compression";
+    const auto                 compressed     = LegacyCompression::compress(legacy_payload);
+    const std::string          expected_compressed(
+        "\x00\x00\x00\x1d\x78\x9c\x73\xad\x28\x29\x4a\x74\xce\x48\xcc\xcc\x53\xc8\x49\x4d\x4f"
+                 "\x4c\xae\x54\x48\xce\xcf\x2d\x28\x4a\x2d\x2e\xce\xcc\xcf\x03\x00\xa5\x57\x0b\x4f",
+        41);
+    check("legacy compression matches Qt wire format",
+          compressed.has_value() && compressed.value() == expected_compressed);
+    const auto decompressed = compressed.has_value()
+                                  ? LegacyCompression::decompress(compressed.value(), 1024)
+                                  : std::expected<std::string, LegacyCompression::Error>(
+                                        std::unexpected(LegacyCompression::Error::CompressFailed));
+    check("legacy compression round-trip", decompressed.has_value() && decompressed.value() == legacy_payload);
+    check("legacy compression size limit",
+          compressed.has_value() && !LegacyCompression::decompress(compressed.value(), 4).has_value());
+    const auto compressed_empty   = LegacyCompression::compress({});
+    const auto decompressed_empty = compressed_empty.has_value()
+                                        ? LegacyCompression::decompress(compressed_empty.value(), 0)
+                                        : std::expected<std::string, LegacyCompression::Error>(
+                                              std::unexpected(LegacyCompression::Error::CompressFailed));
+    check("legacy empty compression round-trip", decompressed_empty.has_value() && decompressed_empty->empty());
+
+    const std::filesystem::path atomic_path = "/tmp/ci-unit/atomic-state";
+    check("atomic file write", FileIo::write_atomic(atomic_path, "first").has_value());
+    check("atomic file replace", FileIo::write_atomic(atomic_path, "second").has_value());
+    const auto atomic_data = FileIo::read_all(atomic_path);
+    check("atomic file read", atomic_data.has_value() && atomic_data.value() == "second");
 
     // state now: {20:hash20b, 60:hash60} (40 erased)
     check("get missing -> nullopt", !ci.get(SectionId(99)).has_value());
@@ -79,10 +113,10 @@ int main(int argc, char *argv[]) {
     check("clear empties", ci.row_count() == 0);
     check("get after clear -> nullopt", !ci.get(SectionId(20)).has_value());
 
-    const auto original_path = QDir::currentPath();
+    const auto original_path = std::filesystem::current_path();
     std::filesystem::remove_all("/tmp/ci-clean-state");
     std::filesystem::create_directories("/tmp/ci-clean-state");
-    QDir::setCurrent("/tmp/ci-clean-state");
+    std::filesystem::current_path("/tmp/ci-clean-state");
     {
         ControlIndex first_open(nullptr);
         check("new index requires rebuild", first_open.rebuild_required());
@@ -91,7 +125,7 @@ int main(int argc, char *argv[]) {
         ControlIndex clean_reopen(nullptr);
         check("cleanly closed index skips rebuild", !clean_reopen.rebuild_required());
     }
-    QDir::setCurrent(original_path);
+    std::filesystem::current_path(original_path);
     std::filesystem::remove_all("/tmp/ci-unit");
     std::filesystem::remove_all("/tmp/ci-clean-state");
 

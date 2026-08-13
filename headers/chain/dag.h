@@ -39,10 +39,13 @@
 #include "chain/control_index.h"
 #include "chain/pack_registry.h"
 #include "chain/hot_section_store.h"
+#include "runtime/event.h"
 
 #include "3rdparty/rustex.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 class Responder;
 
 // Control hashes live on every CONTROL_INTERVAL-th section (section_id % 20 == 0).
@@ -344,15 +347,35 @@ class Dag {
 public:
     using AdmissionCompletion =
         std::function<void(std::expected<void, TransactionProveError> result, bool should_forward)>;
+    using StatusEvent      = ExtraChain::Core::Event<DagStatus>;
+    using SyncStartEvent   = ExtraChain::Core::Event<SectionId, SectionId>;
+    using SectionEvent     = ExtraChain::Core::Event<SectionId>;
+    using TimerEvent       = ExtraChain::Core::Event<int>;
+    using TransactionEvent = ExtraChain::Core::Event<SectionId, const std::string &>;
 
     /**
      * @brief Construct a new Dag object
      *
      * @param node Pointer to the ExtraChainNode that owns this DAG
      */
-    Dag(ExtraChainNode *node);
+    Dag(ExtraChain::Core::ExtraChainNode *node);
 
     ~Dag();
+
+    [[nodiscard]] StatusEvent               &status_event() noexcept;
+    [[nodiscard]] SyncStartEvent            &sync_start_event() noexcept;
+    [[nodiscard]] SectionEvent              &sync_progress_event() noexcept;
+    [[nodiscard]] ExtraChain::Core::Event<> &sync_finish_event() noexcept;
+    [[nodiscard]] TimerEvent                &timer_start_event() noexcept;
+    [[nodiscard]] ExtraChain::Core::Event<> &timer_stop_event() noexcept;
+    [[nodiscard]] TransactionEvent          &transaction_sent_event() noexcept;
+    [[nodiscard]] TransactionEvent          &transaction_approved_event() noexcept;
+    [[nodiscard]] TransactionEvent          &transaction_rejected_event() noexcept;
+    [[nodiscard]] ExtraChain::Core::Event<> &control_started_event() noexcept;
+    [[nodiscard]] ExtraChain::Core::Event<> &control_ended_event() noexcept;
+    [[nodiscard]] SectionEvent              &control_progress_event() noexcept;
+    [[nodiscard]] ExtraChain::Core::Event<> &control_search_started_event() noexcept;
+    [[nodiscard]] ExtraChain::Core::Event<> &control_search_ended_event() noexcept;
 
     /**
      * @brief Get the current section ID
@@ -760,7 +783,21 @@ private:
                                                                             const SectionId                  *validation_frontier,
                                                                             const TransactionValidationFacts *facts);
 
-    ExtraChainNode                                       *node;               // Parent node reference
+    StatusEvent                                           status_event_;
+    SyncStartEvent                                        sync_start_event_;
+    SectionEvent                                          sync_progress_event_;
+    ExtraChain::Core::Event<>                             sync_finish_event_;
+    TimerEvent                                            timer_start_event_;
+    ExtraChain::Core::Event<>                             timer_stop_event_;
+    TransactionEvent                                      transaction_sent_event_;
+    TransactionEvent                                      transaction_approved_event_;
+    TransactionEvent                                      transaction_rejected_event_;
+    ExtraChain::Core::Event<>                             control_started_event_;
+    ExtraChain::Core::Event<>                             control_ended_event_;
+    SectionEvent                                          control_progress_event_;
+    ExtraChain::Core::Event<>                             control_search_started_event_;
+    ExtraChain::Core::Event<>                             control_search_ended_event_;
+    ExtraChain::Core::ExtraChainNode                     *node;               // Parent node reference
     TransactionCache                                      transaction_cache_; // Transaction cache for fast lookups
     std::unordered_map<std::string, Transaction>          sended_transactions_; // Transactions sent but not yet
     std::unordered_map<std::string, Transaction>          failed_transactions_; // Transactions failed
@@ -788,26 +825,26 @@ private:
     SectionId                                    sync_last_index_;                    // Last section index to sync
     int                                          requests_count_ = 0; // Number of outstanding requests
     int                                          min_req_count_  = 5;
-    std::unordered_map<std::string, DagLastInfo> last_info_;  // Last chain info from peers
+    std::unordered_map<std::string, DagLastInfo> last_info_; // Last chain info from peers
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
     bool                                         search_control_              = false;
     bool                                         light_requested_             = false;
 
-    rustex::mutex<std::set<Transaction>>         cached_txs_; // Transactions cached during synchronization
-    static constexpr std::size_t                 MaxDeferredContractTransactions = 1024;
-    std::mutex          deferred_contracts_mutex_;
-    DeferredContractMap deferred_contracts_;
+    rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
+    static constexpr std::size_t         MaxDeferredContractTransactions = 1024;
+    std::mutex                           deferred_contracts_mutex_;
+    DeferredContractMap                  deferred_contracts_;
 
     // Immutable packed storage for cold sections (10k per pack)
-    std::unique_ptr<Pack::Registry>  pack_registry_;
-    std::unique_ptr<HotSectionStore> hot_section_store_;
-    SectionId                        next_pack_index_ = SectionId(0);
-    std::mutex                       pack_mutex_;
-    std::mutex                       pack_hot_cache_mutex_;
-    std::mutex                       pack_hot_completion_mutex_;
-    std::condition_variable          pack_hot_completion_;
-    std::atomic_bool                 pack_hot_running_ = false;
-    std::atomic_uint64_t             pack_hot_generation_ = 0;
+    std::unique_ptr<Pack::Registry>                pack_registry_;
+    std::unique_ptr<HotSectionStore>               hot_section_store_;
+    SectionId                                      next_pack_index_ = SectionId(0);
+    std::mutex                                     pack_mutex_;
+    std::mutex                                     pack_hot_cache_mutex_;
+    std::mutex                                     pack_hot_completion_mutex_;
+    std::condition_variable                        pack_hot_completion_;
+    std::atomic_bool                               pack_hot_running_    = false;
+    std::atomic_uint64_t                           pack_hot_generation_ = 0;
     std::map<SectionId, std::string>               pack_hot_cache_;
     std::mutex                                     file_sync_response_mutex_;
     std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;
@@ -817,22 +854,23 @@ private:
 
     struct PendingSyncResponse {
         std::string message_id;
-        SectionId  from;
-        SectionId  to;
+        SectionId   from;
+        SectionId   to;
     };
     mutable std::mutex                 sync_response_request_mutex_;
     std::optional<PendingSyncResponse> pending_section_response_;
     std::optional<PendingSyncResponse> pending_file_response_;
 
-    // Periodic "am I behind?" trigger. The worker only schedules work; all DAG and
-    // Qt state is read and changed on the node thread.
-    std::jthread watchdog_;
-    std::atomic_bool watchdog_tick_pending_ = false;
-    std::atomic_bool sync_check_pending_     = false;
+    // Periodic "am I behind?" trigger. The worker only schedules work; all DAG state
+    // is read and changed on the node serial executor.
+    std::thread      watchdog_;
+    std::atomic_bool watchdog_stop_requested_ = false;
+    std::atomic_bool watchdog_tick_pending_   = false;
+    std::atomic_bool sync_check_pending_      = false;
     // Height seen by the previous watchdog round, and how many rounds it has not moved
     // while a sync was supposedly running. Used to tell a slow sync from a stuck one.
-    SectionId    last_watchdog_section_ = SectionId(-1);
-    int          stalled_sync_rounds_   = 0;
+    SectionId last_watchdog_section_ = SectionId(-1);
+    int       stalled_sync_rounds_   = 0;
 
     // Boundary -> when we last refetched it after a control mismatch. Several peers
     // reporting the same disagreement must not each trigger their own refetch.
@@ -872,15 +910,15 @@ private:
     std::atomic<bool> accepting_messages_ { false };
 
     //
-    void add_to_cached_tx(const Transaction &transaction);
-    void schedule_watchdog_tick();
-    void watchdog_tick();
-    void schedule_sync_check();
-    void sync_check();
-    void clear_pending_sync_responses();
+    void                                           add_to_cached_tx(const Transaction &transaction);
+    void                                           schedule_watchdog_tick();
+    void                                           watchdog_tick();
+    void                                           schedule_sync_check();
+    void                                           sync_check();
+    void                                           clear_pending_sync_responses();
     std::optional<std::pair<SectionId, SectionId>> pending_sync_range(const Responder &responder,
                                                                       const SectionId &to,
-                                                                      bool file_response) const;
+                                                                      bool             file_response) const;
     void consume_pending_sync_response(const Responder &responder, bool file_response);
 
     std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
@@ -1139,6 +1177,6 @@ public:
     void network_control_range_response(const DagControlRangeResponse &control_response,
                                         const Responder               &responder);
 
-    friend class ExtraChainNode;
+    friend class ExtraChain::Core::ExtraChainNode;
     friend class DagCache;
 };

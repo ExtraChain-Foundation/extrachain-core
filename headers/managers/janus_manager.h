@@ -22,11 +22,13 @@
 #include <boost/describe.hpp>
 
 #include "chain/actor_id.h"
-#include "dfs/dfs_controller.h"
+#include "dfs/dfs_service.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 class DbConnector;
 struct NodeId;
 class BigNumberFloat;
@@ -85,7 +87,7 @@ BOOST_DESCRIBE_STRUCT(JanusItemBase, (), (owner_id, file_id, title, description,
  */
 class JanusManager {
 public:
-    JanusManager(ExtraChainNode *node);
+    JanusManager(ExtraChain::Core::ExtraChainNode *node);
     ~JanusManager() = default;
 
     /**
@@ -137,36 +139,21 @@ public:
      * @brief Get the ExtraChainNode instance
      * @return Pointer to the node
      */
-    ExtraChainNode *get_node() const { return node; }
+    ExtraChain::Core::ExtraChainNode *get_node() const {
+        return node;
+    }
 
 private:
-    ExtraChainNode *node;
+    std::optional<std::string> place_bid_row(const ActorId     &item_owner_id,
+                                             const std::string &item_file_id,
+                                             DbRow              bid);
+
+    ExtraChain::Core::ExtraChainNode *node;
 };
 
 template<typename BidT>
 std::optional<std::string> JanusManager::place_bid(const ActorId     &item_owner_id,
                                                    const std::string &item_file_id,
                                                    BidT               bid) {
-    auto file_row =
-        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(), item_owner_id, item_file_id);
-
-    if (!file_row.has_value()) {
-        return std::nullopt;
-    }
-
-    if (file_row->state != Dfs::FileState::Ready) {
-        return std::nullopt;
-    }
-
-    auto main_id = node->account_controller()->current_profile().main_id();
-
-    bid.timestamp = Utils::current_date_ms();
-    bid.actor = main_id;
-
-    auto res = node->dfs()->add_vector_row(item_owner_id, item_file_id, bid, main_id);
-    if (!res) {
-        return std::nullopt;
-    }
-
-    return "";
+    return place_bid_row(item_owner_id, item_file_id, Utils::to_dbrow(bid));
 }

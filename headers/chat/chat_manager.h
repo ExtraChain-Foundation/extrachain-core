@@ -21,6 +21,7 @@
 
 #include <extrachain_global.h>
 #include <expected>
+#include <vector>
 #include "chain/actor.h"
 #include "chain/actor_id.h"
 #include "chat/chat.h"
@@ -29,6 +30,7 @@
 #include "chat/message.h"
 #include "dfs/dfs_utils.h"
 #include "dfs/dfs_vector.h"
+#include "runtime/event.h"
 
 static const std::string CHAT_DAPP_FOLDER        = ":DApp:Chat";
 static const std::string CHAT_DAPP_INVITE_FOLDER = ":DApp:Chat:Invite";
@@ -40,14 +42,36 @@ static const std::string CHAT_PROFILE       = "ChatProfile";
 static const std::string CHAT_FOLDERS       = "ChatFolders";
 static const std::string CHAT_SERVICE_ACTOR = "46710a2d823c23db9fc2ac01e0f84212a8128373";
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 
 class EXTRACHAIN_EXPORT ChatManager {
+public:
+    using ChatEvent    = ExtraChain::Core::Event<const Chat::Chat &>;
+    using MessageEvent = ExtraChain::Core::Event<const ActorId &, const std::string &, const Chat::Message &>;
+    using MessageRemovedEvent = ExtraChain::Core::Event<const ActorId &, const std::string &, const std::string &>;
+
 private:
-    ExtraChainNode *node;
+    ExtraChain::Core::ExtraChainNode *node;
+    ExtraChain::Core::Event<>         chats_loaded_event_;
+    ChatEvent                         chat_added_event_;
+    ChatEvent                         chat_updated_event_;
+    MessageEvent                      message_added_event_;
+    MessageRemovedEvent               message_removed_event_;
 
 public:
-    ChatManager(ExtraChainNode *node);
+    ChatManager(ExtraChain::Core::ExtraChainNode *node);
+
+    [[nodiscard]] ExtraChain::Core::Event<> &chats_loaded_event() noexcept;
+    [[nodiscard]] ChatEvent                 &chat_added_event() noexcept;
+    [[nodiscard]] ChatEvent                 &chat_updated_event() noexcept;
+    [[nodiscard]] MessageEvent              &message_added_event() noexcept;
+    [[nodiscard]] MessageRemovedEvent       &message_removed_event() noexcept;
+
+    void on_file_downloaded(const ActorId &owner_id, const Dfs::DirRow &dir_row);
+    void on_vector_row_added(const ActorId &owner_id, const Dfs::DirRow &dir_row, const DbRow &row);
+    void on_vector_row_removed(const ActorId &owner_id, const Dfs::DirRow &dir_row, const DbRow &row);
 
     void              set_mode(ChatMode mode);
     ChatMode          mode() const;

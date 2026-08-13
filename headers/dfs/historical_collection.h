@@ -54,11 +54,13 @@ struct HistoricalCollectionRow {
 };
 BOOST_DESCRIBE_STRUCT(HistoricalCollectionRow, (), (id, prev_id, operation, data, timestamp, actor_id, sign))
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 
 class HistoricalCollection {
 private:
-    ExtraChainNode*       node;
+    ExtraChain::Core::ExtraChainNode* node;
     FsPath                file_path_;
     FsPath                historical_path_;
     Actor<KeyPrivate>     actor_;
@@ -69,39 +71,39 @@ private:
     Dfs::DataSecurityData security_data_;
 
     HistoricalCollection() = default;
-    HistoricalCollection(ExtraChainNode*              node,
-                         const Actor<KeyPrivate>&     actor,
-                         const ActorId&               file_actor_id,
-                         const std::string&           file_id,
-                         Dfs::DataSecurity            data_security,
-                         const Dfs::DataSecurityData& security_data);
+    HistoricalCollection(ExtraChain::Core::ExtraChainNode* node,
+                         const Actor<KeyPrivate>&          actor,
+                         const ActorId&                    file_actor_id,
+                         const std::string&                file_id,
+                         Dfs::DataSecurity                 data_security,
+                         const Dfs::DataSecurityData&      security_data);
 
 public:
     static std::expected<HistoricalCollection, CollectionError> create(
-        ExtraChainNode*              node,
-        const Actor<KeyPrivate>&     main_actor,
-        const ActorId&               file_actor_id,
-        const std::string&           file_id,
-        const ActorId&               template_actor_id,
-        const std::string&           template_file_id,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
+        ExtraChain::Core::ExtraChainNode* node,
+        const Actor<KeyPrivate>&          main_actor,
+        const ActorId&                    file_actor_id,
+        const std::string&                file_id,
+        const ActorId&                    template_actor_id,
+        const std::string&                template_file_id,
+        Dfs::DataSecurity                 data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&      security_data = Dfs::DataSecurityData());
     static std::expected<HistoricalCollection, CollectionError> create(
-        ExtraChainNode*                node,
-        const Actor<KeyPrivate>&       main_actor,
-        const ActorId&                 file_actor_id,
-        const std::string&             file_id,
-        const Dfs::CollectionTemplate& collection_template,
-        Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData&   security_data = Dfs::DataSecurityData());
+        ExtraChain::Core::ExtraChainNode* node,
+        const Actor<KeyPrivate>&          main_actor,
+        const ActorId&                    file_actor_id,
+        const std::string&                file_id,
+        const Dfs::CollectionTemplate&    collection_template,
+        Dfs::DataSecurity                 data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&      security_data = Dfs::DataSecurityData());
 
     static std::expected<HistoricalCollection, CollectionError> load(
-        ExtraChainNode*              node,
-        const Actor<KeyPrivate>&     actor,
-        const ActorId&               file_actor_id,
-        const std::string&           file_id,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
+        ExtraChain::Core::ExtraChainNode* node,
+        const Actor<KeyPrivate>&          actor,
+        const ActorId&                    file_actor_id,
+        const std::string&                file_id,
+        Dfs::DataSecurity                 data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&      security_data = Dfs::DataSecurityData());
 
     std::expected<HistoricalCollectionRow, CollectionError> add_row(const DbRow&                 row,
                                                                     Dfs::DataSecurity            data_security,

@@ -19,13 +19,14 @@
 
 #pragma once
 
-#include <QObject>
-
 #include "chain/actor.h"
 #include "chain/private_profile.h"
+#include "runtime/event.h"
 #include "utils/autologinhash.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 
 enum class LoadError {
     Unknown,
@@ -51,11 +52,9 @@ enum class ProfileType {
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-class EXTRACHAIN_EXPORT AccountController : public QObject {
-    Q_OBJECT
-
+class EXTRACHAIN_EXPORT AccountController {
 public:
-    explicit AccountController(ExtraChainNode *node);
+    explicit AccountController(ExtraChain::Core::ExtraChainNode *node);
 
     /**
      * @brief Generates a new actor and adds it into accounts list
@@ -112,7 +111,7 @@ public:
     void                     insert_to_profile_set(const ActorId &actorId);
 
 private:
-    ExtraChainNode *node;
+    ExtraChain::Core::ExtraChainNode *node;
     AutologinHash   autologin_hash; // for debug builds
 
     std::vector<PrivateProfile> profiles_;
@@ -135,7 +134,8 @@ public:
     bool import_seed(const std::string &login, const std::string &password, const MasterSeed &seed);
 
     void dogenerate();
+    ExtraChain::Core::Event<> &generated_event() noexcept;
 
-signals:
-    void dogenerated();
+private:
+    ExtraChain::Core::Event<> generated_event_;
 };

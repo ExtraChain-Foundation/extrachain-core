@@ -20,23 +20,18 @@
 #include "chain/dag.h"
 #include "contracts/contract_manager.h"
 
-#include <QDir>
-#include <QElapsedTimer>
-#include <QMetaObject>
-#include <QFile>
-#include <QProcess>
-#include <QSaveFile>
-#include <QStringList>
-#include <QtEndian>
-
+#include <boost/asio/post.hpp>
 #include <chrono>
 #include <cctype>
+#include <future>
 #include <limits>
 
-#include "dfs/dfs_controller.h"
-#include "managers/extrachain_node.h"
+#include "dfs/dfs_service.h"
+#include "core/extrachain_node.h"
 #include "network/message_body.h"
-#include "network/network_manager.h"
+#include "network/network_service.h"
+#include "utils/file_io.h"
+#include "utils/legacy_compression.h"
 #include "utils/thread_pool_boost.h"
 
 static constexpr int SYNC_SECTIONS_BATCH   = 2100;
@@ -47,7 +42,7 @@ static constexpr auto SYNC_LAST_INFO_COLLECTION_DELAY = std::chrono::millisecond
 // in memory and large packs stay well under the socket buffer limit.
 static constexpr std::size_t   PACK_SYNC_CHUNK                  = 256 * 1024;
 static constexpr std::size_t   FILE_SYNC_MAX_COMPRESSED_BYTES   = 64 * 1024 * 1024;
-static constexpr quint32       FILE_SYNC_MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024;
+static constexpr std::uint32_t FILE_SYNC_MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024;
 static constexpr std::uint64_t PACK_SYNC_MAX_ID =
     (std::numeric_limits<std::uint64_t>::max() - (Pack::SECTIONS_PER_PACK - 1)) / Pack::SECTIONS_PER_PACK;
 // The hot section database and pack registry recover exact bounds after a
@@ -55,9 +50,9 @@ static constexpr std::uint64_t PACK_SYNC_MAX_ID =
 // every accepted section.
 static constexpr long long RANGE_PERSIST_INTERVAL = 256;
 
-Dag::Dag(ExtraChainNode *node)
+Dag::Dag(ExtraChain::Core::ExtraChainNode *node)
     : node(node)
-    , transaction_cache_(node, nullptr)
+    , transaction_cache_(node)
     , cache_(node, this)
     , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
     bool storage_reset = false;
@@ -120,11 +115,9 @@ Dag::Dag(ExtraChainNode *node)
     // path regardless of ChainIndex mode.
     control_index_ = std::make_unique<ControlIndex>(node);
 
-    QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
-    if (file.open(QFile::ReadOnly)) {
-        auto last_id_content = file.readAll();
-
-        auto section_range = Json::deserialize<SectionRange>(last_id_content.toStdString());
+    const auto range_data = FileIo::read_all(ChainConst::DAG_RANGE_PATH);
+    if (range_data.has_value()) {
+        auto section_range = Json::deserialize<SectionRange>(range_data.value());
         if (section_range.has_value()) {
             persisted_range_        = *section_range;
             auto first_id_result    = SectionId::create(section_range->first);
@@ -162,10 +155,8 @@ Dag::Dag(ExtraChainNode *node)
                  current_section_,
                  first_saved_section_,
                  cache_.section());
-            file.close();
         }
     } else {
-        // QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).removeRecursively();
         clear_dag();
         storage_reset = true;
     }
@@ -209,11 +200,6 @@ Dag::Dag(ExtraChainNode *node)
     transaction_cache_.make_files();
     cache_.init_db();
 
-    // if (!QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).exists()) {
-    //     QDir().mkdir(QString::fromStdString(ChainConst::CHAIN_FOLDER));
-    //     transaction_cache_.make_files();
-    // }
-
     timestamp_bigger_sync_start_ = 0;
 
     auto section = this->read_section(SectionId(0));
@@ -251,6 +237,49 @@ Dag::~Dag() {
     cache_.dag = nullptr;
 }
 
+Dag::StatusEvent &Dag::status_event() noexcept {
+    return status_event_;
+}
+Dag::SyncStartEvent &Dag::sync_start_event() noexcept {
+    return sync_start_event_;
+}
+Dag::SectionEvent &Dag::sync_progress_event() noexcept {
+    return sync_progress_event_;
+}
+ExtraChain::Core::Event<> &Dag::sync_finish_event() noexcept {
+    return sync_finish_event_;
+}
+Dag::TimerEvent &Dag::timer_start_event() noexcept {
+    return timer_start_event_;
+}
+ExtraChain::Core::Event<> &Dag::timer_stop_event() noexcept {
+    return timer_stop_event_;
+}
+Dag::TransactionEvent &Dag::transaction_sent_event() noexcept {
+    return transaction_sent_event_;
+}
+Dag::TransactionEvent &Dag::transaction_approved_event() noexcept {
+    return transaction_approved_event_;
+}
+Dag::TransactionEvent &Dag::transaction_rejected_event() noexcept {
+    return transaction_rejected_event_;
+}
+ExtraChain::Core::Event<> &Dag::control_started_event() noexcept {
+    return control_started_event_;
+}
+ExtraChain::Core::Event<> &Dag::control_ended_event() noexcept {
+    return control_ended_event_;
+}
+Dag::SectionEvent &Dag::control_progress_event() noexcept {
+    return control_progress_event_;
+}
+ExtraChain::Core::Event<> &Dag::control_search_started_event() noexcept {
+    return control_search_started_event_;
+}
+ExtraChain::Core::Event<> &Dag::control_search_ended_event() noexcept {
+    return control_search_ended_event_;
+}
+
 void Dag::start() {
     // Idempotent: once started, later calls are no-ops so callers don't need
     // to track state themselves.
@@ -279,12 +308,13 @@ void Dag::start() {
     // sat at section 1 while the other two reached 177, and four minutes later their
     // socket queues filled with transactions stamped for a section the network had long
     // passed. A plain thread with a sleep cannot be silenced the same way.
-    watchdog_ = std::jthread([this](std::stop_token token) {
-        while (!token.stop_requested()) {
-            for (int slept = 0; slept < 15 && !token.stop_requested(); ++slept) {
+    watchdog_stop_requested_.store(false);
+    watchdog_ = std::thread([this]() {
+        while (!watchdog_stop_requested_.load()) {
+            for (int slept = 0; slept < 15 && !watchdog_stop_requested_.load(); ++slept) {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
             }
-            if (token.stop_requested() || !started_.load()) {
+            if (watchdog_stop_requested_.load() || !started_.load()) {
                 return;
             }
             schedule_watchdog_tick();
@@ -304,7 +334,7 @@ void Dag::stop() {
 
     // Before anything else it might touch: the watchdog calls start_check().
     if (watchdog_.joinable()) {
-        watchdog_.request_stop();
+        watchdog_stop_requested_.store(true);
         watchdog_.join();
     }
     watchdog_tick_pending_.store(false);
@@ -327,7 +357,7 @@ void Dag::stop() {
 
     update_range(true);
 
-    emit node->dagTimerStop();
+    timer_stop_event_.publish();
 
     eLog("[Dag] stop");
 }
@@ -336,9 +366,9 @@ void Dag::schedule_watchdog_tick() {
     if (watchdog_tick_pending_.exchange(true)) {
         return;
     }
-    if (!QMetaObject::invokeMethod(node, &ExtraChainNode::dagWatchdogTick, Qt::QueuedConnection)) {
-        watchdog_tick_pending_.store(false);
-    }
+    boost::asio::post(node->runtime_executor(), [node = node] {
+        node->dagWatchdogTick();
+    });
 }
 
 void Dag::watchdog_tick() {
@@ -385,9 +415,9 @@ void Dag::schedule_sync_check() {
     if (sync_check_pending_.exchange(true)) {
         return;
     }
-    if (!QMetaObject::invokeMethod(node, &ExtraChainNode::dagSyncCheck, Qt::QueuedConnection)) {
-        sync_check_pending_.store(false);
-    }
+    boost::asio::post(node->runtime_executor(), [node = node] {
+        node->dagSyncCheck();
+    });
 }
 
 void Dag::sync_check() {
@@ -478,11 +508,11 @@ void Dag::force_light_mode() {
 
 void Dag::set_status(DagStatus status) {
     this->status_ = status;
-    emit node->dagStatus(status_);
+    status_event_.publish(status_);
 
     if (status == DagStatus::Ready) {
         clear_pending_sync_responses();
-        emit node->dagTimerStop();
+        timer_stop_event_.publish();
         min_req_count_ = 5;
     }
 }
@@ -621,7 +651,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
             if (transaction.section() > sync_last_index_
                 && transaction.section() <= sync_last_index_ + SectionId(CACHE_LAG_SECTIONS)) {
                 sync_last_index_ = transaction.section();
-                emit node->dagSyncStart(current_section_, sync_last_index_);
+                sync_start_event_.publish(current_section_, sync_last_index_);
             }
             return {};
         }
@@ -761,12 +791,12 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
         // if not approved > min (connections, 5)
         this->sended_transactions_.erase(tx_result.hash);
         this->failed_transactions_.insert({ tx_result.hash, transaction });
-        emit node->dagTxNotApproved(transaction.section(), tx_result.hash);
+        transaction_rejected_event_.publish(transaction.section(), tx_result.hash);
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
         this->sended_transactions_.erase(tx_result.hash);
-        emit node->dagTxApproved(transaction.section(), tx_result.hash);
+        transaction_approved_event_.publish(transaction.section(), tx_result.hash);
     }
 
     auto save_result = this->save_transaction(transaction);
@@ -798,7 +828,7 @@ void Dag::check_self(const Transaction &transaction) {
         return;
     }
 
-    emit transaction_cache_.add(transaction);
+    transaction_cache_.add(transaction);
 
     if (transaction.type() == TransactionType::InitContract
         || transaction.type() == TransactionType::ContractDeploy) {
@@ -1022,8 +1052,8 @@ std::optional<bool> Dag::write_section(const Section &section) {
     // network_transaction_result -> save_transaction -> write_section ->
     // flush_admission, waiting for the queue; the admission worker sat in
     // network_transaction_immediate -> save_transaction, waiting for save_mutex_. Each
-    // held what the other needed. Because the node thread is the one running the Qt
-    // event loop, the whole node froze with it: timers stopped (3 ticks instead of 49),
+    // held what the other needed. Because the node thread owned ordered node work,
+    // the whole node froze with it: timers stopped (3 ticks instead of 49),
     // inbound messages stopped being read, and every peer writing to it filled its send
     // queue until locally created transactions were dropped — 200+ per node.
     //
@@ -1210,7 +1240,7 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
 
 void Dag::timer_tick() {
     eLog("[Dag] Timer tick");
-    emit node->dagTimerStop();
+    timer_stop_event_.publish();
     clear_pending_sync_responses();
     this->set_status(DagStatus::Timered);
     this->sync_status_ = DagSyncStatus::None;
@@ -1830,7 +1860,7 @@ void Dag::invalidate_token_allocations() {
 void Dag::add_transaction_sended(const Transaction &transaction) {
     // eLog("[Dag] Add to sended: {}", transaction.hash());
     sended_transactions_.insert({ transaction.hash(), transaction });
-    emit node->dagTxSended(transaction.section(), transaction.hash());
+    transaction_sent_event_.publish(transaction.section(), transaction.hash());
 }
 
 void Dag::update_range(bool allow_lower_first) {
@@ -1871,10 +1901,7 @@ void Dag::update_range(bool allow_lower_first) {
         }
 
         const std::string json = Json::serialize(next);
-        QSaveFile         file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
-        if (!file.open(QFile::WriteOnly)
-            || file.write(json.data(), static_cast<qint64>(json.size())) != static_cast<qint64>(json.size())
-            || !file.commit()) {
+        if (!FileIo::write_atomic(ChainConst::DAG_RANGE_PATH, json).has_value()) {
             eLog("[Dag] Failed to write range file");
             return;
         }
@@ -1953,10 +1980,10 @@ void Dag::start_sync() {
         status_ = DagStatus::Sync;
     }
     clear_pending_sync_responses();
-    emit node->dagStatus(DagStatus::Sync);
+    status_event_.publish(DagStatus::Sync);
 
     // if (mode_ == DagMode::Light) {
-    emit node->dagTimerStart(15001);
+    timer_start_event_.publish(15001);
     // eLog("Timer start");
     // }
 
@@ -2013,9 +2040,6 @@ void Dag::start_check() {
 
     if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
         start_sync();
-        // QTimer::singleShot(3000, [this]() {
-        //     this->start_sync();
-        // });
         // eLog("BC 12 start_check return");
         return;
     }
@@ -2198,9 +2222,13 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
     auto section_sync =
         SectionSync { .to = to, .txs = txs, .controls = controls, .last_section = current_section_ };
 
-    auto ser      = MessagePack::serialize(section_sync);
-    auto compress = qCompress(QByteArray::fromStdString(ser));
-    responder.send_response(compress.toStdString(),
+    const auto serialized = MessagePack::serialize(section_sync);
+    const auto compressed = LegacyCompression::compress(serialized);
+    if (!compressed.has_value()) {
+        eWarning("[Dag] Failed to compress section response");
+        return;
+    }
+    responder.send_response(compressed.value(),
                             MessageType::DagSections,
                             SendMode::Focused,
                             MessageStatus::Response);
@@ -2211,8 +2239,12 @@ void Dag::network_request_sections_response(const std::string &compressed, const
     // until the answer proves usable, so a corrupt or undecodable one does not silently
     // cancel the retry it should have caused.
     ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
-        const auto section_sync = MessagePack::deserialize<SectionSync>(
-            qUncompress(QByteArray::fromStdString(compressed)).toStdString());
+        const auto uncompressed = LegacyCompression::decompress(compressed, FILE_SYNC_MAX_UNCOMPRESSED_BYTES);
+        if (!uncompressed.has_value()) {
+            eWarning("[Dag] Failed to decompress section response");
+            return;
+        }
+        const auto section_sync = MessagePack::deserialize<SectionSync>(uncompressed.value());
 
         if (!section_sync.has_value()) {
             // eLog("network_request_sections_response 1");
@@ -2242,22 +2274,19 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                 return;
             }
 
-            QMetaObject::invokeMethod(
-                node,
-                [this]() {
-                    retry_contract_transactions();
-                },
-                Qt::QueuedConnection);
+            boost::asio::post(node->runtime_executor(), [this] {
+                retry_contract_transactions();
+            });
 
             const auto &[min, max] = res.value();
         }
 
         consume_pending_sync_response(responder, false);
-        emit node->dagTimerStop();
+        timer_stop_event_.publish();
 
         if (section_sync->last_section > sync_last_index_) {
             sync_last_index_ = section_sync->last_section;
-            emit node->dagSyncStart(current_section_, sync_last_index_);
+            sync_start_event_.publish(current_section_, sync_last_index_);
         }
 
         // for (const auto &[section_id, control] : section_sync->controls) {
@@ -2298,7 +2327,6 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                 }
 
 #ifdef IS_APP_CLIENT // only for clients for first correction and integration
-                     // emit node->dagSyncFinish();
                 this->process_cached_transactions(true);
                 cache_.reset_db();
                 auto responder_new = responder.with_new_message_id();
@@ -2315,13 +2343,13 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             return;
         }
 
-        emit node->dagSyncProgress(section_sync->to);
+        sync_progress_event_.publish(section_sync->to);
         this->set_current_section(section_sync->to);
         // eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ +
         // 100);
 
         // timer_sync->start();
-        emit node->dagTimerStart(15002);
+        timer_start_event_.publish(15002);
         this->request_file_sections(section_sync->to,
                                     std::min(sync_last_index_, section_sync->to + SYNC_SECTIONS_BATCH),
                                     responder);
@@ -2374,9 +2402,13 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
         // travels in the wire format, symmetric with the request and response
         // decode, independent of the peer's on-disk file_bytes format above.
         WireFormat::Scope wire_scope(WireFormat::wire());
-        auto              ser      = MessagePack::serialize(file_sync);
-        auto              compress = qCompress(QByteArray::fromStdString(ser));
-        responder.send_response(compress.toStdString(),
+        const auto        serialized = MessagePack::serialize(file_sync);
+        const auto        compressed = LegacyCompression::compress(serialized);
+        if (!compressed.has_value()) {
+            eWarning("[Dag] Failed to compress file section response");
+            return;
+        }
+        responder.send_response(compressed.value(),
                                 MessageType::DagFileSections,
                                 SendMode::Focused,
                                 MessageStatus::Response);
@@ -2398,13 +2430,13 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
     // The timeout is now cancelled only once the answer is known to be usable, just
     // before this batch is applied. A rejected answer leaves the clock running, which
     // is exactly what a rejected answer should do.
-    if (compressed.size() < sizeof(quint32) || compressed.size() > FILE_SYNC_MAX_COMPRESSED_BYTES) {
+    if (compressed.size() < sizeof(std::uint32_t) || compressed.size() > FILE_SYNC_MAX_COMPRESSED_BYTES) {
         eWarning("[Dag] Reject file sections with invalid compressed size {}", compressed.size());
         return;
     }
-    const auto declared_size = qFromBigEndian<quint32>(reinterpret_cast<const uchar *>(compressed.data()));
-    if (declared_size > FILE_SYNC_MAX_UNCOMPRESSED_BYTES) {
-        eWarning("[Dag] Reject file sections with declared size {}", declared_size);
+    const auto declared_size = LegacyCompression::declared_size(compressed);
+    if (!declared_size.has_value() || declared_size.value() > FILE_SYNC_MAX_UNCOMPRESSED_BYTES) {
+        eWarning("[Dag] Reject file sections with invalid declared size");
         return;
     }
 
@@ -2432,13 +2464,12 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         // here — set it explicitly so section ids decode in the wire format.
         WireFormat::Scope wire_scope(WireFormat::wire());
 
-        const auto uncompressed = qUncompress(QByteArray::fromStdString(compressed));
-        if (uncompressed.size() < 0
-            || static_cast<quint32>(uncompressed.size()) > FILE_SYNC_MAX_UNCOMPRESSED_BYTES) {
+        const auto uncompressed = LegacyCompression::decompress(compressed, FILE_SYNC_MAX_UNCOMPRESSED_BYTES);
+        if (!uncompressed.has_value()) {
             eWarning("[Dag] File sections exceed the uncompressed size limit");
             return;
         }
-        const auto file_sync = MessagePack::deserialize<FileSectionsSync>(uncompressed.toStdString());
+        const auto file_sync = MessagePack::deserialize<FileSectionsSync>(uncompressed.value());
 
         if (!file_sync.has_value()) {
             eLog("[Dag] File sections sync: failed to deserialize");
@@ -2520,7 +2551,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         // The answer survived every check and is about to be applied — only now is it
         // safe to stop the retry clock. See the note at the top of this function.
         consume_pending_sync_response(responder, true);
-        emit node->dagTimerStop();
+        timer_stop_event_.publish();
 
         if (!received_sections.empty() && (!hot_section_store_ || !hot_section_store_->is_open())) {
             for (const auto &[section_id, disk_bytes] : received_sections) {
@@ -2553,7 +2584,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         if (file_sync->last_section > sync_last_index_) {
             sync_last_index_ = file_sync->last_section;
-            emit node->dagSyncStart(current_section_, sync_last_index_);
+            sync_start_event_.publish(current_section_, sync_last_index_);
         }
 
         if (file_sync->to >= sync_last_index_ - 1) {
@@ -2584,7 +2615,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 this->process_cached_transactions();
                 set_status(DagStatus::Ready);
                 set_sync_status(DagSyncStatus::None);
-                emit node->dagSyncFinish();
+                sync_finish_event_.publish();
 
                 // The balance cache is derived state. Rebuild it from the
                 // verified local sections instead of trusting a peer snapshot.
@@ -2607,8 +2638,8 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             return;
         }
 
-        emit node->dagSyncProgress(file_sync->to);
-        emit node->dagTimerStart(15002);
+        sync_progress_event_.publish(file_sync->to);
+        timer_start_event_.publish(15002);
         this->request_file_sections(file_sync->to + 1,
                                     std::min(sync_last_index_, file_sync->to + SYNC_SECTIONS_BATCH),
                                     responder);
@@ -2641,8 +2672,7 @@ void Dag::request_file_sections(const SectionId &from, const SectionId &to, cons
 
 void Dag::network_request_light(const Responder &responder) {
     ThreadPoolBoost::instance_dag_sync()->post([this, responder]() {
-        QElapsedTimer timer;
-        timer.start();
+        const auto                                     started_at = std::chrono::steady_clock::now();
         std::set<Transaction>                          txs;
         std::vector<std::pair<SectionId, std::string>> controls;
 
@@ -2731,7 +2761,8 @@ void Dag::network_request_light(const Responder &responder) {
         eLog("[Dag] Sent light data: cache section {}, transactions count: {}, time: {}",
              cache_section,
              txs.size(),
-             timer.elapsed());
+             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started_at)
+                 .count());
     });
 }
 
@@ -2788,7 +2819,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 
         set_status(DagStatus::Ready);
         set_sync_status(DagSyncStatus::None);
-        emit node->dagSyncFinish();
+        sync_finish_event_.publish();
         // start check hash
         // TIMER_END(network_response_light)
     });
@@ -2877,7 +2908,7 @@ void Dag::set_sync_status(DagSyncStatus status) {
 }
 
 void Dag::handle_sync_request() {
-    emit node->dagTimerStop();
+    timer_stop_event_.publish();
 
     // if (search_control_) {
     //     eLog("[Dag] Ignore sync, because search control");
@@ -2959,7 +2990,7 @@ void Dag::handle_sync_request() {
                 if (info.last_control_section_id < SectionId(0)) {
                     continue;
                 }
-                emit node->dagControlStarted();
+                control_started_event_.publish();
                 this->start_control(Force::Active);
                 last_control = this->find_last_control();
             }
@@ -3017,8 +3048,6 @@ void Dag::handle_sync_request() {
         this->try_pack_hot();
         // timer_sync->stop();
 
-        // emit syncEnd();
-
         eLog("BC 4");
         return; // end sync
     }
@@ -3041,8 +3070,6 @@ void Dag::handle_sync_request() {
         this->process_cached_transactions();
         this->try_pack_hot();
         // timer_sync->stop();
-
-        // emit syncEnd();
 
         return;
     }
@@ -3075,8 +3102,8 @@ void Dag::handle_sync_request() {
             std::lock_guard pack_lock(pack_mutex_);
             status_ = DagStatus::Sync;
         }
-        emit node->dagStatus(DagStatus::Sync);
-        emit node->dagTimerStart(15001);
+        status_event_.publish(DagStatus::Sync);
+        timer_start_event_.publish(15001);
         set_sync_status(DagSyncStatus::Sections);
         check_status_ = DagSyncStatus::None;
     }
@@ -3173,35 +3200,38 @@ void Dag::handle_sync_request() {
 
     // request from to
     check_status_ = DagSyncStatus::None;
-    emit node->dagSyncStart(sync_index, sync_last_index_);
-    emit node->dagTimerStart(30000);
+    sync_start_event_.publish(sync_index, sync_last_index_);
+    timer_start_event_.publish(30000);
     // eLog("Timer start");
     eLog("syncStart, timer 30 secs");
 }
 
 void Dag::clear_dag_folder() {
 #ifdef IS_APP_CLIENT
-    auto dag_path      = QString::fromStdString(ChainConst::DAG_FOLDER);
-    auto remove_path   = dag_path + "_to_remove";
-    auto migrated_path = dag_path + "_migrated";
+    const std::filesystem::path dag_path      = ChainConst::DAG_FOLDER;
+    const std::filesystem::path remove_path   = ChainConst::DAG_FOLDER + "_to_remove";
+    const std::filesystem::path migrated_path = ChainConst::DAG_FOLDER + "_migrated";
+    std::error_code             error;
 
-    // Clean up leftover from previous interrupted deletion
-    if (QDir(remove_path).exists()) {
-        ThreadPoolBoost::instance()->post([path = remove_path.toStdString()]() {
-            QDir(QString::fromStdString(path)).removeRecursively();
+    if (std::filesystem::exists(remove_path, error)) {
+        ThreadPoolBoost::instance()->post([remove_path]() {
+            std::error_code remove_error;
+            std::filesystem::remove_all(remove_path, remove_error);
         });
     }
 
-    // One-time migration: if dag exists and not yet migrated
-    if (QDir(dag_path).exists() && !QFile::exists(migrated_path)) {
-        (void)QFile(migrated_path).open(QFile::WriteOnly);
-        QDir().rename(dag_path, remove_path);
-        ThreadPoolBoost::instance()->post([path = remove_path.toStdString()]() {
-            QDir(QString::fromStdString(path)).removeRecursively();
-        });
-
-        QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
-        QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
+    error.clear();
+    if (std::filesystem::exists(dag_path, error) && !std::filesystem::exists(migrated_path, error)
+        && FileIo::write_atomic(migrated_path, {}).has_value()) {
+        std::filesystem::rename(dag_path, remove_path, error);
+        if (!error) {
+            ThreadPoolBoost::instance()->post([remove_path]() {
+                std::error_code remove_error;
+                std::filesystem::remove_all(remove_path, remove_error);
+            });
+        }
+        std::filesystem::remove(ChainConst::BALANCE_CACHE, error);
+        std::filesystem::remove(ChainConst::DAG_RANGE_PATH, error);
 
         current_section_     = SectionId(-1);
         first_saved_section_ = SectionId(-1);
@@ -3216,53 +3246,39 @@ void Dag::clear_dag() {
     std::lock_guard pack_lock(pack_mutex_);
     auto max_section = file_section(current_section_);
 
-    QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
-    QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
+    std::error_code error;
+    std::filesystem::remove(ChainConst::BALANCE_CACHE, error);
+    std::filesystem::remove(ChainConst::DAG_RANGE_PATH, error);
 
-    #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    #if defined(__ANDROID__) || defined(__APPLE__)
     for (SectionId i = SectionId(0); i <= max_section; ++i) {
-        QString path = QString::fromStdString(ChainConst::DAG_FOLDER + "/" + i.to_string());
-        QDir    dir(path);
-        if (dir.exists()) {
-            dir.removeRecursively();
-        }
+        std::filesystem::remove_all(std::filesystem::path(ChainConst::DAG_FOLDER) / i.to_string(), error);
     }
     #else
-    QStringList to_delete;
-    QDir        parent_dir(QString::fromStdString(ChainConst::DAG_FOLDER));
-    auto        suffix = QString::fromStdString(Utils::generate_random_hex(4));
+    std::vector<std::filesystem::path> to_delete;
+    const std::filesystem::path        parent_dir = ChainConst::DAG_FOLDER;
+    const auto                         suffix     = Utils::generate_random_hex(4);
 
     for (SectionId i = SectionId(0); i <= max_section; ++i) {
-        QString old_name = QString::fromStdString(i.to_string());
-        if (!parent_dir.exists(old_name)) {
+        const auto old_path = parent_dir / i.to_string();
+        if (!std::filesystem::exists(old_path, error)) {
             continue;
         }
-        QString new_name = old_name + "_del_" + suffix;
-        if (parent_dir.rename(old_name, new_name)) {
-            to_delete << QString::fromStdString(ChainConst::DAG_FOLDER) + "/" + new_name;
+        const auto new_path = parent_dir / (i.to_string() + "_del_" + suffix);
+        std::filesystem::rename(old_path, new_path, error);
+        if (!error) {
+            to_delete.push_back(new_path);
         }
+        error.clear();
     }
 
-    if (!to_delete.isEmpty()) {
-        #ifdef Q_OS_WIN
-        QString cmd = "cmd /C \"";
-        for (const QString &path : to_delete) {
-            cmd += "rmdir /S /Q \"" + QDir::toNativeSeparators(path) + "\" & ";
-        }
-        cmd.chop(3); // remove last " & "
-        cmd += "\"";
-        if (!QProcess::startDetached(cmd)) {
-            for (const QString &path : to_delete) {
-                QDir(path).removeRecursively();
+    if (!to_delete.empty()) {
+        ThreadPoolBoost::instance()->post([paths = std::move(to_delete)]() {
+            for (const auto &path : paths) {
+                std::error_code remove_error;
+                std::filesystem::remove_all(path, remove_error);
             }
-        }
-        #else
-        if (!QProcess::startDetached("rm", QStringList() << "-rf" << to_delete)) {
-            for (const QString &path : to_delete) {
-                QDir(path).removeRecursively();
-            }
-        }
-        #endif
+        });
     }
     #endif
 
@@ -3513,7 +3529,7 @@ void Dag::issue_next_pack_request(const Responder &responder) {
             }
             start_control();
             process_cached_transactions();
-            emit node->dagSyncFinish();
+            sync_finish_event_.publish();
 
             cache_.reset_db();
             cache_.init_db();
@@ -4047,11 +4063,11 @@ void Dag::remove_sections(const SectionId &from) {
             continue;
         }
 
-        QFile::remove(QString::fromStdString(path_str.value()));
+        std::error_code error;
+        std::filesystem::remove(path_str.value(), error);
 
         if (i % Config::DataStorage::SECTION_SIZE == 0) {
-            QDir dir(QString::fromStdString(this->file_folder(i)));
-            dir.removeRecursively();
+            std::filesystem::remove_all(this->file_folder(i), error);
         }
     }
 }
@@ -4720,7 +4736,7 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
             }
 
             if (qt_signals == Force::Active) {
-                emit node->dagControlProgress(current_start);
+                control_progress_event_.publish(current_start);
             }
         }
     }
@@ -4740,18 +4756,18 @@ bool Dag::generate_hash(const SectionId &start_section, Force qt_signals) {
     }
 
     if (qt_signals == Force::Active) {
-        emit node->dagControlStarted();
+        control_started_event_.publish();
     }
 
     if (start_section > cache_.section() && start_section != SectionId(0)) {
-        emit node->dagControlEnded();
+        control_ended_event_.publish();
         return true;
     }
 
     auto result = this->generate_hash_from_section(start_section, Force::Active, qt_signals);
 
     if (qt_signals == Force::Active) {
-        emit node->dagControlEnded();
+        control_ended_event_.publish();
     }
 
     return result.has_value();
@@ -4914,8 +4930,8 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
     }
 
     search_control_ = true;
-    emit node->dagSearchControlStarted();
-    emit node->dagSyncStart(current_section_, current_section_);
+    control_search_started_event_.publish();
+    sync_start_event_.publish(current_section_, current_section_);
 
     DagControlRangeRequest req { .from = lo, .to = hi };
     node->network()->send_message(req,
@@ -4980,7 +4996,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
              control_response.to,
              control_response.from);
         search_control_ = false;
-        emit node->dagSearchControlEnded();
+        control_search_ended_event_.publish();
         return;
     }
 
@@ -5032,7 +5048,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
         if (sync_last_index_ <= current_section_) {
             search_control_ = false;
-            emit node->dagSearchControlEnded();
+            control_search_ended_event_.publish();
             this->process_cached_transactions();
             return;
         } else {
@@ -5052,7 +5068,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
             DagControlRangeRequest req { .from = next_lo, .to = next_hi };
             // eTemp("[Dag] Request controls: {}", req);
-            emit node->dagControlProgress(next_lo);
+            control_progress_event_.publish(next_lo);
             node->network()->send_message(req,
                                           MessageType::DagControlRangeRequest,
                                           SendMode::Neighbours,
@@ -5072,9 +5088,9 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         auto correct_from = std::max(SectionId(0), sync_from - 50);
         this->remove_sections(correct_from);
         check_status_ = DagSyncStatus::None;
-        emit node->dagSyncStart(correct_from, sync_last_index_);
+        sync_start_event_.publish(correct_from, sync_last_index_);
         search_control_ = false;
-        emit node->dagSearchControlEnded();
+        control_search_ended_event_.publish();
         this->request_file_sections(correct_from,
                                     std::min(sync_from + SYNC_SECTIONS_BATCH, sync_last_index_),
                                     responder.with_new_message_id());

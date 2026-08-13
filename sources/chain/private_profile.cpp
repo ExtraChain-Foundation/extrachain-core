@@ -19,15 +19,15 @@
 
 #include "chain/private_profile.h"
 
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "encryption/encryption_tools.h"
 #include "utils/exc_utils.h"
 
-PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &system_actor,
-                                      const Actor<KeyPrivate> &main_actor,
-                                      const std::string       &hash,
-                                      ExtraChainNode          *node,
-                                      bool                     is_save) {
+PrivateProfile PrivateProfile::create(const Actor<KeyPrivate>          &system_actor,
+                                      const Actor<KeyPrivate>          &main_actor,
+                                      const std::string                &hash,
+                                      ExtraChain::Core::ExtraChainNode *node,
+                                      bool                              is_save) {
     PrivateProfile user;
     user.actors_.push_back(system_actor);
     user.actors_.push_back(main_actor);
@@ -44,9 +44,9 @@ PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &system_actor,
     return user;
 }
 
-std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const ActorId                &actor_id,
-                                                                            const std::string            &hash,
-                                                                            ExtraChainNode               *node,
+std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const ActorId     &actor_id,
+                                                                            const std::string &hash,
+                                                                            ExtraChain::Core::ExtraChainNode *node,
                                                                             const std::optional<KeyPass> &key) {
     PrivateProfile user;
     user.system_ = actor_id;
@@ -55,10 +55,10 @@ std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(cons
     return user.read(key);
 }
 
-PrivateProfile PrivateProfile::load(const ActorId                &actor_id,
-                                    const std::string            &hash,
-                                    ExtraChainNode               *node,
-                                    const std::optional<KeyPass> &key) {
+PrivateProfile PrivateProfile::load(const ActorId                    &actor_id,
+                                    const std::string                &hash,
+                                    ExtraChain::Core::ExtraChainNode *node,
+                                    const std::optional<KeyPass>     &key) {
     PrivateProfile user;
     user.system_ = actor_id;
     user.hash_   = hash;
@@ -67,9 +67,9 @@ PrivateProfile PrivateProfile::load(const ActorId                &actor_id,
     return user;
 }
 
-PrivateProfile PrivateProfile::import(const ImportedUser &imported_user,
-                                      const std::string  &hash,
-                                      ExtraChainNode     *node) {
+PrivateProfile PrivateProfile::import(const ImportedUser               &imported_user,
+                                      const std::string                &hash,
+                                      ExtraChain::Core::ExtraChainNode *node) {
     PrivateProfile private_profile;
     private_profile.hash_         = hash;
     private_profile.actors_       = imported_user.actors;
@@ -277,8 +277,12 @@ void PrivateProfile::load(const std::optional<KeyPass> &key) {
             Actor<KeyPrivate> main_actor;
             main_actor.create(ActorType::User);
             this->actors_.insert(this->actors_.begin() + 1, main_actor);
-            this->main_ = main_actor.id();
-            node->actor_index()->store_new_actor(main_actor.to_public());
+            this->main_      = main_actor.id();
+            auto save_result = node->actor_index()->store_new_actor(main_actor.to_public());
+            if (!save_result.has_value() && save_result.error() != ActorSaveError::AlreadyExists) {
+                eWarning("[PrivateProfile] Cannot save main actor: error {}",
+                         static_cast<int>(save_result.error()));
+            }
         }
 
         this->save();
@@ -419,7 +423,7 @@ void SeedProfile::generate() {
     actors_.push_back(chat);
 }
 
-std::vector<Actor<KeyPrivate>> SeedProfile::generate_other(ExtraChainNode *node) {
+std::vector<Actor<KeyPrivate>> SeedProfile::generate_other(ExtraChain::Core::ExtraChainNode *node) {
     std::vector<Actor<KeyPrivate>> actor_ids;
 
     for (int i = 2;; i++) {

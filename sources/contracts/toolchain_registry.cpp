@@ -18,11 +18,11 @@
 #include <fmt/format.h>
 
 #include "chain/actor_index.h"
-#include "dfs/dfs_controller.h"
+#include "dfs/dfs_service.h"
 #include "dfs/dfs_utils.h"
 #include "extrachain_version.h"
 #include "managers/account_controller.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "utils/exc_utils.h"
 
 namespace ExtraChain::Contracts {
@@ -149,7 +149,9 @@ namespace ExtraChain::Contracts {
                       });
         }
 
-        bool verify_signed_row(ExtraChainNode* node, Dfs::DirRow row, const ActorId& network_id) {
+        bool verify_signed_row(ExtraChain::Core::ExtraChainNode* node,
+                               Dfs::DirRow                       row,
+                               const ActorId&                    network_id) {
             if (row.owner_id != network_id || row.actor_id != network_id) {
                 return false;
             }
@@ -161,16 +163,18 @@ namespace ExtraChain::Contracts {
             return verified.has_value() && *verified;
         }
 
-        bool verify_toolchain_row(ExtraChainNode* node, Dfs::DirRow row, const ActorId& network_id) {
+        bool verify_toolchain_row(ExtraChain::Core::ExtraChainNode* node,
+                                  Dfs::DirRow                       row,
+                                  const ActorId&                    network_id) {
             return row.state == Dfs::FileState::Ready && !row.encryption
                    && row.folder == Dfs::Basic::TEMPLATE_CONTRACT_TOOLCHAIN
                    && verify_signed_row(node, std::move(row), network_id);
         }
 
-        bool verify_chain(ExtraChainNode*                 node,
-                          const std::vector<Dfs::DirRow>& rows,
-                          const Dfs::DirRow&              leaf,
-                          const ActorId&                  network_id) {
+        bool verify_chain(ExtraChain::Core::ExtraChainNode* node,
+                          const std::vector<Dfs::DirRow>&   rows,
+                          const Dfs::DirRow&                leaf,
+                          const ActorId&                    network_id) {
             std::unordered_map<std::string, Dfs::DirRow> by_id;
             by_id.reserve(rows.size());
             for (const auto& row : rows) {
@@ -193,9 +197,10 @@ namespace ExtraChain::Contracts {
             }
         }
 
-        std::expected<std::vector<std::uint8_t>, ToolchainFailure> read_content(ExtraChainNode*    node,
-                                                                                const ActorId&     network_id,
-                                                                                const Dfs::DirRow& row) {
+        std::expected<std::vector<std::uint8_t>, ToolchainFailure> read_content(
+            ExtraChain::Core::ExtraChainNode* node,
+            const ActorId&                    network_id,
+            const Dfs::DirRow&                row) {
             auto content = Dfs::Tables::DirsFile::ActorSpace::get_file_content(network_id, row.file_id);
             if (!content.has_value()) {
                 node->dfs()->request_file(network_id, row.file_id);
@@ -210,7 +215,7 @@ namespace ExtraChain::Contracts {
         }
     } // namespace
 
-    ToolchainRegistry::ToolchainRegistry(ExtraChainNode* node)
+    ToolchainRegistry::ToolchainRegistry(ExtraChain::Core::ExtraChainNode* node)
         : node_(node) {
     }
 

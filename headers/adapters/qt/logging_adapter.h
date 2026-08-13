@@ -152,18 +152,18 @@ struct fmt::formatter<QNetworkInterface> {
     }
 
     template <typename FormatContext>
-    auto format(const QNetworkInterface& interface, FormatContext& ctx) const {
+    auto format(const QNetworkInterface& network_interface, FormatContext& ctx) const {
         std::string flags;
-        if (interface.flags() & QNetworkInterface::IsUp) {
+        if (network_interface.flags() & QNetworkInterface::IsUp) {
             flags += "Up|";
         }
-        if (interface.flags() & QNetworkInterface::IsRunning) {
+        if (network_interface.flags() & QNetworkInterface::IsRunning) {
             flags += "Running|";
         }
-        if (interface.flags() & QNetworkInterface::CanBroadcast) {
+        if (network_interface.flags() & QNetworkInterface::CanBroadcast) {
             flags += "Broadcast|";
         }
-        if (interface.flags() & QNetworkInterface::IsLoopBack) {
+        if (network_interface.flags() & QNetworkInterface::IsLoopBack) {
             flags += "Loopback|";
         }
         if (!flags.empty()) {
@@ -172,10 +172,10 @@ struct fmt::formatter<QNetworkInterface> {
 
         return fmt::format_to(ctx.out(),
                               "{}[{}]: {} -> {}",
-                              interface.name().toStdString(),
-                              interface.hardwareAddress().toStdString(),
+                              network_interface.name().toStdString(),
+                              network_interface.hardwareAddress().toStdString(),
                               flags,
-                              fmt::join(interface.addressEntries(), ", "));
+                              fmt::join(network_interface.addressEntries(), ", "));
     }
 };
 

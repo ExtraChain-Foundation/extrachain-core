@@ -21,17 +21,16 @@
 
 #include <algorithm>
 
-#include "managers/extrachain_node.h"
-#include "network/network_manager.h"
-#include "dfs/dfs_controller.h"
+#include "core/extrachain_node.h"
+#include "network/network_service.h"
+#include "dfs/dfs_service.h"
 #include "dfs/load_manager.h"
 #include "utils/exc_logs.h"
 #include "chain/actor_index.h"
 #include "utils/thread_pool_boost.h"
 
-DirsManager::DirsManager(ExtraChainNode* node)
-    : QObject(node)
-    , node(node) {
+DirsManager::DirsManager(ExtraChain::Core::ExtraChainNode* node)
+    : node(node) {
     // create dfs folder
     std::filesystem::create_directories(DfsB::DFS_FOLDER);
 
@@ -57,8 +56,6 @@ void DirsManager::old_dfs_to_new_dfs_converter() {
             eCritical("DirsManager::old_dfs_to_new_dfs_converter, Can't open .dir file");
             return false;
         }
-
-        char* errMsg = nullptr;
 
         static const std::string select_old_query =
             "SELECT file_id, prev_file_id, actor_id, hash, folder, name, size, "
@@ -91,8 +88,6 @@ void DirsManager::old_dfs_to_new_dfs_converter() {
                       Dfs::Basic::DFS_FOLDER);
             return;
         }
-
-        emit convertion_started();
 
         int    processed_files = 0;
         int    deleted_files   = 0;
@@ -145,7 +140,6 @@ void DirsManager::old_dfs_to_new_dfs_converter() {
              processed_files,
              deleted_files);
 
-        emit convertion_finished();
     } catch (const std::filesystem::filesystem_error& e) {
         eCritical("DirsManager::old_dfs_to_new_dfs_converter, filesystem error: {}", e.what());
     }
@@ -334,8 +328,8 @@ void DirsManager::network_response_dir_rows(
                     // a node that missed the creation broadcast stayed permanently
                     // without that vector. Files do not have this hole because they test
                     // the file's presence on disk.
-                    if (!local.has_value() || !file_path->exists()
-                        || local->state != Dfs::FileState::Ready || row.last_modified > local->last_modified
+                    if (!local.has_value() || !file_path->exists() || local->state != Dfs::FileState::Ready
+                        || row.last_modified > local->last_modified
                         || !node->dfs()->is_file_already_downloaded(owner_id, row.file_id, row.hash)) {
                         dir_rows_todo.push_back(row);
                     }
@@ -343,7 +337,11 @@ void DirsManager::network_response_dir_rows(
 
                 if (row.state == Dfs::FileState::Removed) {
                     if (row.type == Dfs::FileType::File && file_path->exists()) {
-                        node->dfs()->remove_local_file(owner_id, row.file_id);
+                        auto remove_result = node->dfs()->remove_local_file(owner_id, row.file_id);
+                        if (!remove_result.has_value()) {
+                            eWarning("[DirsManager] Cannot remove local file {} / {}", owner_id, row.file_id);
+                            continue;
+                        }
                     }
                     Dfs::Tables::DirsFile::ActorSpace::update_file_state(db_,
                                                                          owner_id,
@@ -370,7 +368,7 @@ void DirsManager::network_response_dir_rows(
 
                 for (const auto& row : dir_rows_res) {
                     if (row.type == Dfs::FileType::Folder) {
-                        emit node->dfs()->added(owner_id, row);
+                        node->dfs()->notify_added(owner_id, row);
                     }
                 }
             }
@@ -478,8 +476,6 @@ void DirsManager::network_request_all(const Responder& responder, const std::vec
 
             rows_count += dir_rows->size();
             response_data.emplace_back(actor, dir_rows.value());
-
-            // QThread::msleep(3);
 
             if (!node_enabled.load()) {
                 return;

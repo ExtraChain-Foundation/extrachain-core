@@ -21,15 +21,18 @@
 
 #include "sqlite3.h"
 #include <blake3.h>
-
-#include <QDir>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <QRegularExpression>
+#include <cctype>
+#include <filesystem>
 
 #include "utils/exc_logs.h"
+#include "utils/file_io.h"
+#include "utils/legacy_compression.h"
 
 // #define ENABLE_SQLITE_TRUE_LOGS
+
+namespace {
+    constexpr std::size_t MAX_LEGACY_DATABASE_BYTES = 512U * 1024U * 1024U;
+}
 
 DbConnector::DbConnector(const std::string &filePath, DbConnectorType type) {
     if (filePath.empty()) {
@@ -40,17 +43,16 @@ DbConnector::DbConnector(const std::string &filePath, DbConnectorType type) {
         m_type       = type;
         this->m_file = filePath + ".temp"; // TODO: + random str?
 
-        if (!QFile::exists(filePath.c_str()))
+        if (!std::filesystem::exists(filePath))
             return;
-        QFile file(filePath.c_str());
-        if (!file.open(QFile::ReadOnly)) {
+        const auto compressed = FileIo::read_all(filePath);
+        if (!compressed.has_value()) {
             eFatal("[DbConnector] Can't open db file");
         }
-        auto  data_uncompressed = qUncompress(file.readAll());
-        QFile fileTemp(QString::fromStdString(filePath) + ".temp");
-        (void)fileTemp.open(QFile::WriteOnly);
-        fileTemp.write(data_uncompressed);
-        fileTemp.close();
+        const auto uncompressed = LegacyCompression::decompress(*compressed, MAX_LEGACY_DATABASE_BYTES);
+        if (!uncompressed.has_value() || !FileIo::write_atomic(this->m_file, *uncompressed).has_value()) {
+            eFatal("[DbConnector] Can't decompress db file");
+        }
         return;
     }
 
@@ -88,7 +90,7 @@ DbConnector::~DbConnector() {
     // close();
 }
 
-QString DbConnector::sqlite_version() {
+std::string DbConnector::sqlite_version() {
     return sqlite3_libversion();
 }
 
@@ -113,7 +115,7 @@ bool DbConnector::open(bool create_if_missing) {
         db = nullptr;
         return false;
     } else {
-        if (!QFile::exists(m_file.c_str())) {
+        if (!std::filesystem::exists(m_file)) {
             // eFatal("[DbConnector] Open error: {}", m_file);
             return false;
         }
@@ -143,20 +145,22 @@ bool DbConnector::close() {
         m_open = false;
 
         if (std::filesystem::exists(m_file) && std::filesystem::file_size(m_file) == 0) {
-            QFile(m_file.c_str()).remove();
+            std::error_code error;
+            std::filesystem::remove(m_file, error);
         }
 
         if (m_type == DbConnectorType::Compressed) {
-            QFile file(m_file.c_str());
-            if (!file.open(QFile::ReadOnly)) {
+            const auto data = FileIo::read_all(m_file);
+            if (!data.has_value()) {
                 eFatal("[DbConnector] Can't open database '{}'", m_file);
             }
-            auto  data_compressed = qCompress(file.readAll());
-            QFile fileTemp(QString::fromStdString(m_file).mid(0, m_file.size() - 4));
-            (void)fileTemp.open(QFile::WriteOnly);
-            fileTemp.write(data_compressed);
-            fileTemp.close();
-            file.remove();
+            const auto compressed = LegacyCompression::compress(*data);
+            const auto target     = m_file.substr(0, m_file.size() - std::string_view(".temp").size());
+            if (!compressed.has_value() || !FileIo::write_atomic(target, *compressed).has_value()) {
+                eFatal("[DbConnector] Can't compress database '{}'", m_file);
+            }
+            std::error_code error;
+            std::filesystem::remove(m_file, error);
         }
 
         return true;
@@ -259,7 +263,7 @@ std::unique_ptr<DbIterator> DbConnector::select_while(std::string query, std::st
     if (!binds.empty()) {
         // dbmutex.unlock();
         if (!implementation_prepare(table_name, binds, stmt)) {
-            qDebug() << "[DBConnector] Select bind error";
+            eWarning("[DbConnector] Select bind error");
             return {};
         }
         // dbmutex.lock();
@@ -368,8 +372,21 @@ bool DbConnector::update(const std::string &table_name, const DbRow &set_data, c
 }
 
 bool DbConnector::create_table(const std::string &query) {
-    QString queryTemp = QString::fromStdString(query).replace(QRegularExpression("\\s+"), " ");
-    return this->query(queryTemp.toStdString());
+    std::string normalized;
+    normalized.reserve(query.size());
+    bool whitespace = false;
+    for (const unsigned char character : query) {
+        if (std::isspace(character)) {
+            whitespace = !normalized.empty();
+        } else {
+            if (whitespace) {
+                normalized.push_back(' ');
+            }
+            normalized.push_back(static_cast<char>(character));
+            whitespace = false;
+        }
+    }
+    return this->query(std::move(normalized));
 }
 
 std::expected<std::string, SqlCreateError> DbConnector::create_table(const DbSchema &query) {
@@ -377,7 +394,9 @@ std::expected<std::string, SqlCreateError> DbConnector::create_table(const DbSch
     if (!sql.has_value())
         return sql;
 
-    create_table(sql.value());
+    if (!create_table(sql.value())) {
+        return std::unexpected(SqlCreateError::ExecutionFailed);
+    }
     return sql;
 }
 
@@ -483,7 +502,6 @@ std::uint64_t DbConnector::count(const std::string &table, const std::string &wh
 }
 
 std::string DbConnector::file() const {
-    // QString dbFile = sqlite3_db_filename(db, nullptr);
     // dbFile = dbFile.remove(0, QDir::currentPath().length());
     return m_file;
 }
@@ -542,36 +560,34 @@ bool DbConnector::query(std::string query) {
     return res == SQLITE_DONE;
 }
 
-QJsonObject DbConnector::toJsonObject() {
+boost::json::object DbConnector::to_json_object() {
     if (!is_open()) {
         eFatal("[DbConnector] Database not open");
     }
 
-    QJsonObject json;
+    boost::json::object json;
 
     const auto tables = table_names();
     for (const auto &table : tables) {
         auto result = select_all(table);
 
-        QJsonArray array;
+        boost::json::array array;
         for (const auto &row : result) {
-            QJsonObject obj;
+            boost::json::object object;
             for (const auto &[key, value] : row) {
-                obj[key.c_str()] = value.c_str();
+                object[key] = value;
             }
-            array << obj;
+            array.push_back(std::move(object));
         }
 
-        json[table.c_str()] = array;
+        json[table] = std::move(array);
     }
 
     return json;
 }
 
-QJsonDocument DbConnector::toJsonDocument() {
-    auto object = toJsonObject();
-    auto json   = QJsonDocument(std::move(object));
-    return json;
+std::string DbConnector::to_json() {
+    return boost::json::serialize(to_json_object());
 }
 
 sqlite3 *DbConnector::getDb() const {

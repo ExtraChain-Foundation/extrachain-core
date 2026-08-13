@@ -1,23 +1,15 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(extrachain-runtime-tests LANGUAGES CXX)
+project(extrachain-runtime-tests LANGUAGES C CXX)
 
-find_package(Boost CONFIG REQUIRED COMPONENTS system thread signals2)
+set(EXTRACHAIN_BUILD_QT_COMPAT OFF CACHE BOOL "" FORCE)
+set(EXTRACHAIN_BUILD_LEGACY_QT_NODE OFF CACHE BOOL "" FORCE)
+set(EXTRACHAIN_BUILD_CBINDINGS OFF CACHE BOOL "" FORCE)
+set(EXTRACHAIN_STATIC_BUILD ON CACHE BOOL "" FORCE)
+include(../../CMakeLists.txt)
 
-add_executable(extrachain-runtime-tests
-    runtime_test.cpp
-    ../../sources/network/network_runtime.cpp
-    ../../sources/runtime/deadline_task.cpp
-    ../../sources/runtime/periodic_task.cpp
-    ../../sources/runtime/runtime.cpp
-    ../../sources/utils/version.cpp
-)
-target_include_directories(extrachain-runtime-tests PRIVATE ../../headers)
-target_link_libraries(extrachain-runtime-tests PRIVATE Boost::boost Boost::system Boost::thread)
-target_compile_features(extrachain-runtime-tests PRIVATE cxx_std_23)
-if(WIN32)
-    target_compile_definitions(extrachain-runtime-tests PRIVATE _WIN32_WINNT=0x0A00)
-endif()
+add_executable(extrachain-runtime-tests runtime_test.cpp)
+target_link_libraries(extrachain-runtime-tests PRIVATE extrachain-core)
 
 enable_testing()
 add_test(NAME runtime COMMAND extrachain-runtime-tests)

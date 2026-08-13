@@ -21,16 +21,32 @@
 
 #include "chain/chain_index.h"
 #include "chain/dag.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 
-TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
-    : QObject(parent)
-    , node(node) {
-    connect(this, &TransactionCache::add, this, &TransactionCache::adding);
-    connect(this, &TransactionCache::request, this, &TransactionCache::prepare);
-    connect(this, &TransactionCache::make_cache, this, &TransactionCache::cache);
-
+TransactionCache::TransactionCache(ExtraChain::Core::ExtraChainNode *node)
+    : node(node) {
     make_files();
+}
+
+void TransactionCache::add(const Transaction &transaction) {
+    adding(transaction);
+}
+
+void TransactionCache::request(ActorId actor_id, TokenId token, bool reward_hidden, std::uint64_t from_time) {
+    prepare(actor_id, token, reward_hidden, from_time);
+}
+
+void TransactionCache::make_cache() {
+    cache();
+}
+
+ExtraChain::Core::Event<ActorId, TokenId, int, std::vector<TransactionInfo>> &TransactionCache::response_event() {
+    return response_event_;
+}
+
+ExtraChain::Core::Event<const Transaction &, StatusTrx::StatusTrxType> &TransactionCache::
+    self_transaction_event() {
+    return self_transaction_event_;
 }
 
 void TransactionCache::make_files() {
@@ -44,7 +60,7 @@ void TransactionCache::adding(const Transaction &transaction) {
     if (!exc_token.has_value() || transaction.token() != exc_token.value()) {
         return;
     }
-    emit node->selfTxAdded(transaction, StatusTrx::StatusTrxType::Approved);
+    self_transaction_event_.publish(transaction, StatusTrx::StatusTrxType::Approved);
 }
 
 void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidden, std::uint64_t from_time) {
@@ -58,7 +74,7 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
     auto                        *dag   = node->dag();
     auto                        *index = dag != nullptr ? dag->chain_index() : nullptr;
     if (index == nullptr) {
-        emit this->response(actor_id, token, 0, transactions);
+        response_event_.publish(actor_id, token, 0, std::move(transactions));
         return;
     }
 
@@ -102,5 +118,5 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
         }
     }
 
-    emit this->response(actor_id, token, 0, transactions);
+    response_event_.publish(actor_id, token, 0, std::move(transactions));
 }

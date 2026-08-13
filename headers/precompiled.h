@@ -142,13 +142,8 @@
     #include <boost/mp11.hpp>
     #include <boost/json.hpp>
 
-    #ifdef Q_OS_WINDOWS
+    #ifdef _WIN32
         #define UINT32_C(c) (c##ULL)
         #define UINT64_C(c) (c##ULL)
     #endif
-
-    #include <QtCore>
-    #include <QtNetwork>
-
-    #include "adapters/qt/logging_adapter.h"
 #endif

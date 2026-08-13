@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 ## Project
-ExtraChain Core — C++23/Qt6 library: DAG ledger + DFS file system.
+ExtraChain Core — C++23/Boost library: DAG ledger + DFS file system. Qt is an optional client
+compatibility layer.
 - License: LGPL v3
 - Branch for PRs: dev (current work usually on feature branches)
 - Build/deps: see README. vcpkg, CMake.
@@ -14,7 +15,8 @@ ExtraChain Core — C++23/Qt6 library: DAG ledger + DFS file system.
 Use static `create()` factory, not direct constructor — validates input.
 
 ### Precompiled headers
-`headers/precompiled.h` already includes std, Qt, Boost, fmt, magic_enum, msgpack.
+`headers/precompiled.h` includes std, Boost, fmt, magic_enum, and msgpack. Qt code must include
+its Qt headers directly and must stay in the compatibility target where possible.
 Don't re-include in source files. clangd shows false-positive errors because PCH not visible to LSP — ignore.
 
 ### Logging
@@ -45,13 +47,17 @@ Returns `expected<T, std::string>`. Works on any BOOST_DESCRIBE-enabled struct.
 ## Architecture
 
 ### ExtraChainNode
-Central coordinator. Instantiates managers in order, owns lifecycle, periodic timers (reward request 60s / MINING_TIMER_TICK, status 10s, luminance cleanup 30s).
+`ExtraChain::Core::ExtraChainNode` is the Core entry point. It instantiates managers in order and
+owns the lifecycle, Boost runtime, serial executor, and periodic tasks. The global
+`ExtraChainNode` is the Qt compatibility facade.
 
 ### Layers
 - **chain/**: Dag (DAG ledger, Full/Light modes), Section (block-like), Transaction, DagCache (balance cache, CACHE_LAG_SECTIONS = 15 behind current), ActorIndex (network actor registry).
 - **encryption/**: Actor<KeyPrivate|KeyPublic>, libsodium, Ed25519, ActorId = blake3(public_key)[:40].
-- **network/**: NetworkManager (WebSocket P2P), Responder pattern (deferred responses), DiscoveryService (UDP), ~54 MessageType enum values.
-- **dfs/**: DfsController (Full/Light), Vector/Dictionary/Collection templates, fragment-based downloads (256KB), DataSecurity {Public, Encrypted, Self, Actor, Key}.
+- **network/**: NetworkService (Boost.Beast WebSocket P2P), Responder pattern (deferred responses),
+  NetworkManager Qt facade, ~54 MessageType enum values.
+- **dfs/**: DfsService (Full/Light), DfsController Qt facade, Vector/Dictionary/Collection
+  templates, fragment-based downloads (256KB), DataSecurity {Public, Encrypted, Self, Actor, Key}.
 - **managers/**: AccountController, LuminanceManager, TokenManager, DataMiningManager, ChatManager, JanusManager, ThothManager.
 
 ### Account / Profile
@@ -115,10 +121,13 @@ Inherit from `JanusBidBase` / `JanusItemBase`, BOOST_DESCRIBE_STRUCT, then:
 - `janus_manager->place_bid<MyBid>(owner, item_file, bid)`
 
 ## Files Often Touched
-- `managers/extrachain_node.{h,cpp}` — init, manager wiring, signal connect.
+- `core/extrachain_node.{h,cpp}` — Core init, manager wiring, lifecycle, and events.
+- `managers/extrachain_node.{h,cpp}` — Qt node facade and signal conversion.
 - `chain/dag.{h,cpp}`, `chain/dag_cache.{h,cpp}` — chain logic.
-- `network/network_manager.{h,cpp}` — protocol routing.
-- `dfs/dfs_controller.{h,cpp}` — DFS API surface.
+- `network/network_service.{h,cpp}` — protocol routing and network state.
+- `network/network_manager.{h,cpp}` — Qt network facade.
+- `dfs/dfs_service.{h,cpp}` — DFS API and state.
+- `dfs/dfs_controller.{h,cpp}` — Qt DFS facade.
 - `chat/chat_manager.{h,cpp}` — chat features.
 - `managers/account_controller.{h,cpp}` — profile/actor lifecycle.
 

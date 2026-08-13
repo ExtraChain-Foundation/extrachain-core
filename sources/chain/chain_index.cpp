@@ -31,7 +31,7 @@
 #include "chain/transaction.h"
 #include "contracts/contract_transaction.h"
 #include "managers/account_controller.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "utils/exc_logs.h"
 #include "utils/exc_utils.h"
 
@@ -148,7 +148,7 @@ namespace {
 } // namespace
 
 struct ChainIndex::Impl {
-    ExtraChainNode *node = nullptr;
+    ExtraChain::Core::ExtraChainNode *node = nullptr;
     sqlite3        *db   = nullptr;
 
     sqlite3_stmt *stmt_insert_tx               = nullptr;
@@ -614,7 +614,7 @@ struct ChainIndex::Impl {
     }
 };
 
-ChainIndex::ChainIndex(ExtraChainNode *node)
+ChainIndex::ChainIndex(ExtraChain::Core::ExtraChainNode *node)
     : impl_(std::make_unique<Impl>()) {
     impl_->node = node;
     if (!impl_->open()) {

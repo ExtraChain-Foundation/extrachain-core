@@ -29,7 +29,9 @@
 #include "extrachain_global.h"
 #include "utils/bignumber.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 
 /**
  * Read-side accelerator for control hashes.
@@ -44,7 +46,7 @@ class ExtraChainNode;
  */
 class EXTRACHAIN_EXPORT ControlIndex {
 public:
-    explicit ControlIndex(ExtraChainNode *node);
+    explicit ControlIndex(ExtraChain::Core::ExtraChainNode *node);
     ~ControlIndex();
 
     ControlIndex(const ControlIndex &)            = delete;

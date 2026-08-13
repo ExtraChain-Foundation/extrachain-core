@@ -29,7 +29,9 @@
 #include "extrachain_global.h"
 #include "utils/bignumber.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 struct Section;
 class Transaction;
 
@@ -64,7 +66,7 @@ struct ChainIndexEntry {
  */
 class EXTRACHAIN_EXPORT ChainIndex {
 public:
-    explicit ChainIndex(ExtraChainNode *node);
+    explicit ChainIndex(ExtraChain::Core::ExtraChainNode *node);
     ~ChainIndex();
 
     ChainIndex(const ChainIndex &)            = delete;

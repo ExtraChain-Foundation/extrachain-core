@@ -19,13 +19,13 @@
 
 #include "managers/luminance_manager.h"
 
-#include <QDir>
+#include <filesystem>
 
 #include "chain/actor_id.h"
 #include "utils/db_connector.h"
 #include "utils/exc_logs.h"
 
-LuminanceManager::LuminanceManager(ExtraChainNode *node)
+LuminanceManager::LuminanceManager(ExtraChain::Core::ExtraChainNode *node)
     : node(node) {
     this->init_db();
 }
@@ -40,9 +40,12 @@ bool LuminanceManager::init_db() {
         return true;
     }
 
-    // bool is_exists = QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).exists();
-
-    QDir().mkdir(QString::fromStdString(Luminance::FOLDER));
+    std::error_code error;
+    std::filesystem::create_directories(Luminance::FOLDER, error);
+    if (error) {
+        eCritical("[LuminanceManager] Failed to create database directory: {}", error.message());
+        return false;
+    }
 
     std::string db_path = Luminance::DATABASE;
     luminance_db_       = std::make_unique<DbConnector>(db_path);
@@ -66,20 +69,22 @@ bool LuminanceManager::init_db() {
 }
 
 void LuminanceManager::reset_db() {
-    db_initialized_ = false;
-
     {
         std::lock_guard lock(cache_mutex_);
         luminance_cache_.clear();
         cache_loaded_ = false;
     }
 
-    if (db_initialized_) {
+    if (luminance_db_) {
         luminance_db_->close();
-        QFile::remove(QString::fromStdString(Luminance::DATABASE));
     }
-
     luminance_db_.reset();
+    std::error_code error;
+    std::filesystem::remove(Luminance::DATABASE, error);
+    if (error) {
+        eWarning("[LuminanceManager] Failed to remove database: {}", error.message());
+    }
+    db_initialized_ = false;
 }
 
 void LuminanceManager::load_cache() {
@@ -100,7 +105,7 @@ void LuminanceManager::load_cache() {
 
 int LuminanceManager::read_luminance(const NodeId &node_id) {
     // Served from memory: this runs on every inbound network message, and going to
-    // sqlite here took the process-wide db mutex often enough to starve the Qt event
+    // SQLite here took the process-wide database mutex often enough to starve the node
     // loop — periodic timers stopped firing and nodes stopped syncing. See the note on
     // luminance_cache_ in the header.
     auto node_id_str = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);

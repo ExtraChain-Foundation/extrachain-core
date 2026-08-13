@@ -6,505 +6,68 @@
  * it under the terms of the GNU Lesser General Public License as published
  * by the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
 #pragma once
 
-#include <QtNetwork/QNetworkProxy>
-#include <deque>
-#include <chrono>
 #include <memory>
-#include <mutex>
-#include <shared_mutex>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
 
-#include <boost/asio/awaitable.hpp>
+#include <QObject>
+#include <QtNetwork/QNetworkProxy>
 
-#include "adapters/qt/logging_adapter.h"
-#include "adapters/qt/network_status_adapter.h"
-#include "managers/account_controller.h"
-#include "managers/extrachain_node.h"
-#include "network/isocket_service.h"
-#include "network/message_body.h"
-#include "network/network_runtime.h"
-#include "network/network_status.h"
-#include "network/traffic_meter.h"
-#include "network/wire_format.h"
-#include "runtime/deadline_task.h"
-#include "dfs/dfs_utils.h"
-#include "utils/exc_utils.h"
-#include "utils/safeptr.h"
+#include "adapters/qt/qt_compat_global.h"
+#include "network/network_service.h"
 
-class SocketService;
-class WebSocketService;
-using CalculateTraffic = ExtraChain::Core::TrafficMeter;
-
-struct NetworkReconnect {
-    std::string       ip;
-    std::uint16_t     port;
-    Network::Protocol protocol;
-
-    auto operator==(const NetworkReconnect& reconnect) const {
-        return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
-    }
-
-    bool operator<(const NetworkReconnect& other) const {
-        if (ip < other.ip)
-            return true;
-        if (ip == other.ip) {
-            if (port < other.port)
-                return true;
-            if (port == other.port)
-                return protocol < other.protocol;
-        }
-
-        return false;
-    }
-
-    static NetworkReconnect fromWsConnection(const DfsP::WSConnection& wsConnection) {
-        return NetworkReconnect { .ip       = wsConnection.address,
-                                  .port     = static_cast<std::uint16_t>(wsConnection.port),
-                                  .protocol = Network::Protocol::WebSocket };
-    }
-
-    void print() const {
-        eLog("[NetworkReconnect] ip: {}, port: {}", ip, port);
-    }
-};
-
-static const std::string NetworkCacheFile = "tmp/network.cache";
-
-class Responder {
-public:
-    Responder(NetworkManager* manager = nullptr)
-        : network_manager(manager) {
-    }
-
-    Responder(const Responder&) = default;
-
-    template <class T>
-    std::string send_response(const T& data, MessageType type, SendMode send_mode, MessageStatus status) const {
-        if (network_manager == nullptr) {
-            return "";
-        }
-
-        auto data_serialized = MessagePack::serialize(data);
-        auto send_result     = send_response_impl(data_serialized, type, send_mode, status);
-        return send_result;
-    }
-
-    const std::string& message_id() const {
-        return message_id_;
-    }
-
-    const std::string& ip() const {
-        return ip_;
-    }
-
-    const std::unordered_set<std::string>& identifiers() const {
-        return identifiers_;
-    }
-
-    const NodeId& node_id() const {
-        return node_id_;
-    }
-
-    int luminance() const {
-        return luminance_;
-    }
-
-    bool add_identifier(const std::string& identifier) {
-        if (identifier.empty()) {
-            return false;
-        }
-
-        return identifiers_.insert(identifier).second;
-    }
-
-    bool remove_identifier(const std::string& identifier) {
-        if (identifier.empty()) {
-            return false;
-        }
-
-        return identifiers_.erase(identifier) != 0;
-    }
-
-    void set_ip(const std::string& ip) {
-        ip_ = ip;
-    }
-
-    void set_message_id(const std::string& message_id) {
-        message_id_ = message_id;
-    }
-
-    void set_message_type(MessageType type) {
-        message_type_ = type;
-    }
-
-    void set_node_id(const NodeId& node_id) {
-        node_id_ = node_id;
-    }
-
-    void set_luminance(int luminance) {
-        luminance_ = luminance;
-    }
-
-    Responder with_new_message_id() const {
-        Responder responder   = *this;
-        responder.message_id_ = generate_message_id();
-        return responder;
-    }
-
-    bool empty() const {
-        return identifiers_.empty() && message_id_.empty();
-    }
-
-    Responder& operator=(const Responder&) = default;
-
-private:
-    std::string send_response_impl(const std::string& data_serialized,
-                                   MessageType        type,
-                                   SendMode           send_mode,
-                                   MessageStatus      status) const;
-
-    MessageType message_type_;
-    // MessageStatus                   message_status_;
-    std::string                     ip_;
-    std::unordered_set<std::string> identifiers_;
-    std::string                     message_id_;
-    NodeId                          node_id_;
-    int                             luminance_      = 0;
-    NetworkManager*                 network_manager = nullptr;
-};
+class QtNetworkManagerAdapter;
 
 /**
- * @brief The NetworkManager class
- * Creates Discovery, Server and Sockets services
+ * Qt compatibility facade for NetworkService.
+ *
+ * NetworkService owns the network state. This class only keeps the Qt API
+ * used by existing clients.
  */
-class EXTRACHAIN_EXPORT NetworkManager : public QObject, public PeerContext {
+class EXTRACHAIN_QT_EXPORT NetworkManager final : public QObject, public NetworkService {
     Q_OBJECT
 
-private:
-    using CacheTime = std::chrono::steady_clock::time_point;
-
-    enum class PeerSelection {
-        All,
-        LegacyDag
-    };
-
-    struct LiveDagQueueEntry {
-        Transaction transaction;
-        std::size_t serialized_size = 0;
-    };
-
-    struct LiveDagPeerQueue {
-        std::deque<LiveDagQueueEntry> entries;
-        std::size_t                   bytes = 0;
-    };
-
-    bool                                                       active_ = false;
-    std::set<std::string>                                      failed_ips_;
-    std::unordered_map<std::string, std::pair<int, CacheTime>> msg_hash_list_;
-
-    ExtraChainNode*                                           node;
-    std::string                                               local_ip_;
-    ExtraChain::Core::NetworkRuntime*                         network_runtime_ = nullptr;
-    SafePtr<std::set<SocketService::Ptr>>                     connections_;
-    SafePtr<std::map<NetworkReconnect, std::string>>          reconnections_to_identifier_;
-    ExtraChain::Core::NetworkStatus                           network_status_;
-    ExtraChain::Core::NetworkStatus::ChangedEvent::Connection network_status_connection_;
-    std::unique_ptr<QtNetworkStatusAdapter>                   network_status_adapter_;
-
-    struct ReconnEntry {
-        uint64_t     attempts        = 0;
-        std::int64_t next_attempt_ms = 0;
-    };
-    std::map<std::string, ReconnEntry> reconn_;
-
-    SafePtr<std::map<std::string, std::pair<std::string, CacheTime>>>           messages_;
-    std::shared_ptr<ExtraChain::Core::DeadlineTask>                             reconnect_timer_;
-    std::atomic_bool                                                            offline_ { false };
-    std::atomic_bool                                                            first_node_probe_active_ { false };
-    std::shared_ptr<ExtraChain::Core::DeadlineTask>                             clear_network_caches_timer_;
-    std::shared_ptr<ExtraChain::Core::DeadlineTask>                             live_dag_batch_timer_;
-    CalculateTraffic*                                                           calculate_traffic_;
-    SafePtr<std::unordered_map<std::string, std::pair<std::string, CacheTime>>> forwarded_messages_;
-    std::unordered_map<std::string, LiveDagPeerQueue>                           live_dag_peer_queues_;
-    std::mutex                                                                  recent_dag_hashes_mutex_;
-    std::unordered_set<std::string>                                             recent_dag_hashes_;
-    std::deque<std::string>                                                     recent_dag_hash_order_;
-
-    std::string              public_ip_;
-    std::vector<std::string> first_nodes_ =
-#ifdef QT_DEBUG
-        {
-            "57.128.191.73", // test node 1
-            "57.128.191.74", // test node 2
-            "57.128.200.221" // test node 3
-        };
-#else
-        {
-            "51.68.181.52", // release node 1
-            "149.33.19.250" // release node 2
-        };
-#endif
-    std::string first_node_;
-
 public:
-    explicit NetworkManager(ExtraChainNode*                  node,
+    explicit NetworkManager(ExtraChain::Core::ExtraChainNode* node,
                             ExtraChain::Core::NetworkRuntime& runtime,
-                            std::uint16_t                     port);
-    ~NetworkManager();
-    void                        local_inizialization();
-    void                        probe_first_node_candidate(std::size_t index);
-    std::pair<QString, QString> search_public_ip_and_country_(const QString& ip = "", bool alt = false);
-
-    bool remove_one_connection();
-
-    // protected:
-    // std::uint16_t tcp_port = 17593;
-    std::uint16_t ws_port = 17593;
-
-private:
-    void connectWsService(const std::shared_ptr<WebSocketService>& service, bool requestListNodes = false);
-    boost::asio::awaitable<void> connect_websocket(std::string   ip,
-                                                   std::uint16_t port,
-                                                   bool          request_list_nodes,
-                                                   bool          is_constant,
-                                                   bool          is_light);
-
-    void send_message_connections(const std::string& serialized_message,
-                                  const std::string& serialized_message_legacy,
-                                  const MessageBody& non_serialized_message,
-                                  SendMode           send_mode,
-                                  const std::string& receiver_identifier,
-                                  MessageType        message_type   = MessageType::Unknown,
-                                  MessageStatus      status_info    = MessageStatus::NoStatus,
-                                  PeerSelection      peer_selection = PeerSelection::All);
-
-    void queue_live_dag_transaction(const Transaction&                     transaction,
-                                    const std::string&                     source_identifier,
-                                    const std::unordered_set<std::string>& ignored_identifiers);
-    void flush_live_dag_batches();
-    void send_live_dag_batch(const std::string& peer_identifier, DagTransactionBatch batch);
-    void send_live_dag_transaction_to_legacy(const Transaction& transaction);
-    bool remember_live_dag_hash(const std::string& hash);
-    void forget_live_dag_hash(const std::string& hash);
-
-    void clear_network_caches();
-    void schedule_cache_cleanup();
-    void schedule_reconnection(int delay_ms);
-
-    void add_all_services_identifiers_to_message(MessageBody& msg);
-    void refresh_public_ip_and_country(std::string ip = {});
-
-public:
-    bool                                  is_first_node(const std::string& identifier); // detect for safety
-    SafePtr<std::set<SocketService::Ptr>> connections() const;
-
-    // Look up an active connection's peer_meta by its node identifier (the
-    // string carried by Responder). Returns nullopt when the peer is not
-    // currently connected. Response handlers must reject data when metadata is
-    // absent; request handlers may use the legacy format for old peers.
-    std::optional<PeerMeta> peer_meta_for(const std::string& identifier) const;
-    bool                    server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
-    void                    connect_network();
-    bool                    is_own_address(const std::string& ip) const;
+                            std::uint16_t                     port,
+                            QObject*                          parent = nullptr);
+    ~NetworkManager() override;
 
 public slots:
     void remove_connection(const QString& identifier);
-    void check_port(const QString ip, Network::Protocol protocol, const bool request, const bool isConstant);
     void connect_to_endpoint(const QString& ip,
-                             quint16        port,
-                             bool           requestListNodes = false,
-                             bool           isConstant       = false,
-                             bool           is_light         = false);
-
-signals:
-    void finished(); // ThreadPool
-    void connect_to_node(const QString&    ip,
-                         Network::Protocol protocol,
-                         const bool        request    = false,
-                         const bool        isConstant = false,
-                         const bool        is_light   = false);
-
-protected:
-    void connect_to_websocket(const QString& ip,
-                              quint16        port,
-                              bool           requestListNodes = false,
-                              const bool     isConstant       = false,
-                              const bool     is_light         = false);
-
-    /**
-     * @brief NetworkManager::check_message_count
-     * @param msg
-     * @return
-     */
-    bool check_message_count(const std::string& msg);
-
-public:
-    size_t msg_hash_list_size() const {
-        return msg_hash_list_.size();
-    }
-    size_t messages_size() {
-        return messages_->size();
-    }
-    size_t forwarded_messages_size() {
-        return forwarded_messages_->size();
-    }
-    size_t connections_size() {
-        return connections_->size();
-    }
-
-protected slots:
-    virtual void check_connections_status();
-    void         start_discovery();
-
-public slots:
-    void start_network();
-    // Permanent offline for a revoked client: closes every socket, stops the
-    // reconnect timer and refuses any new connections until process exit.
-    void go_offline();
-    void connect_to_node_slot(const QString&    ip,
-                              Network::Protocol protocol,
-                              const bool        request    = false,
-                              bool              isConstant = false,
-                              const bool        is_light   = false);
-    void process();
-    void reconnection();
+                             std::uint16_t  port,
+                             bool           request_list_nodes = false,
+                             bool           is_constant        = false,
+                             bool           is_light           = false);
     void setup_proxy(QNetworkProxy::ProxyType type,
-                     const QString&           hostName,
-                     quint16                  port,
+                     const QString&           host_name,
+                     std::uint16_t            port,
                      const QString&           user,
                      const QString&           password);
 
-private:
-    void remove_socket_connection(SocketService::Ptr connection);
-    void socket_error(Network::SocketServiceError error,
-                      std::string                 error_data,
-                      std::string                 ip,
-                      std::string                 identifier,
-                      SocketDirection             direction);
-
-public:
-    QString local_ip(); // TODO: remove
-
-    void        initialize_first_node();
-    std::string first_node();
-    bool        save_first_node(const std::string_view first_node);
-
-    void send_broadcast_message_further(const NetworkPackageStorage& package_data, bool legacy_dag_only = false);
-
-    void                     save_to_cache(const std::string& serialized_message,
-                                           SendMode           send_mode,
-                                           const std::string& receiver_identifier);
-    void                     send_from_cache();
-    bool                     is_connection_exists(const std::string& identifier);
-    bool                     is_active_connection_exists();
-    int                      active_connections_count();
-    int                      max_connections() const;
-    std::vector<std::string> active_connection_identifiers() const;
-    qint64                   connection_pending_bytes(const std::string& identifier) const;
-
-    void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
-
-    QString found_current_identifier(QString ip, quint16 port);
-
-    bool        send_message_checker(MessageType      type,
-                                     SendMode         send_mode,
-                                     MessageStatus    status,
-                                     const Responder& responder);
-    std::string send_message_send(const std::string& data_serialized,
-                                  const std::string& data_serialized_legacy,
-                                  MessageType        type,
-                                  SendMode           send_mode,
-                                  MessageStatus      status,
-                                  const Responder&   responder);
-    bool        needs_legacy_payload(SendMode send_mode, const Responder& responder) const;
-
-    // Backward-compat overload for Responder::send_response in message_body.cpp.
-    std::string send_message_send(const std::string& data_serialized,
-                                  MessageType        type,
-                                  SendMode           send_mode,
-                                  MessageStatus      status,
-                                  const Responder&   responder) {
-        return send_message_send(data_serialized, {}, type, send_mode, status, responder);
-    }
-
-    template <class T>
-    std::string send_message(const T&         data,
-                             MessageType      type,
-                             SendMode         send_mode,
-                             MessageStatus    status    = MessageStatus::NoStatus,
-                             const Responder& responder = Responder(nullptr)) {
-        bool check = send_message_checker(type, send_mode, status, responder);
-        if (!check) {
-            return "";
-        }
-
-        // Serialize the payload in the current wire format (see WireFormat::wire()).
-        // Forced via an explicit scope so it never depends on whatever ambient
-        // scope a receive handler may have left active on this thread.
-        std::string data_serialized;
-        {
-            WireFormat::Scope scope(WireFormat::wire());
-            data_serialized = MessagePack::serialize(data);
-        }
-        // TEMPORARY 0.26 legacy compat: hex variant for pre-0.26 peers, picked
-        // per-peer by send_message_connections. Drop with the wire() shim.
-        std::string data_serialized_legacy;
-        if (needs_legacy_payload(send_mode, responder)) {
-            WireFormat::Scope scope(WireFormat::Mode::Legacy);
-            data_serialized_legacy = MessagePack::serialize(data);
-        }
-        auto message_id =
-            send_message_send(data_serialized, data_serialized_legacy, type, send_mode, status, responder);
-        return message_id;
-    }
-
-    template <class T>
-    std::string send_broadcast(const T& data, MessageType type, MessageStatus status = MessageStatus::NoStatus) {
-        auto message_id = send_message(data, type, SendMode::Broadcast, status);
-        return message_id;
-    }
-
-    SafePtr<std::map<NetworkReconnect, std::string>> reconnections();
-
-    CalculateTraffic* calculate_traffic() const;
-    std::string public_ip() const;
-    void        set_public_ip(const std::string& newPublic_ip);
-
-    [[nodiscard]] ActorId     local_network_id() const override;
-    void                      adopt_network_id(const ActorId& network_id) override;
-    [[nodiscard]] std::string local_node_identifier() const override;
-    [[nodiscard]] DfsMode     local_dfs_mode() const override;
-    [[nodiscard]] bool has_active_duplicate(std::string_view identifier, const SocketService* candidate) override;
-    [[nodiscard]] int  active_peer_count() const override;
-    [[nodiscard]] int  peer_limit() const override;
-    [[nodiscard]] std::set<PeerConnection> shareable_peers(std::string_view remote_ip) const override;
-    void peer_authenticated(std::string_view identifier, std::string_view public_ip) override;
-    [[nodiscard]] std::uint16_t local_server_port() const override;
-    [[nodiscard]] bool          peer_processing_enabled() const override;
+    [[nodiscard]] QString                     local_ip();
+    [[nodiscard]] std::pair<QString, QString> search_public_ip_and_country_(const QString& ip  = {},
+                                                                            bool           alt = false);
 
 signals:
+    void finished();
+    void connect_to_node(const QString&    ip,
+                         Network::Protocol protocol,
+                         bool              request     = false,
+                         bool              is_constant = false,
+                         bool              is_light    = false);
     void newSocketActivated();
-    void newSocketActivatedWithParams(const std::string ip, const std::string identifier);
+    void newSocketActivatedWithParams(std::string ip, std::string identifier);
     void connectionStatusChanged(bool status);
-    void connectionsCountChanged(int socketsCount);
-    void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);
+    void connectionsCountChanged(int sockets_count);
+    void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString error_data);
     void messageCountReceived(SectionId count);
-    void customMessageReceived(const NetworkPackageStorage packageData, const CustomMessage customPackage);
-    void messageReceivedSignal(const std::string& message, const std::string& ip, const std::string& identifier);
+    void customMessageReceived(NetworkPackageStorage package_data, CustomMessage custom_package);
+
+private:
+    std::unique_ptr<QtNetworkManagerAdapter> adapter_;
 };

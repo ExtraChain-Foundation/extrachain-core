@@ -15,14 +15,14 @@
 
 #include "contracts/contract_manager.h"
 
-class DfsController;
+class DfsService;
 class Dag;
 
 namespace ExtraChain::Contracts {
 
     class EXTRACHAIN_EXPORT DfsContractStorage final : public ContractStorage {
     public:
-        DfsContractStorage(DfsController *dfs, Dag *dag);
+        DfsContractStorage(DfsService *dfs, Dag *dag);
 
         [[nodiscard]] std::expected<ContractRecord, ContractFailure> load(
             std::string_view contract_id) const override;
@@ -38,7 +38,7 @@ namespace ExtraChain::Contracts {
     private:
         [[nodiscard]] std::expected<void, ContractFailure> stage_artifacts(const ContractRecord &record) const;
 
-        DfsController                                          *dfs_ = nullptr;
+        DfsService                                             *dfs_ = nullptr;
         Dag                                                    *dag_ = nullptr;
         mutable std::mutex                                      mutex_;
         mutable std::unordered_map<std::string, ContractRecord> heads_;

@@ -8,7 +8,7 @@
  * (at your option) any later version.
  *
  * Single public header — include only this file.
- * All functions are thread-safe (dispatched to the Qt event loop internally).
+ * All functions are thread-safe. Stateful work uses the Core serial executor.
  * Strings returned by exc_* functions must be freed via exc_string_free().
  * Handles must be freed via the matching exc_*_free() or exc_handle_free().
  */
@@ -39,22 +39,20 @@ extern "C" {
  * ════════════════════════════════════════════════════════════════════ */
 
 /*
- * Initialise the node on a background thread.
- * Creates QCoreApplication and starts the Qt event loop internally.
+ * Initialise the node and start the internal Boost.Asio runtime.
  * ws_port: WebSocket listen port (0 = default 17593).
  * Returns EXC_OK or EXC_ERR_ALREADY_INITIALIZED.
  */
 EXC_API ExcError exc_init(int argc, char** argv, uint16_t ws_port);
 
 /*
- * Initialise the node but do NOT start the event loop.
- * The caller must call exc_run() on the main thread afterwards.
- * Useful on macOS where the main thread must own the run loop.
+ * Initialise the node for a blocking host run loop.
+ * The caller must call exc_run() afterwards.
  */
 EXC_API ExcError exc_init_main_thread(int argc, char** argv, uint16_t ws_port);
 
 /*
- * Blocking: run the Qt event loop on the calling thread.
+ * Block the calling thread until exc_shutdown() is called.
  * Only valid after exc_init_main_thread(). Returns after exc_shutdown().
  */
 EXC_API ExcError exc_run(void);
@@ -80,7 +78,8 @@ EXC_API ExcError exc_login_hash(const char* hash);
 /* Logout the current profile. */
 EXC_API ExcError exc_logout(void);
 
-/* Gracefully shut down the node and free resources. */
+/* Gracefully shut down the node and free resources.
+ * A call from an event callback schedules cleanup after that callback returns. */
 EXC_API ExcError exc_shutdown(void);
 
 /* Delete all local data (blockchain, DFS, profiles). */
@@ -496,10 +495,12 @@ EXC_API ExcError exc_contract_upgrade(const char*    contract_id,
 /* Return identity, version, revision, and current hashes as JSON. */
 EXC_API ExcError exc_contract_inspect(const char* contract_id, char** out_json);
 
-/* Return the trusted contract component catalog as JSON. Desktop use only. */
+/* Contract Studio is part of the desktop Qt adapter. This call returns
+ * EXC_ERR_CONTRACT_DEVELOPMENT_UNAVAILABLE in the Qt-free C library. */
 EXC_API ExcError exc_contract_components(char** out_json);
 
-/* Generate Rust source from a JSON array of component IDs. Desktop use only. */
+/* Contract Studio is part of the desktop Qt adapter. This call returns
+ * EXC_ERR_CONTRACT_DEVELOPMENT_UNAVAILABLE in the Qt-free C library. */
 EXC_API ExcError exc_contract_compose(const char* project_name, const char* component_ids_json, char** out_source);
 
 /* ════════════════════════════════════════════════════════════════════

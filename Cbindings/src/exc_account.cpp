@@ -4,9 +4,9 @@
 
 #include "exc_internal.h"
 
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "managers/account_controller.h"
-#include "network/network_manager.h"
+#include "network/network_service.h"
 #include "chain/private_profile.h"
 #include "encryption/encryption_tools.h"
 #include "utils/exc_utils.h"

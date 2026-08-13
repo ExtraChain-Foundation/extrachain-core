@@ -19,14 +19,23 @@
 
 #include "managers/account_controller.h"
 
-#include <QJsonArray>
+#include <boost/json.hpp>
+#include <filesystem>
 
-#include "managers/extrachain_node.h"
-#include "dfs/dfs_controller.h"
+#include "core/extrachain_node.h"
+#include "dfs/dfs_service.h"
+#include "utils/file_io.h"
 
-AccountController::AccountController(ExtraChainNode *node)
-    : QObject(node)
-    , node(node) {
+namespace {
+    void log_actor_save_failure(const std::expected<void, ActorSaveError> &result, const ActorId &actor_id) {
+        if (!result.has_value() && result.error() != ActorSaveError::AlreadyExists) {
+            eWarning("[Accounts] Cannot save actor {}: error {}", actor_id, static_cast<int>(result.error()));
+        }
+    }
+} // namespace
+
+AccountController::AccountController(ExtraChain::Core::ExtraChainNode *node)
+    : node(node) {
 }
 
 SeedProfile AccountController::create_profile(const std::string               &hash,
@@ -52,22 +61,24 @@ SeedProfile AccountController::create_profile(const std::string               &h
     auto profile = PrivateProfile::create(system_actor, main_actor, hash, node);
     profiles_.push_back(profile);
     current_profile_ = system_actor.id();
-    node->actor_index()->store_new_actor(system_actor.to_public());
-    node->actor_index()->store_new_actor(main_actor.to_public());
+    log_actor_save_failure(node->actor_index()->store_new_actor(system_actor.to_public()), system_actor.id());
+    log_actor_save_failure(node->actor_index()->store_new_actor(main_actor.to_public()), main_actor.id());
     insert_to_profile_set(system_actor.id());
     autologin_hash.save(hash); // TODO: add arg
 
     SeedProfile profile_seed;
     profile_seed.set(seed);
     profile_seed.generate();
-    profile_seed.save(hash);
+    if (!profile_seed.save(hash).has_value()) {
+        eCritical("[Accounts] Cannot save seed profile {}", system_actor.id());
+    }
     this->profile_seed = profile_seed;
 
     // chat_main is in seed_profile.actors()[2]; add to profile.actors_ for DFS lookup.
     if (profile_seed.actors().size() > 2) {
         const auto &chat_main = profile_seed.actors()[2];
         this->profile(current_profile_).add_wallet(chat_main, false);
-        node->actor_index()->store_new_actor(chat_main.to_public());
+        log_actor_save_failure(node->actor_index()->store_new_actor(chat_main.to_public()), chat_main.id());
         eLog("[Accounts] chat_main registered: {}", chat_main.id());
     }
 
@@ -97,7 +108,7 @@ Actor<KeyPrivate> AccountController::create_wallet(const ActorId &profileActor, 
         profile.rename_wallet(actor.id(), wallet_name);
     }
 
-    node->actor_index()->store_new_actor(actor.to_public());
+    log_actor_save_failure(node->actor_index()->store_new_actor(actor.to_public()), actor.id());
     return actor;
 }
 
@@ -110,7 +121,7 @@ Actor<KeyPrivate> AccountController::create_service(const ActorId               
         actor.create(ActorType::Service);
     auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
     profile.add_wallet(actor);
-    node->actor_index()->store_new_actor(actor.to_public());
+    log_actor_save_failure(node->actor_index()->store_new_actor(actor.to_public()), actor.id());
     return actor;
 }
 
@@ -124,7 +135,7 @@ Actor<KeyPrivate> AccountController::create_actor(const ActorId &profileActor, i
 
     auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
     profile.add_wallet(actor, false);
-    node->actor_index()->store_new_actor(actor.to_public());
+    log_actor_save_failure(node->actor_index()->store_new_actor(actor.to_public()), actor.id());
     return actor;
 }
 
@@ -142,7 +153,7 @@ Actor<KeyPrivate> AccountController::create_actor(const ActorId     &profileActo
     profile.add_wallet(actor, false);
 
     if (!node->actor_index()->exists(actor.id())) {
-        node->actor_index()->store_new_actor(actor.to_public());
+        log_actor_save_failure(node->actor_index()->store_new_actor(actor.to_public()), actor.id());
     }
     return actor;
 }
@@ -202,10 +213,10 @@ void AccountController::import_old_profile(const ImportedUser &imported_profile,
     Actor<KeyPrivate> actor   = profile.system();
 
     for (const auto &actor : profile.actors()) {
-        node->actor_index()->save_actor(actor.to_public());
+        log_actor_save_failure(node->actor_index()->save_actor(actor.to_public()), actor.id());
     }
     for (const auto &actor : profile.imports()) {
-        node->actor_index()->save_actor(actor.to_public());
+        log_actor_save_failure(node->actor_index()->save_actor(actor.to_public()), actor.id());
     }
 
     insert_to_profile_set(actor.id());
@@ -285,8 +296,8 @@ bool AccountController::load_profile(const ActorId                &actor_id,
     if (profile.loaded()) {
         const auto &actors = profile.actors();
         for (auto &actor : actors) {
-            if (node->actor_index()->read_by_id(actor.id()).isEmpty()) {
-                node->actor_index()->save_actor(actor.to_public());
+            if (node->actor_index()->read_by_id(actor.id()).empty()) {
+                log_actor_save_failure(node->actor_index()->save_actor(actor.to_public()), actor.id());
             }
 
             node->dfs()->add_priority_actor(actor.id());
@@ -308,7 +319,8 @@ bool AccountController::load_profile(const ActorId                &actor_id,
                 const auto &chat_main = try_new->actors()[2];
                 profile.add_wallet(chat_main, false);
                 if (!node->actor_index()->exists(chat_main.id())) {
-                    node->actor_index()->store_new_actor(chat_main.to_public());
+                    log_actor_save_failure(node->actor_index()->store_new_actor(chat_main.to_public()),
+                                           chat_main.id());
                 }
                 eLog("[Accounts] chat_main registered (load): {}", chat_main.id());
             }
@@ -390,9 +402,7 @@ const PrivateProfile &AccountController::current_profile() const {
     }
 
     eFatal("Can't find actor");
-    QCoreApplication::exit(-123);
-
-    return profiles_.front();
+    throw std::logic_error("Current profile is not loaded");
 }
 
 int AccountController::count() const {
@@ -434,46 +444,44 @@ void AccountController::clear() {
 }
 
 std::set<ActorId> AccountController::profiles_list() {
-    QString file_name = QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles);
-    QFile   file(file_name);
-    if (!file.exists())
-        return {};
-
-    if (!file.open(QFile::ReadOnly)) {
-        eWarning("Failed to open file: {}. Error: {}", file_name, file.errorString());
+    const auto file_name = std::filesystem::path(Profiles::folder) / Profiles::profiles;
+    const auto content   = FileIo::read_all(file_name);
+    if (!content.has_value()) {
         return {};
     }
-
-    auto json_bytes    = file.readAll();
-    auto profiles_json = QJsonDocument::fromJson(json_bytes).array();
-
-    std::set<ActorId> profiles;
-
-    for (auto actor_id : profiles_json) {
-        profiles.insert(ActorId(actor_id.toString().toStdString()));
+    std::set<ActorId>         profiles;
+    boost::system::error_code error;
+    const auto                parsed = boost::json::parse(*content, error);
+    if (error || !parsed.is_array()) {
+        eWarning("Failed to parse profile index: {}", error.message());
+        return {};
     }
-
+    for (const auto &actor_id : parsed.as_array()) {
+        if (actor_id.is_string()) {
+            profiles.emplace(std::string(actor_id.as_string()));
+        }
+    }
     return profiles;
 }
 
 void AccountController::insert_to_profile_set(const ActorId &actorId) {
     auto profiles = profiles_list();
     profiles.insert(actorId);
-    QJsonArray array;
-    for (auto &actorId : profiles) {
-        array.push_back(QString::fromStdString(actorId.to_string()));
+    boost::json::array array;
+    array.reserve(profiles.size());
+    for (const auto &profile_id : profiles) {
+        array.emplace_back(profile_id.to_string());
     }
-    auto json = QJsonDocument(array).toJson(QJsonDocument::Compact);
-
-    QString file_name = QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles);
-    QFile   file(file_name);
-    if (!file.open(QFile::WriteOnly)) {
-        eWarning("Failed to open file: {}. Error: {}", file_name, file.errorString());
+    const auto      folder = std::filesystem::path(Profiles::folder);
+    std::error_code directory_error;
+    std::filesystem::create_directories(folder, directory_error);
+    if (directory_error) {
+        eWarning("Failed to create profile folder: {}", directory_error.message());
         return;
     }
-
-    file.write(json);
-    file.close();
+    if (!FileIo::write_atomic(folder / Profiles::profiles, boost::json::serialize(array)).has_value()) {
+        eWarning("Failed to write profile index");
+    }
 }
 
 std::vector<std::string> AccountController::seed_mnemonic() {
@@ -579,5 +587,9 @@ void AccountController::dogenerate() {
         profile(current_profile_).add_wallet(actor, false);
     }
 
-    emit this->dogenerated();
+    generated_event_.publish();
+}
+
+ExtraChain::Core::Event<> &AccountController::generated_event() noexcept {
+    return generated_event_;
 }

@@ -21,13 +21,12 @@
 #include "chain/dag.h"
 #include "dfs/dfs_utils.h"
 #include "managers/account_controller.h"
-#include "dfs/dfs_controller.h"
-#include "network/network_manager.h"
+#include "dfs/dfs_service.h"
+#include "network/network_service.h"
 #include "utils/bignumber_float.h"
 
-DataMiningManager::DataMiningManager(ExtraChainNode *node, QObject *parent)
-    : QObject(parent) {
-    this->node = node;
+DataMiningManager::DataMiningManager(ExtraChain::Core::ExtraChainNode *node)
+    : node(node) {
 }
 
 BigNumberFloat DataMiningManager::calculate_coins(BigNumberFloat data_amount_stored,
@@ -68,7 +67,7 @@ void DataMiningManager::request_reward() {
         return;
     }
 
-#if !defined(QT_DEBUG) && !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
+#if defined(NDEBUG) && !defined(__ANDROID__) && !defined(__APPLE__)
     if (node->dag()->mode() == DagMode::Light && node->dfs()->mode() != DfsMode::Full
         && koef_to_koef_ == BigNumberFloat(1)) {
         return;

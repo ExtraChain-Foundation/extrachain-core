@@ -8,7 +8,7 @@
  * (at your option) any later version.
  */
 
-#include "contracts/toolchain_registry.h"
+#include "adapters/qt/toolchain_installer.h"
 
 #include <algorithm>
 #include <array>
@@ -32,7 +32,7 @@
 #include <QTemporaryDir>
 
 #include "extrachain_version.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "utils/exc_utils.h"
 
 namespace ExtraChain::Contracts {
@@ -347,12 +347,14 @@ namespace ExtraChain::Contracts {
         }
     } // namespace
 
-    ToolchainInstaller::ToolchainInstaller(ExtraChainNode* node, QString root_path)
+    ToolchainInstaller::ToolchainInstaller(ExtraChain::Core::ExtraChainNode* node, QString root_path)
         : node_(node)
         , root_path_(std::move(root_path)) {
     }
 
-    ToolchainInstaller::ToolchainInstaller(ExtraChainNode* node, QString root_path, ToolchainLanguage language)
+    ToolchainInstaller::ToolchainInstaller(ExtraChain::Core::ExtraChainNode* node,
+                                           QString                           root_path,
+                                           ToolchainLanguage                 language)
         : node_(node)
         , root_path_(language == ToolchainLanguage::Rust
                          ? std::move(root_path)

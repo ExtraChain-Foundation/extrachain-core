@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <type_traits>
 
 #include <QCoreApplication>
 
@@ -7,7 +8,9 @@
 #include "adapters/qt/bignumber_adapter.h"
 #include "adapters/qt/byte_array_adapter.h"
 #include "adapters/qt/logging_adapter.h"
+#include "dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
+#include "network/network_manager.h"
 #include "utils/variant_model.h"
 
 namespace {
@@ -20,6 +23,11 @@ namespace {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    static_assert(!std::is_base_of_v<QObject, DfsService>);
+    static_assert(std::is_base_of_v<QObject, DfsController>);
+    static_assert(std::is_base_of_v<DfsService, DfsController>);
+    static_assert(std::is_base_of_v<ResponseSender, NetworkManager>);
+
     QCoreApplication app(argc, argv);
 
     const ActorId actor_id("abc");

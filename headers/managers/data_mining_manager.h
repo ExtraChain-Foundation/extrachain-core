@@ -20,20 +20,16 @@
 #pragma once
 
 #include <string>
-#include <QObject>
-
-#include "dfs/dfs_controller.h"
+#include "dfs/dfs_service.h"
 #include "utils/bignumber_float.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "dfs/dfs_utils.h"
 
 static const int MINING_TIMER_TICK = 60000;
 
-class DataMiningManager : public QObject {
-    Q_OBJECT
-
+class DataMiningManager {
 public:
-    DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);
+    explicit DataMiningManager(ExtraChain::Core::ExtraChainNode *node);
 
     /**
      * @brief calculate_coins
@@ -79,7 +75,7 @@ private:
     const BigNumberFloat koef_reward_dag_     = BigNumberFloat("0.0063"); // 0.0063 - dfs + dag
     const BigNumberFloat koef_reward_         = BigNumberFloat("0.000015");
     BigNumberFloat       koef_to_koef_        = BigNumberFloat(1);
-    ExtraChainNode      *node;
+    ExtraChain::Core::ExtraChainNode *node;
 
     std::unordered_map<ActorId, std::unordered_map<std::string, std::uint64_t>> last_reward_;
 };

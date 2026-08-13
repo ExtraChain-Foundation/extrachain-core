@@ -36,7 +36,8 @@ enum class SqlCreateError {
     ReservedKeyword,
     InvalidValue,
     SqlInjectionRisk,
-    AutoincrementNotInteger
+    AutoincrementNotInteger,
+    ExecutionFailed
 };
 
 enum class SqlAutoincrement {

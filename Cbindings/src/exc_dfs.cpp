@@ -4,9 +4,9 @@
 
 #include "exc_internal.h"
 
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 #include "managers/account_controller.h"
-#include "dfs/dfs_controller.h"
+#include "dfs/dfs_service.h"
 #include "utils/exc_utils.h"
 #include "utils/fs_path.h"
 

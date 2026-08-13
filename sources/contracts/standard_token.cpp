@@ -11,20 +11,25 @@
 #include "contracts/standard_token.h"
 
 #include <array>
-
-#include <QFile>
+#include <span>
 
 #include "contracts/contract_hash.h"
+#include "contracts/embedded_contracts.h"
 
 namespace ExtraChain::Contracts {
     namespace {
-        std::string resource_name(std::string_view kind, ToolchainLanguage language) {
-            const auto suffix = language == ToolchainLanguage::AssemblyScript ? "assemblyscript" : "rust";
-            if (kind == FungibleTokenKind) {
-                return ":/contracts/fungible_token_" + std::string(suffix) + ".wasm";
+        std::span<const std::uint8_t> embedded_module(std::string_view kind, ToolchainLanguage language) {
+            if (kind == FungibleTokenKind && language == ToolchainLanguage::Rust) {
+                return Embedded::fungible_token_rust;
             }
-            if (kind == NonFungibleTokenKind) {
-                return ":/contracts/non_fungible_token_" + std::string(suffix) + ".wasm";
+            if (kind == FungibleTokenKind && language == ToolchainLanguage::AssemblyScript) {
+                return Embedded::fungible_token_assemblyscript;
+            }
+            if (kind == NonFungibleTokenKind && language == ToolchainLanguage::Rust) {
+                return Embedded::non_fungible_token_rust;
+            }
+            if (kind == NonFungibleTokenKind && language == ToolchainLanguage::AssemblyScript) {
+                return Embedded::non_fungible_token_assemblyscript;
             }
             return {};
         }
@@ -36,16 +41,11 @@ namespace ExtraChain::Contracts {
 
     std::expected<std::vector<std::uint8_t>, std::string> standard_token_module(std::string_view  kind,
                                                                                 ToolchainLanguage language) {
-        const auto name = resource_name(kind, language);
-        if (name.empty()) {
+        const auto module = embedded_module(kind, language);
+        if (module.empty()) {
             return std::unexpected("Token kind is not supported");
         }
-        QFile file(QString::fromStdString(name));
-        if (!file.open(QIODevice::ReadOnly)) {
-            return std::unexpected("Standard token module is not available");
-        }
-        const auto bytes = file.readAll();
-        return std::vector<std::uint8_t>(bytes.begin(), bytes.end());
+        return std::vector<std::uint8_t>(module.begin(), module.end());
     }
 
     bool is_standard_token_module(std::string_view kind, std::string_view module_hash) {

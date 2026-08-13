@@ -22,13 +22,14 @@
 #include <string>
 #include <expected>
 
-#include <QObject>
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
-#include "network/network_manager.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 class LoadManager;
+class Responder;
 
 enum class DirsError {
     FileSystemError,
@@ -36,10 +37,9 @@ enum class DirsError {
     DownloadManagerError
 };
 
-class DirsManager : public QObject {
-    Q_OBJECT
+class DirsManager {
 public:
-    DirsManager(ExtraChainNode* node);
+    DirsManager(ExtraChain::Core::ExtraChainNode* node);
     ~DirsManager();
 
     void update_dirs(const ActorId& actor_id, std::uint64_t last_modified);
@@ -65,13 +65,9 @@ public:
 
     std::shared_ptr<DbConnector> get_db_instance();
 
-signals:
-    void convertion_started();
-    void convertion_finished();
-
 private:
     void old_dfs_to_new_dfs_converter();
 
     std::shared_ptr<DbConnector> db_;
-    ExtraChainNode*              node;
+    ExtraChain::Core::ExtraChainNode* node;
 };

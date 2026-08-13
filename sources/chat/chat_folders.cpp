@@ -20,9 +20,9 @@
 #include "chat/chat_folders.h"
 
 #include "chat/chat_manager.h"
-#include "dfs/dfs_controller.h"
+#include "dfs/dfs_service.h"
 #include "encryption/encryption_tools.h"
-#include "managers/extrachain_node.h"
+#include "core/extrachain_node.h"
 
 ChatFolders::ChatFolders(ChatManager* owner)
     : owner_(owner) {

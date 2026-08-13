@@ -19,40 +19,60 @@
 
 #include "dfs/load_manager.h"
 
-#include "managers/extrachain_node.h"
-#include "network/network_manager.h"
-#include "dfs/dfs_controller.h"
+#include "core/extrachain_node.h"
+#include "network/network_service.h"
+#include "dfs/dfs_service.h"
 #include "utils/exc_logs.h"
 #include "dfs/dfs_utils.h"
 
 #include "utils/thread_pool_boost.h"
+#include "runtime/deadline_task.h"
 
-#include <QMetaObject>
-#include <QThread>
-#include <QTimer>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/post.hpp>
 #include <algorithm>
 #include <optional>
 
-static constexpr qint64 DFS_QUEUE_HIGH_WATER = 4 * 1024 * 1024;
-static constexpr qint64 DFS_QUEUE_LOW_WATER  = 2 * 1024 * 1024;
+static constexpr std::size_t DFS_QUEUE_HIGH_WATER = 4 * 1024 * 1024;
+static constexpr std::size_t DFS_QUEUE_LOW_WATER  = 2 * 1024 * 1024;
 
-LoadManager::LoadManager(ExtraChainNode* node, QObject* parent)
-    : QObject(parent)
-    , node(node) {
-    m_timer = new QTimer(this);
-    m_timer->setSingleShot(true);
-    connect(m_timer, &QTimer::timeout, this, [this]() {
-        timer_runner();
-        schedule_watchdog();
-    });
-    connect(node, &ExtraChainNode::runtimeActivityChanged, this, [this](RuntimeActivity activity) {
-        if (activity == RuntimeActivity::Background) {
-            m_timer->stop();
+LoadManager::LoadManager(ExtraChain::Core::ExtraChainNode* node)
+    : node(node) {
+    watchdog_            = ExtraChain::Core::DeadlineTask::create(node->serial_executor(), [this]() {
+        if (stopping_.load(std::memory_order_acquire)) {
             return;
         }
         timer_runner();
         schedule_watchdog();
     });
+    activity_connection_ = node->runtime_activity_event().subscribe([this](RuntimeActivity activity) {
+        boost::asio::dispatch(this->node->serial_executor(), [this, activity] {
+            if (stopping_.load(std::memory_order_acquire)) {
+                return;
+            }
+            if (activity == RuntimeActivity::Background) {
+                watchdog_->cancel();
+                return;
+            }
+            timer_runner();
+            schedule_watchdog();
+        });
+    });
+}
+
+LoadManager::~LoadManager() {
+    stop();
+}
+
+void LoadManager::stop() {
+    if (stopping_.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+    activity_connection_.disconnect();
+    if (watchdog_) {
+        watchdog_->cancel();
+        watchdog_.reset();
+    }
 }
 
 std::size_t LoadManager::max_concurrent_downloads() const {
@@ -65,28 +85,24 @@ std::size_t LoadManager::max_forced_downloads() const {
 }
 
 void LoadManager::schedule_watchdog() {
-    if (QThread::currentThread() != thread()) {
-        QMetaObject::invokeMethod(
-            this,
-            [this]() {
-                schedule_watchdog();
-            },
-            Qt::QueuedConnection);
-        return;
-    }
+    boost::asio::dispatch(node->serial_executor(), [this] {
+        if (stopping_.load(std::memory_order_acquire) || node->runtime_activity() == RuntimeActivity::Background
+            || max_concurrent_downloads() == 0
+            || (m_active_downloads->empty() && m_active_downloads_priority->empty())) {
+            watchdog_->cancel();
+            return;
+        }
 
-    if (node->runtime_activity() == RuntimeActivity::Background || max_concurrent_downloads() == 0
-        || (m_active_downloads->empty() && m_active_downloads_priority->empty())) {
-        m_timer->stop();
-        return;
-    }
-
-    if (!m_timer->isActive()) {
-        m_timer->start(5000);
-    }
+        if (!watchdog_->active()) {
+            watchdog_->schedule_after(std::chrono::seconds(5));
+        }
+    });
 }
 
 void LoadManager::kick(const Dfs::FileLink& file_link_to_proceed) {
+    if (stopping_.load(std::memory_order_acquire)) {
+        return;
+    }
     {
         std::lock_guard lock(pending_kicks_mutex_);
         if (file_link_to_proceed.file_id.empty()) {
@@ -100,43 +116,44 @@ void LoadManager::kick(const Dfs::FileLink& file_link_to_proceed) {
     if (kick_pending_.exchange(true)) {
         return;
     }
-    QMetaObject::invokeMethod(
-        this,
-        [this] {
-            bool                         run_full = false;
-            std::optional<Dfs::FileLink> targeted;
-            {
-                std::lock_guard lock(pending_kicks_mutex_);
-                run_full = full_kick_pending_ || pending_file_kicks_.size() != 1;
-                if (!run_full) {
-                    targeted = *pending_file_kicks_.begin();
-                }
-                full_kick_pending_ = false;
-                pending_file_kicks_.clear();
+    boost::asio::post(node->serial_executor(), [this] {
+        if (stopping_.load(std::memory_order_acquire)) {
+            kick_pending_.store(false, std::memory_order_release);
+            return;
+        }
+        bool                         run_full = false;
+        std::optional<Dfs::FileLink> targeted;
+        {
+            std::lock_guard lock(pending_kicks_mutex_);
+            run_full = full_kick_pending_ || pending_file_kicks_.size() != 1;
+            if (!run_full) {
+                targeted = *pending_file_kicks_.begin();
             }
-            kick_pending_.store(false);
-            if (!m_timer->isActive()) {
-                m_timer->start(5000);
-            }
-            if (run_full) {
-                timer_runner();
-            } else {
-                timer_runner(*targeted);
-            }
+            full_kick_pending_ = false;
+            pending_file_kicks_.clear();
+        }
+        kick_pending_.store(false);
+        if (!watchdog_->active()) {
+            watchdog_->schedule_after(std::chrono::seconds(5));
+        }
+        if (run_full) {
+            timer_runner();
+        } else {
+            timer_runner(*targeted);
+        }
 
-            // A producer can enqueue work after the pending set was drained
-            // but before kick_pending_ became false. Recheck after the pass so
-            // that this narrow race cannot leave a refill without a Qt event.
-            bool rerun = false;
-            {
-                std::lock_guard lock(pending_kicks_mutex_);
-                rerun = full_kick_pending_ || !pending_file_kicks_.empty();
-            }
-            if (rerun && !kick_pending_.load()) {
-                kick();
-            }
-        },
-        Qt::QueuedConnection);
+        // A producer can enqueue work after the pending set was drained
+        // but before kick_pending_ became false. Recheck after the pass so
+        // that this narrow race cannot leave a refill without a scheduler event.
+        bool rerun = false;
+        {
+            std::lock_guard lock(pending_kicks_mutex_);
+            rerun = full_kick_pending_ || !pending_file_kicks_.empty();
+        }
+        if (rerun && !kick_pending_.load()) {
+            kick();
+        }
+    });
 }
 
 bool LoadManager::compute_vectors_waiting() {
@@ -150,7 +167,7 @@ bool LoadManager::compute_vectors_waiting() {
     auto has_fresh = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& pool) {
         auto locked = *pool;
         for (const auto& [link, info] : *locked) {
-            if (node->dfs()->download_rank(link.owner_id, info.dir_row) > DfsController::RANK_OTHER_VECTORS) {
+            if (node->dfs()->download_rank(link.owner_id, info.dir_row) > DfsService::RANK_OTHER_VECTORS) {
                 continue;
             }
             // A repeated vector download does not hold the gate. This prevents file starvation.
@@ -172,14 +189,9 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
     // it holds the other. Network and DFS workers can ask for an immediate
     // refill, but they must not run the scheduler in parallel: two callers can
     // otherwise take the priority and regular pool locks in opposite order.
-    // Keep all scheduling on this QObject's thread. The queued calls preserve
+    // Keep all scheduling on the Core serial executor. The queued calls preserve
     // the targeted refill without blocking the worker that stored a fragment.
     // kick() also merges a burst of requests into one queued scheduler pass.
-    if (QThread::currentThread() != thread()) {
-        kick(file_link_to_proceed);
-        return;
-    }
-
     const auto download_limit = max_concurrent_downloads();
     if (download_limit == 0 || node->runtime_activity() == RuntimeActivity::Background) {
         return;
@@ -283,19 +295,14 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     // Re-probe the network for the content: a peer that only knew the
                     // row (state=Known) when we first asked may have become Ready since.
                     // request_file re-broadcasts DfsFileState (throttled to 30s/file).
-                    QMetaObject::invokeMethod(
-                        this,
-                        [this, file_link] {
-                            node->dfs()->request_file(file_link.owner_id, file_link.file_id);
-                        },
-                        Qt::QueuedConnection);
+                    node->dfs()->request_file(file_link.owner_id, file_link.file_id);
                 }
 
                 // Files stay paused while vectors are downloading. Forced files (explicit
                 // user request_file, e.g. tapping media) are not paused.
                 if (!load_info.forced
                     && node->dfs()->download_rank(file_link.owner_id, load_info.dir_row)
-                           > DfsController::RANK_OTHER_VECTORS
+                           > DfsService::RANK_OTHER_VECTORS
                     && vectors_waiting()) {
                     continue;
                 }
@@ -478,14 +485,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
     // kick() re-arms the timer when a download is queued again.
     if (file_link_to_proceed.file_id.empty() && m_active_downloads->empty()
         && m_active_downloads_priority->empty()) {
-        QMetaObject::invokeMethod(
-            this,
-            [this] {
-                if (m_active_downloads->empty() && m_active_downloads_priority->empty()) {
-                    m_timer->stop();
-                }
-            },
-            Qt::QueuedConnection);
+        watchdog_->cancel();
     }
 }
 
@@ -562,12 +562,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     if (update_existing(m_active_downloads_priority) || update_existing(m_active_downloads)) {
         if (is_forced) {
             node->dfs()->consume_forced_file(file_link);
-            QMetaObject::invokeMethod(
-                this,
-                [this, file_link]() {
-                    timer_runner(file_link);
-                },
-                Qt::QueuedConnection);
+            kick(file_link);
         }
         return;
     }
@@ -732,12 +727,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         //         responder);
         eLog("m_active_downloads{}->emplace: {}", is_priority ? "_priority" : "", file_link);
         if (load_info.forced) {
-            QMetaObject::invokeMethod(
-                this,
-                [this, file_link]() {
-                    timer_runner(file_link);
-                },
-                Qt::QueuedConnection);
+            kick(file_link);
         }
         schedule_watchdog();
     } else {
@@ -889,9 +879,9 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                 // offset += Dfs::Basic::FRAGMENT_SIZE;
 
                 int  progress = static_cast<int>((fragment_number * 100) / max_offsets);
-                emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
-                                                 file_link_fragment.file_link.file_id,
-                                                 progress);
+                node->dfs()->notify_upload_progress(file_link_fragment.file_link.owner_id,
+                                                    file_link_fragment.file_link.file_id,
+                                                    progress);
                 if (node->network()->connection_pending_bytes(identifier) > DFS_QUEUE_HIGH_WATER) {
                     while (node->network()->is_connection_exists(identifier)
                            && node->network()->connection_pending_bytes(identifier) > DFS_QUEUE_LOW_WATER) {
@@ -900,9 +890,9 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                 }
             }
 
-            emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
-                                             file_link_fragment.file_link.file_id,
-                                             100);
+            node->dfs()->notify_upload_progress(file_link_fragment.file_link.owner_id,
+                                                file_link_fragment.file_link.file_id,
+                                                100);
         });
     // eLog("[Dfs] LoadManager::share_stored_file, file pushed to waiting send queue. owner_id: {}, file_id: {}",
     // file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
@@ -1004,7 +994,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             // Refill the request window right away: the dfs pool that runs the
             // disk write below can be busy with vector handling for seconds,
             // and by then the retry timeout has already stalled the transfer.
-            timer_runner(file_link_fragment.file_link);
+            kick(file_link_fragment.file_link);
         }
     }
 
@@ -1034,7 +1024,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
 
         const auto path = Dfs::Path::file_path(file_link.owner_id, file_link.file_id);
         if (!path.has_value()) {
-            timer_runner(file_link);
+            kick(file_link);
             return;
         }
 
@@ -1062,7 +1052,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                         it->second.fragments_left.insert(file_content.fragment_number);
                     }
                 }
-                timer_runner(file_link);
+                kick(file_link);
                 return;
             }
 
@@ -1115,7 +1105,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
         }
 
         if (!download_complete) {
-            timer_runner(file_link);
+            kick(file_link);
             return;
         }
 
@@ -1153,7 +1143,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                     return entry.first.file_link == file_link;
                 });
             }
-            timer_runner(file_link);
+            kick(file_link);
             return;
         }
 
@@ -1167,7 +1157,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
         if (notify_neighbours) {
             broadcast_file_exist(file_link.owner_id, file_link.file_id);
         }
-        timer_runner();
+        kick();
     });
 }
 
@@ -1187,8 +1177,8 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
          dir_row.size);
 
     node->dfs()->completeDownloadedFile(owner_id, dir_row);
-    emit node->dfs()->added(owner_id, dir_row);
-    emit node->dfs()->downloaded(owner_id, dir_row);
+    node->dfs()->notify_added(owner_id, dir_row);
+    node->dfs()->notify_downloaded(owner_id, dir_row);
 
     // A finished transfer frees window slots; hand them to the next queued
     // download now instead of on the next periodic tick. Coalesced, so a burst

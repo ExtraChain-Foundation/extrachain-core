@@ -19,34 +19,34 @@
 
 #pragma once
 
-#include <QObject>
-
 #include "chain/actor_id.h"
 #include "chain/transaction.h"
+#include "chain/transaction_status.h"
+#include "runtime/event.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 class Transaction;
 
-class TransactionCache : public QObject {
-    Q_OBJECT
-
+class TransactionCache {
 public:
-    explicit TransactionCache(ExtraChainNode *node, QObject *parent);
+    explicit TransactionCache(ExtraChain::Core::ExtraChainNode *node);
     void make_files();
-
-signals:
     void add(const Transaction &transaction);
     void request(ActorId actor_id, TokenId token, bool reward_hidden, std::uint64_t from_time);
-    void response(ActorId actor_id, TokenId token, int offset, std::vector<TransactionInfo> txs);
     void make_cache();
+    ExtraChain::Core::Event<ActorId, TokenId, int, std::vector<TransactionInfo>> &response_event();
+    ExtraChain::Core::Event<const Transaction &, StatusTrx::StatusTrxType>       &self_transaction_event();
 
-private slots:
+private:
     void adding(const Transaction &transaction);
     void prepare(ActorId actor_id, TokenId token, bool reward_hidden, std::uint64_t from_time);
     void cache();
 
-private:
-    ExtraChainNode *node;
+    ExtraChain::Core::ExtraChainNode                                            *node;
+    ExtraChain::Core::Event<ActorId, TokenId, int, std::vector<TransactionInfo>> response_event_;
+    ExtraChain::Core::Event<const Transaction &, StatusTrx::StatusTrxType>       self_transaction_event_;
 
     friend class Dag;
 };

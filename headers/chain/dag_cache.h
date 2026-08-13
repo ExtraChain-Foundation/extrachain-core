@@ -30,7 +30,9 @@
 #include "contracts/contract_types.h"
 #include "utils/exc_utils.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
 class Dag;
 struct Section;
 class DbConnector;
@@ -61,7 +63,7 @@ public:
      *
      * @param node The ExtraChainNode reference
      */
-    DagCache(ExtraChainNode* node, Dag* dag);
+    DagCache(ExtraChain::Core::ExtraChainNode* node, Dag* dag);
 
     /**
      * @brief Destroy the DagCache object
@@ -227,7 +229,7 @@ public:
         const ExtraChain::Contracts::ContractCatalogFilter& filter = {});
 
 private:
-    ExtraChainNode*              node;                              // Node reference
+    ExtraChain::Core::ExtraChainNode* node;                              // Node reference
     Dag*                         dag;                               // Dag reference
     SectionId                    cached_section_ = SectionId(-1);   // Current cached section id (genesis point)
     std::unique_ptr<DbConnector> cache_db_;                         // Database connection

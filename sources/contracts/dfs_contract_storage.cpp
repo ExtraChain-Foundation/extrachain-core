@@ -11,10 +11,7 @@
 #include "contracts/dfs_contract_storage.h"
 
 #include <algorithm>
-
-#include <QDir>
-#include <QFile>
-#include <QSaveFile>
+#include <filesystem>
 
 #include "chain/dag.h"
 #include "contracts/contract_codec.h"
@@ -23,9 +20,10 @@
 #include <fmt/format.h>
 #include <msgpack.hpp>
 
-#include "dfs/dfs_controller.h"
+#include "dfs/dfs_service.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
+#include "utils/file_io.h"
 
 namespace ExtraChain::Contracts {
     namespace {
@@ -91,26 +89,22 @@ namespace ExtraChain::Contracts {
             return std::string(value.substr(0, std::min<std::size_t>(value.size(), 12)));
         }
 
-        QString head_path(const ActorId &contract_id) {
-            return QDir::current().filePath(
-                QStringLiteral("contract-heads/%1.msgpack").arg(QString::fromStdString(contract_id.to_string())));
+        std::filesystem::path head_path(const ActorId &contract_id) {
+            return std::filesystem::current_path() / "contract-heads" / (contract_id.to_string() + ".msgpack");
         }
 
         bool write_head(const ActorId &contract_id, const ContractHeadCache &head) {
-            QDir directory(QDir::current().filePath(QStringLiteral("contract-heads")));
-            if (!directory.exists() && !QDir::current().mkpath(QStringLiteral("contract-heads"))) {
+            std::error_code error;
+            std::filesystem::create_directories(head_path(contract_id).parent_path(), error);
+            if (error) {
                 return false;
             }
             msgpack::sbuffer buffer;
             msgpack::pack(buffer, head);
-            QSaveFile file(head_path(contract_id));
-            return file.open(QIODevice::WriteOnly)
-                   && file.write(buffer.data(), static_cast<qint64>(buffer.size()))
-                          == static_cast<qint64>(buffer.size())
-                   && file.commit();
+            return FileIo::write_atomic(head_path(contract_id), { buffer.data(), buffer.size() }).has_value();
         }
 
-        std::expected<std::vector<std::uint8_t>, ContractFailure> read_file(DfsController   *dfs,
+        std::expected<std::vector<std::uint8_t>, ContractFailure> read_file(DfsService      *dfs,
                                                                             const ActorId   &owner_id,
                                                                             std::string_view file_id) {
             auto content = Dfs::Tables::DirsFile::ActorSpace::get_file_content(owner_id, std::string(file_id));
@@ -123,7 +117,7 @@ namespace ExtraChain::Contracts {
             return *content;
         }
 
-        std::expected<Dfs::DirRow, ContractFailure> store_file(DfsController                *dfs,
+        std::expected<Dfs::DirRow, ContractFailure> store_file(DfsService                   *dfs,
                                                                const ActorId                &contract_id,
                                                                const ActorId                &author_id,
                                                                std::span<const std::uint8_t> data,
@@ -147,7 +141,7 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ContractError::StorageError, "Cannot store contract data in DFS"));
         }
 
-        std::expected<ContractRecord, ContractFailure> save_head(DfsController *dfs,
+        std::expected<ContractRecord, ContractFailure> save_head(DfsService    *dfs,
                                                                  const ActorId &contract_id,
                                                                  ContractRecord record) {
             if (record.active_version == 0 || record.active_version > record.versions.size()) {
@@ -281,16 +275,15 @@ namespace ExtraChain::Contracts {
             return std::nullopt;
         }
 
-        std::expected<ContractRecord, ContractFailure> load_head(DfsController *dfs,
+        std::expected<ContractRecord, ContractFailure> load_head(DfsService    *dfs,
                                                                  Dag           *dag,
                                                                  const ActorId &contract_id) {
-            QFile file(head_path(contract_id));
-            if (!file.open(QIODevice::ReadOnly)) {
+            const auto bytes = FileIo::read_all(head_path(contract_id));
+            if (!bytes.has_value()) {
                 return std::unexpected(failure(ContractError::NotFound, "Contract head does not exist"));
             }
-            const auto bytes = file.readAll();
             try {
-                auto object = msgpack::unpack(bytes.constData(), static_cast<std::size_t>(bytes.size()));
+                auto object = msgpack::unpack(bytes->data(), bytes->size());
                 auto cache  = object.get().as<ContractHeadCache>();
                 if (cache.schema != 3 || cache.contract_id != contract_id.to_string() || cache.owner_id.empty()
                     || cache.kind.empty() || cache.active_version == 0
@@ -584,7 +577,7 @@ namespace ExtraChain::Contracts {
             return record;
         }
 
-        std::expected<ContractRecord, ContractFailure> load_checkpoint_from_dag(DfsController *dfs,
+        std::expected<ContractRecord, ContractFailure> load_checkpoint_from_dag(DfsService    *dfs,
                                                                                 Dag           *dag,
                                                                                 const ActorId &contract_id) {
             if (dag == nullptr) {
@@ -752,7 +745,7 @@ namespace ExtraChain::Contracts {
 
     } // namespace
 
-    DfsContractStorage::DfsContractStorage(DfsController *dfs, Dag *dag)
+    DfsContractStorage::DfsContractStorage(DfsService *dfs, Dag *dag)
         : dfs_(dfs)
         , dag_(dag) {
     }

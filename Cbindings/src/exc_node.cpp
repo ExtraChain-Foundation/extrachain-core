@@ -5,65 +5,60 @@
 
 #include "exc_internal.h"
 
-#include "managers/extrachain_node.h"
-#include "network/network_manager.h"
+#include "core/extrachain_node.h"
+#include "network/network_service.h"
 #include "extrachain_version.h"
 #include "utils/exc_utils.h"
 
-#include <QCoreApplication>
-#include <QThread>
+#include <filesystem>
+#include <thread>
 
 using namespace exc_ffi;
 
 /* Forward declaration from exc_bridge.cpp */
 namespace exc_ffi {
-void connect_signals(ExtraChainNode* node);
+    void connect_events(ExtraChain::Core::ExtraChainNode* node);
 }
 
-/* ── Background thread helper ────────────────────────────────────── */
-
 namespace {
-
-class EventLoopThread : public QThread {
-public:
-    EventLoopThread(int argc, char** argv, uint16_t ws_port)
-        : argc_(argc), argv_(argv), ws_port_(ws_port) {}
-
-    void run() override {
+    ExcError initialize_node(uint16_t ws_port, bool main_thread_mode) {
         auto& gs = GlobalState::instance();
+        {
+            std::lock_guard lock(gs.mutex);
+            if (gs.initialized || gs.initializing || gs.shutdown_in_progress) {
+                return EXC_ERR_ALREADY_INITIALIZED;
+            }
+            gs.initializing         = true;
+            gs.main_thread_mode     = main_thread_mode;
+            gs.shutdown_requested   = false;
+            gs.shutdown_in_progress = false;
+        }
 
-        QCoreApplication app(argc_, argv_);
-        gs.app = &app;
-
-        auto wrapper = new ExtraChainNodeWrapper(nullptr, false, false, ws_port_);
-        wrapper->init();
-        gs.wrapper = wrapper;
-        gs.node = wrapper->node;
-
-        connect_signals(gs.node);
-        gs.node->start();
-        gs.initialized = true;
-
-        ready_.store(true);
-
-        app.exec();
-
-        /* Cleanup after event loop exits */
-        gs.initialized = false;
-        gs.node = nullptr;
-        delete gs.wrapper;
-        gs.wrapper = nullptr;
-        gs.app = nullptr;
+        std::unique_ptr<ExtraChain::Core::ExtraChainNode> node;
+        try {
+            node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, ws_port ? ws_port : 17593);
+            node->process();
+            connect_events(node.get());
+            node->start();
+            std::lock_guard lock(gs.mutex);
+            gs.node         = std::move(node);
+            gs.initialized  = true;
+            gs.initializing = false;
+            return EXC_OK;
+        } catch (...) {
+            std::vector<boost::signals2::scoped_connection> event_connections;
+            {
+                std::lock_guard lock(gs.mutex);
+                gs.initialized          = false;
+                gs.initializing         = false;
+                gs.shutdown_in_progress = false;
+                event_connections       = std::move(gs.event_connections);
+            }
+            event_connections.clear();
+            node.reset();
+            return EXC_ERR_UNKNOWN;
+        }
     }
-
-    bool is_ready() const { return ready_.load(); }
-
-private:
-    int              argc_;
-    char**           argv_;
-    uint16_t         ws_port_;
-    std::atomic<bool> ready_ { false };
-};
 
 } // anonymous namespace
 
@@ -76,67 +71,27 @@ static const char* s_version = nullptr;
 extern "C" {
 
 EXC_API ExcError exc_init(int argc, char** argv, uint16_t ws_port) {
-    auto& gs = GlobalState::instance();
-    std::lock_guard lock(gs.mutex);
-
-    if (gs.initialized) return EXC_ERR_ALREADY_INITIALIZED;
-
-    gs.main_thread_mode = false;
-    auto thread = new EventLoopThread(argc, argv, ws_port ? ws_port : 17593);
-    gs.event_loop_thread = thread;
-    thread->start();
-
-    /* Wait for the event loop to be ready (timeout ~30s) */
-    constexpr int max_wait_ms = 30000;
-    int waited_ms = 0;
-    while (!static_cast<EventLoopThread*>(thread)->is_ready()) {
-        QThread::msleep(10);
-        waited_ms += 10;
-        if (waited_ms >= max_wait_ms) {
-            return EXC_ERR_UNKNOWN;
-        }
-    }
-
-    return EXC_OK;
+    (void)argc;
+    (void)argv;
+    return initialize_node(ws_port, false);
 }
 
 EXC_API ExcError exc_init_main_thread(int argc, char** argv, uint16_t ws_port) {
-    auto& gs = GlobalState::instance();
-    std::lock_guard lock(gs.mutex);
-
-    if (gs.initialized) return EXC_ERR_ALREADY_INITIALIZED;
-
-    gs.main_thread_mode = true;
-
-    /* Create QCoreApplication on the calling (main) thread */
-    static QCoreApplication app(argc, argv);
-    gs.app = &app;
-
-    auto wrapper = new ExtraChainNodeWrapper(nullptr, false, false, ws_port ? ws_port : 17593);
-    wrapper->init();
-    gs.wrapper = wrapper;
-    gs.node = wrapper->node;
-
-    connect_signals(gs.node);
-    gs.node->start();
-    gs.initialized = true;
-
-    return EXC_OK;
+    (void)argc;
+    (void)argv;
+    return initialize_node(ws_port, true);
 }
 
 EXC_API ExcError exc_run(void) {
     auto& gs = GlobalState::instance();
-    if (!gs.main_thread_mode) return EXC_ERR_INVALID_ARGUMENT;
-    if (!gs.app) return EXC_ERR_NOT_INITIALIZED;
-
-    gs.app->exec();
-
-    /* Cleanup */
-    gs.initialized = false;
-    gs.node = nullptr;
-    delete gs.wrapper;
-    gs.wrapper = nullptr;
-    gs.app = nullptr;
+    if (!gs.main_thread_mode)
+        return EXC_ERR_INVALID_ARGUMENT;
+    std::unique_lock lock(gs.mutex);
+    if (!gs.initialized)
+        return EXC_ERR_NOT_INITIALIZED;
+    gs.stopped.wait(lock, [&gs] {
+        return gs.shutdown_requested;
+    });
 
     return EXC_OK;
 }
@@ -171,15 +126,25 @@ EXC_API ExcError exc_login(const char* login, const char* password) {
     ExcError result = EXC_OK;
 
     bool ok = dispatch_sync([&]() {
-        auto& gs = GlobalState::instance();
-        auto res = gs.node->login(std::string(login), std::string(password));
+        auto& gs  = GlobalState::instance();
+        auto  res = gs.node->login(std::string(login), std::string(password));
         if (!res.has_value()) {
             switch (res.error()) {
-            case LoadError::EmptyHash:     result = EXC_ERR_ACCOUNT_EMPTY_HASH; break;
-            case LoadError::NoProfiles:    result = EXC_ERR_ACCOUNT_NO_PROFILES; break;
-            case LoadError::NoAuthProfiles: result = EXC_ERR_ACCOUNT_NO_AUTH; break;
-            case LoadError::Multiple:      result = EXC_ERR_ACCOUNT_MULTIPLE; break;
-            default:                       result = EXC_ERR_ACCOUNT_UNKNOWN; break;
+            case LoadError::EmptyHash:
+                result = EXC_ERR_ACCOUNT_EMPTY_HASH;
+                break;
+            case LoadError::NoProfiles:
+                result = EXC_ERR_ACCOUNT_NO_PROFILES;
+                break;
+            case LoadError::NoAuthProfiles:
+                result = EXC_ERR_ACCOUNT_NO_AUTH;
+                break;
+            case LoadError::Multiple:
+                result = EXC_ERR_ACCOUNT_MULTIPLE;
+                break;
+            default:
+                result = EXC_ERR_ACCOUNT_UNKNOWN;
+                break;
             }
         } else {
             gs.node->network()->start_network();
@@ -196,15 +161,25 @@ EXC_API ExcError exc_login_hash(const char* hash) {
     ExcError result = EXC_OK;
 
     bool ok = dispatch_sync([&]() {
-        auto& gs = GlobalState::instance();
-        auto res = gs.node->login(std::string(hash));
+        auto& gs  = GlobalState::instance();
+        auto  res = gs.node->login(std::string(hash));
         if (!res.has_value()) {
             switch (res.error()) {
-            case LoadError::EmptyHash:     result = EXC_ERR_ACCOUNT_EMPTY_HASH; break;
-            case LoadError::NoProfiles:    result = EXC_ERR_ACCOUNT_NO_PROFILES; break;
-            case LoadError::NoAuthProfiles: result = EXC_ERR_ACCOUNT_NO_AUTH; break;
-            case LoadError::Multiple:      result = EXC_ERR_ACCOUNT_MULTIPLE; break;
-            default:                       result = EXC_ERR_ACCOUNT_UNKNOWN; break;
+            case LoadError::EmptyHash:
+                result = EXC_ERR_ACCOUNT_EMPTY_HASH;
+                break;
+            case LoadError::NoProfiles:
+                result = EXC_ERR_ACCOUNT_NO_PROFILES;
+                break;
+            case LoadError::NoAuthProfiles:
+                result = EXC_ERR_ACCOUNT_NO_AUTH;
+                break;
+            case LoadError::Multiple:
+                result = EXC_ERR_ACCOUNT_MULTIPLE;
+                break;
+            default:
+                result = EXC_ERR_ACCOUNT_UNKNOWN;
+                break;
             }
         } else {
             gs.node->network()->start_network();
@@ -225,26 +200,40 @@ EXC_API ExcError exc_logout(void) {
 }
 
 EXC_API ExcError exc_shutdown(void) {
-    auto& gs = GlobalState::instance();
-    if (!gs.initialized) return EXC_ERR_NOT_INITIALIZED;
+    auto&                                           gs = GlobalState::instance();
+    std::vector<boost::signals2::scoped_connection> event_connections;
+    {
+        std::lock_guard lock(gs.mutex);
+        if (!gs.initialized)
+            return EXC_ERR_NOT_INITIALIZED;
+        gs.initialized          = false;
+        gs.shutdown_requested   = true;
+        gs.shutdown_in_progress = true;
+        event_connections       = std::move(gs.event_connections);
+    }
+    gs.stopped.notify_all();
 
-    if (gs.main_thread_mode) {
-        /* In main-thread mode, quit the event loop. exc_run() will clean up. */
-        if (gs.app) {
-            gs.app->quit();
+    auto finish = [event_connections = std::move(event_connections)]() mutable {
+        event_connections.clear();
+        EventDispatchGuard::wait_until_idle();
+        auto&                                             gs = GlobalState::instance();
+        std::unique_ptr<ExtraChain::Core::ExtraChainNode> node;
+        {
+            std::unique_lock lock(gs.mutex);
+            gs.calls_idle.wait(lock, [&gs] {
+                return gs.active_calls == 0;
+            });
+            node = std::move(gs.node);
         }
+        node->cleanUp();
+        node.reset();
+        std::lock_guard lock(gs.mutex);
+        gs.shutdown_in_progress = false;
+    };
+    if (event_dispatch_depth > 0) {
+        std::thread(std::move(finish)).detach();
     } else {
-        /* Background-thread mode: quit app and wait for thread */
-        dispatch_sync([]() {
-            auto& gs = GlobalState::instance();
-            if (gs.app) gs.app->quit();
-        });
-
-        if (gs.event_loop_thread) {
-            gs.event_loop_thread->wait();
-            delete gs.event_loop_thread;
-            gs.event_loop_thread = nullptr;
-        }
+        finish();
     }
 
     return EXC_OK;

@@ -22,78 +22,109 @@
 #include "chat/chat_manager.h"
 
 #include <algorithm>
+#include <cctype>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <string_view>
 #include <utility>
 
-#include <QCoreApplication>
-#include <QDateTime>
-#include <QFile>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QSettings>
-#include <QStringList>
-#include <QSysInfo>
-#include <QTimer>
+#include <boost/asio/ip/host_name.hpp>
+#include <boost/asio/post.hpp>
 
-#include "managers/extrachain_node.h"
-#include "dfs/dfs_controller.h"
+#if defined(__APPLE__)
+    #include <TargetConditionals.h>
+#endif
+
+#include "extrachain_version.h"
+#include "core/extrachain_node.h"
+#include "network/network_service.h"
+#include "dfs/dfs_service.h"
+#include "network/network_runtime.h"
+#include "runtime/deadline_task.h"
+#include "runtime/periodic_task.h"
+#include "utils/file_io.h"
 
 namespace {
 constexpr std::string_view THOTH_DATABASE = "ThothDevicesV2";
+
+std::uint64_t unix_time_ms() {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count());
+}
 }
 
-ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
+ThothManager::ThothManager(ExtraChain::Core::ExtraChainNode* node, std::string application_version)
     : node(node)
-    , QObject(parent)
-    , m_networkManager(new QNetworkAccessManager(this)) {
-    QObject::connect(node->dfs(),
-                     &DfsController::waitDownloaded,
-                     [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
-                         if (owner_id == node->network_id() && dir_row.name == THOTH_DATABASE) {
-                             this->owner_id_ = node->network_id();
-                             this->file_id_  = dir_row.file_id;
-                             this->read_all(!enabled_);
-                             this->flush_pending_records();
-                             this->verify_self_registration();
-                         }
-                     });
-
-    QObject::connect(node->dfs(), &DfsController::downloaded, [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
-        if (owner_id == node->network_id() && dir_row.name == THOTH_DATABASE) {
-            this->owner_id_ = node->network_id();
-            this->file_id_  = dir_row.file_id;
-            this->read_all(!enabled_);
-            this->flush_pending_records();
-            this->verify_self_registration();
-        }
-    });
-
-
+    , application_version_(application_version.empty() ? extrachain_node_version
+                                                       : std::move(application_version)) {
     // Registry watchdog: periodically pull the network actor's dirs so sibling
     // writes (including a revocation of this device) arrive within a minute
     // even when no broadcast reaches us. Created here so the timer keeps the
-    // node's thread affinity (reconcile often runs on pool threads without an
-    // event loop, where a QTimer would never fire).
-    revocation_watchdog_ = new QTimer(this);
-    revocation_watchdog_->setInterval(60000);
-    QObject::connect(revocation_watchdog_, &QTimer::timeout, this, [this]() {
-        if (revoked_ || !enabled_watchdog_ || this->node->account_controller()->empty() || ios_token_.empty()) {
-            return;
+    // node's serial Core executor (reconcile can also run on pool threads).
+    revocation_watchdog_ =
+        ExtraChain::Core::PeriodicTask::create(node->serial_executor(), std::chrono::minutes(1), [this]() {
+            std::scoped_lock lock(state_mutex_);
+            if (stopping_.load(std::memory_order_acquire) || revoked_
+                || !enabled_watchdog_.load(std::memory_order_acquire) || this->node->account_controller()->empty()
+                || ios_token_.empty()) {
+                return;
+            }
+            if (!file_id_.empty()) {
+                this->node->dfs()->request_file(this->node->network_id(), file_id_);
+            }
+            verify_self_registration();
+        });
+    registration_verifier_ = ExtraChain::Core::DeadlineTask::create(node->serial_executor(), [this]() {
+        std::scoped_lock lock(state_mutex_);
+        if (!stopping_.load(std::memory_order_acquire)) {
+            verify_self_registration();
         }
-        // Ask the network for the registry file state: if a sibling wrote a
-        // newer version (rename/removal/revocation), this pulls it and the
-        // downloaded-event verify picks the change up.
-        if (!file_id_.empty()) {
-            this->node->dfs()->request_file(this->node->network_id(), file_id_);
-        }
-        verify_self_registration();
     });
     revocation_watchdog_->start();
 }
 
+ThothManager::~ThothManager() {
+    prepare_shutdown();
+}
+
+void ThothManager::prepare_shutdown() {
+    if (stopping_.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+    std::scoped_lock lock(state_mutex_);
+    enabled_watchdog_.store(false, std::memory_order_release);
+    if (revocation_watchdog_) {
+        revocation_watchdog_->stop();
+        revocation_watchdog_.reset();
+    }
+    if (registration_verifier_) {
+        registration_verifier_->cancel();
+        registration_verifier_.reset();
+    }
+    send_success_event_.disconnect_all();
+    send_failed_event_.disconnect_all();
+    device_revoked_event_.disconnect_all();
+}
+
+void ThothManager::on_registry_file_downloaded(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
+    std::scoped_lock lock(state_mutex_);
+    if (owner_id != node->network_id() || dir_row.name != THOTH_DATABASE) {
+        return;
+    }
+    owner_id_ = node->network_id();
+    file_id_  = dir_row.file_id;
+    read_all(!enabled_);
+    flush_pending_records();
+    verify_self_registration();
+}
+
 void ThothManager::start() {
+    std::scoped_lock lock(state_mutex_);
     enabled_ = true;
     if (this->read_all(false)) {
         this->flush_pending_records();
@@ -101,12 +132,14 @@ void ThothManager::start() {
 }
 
 void ThothManager::stop() {
+    std::scoped_lock lock(state_mutex_);
     enabled_  = false;
     owner_id_ = ActorId();
     file_id_.clear();
 }
 
 bool ThothManager::create_thoth_dictionary() {
+    std::scoped_lock lock(state_mutex_);
     auto network_id = node->actor_index()->network_id();
     if (network_id.is_zero()) {
         return false;
@@ -126,6 +159,7 @@ bool ThothManager::create_thoth_dictionary() {
 }
 
 bool ThothManager::read_all(bool is_my) {
+    std::scoped_lock lock(state_mutex_);
     auto file_row = node->dfs()->read_file_status(node->network_id(), std::string(THOTH_DATABASE), Dfs::Basic::TEMPLATE_DICTIONARY);
     if (!file_row.has_value()) {
         // TODO: wait for exists
@@ -188,6 +222,7 @@ std::string ThothManager::registry_key() {
 bool ThothManager::add_thoth_record(const ActorId&     owner_id,
                                     const std::string& file_id,
                                     const std::string& custom) {
+    std::scoped_lock lock(state_mutex_);
     enqueue_thoth_record(owner_id, file_id, custom);
     flush_pending_records();
     return true;
@@ -276,7 +311,7 @@ void ThothManager::flush_pending_records() {
         chat.file_id   = record.file_id;
 
         auto  name       = effective_device_name();
-        auto  app        = QCoreApplication::applicationVersion().toStdString();
+        auto  app        = application_version_;
         auto  new_record = ThothDeviceRecord { .os = os, .token = ios_token_, .custom = record.custom, .name = name, .app = app };
         auto  dev_it     = chat.devices.find(device_id_);
         // updated_at is intentionally excluded from the change test: it must not, by itself,
@@ -284,7 +319,7 @@ void ThothManager::flush_pending_records() {
         if (dev_it == chat.devices.end() || dev_it->second.os != new_record.os
             || dev_it->second.token != new_record.token || dev_it->second.custom != new_record.custom
             || dev_it->second.name != new_record.name || dev_it->second.app != new_record.app) {
-            new_record.updated_at    = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+            new_record.updated_at    = unix_time_ms();
             chat.devices[device_id_] = new_record;
             changed                  = true;
         }
@@ -302,7 +337,7 @@ void ThothManager::flush_pending_records() {
             dev_it->second.os         = os;
             dev_it->second.token      = ios_token_;
             dev_it->second.name       = name;
-            dev_it->second.updated_at = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+            dev_it->second.updated_at = unix_time_ms();
             changed                   = true;
         }
     }
@@ -312,7 +347,7 @@ void ThothManager::flush_pending_records() {
     // set_device_token(), and the loop above only touches enqueued records.
     if (force_registry_write_) {
         auto name = effective_device_name();
-        auto app  = QCoreApplication::applicationVersion().toStdString();
+        auto app  = application_version_;
         for (auto& [chat_key, chat] : reg.chats) {
             auto dev_it = chat.devices.find(device_id_);
             if (dev_it == chat.devices.end()) {
@@ -324,7 +359,7 @@ void ThothManager::flush_pending_records() {
                 rec.token      = ios_token_;
                 rec.name       = name;
                 rec.app        = app;
-                rec.updated_at = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+                rec.updated_at = unix_time_ms();
                 changed        = true;
             }
         }
@@ -356,6 +391,7 @@ void ThothManager::flush_pending_records() {
 }
 
 void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row) {
+    std::scoped_lock lock(state_mutex_);
     // Live registry-row update: even pure clients (enabled_ is server-only)
     // must notice immediately when a sibling device revoked this one.
     if (owner_id == node->network_id() && !node->account_controller()->empty()) {
@@ -413,6 +449,7 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
 }
 
 void ThothManager::network_thoth_record(const ActorId& owner_id, const std::string& file_id, const DbRow& row) {
+    std::scoped_lock lock(state_mutex_);
     auto id_it = row.find("id");
     if (id_it == row.end()) {
         return;
@@ -504,35 +541,48 @@ void ThothManager::remove_thoth_info(const std::string& id) {
 }
 
 bool ThothManager::send_to_service(const ThothInfo& info, const std::string& username) {
-    QUrl            url("http://localhost:5425/send");
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
+    std::scoped_lock lock(state_mutex_);
     auto service_message =
         ThothServiceMessage { .device_token = info.token,
                               .title        = "Messenger",
                               .body         = username.empty() ? "Raccoon brings word from the shadows"
                                                                : fmt::format("Message from @{}", username) };
 
-    QByteArray     data  = QByteArray::fromStdString(Json::serialize(service_message));
-    eLog("Thoth local push POST {} token={} body={}", url.toString().toStdString(), info.token, service_message.body);
-    QNetworkReply* reply = m_networkManager->post(request, data);
-
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        if (reply->error() == QNetworkReply::NoError) {
-            QByteArray response = reply->readAll();
-
-            emit sendSuccess(QString::fromUtf8(response));
-        } else {
-            emit sendFailed(reply->errorString());
-        }
-        reply->deleteLater();
-    });
+    eLog("Thoth local push POST http://localhost:{}/send token={} body={}",
+         port_,
+         info.token,
+         service_message.body);
+    node->network_runtime().async_http_post("localhost",
+                                            port_,
+                                            "/send",
+                                            "application/json",
+                                            Json::serialize(service_message),
+                                            std::chrono::seconds(10),
+                                            [this](ExtraChain::Core::NetworkRuntime::HttpResult response) {
+                                                if (response.has_value()) {
+                                                    send_success_event_.publish(std::move(response.value()));
+                                                } else {
+                                                    send_failed_event_.publish(std::move(response.error()));
+                                                }
+                                            });
 
     return true;
 }
 
+ExtraChain::Core::Event<std::string>& ThothManager::send_success_event() noexcept {
+    return send_success_event_;
+}
+
+ExtraChain::Core::Event<std::string>& ThothManager::send_failed_event() noexcept {
+    return send_failed_event_;
+}
+
+ExtraChain::Core::Event<>& ThothManager::device_revoked_event() noexcept {
+    return device_revoked_event_;
+}
+
 void ThothManager::set_device_token(const std::string& token) {
+    std::scoped_lock lock(state_mutex_);
     if (revoked_ || token.empty()) {
         return;
     }
@@ -576,6 +626,7 @@ void ThothManager::reconcile_after_token_change() {
 }
 
 void ThothManager::set_device_id(const std::string& id) {
+    std::scoped_lock lock(state_mutex_);
     if (id.empty() || id == device_id_) {
         return;
     }
@@ -585,6 +636,7 @@ void ThothManager::set_device_id(const std::string& id) {
 }
 
 void ThothManager::set_device_name(const std::string& name) {
+    std::scoped_lock lock(state_mutex_);
     if (name.empty() || name == device_name_) {
         return;
     }
@@ -602,73 +654,94 @@ void ThothManager::set_device_name(const std::string& name) {
 }
 
 std::string ThothManager::detect_os() {
-#if defined(Q_OS_IOS)
+#if defined(__APPLE__)
+    #if TARGET_OS_IPHONE
     return "iOS";
-#elif defined(Q_OS_ANDROID)
-    return "Android";
-#elif defined(Q_OS_MACOS)
+    #else
     return "macOS";
-#elif defined(Q_OS_WIN)
+    #endif
+#elif defined(__ANDROID__)
+    return "Android";
+#elif defined(_WIN32)
     return "Windows";
-#elif defined(Q_OS_LINUX)
+#elif defined(__linux__)
     return "Linux";
 #else
-    return QSysInfo::productType().toStdString();
+    return "Unknown";
 #endif
 }
 
 namespace {
+    std::string trim(std::string value) {
+        const auto begin = value.find_first_not_of(" \t\r\n");
+        if (begin == std::string::npos) {
+            return {};
+        }
+        const auto end = value.find_last_not_of(" \t\r\n");
+        return value.substr(begin, end - begin + 1);
+    }
+
+    std::string lowercase(std::string value) {
+        std::ranges::transform(value, value.begin(), [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+        return value;
+    }
+
+    bool starts_with_case_insensitive(const std::string& value, const std::string& prefix) {
+        return value.size() >= prefix.size() && lowercase(value.substr(0, prefix.size())) == lowercase(prefix);
+    }
+
+    bool is_placeholder_hardware_name(const std::string& value) {
+        static const std::array<std::string, 5> junk       = { "system product name",
+                                                               "to be filled by o.e.m.",
+                                                               "default string",
+                                                               "system manufacturer",
+                                                               "invalid" };
+        const auto                              normalized = lowercase(value);
+        return std::ranges::find(junk, normalized) != junk.end();
+    }
+
 // Hardware model from DMI/SMBIOS ("Lenovo ThinkPad X1 Carbon"); empty when
 // the vendor left placeholder junk (custom-built PCs) or the platform has none.
-QString desktop_hardware_model() {
-#if defined(Q_OS_WIN)
-    QSettings bios(QStringLiteral("HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\BIOS"),
-                   QSettings::NativeFormat);
-    QString vendor  = bios.value(QStringLiteral("SystemManufacturer")).toString().trimmed();
-    QString product = bios.value(QStringLiteral("SystemProductName")).toString().trimmed();
-#elif defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
-    auto read_dmi = [](const char* name) {
-        QFile f(QStringLiteral("/sys/class/dmi/id/") + QLatin1String(name));
-        if (!f.open(QIODevice::ReadOnly)) {
-            return QString();
-        }
-        return QString::fromUtf8(f.readAll()).trimmed();
+std::string desktop_hardware_model() {
+#if defined(__linux__) && !defined(__ANDROID__)
+    auto read_dmi = [](std::string_view name) {
+        std::ifstream input(std::filesystem::path("/sys/class/dmi/id") / name);
+        std::string   value;
+        std::getline(input, value);
+        return trim(std::move(value));
     };
-    QString vendor  = read_dmi("sys_vendor");
-    QString product = read_dmi("product_name");
+    std::string vendor  = read_dmi("sys_vendor");
+    std::string product = read_dmi("product_name");
     // Lenovo puts the machine-type code in product_name; the human name lives in product_version.
-    if (vendor.compare(QStringLiteral("LENOVO"), Qt::CaseInsensitive) == 0) {
+    if (lowercase(vendor) == "lenovo") {
         auto version = read_dmi("product_version");
-        if (!version.isEmpty()) {
+        if (!version.empty()) {
             product = version;
         }
     }
 #else
-    QString vendor, product;
+    std::string vendor;
+    std::string product;
 #endif
-    static const QStringList junk = { QStringLiteral("System Product Name"),
-                                      QStringLiteral("To Be Filled By O.E.M."),
-                                      QStringLiteral("Default string"),
-                                      QStringLiteral("System manufacturer"),
-                                      QStringLiteral("INVALID") };
-    if (product.isEmpty() || junk.contains(product, Qt::CaseInsensitive)) {
+    if (product.empty() || is_placeholder_hardware_name(product)) {
         return {};
     }
-    if (vendor.isEmpty() || junk.contains(vendor, Qt::CaseInsensitive)) {
+    if (vendor.empty() || is_placeholder_hardware_name(vendor)) {
         return product;
     }
     // Normalize shouty/legal vendor spellings.
-    if (vendor.compare(QStringLiteral("LENOVO"), Qt::CaseInsensitive) == 0) {
-        vendor = QStringLiteral("Lenovo");
-    } else if (vendor.startsWith(QStringLiteral("Dell"), Qt::CaseInsensitive)) {
-        vendor = QStringLiteral("Dell");
-    } else if (vendor.startsWith(QStringLiteral("Hewlett"), Qt::CaseInsensitive)
-               || vendor.compare(QStringLiteral("HP"), Qt::CaseInsensitive) == 0) {
-        vendor = QStringLiteral("HP");
-    } else if (vendor.startsWith(QStringLiteral("ASUS"), Qt::CaseInsensitive)) {
-        vendor = QStringLiteral("ASUS");
+    if (lowercase(vendor) == "lenovo") {
+        vendor = "Lenovo";
+    } else if (starts_with_case_insensitive(vendor, "Dell")) {
+        vendor = "Dell";
+    } else if (starts_with_case_insensitive(vendor, "Hewlett") || lowercase(vendor) == "hp") {
+        vendor = "HP";
+    } else if (starts_with_case_insensitive(vendor, "ASUS")) {
+        vendor = "ASUS";
     }
-    if (product.startsWith(vendor, Qt::CaseInsensitive)) {
+    if (starts_with_case_insensitive(product, vendor)) {
         return product;
     }
     return vendor + " " + product;
@@ -681,33 +754,36 @@ std::string ThothManager::effective_device_name() {
     }
     // Windows/Linux: hardware model from DMI ("Lenovo ThinkPad X1 Carbon").
     auto model = desktop_hardware_model();
-    if (!model.isEmpty()) {
-        device_name_ = model.toStdString();
+    if (!model.empty()) {
+        device_name_ = std::move(model);
         return device_name_;
     }
     // Host name identifies the concrete machine ("MacBook-Pro-Alex"), unlike
     // prettyProductName which is just the OS version and repeats across devices.
     // Mobile hostnames are meaningless ("localhost") — the app supplies the
     // model via set_device_name there; until it does, fall back to the OS name.
-    auto host = QSysInfo::machineHostName();
-    if (host.endsWith(QStringLiteral(".local"))) {
-        host.chop(6);
+    boost::system::error_code error;
+    auto                      host = boost::asio::ip::host_name(error);
+    if (host.ends_with(".local")) {
+        host.resize(host.size() - 6);
     }
-    if (!host.isEmpty() && host != QStringLiteral("localhost")) {
-        device_name_ = host.toStdString();
+    if (!error && !host.empty() && host != "localhost") {
+        device_name_ = std::move(host);
     } else {
-        device_name_ = QSysInfo::prettyProductName().toStdString();
+        device_name_ = detect_os();
     }
     return device_name_;
 }
 
 const std::string& ThothManager::device_id() {
+    std::scoped_lock lock(state_mutex_);
     load_or_create_device_id();
     return device_id_;
 }
 
 // Reads this account's own registry (system-actor sender) and aggregates by device id.
 std::vector<ThothDeviceInfo> ThothManager::my_devices() {
+    std::scoped_lock             lock(state_mutex_);
     std::vector<ThothDeviceInfo> result;
 
     if (node->account_controller()->empty() || registry_key().empty()) {
@@ -772,26 +848,27 @@ void ThothManager::load_my_revocations() {
         return;
     }
     my_revocations_loaded_ = true;
-    QFile file(".thoth_revoked");
-    if (!file.open(QIODevice::ReadOnly)) {
+    const auto content     = FileIo::read_all(".thoth_revoked");
+    if (!content.has_value()) {
         return;
     }
-    for (const auto& line : QString::fromUtf8(file.readAll()).split('\n', Qt::SkipEmptyParts)) {
-        auto parts = line.trimmed().split(' ');
-        if (parts.size() == 2) {
-            my_revocations_[parts[0].toStdString()] = parts[1].toULongLong();
+    std::istringstream lines(content.value());
+    std::string        id;
+    std::uint64_t      timestamp = 0;
+    while (lines >> id >> timestamp) {
+        if (!id.empty()) {
+            my_revocations_[id] = timestamp;
         }
     }
 }
 
 void ThothManager::persist_my_revocations() {
-    QFile file(".thoth_revoked");
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return;
-    }
+    std::ostringstream content;
     for (const auto& [id, ms] : my_revocations_) {
-        auto line = QString("%1 %2\n").arg(QString::fromStdString(id)).arg(ms);
-        file.write(line.toUtf8());
+        content << id << ' ' << ms << '\n';
+    }
+    if (!FileIo::write_atomic(".thoth_revoked", content.str()).has_value()) {
+        eWarning("[Thoth] Cannot persist local revocations");
     }
 }
 
@@ -802,7 +879,7 @@ bool ThothManager::enforce_my_revocations(ThothRegistry& reg) {
     if (my_revocations_.empty()) {
         return false;
     }
-    auto now = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+    auto                    now              = unix_time_ms();
     constexpr std::uint64_t TOMBSTONE_TTL_MS = 30ull * 24 * 60 * 60 * 1000;
     if (std::erase_if(my_revocations_, [now](const auto& kv) { return now - kv.second > TOMBSTONE_TTL_MS; })) {
         persist_my_revocations();
@@ -846,22 +923,30 @@ bool ThothManager::check_revocation(const ThothRegistry& reg) {
         // autologin hash and the Thoth device identity go, so the next login
         // starts as a fresh device that no old tombstone can match.
         if (node->network()) {
-            QMetaObject::invokeMethod(node->network(), "go_offline", Qt::QueuedConnection);
+            boost::asio::post(node->serial_executor(), [node = node] {
+                if (node->network()) {
+                    node->network()->go_offline();
+                }
+            });
         }
-        QFile(".auth_hash").remove();
-        QFile(".thoth_device_id").remove();
-        QFile(".thoth_device_token").remove();
-        QFile(".thoth_revoked").remove();
+        std::error_code error;
+        for (const auto& path : { ".auth_hash", ".thoth_device_id", ".thoth_device_token", ".thoth_revoked" }) {
+            error.clear();
+            std::filesystem::remove(path, error);
+            if (error) {
+                eWarning("[Thoth] Cannot remove {} after device revocation: {}", path, error.message());
+            }
+        }
         node->account_controller()->clear();
-        if (revocation_watchdog_) {
-            revocation_watchdog_->stop();
-        }
-        emit deviceRevoked();
+        revocation_watchdog_->stop();
+        registration_verifier_->cancel();
+        device_revoked_event_.publish();
     }
     return true;
 }
 
 bool ThothManager::remove_device(const std::string& device_id) {
+    std::scoped_lock lock(state_mutex_);
     if (device_id.empty() || node->account_controller()->empty() || registry_key().empty()) {
         return false;
     }
@@ -908,7 +993,7 @@ bool ThothManager::remove_device(const std::string& device_id) {
         }
     }
 
-    auto now = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+    auto now               = unix_time_ms();
     bool tombstoned = !reg.revoked.contains(device_id);
     reg.revoked[device_id] = reg.revoked.contains(device_id) ? reg.revoked[device_id] : now;
     // Remember the deletion: I keep re-asserting it until every stale copy dies out.
@@ -943,23 +1028,21 @@ bool ThothManager::remove_device(const std::string& device_id) {
 
 // Cwd is the data dir; the current device token is the only token state we retain.
 void ThothManager::persist_device_tokens() {
-    QFile file(".thoth_device_token");
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return;
+    if (!FileIo::write_atomic(".thoth_device_token", ios_token_).has_value()) {
+        eWarning("[Thoth] Cannot persist device token");
     }
-    file.write(ios_token_.data(), qint64(ios_token_.size()));
 }
 
 void ThothManager::load_persisted_device_tokens() {
-    QFile file(".thoth_device_token");
-    if (!file.open(QIODevice::ReadOnly)) {
+    const auto content = FileIo::read_all(".thoth_device_token");
+    if (!content.has_value()) {
         return;
     }
-    auto token = QString::fromUtf8(file.readAll()).trimmed();
-    if (token.isEmpty()) {
+    auto token = trim(content.value());
+    if (token.empty()) {
         return;
     }
-    ios_token_ = token.toStdString();
+    ios_token_ = std::move(token);
 }
 
 void ThothManager::load_or_create_device_id() {
@@ -967,22 +1050,23 @@ void ThothManager::load_or_create_device_id() {
         return;
     }
 
-    QFile file(".thoth_device_id");
-    if (file.open(QIODevice::ReadOnly)) {
-        device_id_ = QString::fromUtf8(file.readAll()).trimmed().toStdString();
+    const auto saved_id = FileIo::read_all(".thoth_device_id");
+    if (saved_id.has_value()) {
+        device_id_ = trim(saved_id.value());
     }
     if (!device_id_.empty()) {
         return;
     }
 
     device_id_ = Utils::generate_random_hex(10);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        file.write(device_id_.data(), qint64(device_id_.size()));
+    if (!FileIo::write_atomic(".thoth_device_id", device_id_).has_value()) {
+        eWarning("[Thoth] Cannot persist generated device identifier");
     }
 }
 
 // Called by read_chats() with a ready chat list; registers the token per chat (deduped).
 void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& chats) {
+    std::scoped_lock lock(state_mutex_);
     if (revoked_ || ios_token_.empty()) {
         return;
     }
@@ -1013,7 +1097,7 @@ void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& cha
     // The write above can be clobbered by a concurrent full-file sync (file-level
     // LWW, row merge is still a DFS TODO). Verify after the dust settles; the
     // downloaded-event verifies don't cover a clobber that happens before login.
-    QTimer::singleShot(7000, this, [this]() { verify_self_registration(); });
+    registration_verifier_->schedule_after(std::chrono::seconds(7));
 }
 
 // A freshly synced registry file may be a stale full-file copy that lost this device's
@@ -1060,12 +1144,11 @@ void ThothManager::verify_self_registration() {
     }
     for (const auto& record : last_reconciled_records_) {
         auto chat_it = reg.chats.find(fmt::format("{}:{}", record.owner_id, record.file_id));
-        auto ok = chat_it != reg.chats.end() && chat_it->second.devices.contains(device_id_)
-               && chat_it->second.devices.at(device_id_).token == ios_token_
-               && chat_it->second.devices.at(device_id_).name == effective_device_name()
-               && chat_it->second.devices.at(device_id_).os == detect_os()
-               && chat_it->second.devices.at(device_id_).app
-                      == QCoreApplication::applicationVersion().toStdString();
+        auto ok      = chat_it != reg.chats.end() && chat_it->second.devices.contains(device_id_)
+                  && chat_it->second.devices.at(device_id_).token == ios_token_
+                  && chat_it->second.devices.at(device_id_).name == effective_device_name()
+                  && chat_it->second.devices.at(device_id_).os == detect_os()
+                  && chat_it->second.devices.at(device_id_).app == application_version_;
         if (!ok) {
             enqueue_thoth_record(record.owner_id, record.file_id, record.custom);
             missing = true;
@@ -1073,7 +1156,7 @@ void ThothManager::verify_self_registration() {
     }
     if (missing) {
         // Rate-limit: a stale-copy ping-pong with file-level sync must not spin.
-        auto now = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+        auto now = unix_time_ms();
         if (now - last_self_heal_ms_ < 15000) {
             return;
         }
@@ -1085,6 +1168,7 @@ void ThothManager::verify_self_registration() {
 }
 
 std::string ThothManager::read_username(const ActorId& actor_id) {
+    std::scoped_lock lock(state_mutex_);
     if (actor_id.is_zero()) {
         return "";
     }

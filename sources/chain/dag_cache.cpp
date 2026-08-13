@@ -21,12 +21,9 @@
 #include "chain/dag.h"
 #include "contracts/contract_codec.h"
 #include "contracts/contract_transaction.h"
-#include "managers/extrachain_node.h"
-#include "network/network_manager.h"
+#include "core/extrachain_node.h"
+#include "network/network_service.h"
 #include "utils/db_connector.h"
-
-#include <QDir>
-#include <QFile>
 
 #include "utils/thread_pool_boost.h"
 
@@ -115,7 +112,7 @@ namespace {
     }
 } // namespace
 
-DagCache::DagCache(ExtraChainNode* node, Dag* dag)
+DagCache::DagCache(ExtraChain::Core::ExtraChainNode* node, Dag* dag)
     : node(node)
     , dag(dag) {
 }
@@ -835,10 +832,9 @@ bool DagCache::init_db() {
 
     std::unique_lock<std::mutex> lock(mutex_);
 
-    // bool is_exists = QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).exists();
-
-    QDir().mkdir(QString::fromStdString(ChainConst::DAG_FOLDER));
-    QDir().mkdir(QString::fromStdString(ChainConst::DAG_CACHE_FOLDER));
+    std::error_code directory_error;
+    std::filesystem::create_directories(ChainConst::DAG_FOLDER, directory_error);
+    std::filesystem::create_directories(ChainConst::DAG_CACHE_FOLDER, directory_error);
 
     std::string db_path = ChainConst::BALANCE_CACHE;
     cache_db_           = std::make_unique<DbConnector>(db_path);
@@ -886,7 +882,8 @@ void DagCache::reset_db() {
     db_initialized_                              = false;
     if (was_initialized && cache_db_) {
         cache_db_->close();
-        QFile::remove(ChainConst::BALANCE_CACHE.c_str());
+        std::error_code remove_error;
+        std::filesystem::remove(ChainConst::BALANCE_CACHE, remove_error);
     }
     cache_db_.reset();
     contract_catalog_scanned_ = false;

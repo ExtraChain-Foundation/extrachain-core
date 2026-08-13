@@ -19,6 +19,7 @@ if(EXTRACHAIN_BUILD_LEGACY_TESTS)
     target_link_libraries(extrachain-tests
         PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Test extrachain)
     set_property(TARGET extrachain-tests PROPERTY POSITION_INDEPENDENT_CODE 1)
+    set_property(TARGET extrachain-tests PROPERTY AUTOMOC ON)
 endif()
 
 # Self-contained synchronization tests (pack-sync data path, wire-format
@@ -31,6 +32,7 @@ add_executable(extrachain-sync-tests
 target_link_libraries(extrachain-sync-tests
     PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Test extrachain)
 set_property(TARGET extrachain-sync-tests PROPERTY POSITION_INDEPENDENT_CODE 1)
+set_property(TARGET extrachain-sync-tests PROPERTY AUTOMOC ON)
 
 # Load generator: spins up a real node and floods it with reward transactions to
 # fill the DAG with many sections (hot -> packs). Usage: extrachain-gen-sections [N]
@@ -122,13 +124,20 @@ set(EXTRACHAIN_HEADER_CHECKS
     chain/dag.h
     chain/pack.h
     chain/pack_registry.h
+    chain/transaction_status.h
+    chat/chat_manager.h
     contracts/contract_manager.h
     contracts/wasm_runtime.h
+    core/extrachain_node.h
+    dfs/dfs_controller.h
+    dfs/dfs_service.h
     managers/extrachain_node.h
     network/network_manager.h
     network/message_body.h
+    network/responder.h
     network/network_runtime.h
     network/peer_context.h
+    runtime/event.h
     utils/exc_logs.h
     utils/exc_utils_base64.h
     utils/hash.h

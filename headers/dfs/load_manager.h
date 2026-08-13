@@ -20,17 +20,27 @@
 #pragma once
 
 #include <array>
+#include <map>
 #include <queue>
+#include <set>
 #include <string>
 #include <chrono>
 #include <expected>
 #include <unordered_set>
 #include <unordered_map>
+#include <boost/signals2/connection.hpp>
 #include "dfs/dfs_utils.h"
 #include "chain/actor_id.h"
-#include "network/network_manager.h"
+#include "utils/safeptr.h"
 
-class ExtraChainNode;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
+class Responder;
+
+namespace ExtraChain::Core {
+    class DeadlineTask;
+}
 
 enum class DownloadError {
     NoNeighbors,
@@ -80,10 +90,12 @@ struct LoadInfo {
     // }
 };
 
-class LoadManager : public QObject {
-    Q_OBJECT
+class LoadManager {
 public:
-    explicit LoadManager(ExtraChainNode* node, QObject* parent = nullptr);
+    explicit LoadManager(ExtraChain::Core::ExtraChainNode* node);
+    ~LoadManager();
+
+    void stop();
 
     bool add_node_identifier(const Dfs::FileLink& file_link, std::string identifier);
     void remove_active_download(const Dfs::FileLinkFragment& file_link_fragment);
@@ -129,7 +141,7 @@ private:
     std::size_t max_concurrent_downloads() const;
     std::size_t max_forced_downloads() const;
 
-    ExtraChainNode* node;
+    ExtraChain::Core::ExtraChainNode* node;
 
     static constexpr int  MAX_ATTEMPTS  = 10;
     static constexpr auto STALL_TIMEOUT = std::chrono::seconds(30);
@@ -154,5 +166,7 @@ private:
     // hash-mismatch cycle) don't hold the "vectors before files" gate.
     SafePtr<std::set<Dfs::FileLink>> m_completed_once;
 
-    QTimer* m_timer;
+    std::shared_ptr<ExtraChain::Core::DeadlineTask> watchdog_;
+    boost::signals2::scoped_connection              activity_connection_;
+    std::atomic_bool                                stopping_ { false };
 };

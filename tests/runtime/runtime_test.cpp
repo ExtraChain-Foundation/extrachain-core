@@ -13,8 +13,12 @@
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/streambuf.hpp>
 #include <boost/asio/write.hpp>
+#include <boost/beast/core/flat_buffer.hpp>
+#include <boost/beast/http.hpp>
 
 #include "network/network_runtime.h"
+#include "network/responder.h"
+#include "core/extrachain_node.h"
 #include "network/network_status.h"
 #include "network/traffic_meter.h"
 #include "runtime/event.h"
@@ -31,6 +35,28 @@ namespace {
             std::exit(EXIT_FAILURE);
         }
     }
+
+    class TestResponseSender final : public ResponseSender {
+    public:
+        std::string send_response(const std::string& data_serialized,
+                                  MessageType        type,
+                                  SendMode           send_mode,
+                                  MessageStatus      status,
+                                  const Responder&   responder) override {
+            data_       = data_serialized;
+            type_       = type;
+            send_mode_  = send_mode;
+            status_     = status;
+            message_id_ = responder.message_id();
+            return "response-sent";
+        }
+
+        std::string   data_;
+        MessageType   type_      = MessageType::Unknown;
+        SendMode      send_mode_ = SendMode::Neighbours;
+        MessageStatus status_    = MessageStatus::NoStatus;
+        std::string   message_id_;
+    };
 } // namespace
 
 int main() {
@@ -42,6 +68,70 @@ int main() {
     using ExtraChain::Core::PeriodicTask;
     using ExtraChain::Core::Runtime;
     using ExtraChain::Core::TrafficMeter;
+
+    TestResponseSender response_sender;
+    Responder          responder(&response_sender);
+    responder.set_message_id("0123456789abcde");
+    require(responder.send_response(std::string("payload"),
+                                    MessageType::Custom,
+                                    SendMode::Focused,
+                                    MessageStatus::Response)
+                == "response-sent",
+            "responder must route a response through the Qt-free sender interface");
+    const auto response_payload = MessagePack::deserialize<std::string>(response_sender.data_);
+    require(response_payload.has_value() && response_payload.value() == "payload",
+            "responder must preserve the serialized response payload");
+    require(response_sender.type_ == MessageType::Custom && response_sender.send_mode_ == SendMode::Focused
+                && response_sender.status_ == MessageStatus::Response
+                && response_sender.message_id_ == "0123456789abcde",
+            "responder must preserve response routing data");
+
+    ExtraChain::Core::ExtraChainNode light_node(false, false, 0, RuntimeProfile::MobileLight);
+    require(light_node.runtime_profile() == RuntimeProfile::MobileLight,
+            "core node must keep its runtime profile");
+    require(light_node.runtime_limits().peer_limit == 3, "foreground mobile node must use the mobile peer limit");
+    std::atomic<RuntimeActivity> observed_activity { RuntimeActivity::Foreground };
+    std::atomic_int              activity_events { 0 };
+    auto activity_connection = light_node.runtime_activity_event().subscribe([&](RuntimeActivity activity) {
+        observed_activity = activity;
+        activity_events.fetch_add(1, std::memory_order_release);
+    });
+    light_node.set_runtime_activity(RuntimeActivity::Background);
+    const auto activity_deadline = std::chrono::steady_clock::now() + 2s;
+    while (activity_events.load(std::memory_order_acquire) == 0
+           && std::chrono::steady_clock::now() < activity_deadline) {
+        std::this_thread::sleep_for(1ms);
+    }
+    require(observed_activity.load(std::memory_order_acquire) == RuntimeActivity::Background,
+            "core node must publish an activity change");
+    require(light_node.runtime_limits().dfs_downloads == 0, "background mobile node must stop DFS downloads");
+    light_node.set_runtime_activity(RuntimeActivity::Background);
+    std::this_thread::sleep_for(20ms);
+    require(activity_events.load(std::memory_order_acquire) == 1, "core node must ignore a duplicate activity");
+
+    std::atomic_int serial_active { 0 };
+    std::atomic_int serial_peak { 0 };
+    std::atomic_int serial_complete { 0 };
+    for (int index = 0; index < 32; ++index) {
+        boost::asio::post(light_node.serial_executor(), [&] {
+            const int active = serial_active.fetch_add(1, std::memory_order_acq_rel) + 1;
+            int       peak   = serial_peak.load(std::memory_order_acquire);
+            while (peak < active && !serial_peak.compare_exchange_weak(peak, active, std::memory_order_acq_rel)) {
+            }
+            std::this_thread::sleep_for(1ms);
+            serial_active.fetch_sub(1, std::memory_order_acq_rel);
+            serial_complete.fetch_add(1, std::memory_order_acq_rel);
+        });
+    }
+    const auto serial_deadline = std::chrono::steady_clock::now() + 2s;
+    while (serial_complete.load(std::memory_order_acquire) != 32
+           && std::chrono::steady_clock::now() < serial_deadline) {
+        std::this_thread::sleep_for(1ms);
+    }
+    require(serial_complete.load(std::memory_order_acquire) == 32,
+            "core node serial executor must complete accepted work");
+    require(serial_peak.load(std::memory_order_acquire) == 1,
+            "core node serial executor must not run node work in parallel");
 
     require(Utils::compare_versions("0.25.0", "0.26.0") == Utils::VersionCompareResult::Newer,
             "version comparison must detect a newer peer");
@@ -250,6 +340,64 @@ int main() {
     }
     http_server.join();
     require(http_ok.load(std::memory_order_acquire), "asynchronous HTTP request must return the response body");
+
+    boost::asio::io_context       post_context;
+    NetworkRuntime::Tcp::acceptor post_acceptor(post_context, { boost::asio::ip::address_v4::loopback(), 0 });
+    const auto                    post_port = post_acceptor.local_endpoint().port();
+    std::atomic_bool              post_request_valid { false };
+    std::thread                   post_server([&] {
+        namespace http = boost::beast::http;
+
+        NetworkRuntime::Tcp::socket socket(post_context);
+        boost::system::error_code   error;
+        post_acceptor.accept(socket, error);
+        if (error) {
+            return;
+        }
+        boost::beast::flat_buffer        buffer;
+        http::request<http::string_body> request;
+        http::read(socket, buffer, request, error);
+        if (error) {
+            return;
+        }
+        post_request_valid.store(request.method() == http::verb::post && request.target() == "/runtime"
+                                     && request[http::field::content_type] == "application/json"
+                                     && request.body() == "{\"ready\":true}",
+                                 std::memory_order_release);
+        http::response<http::string_body> response(http::status::ok, 11);
+        response.set(http::field::content_type, "text/plain");
+        response.body() = "POST-OK";
+        response.prepare_payload();
+        http::write(socket, response, error);
+    });
+
+    std::atomic_bool post_complete { false };
+    std::atomic_bool post_ok { false };
+    network.async_http_post("127.0.0.1",
+                            post_port,
+                            "/runtime",
+                            "application/json",
+                            "{\"ready\":true}",
+                            1s,
+                            [&](NetworkRuntime::HttpResult result) {
+                                post_ok.store(result.has_value() && result.value() == "POST-OK",
+                                              std::memory_order_release);
+                                post_complete.store(true, std::memory_order_release);
+                                condition.notify_one();
+                            });
+    {
+        std::unique_lock lock(mutex);
+        require(condition.wait_for(lock,
+                                   2s,
+                                   [&] {
+                                       return post_complete.load(std::memory_order_acquire);
+                                   }),
+                "asynchronous HTTP POST request must complete");
+    }
+    post_server.join();
+    require(post_ok.load(std::memory_order_acquire), "asynchronous HTTP POST must return the response body");
+    require(post_request_valid.load(std::memory_order_acquire),
+            "asynchronous HTTP POST must preserve target, content type, and body");
 
     std::atomic_bool async_probe_ok { false };
     network.async_probe("127.0.0.1", listen_port.value(), 1s, [&](bool connected, std::string) {
