@@ -32,32 +32,35 @@
 // own node (ExtraChainNode is a per-process singleton), so server and clients
 // must run as separate processes.
 
-#include <QCoreApplication>
-
+#include <chrono>
+#include <csignal>
 #include <cstdlib>
-#include <QDir>
-#include <QTimer>
-
 #include <cstdio>
 #include <filesystem>
+#include <memory>
+#include <thread>
 #include <vector>
 
 #include "chain/dag.h"
-#include "dfs/dfs_controller.h"
+#include "core/extrachain_node.h"
+#include "dfs/dfs_service.h"
 #include "managers/account_controller.h"
-#include "managers/extrachain_node.h"
-#include "network/network_manager.h"
+#include "network/network_service.h"
 #include "utils/exc_logs.h"
 #include "utils/exc_utils.h"
 
 namespace {
     const std::string LOGIN    = "gen-login";
     const std::string PASSWORD = "gen-password";
+
+    volatile std::sig_atomic_t stop_requested = 0;
+
+    void request_stop(int) {
+        stop_requested = 1;
+    }
 } // namespace
 
 int main(int argc, char *argv[]) {
-    QCoreApplication app(argc, argv);
-
     if (argc < 3) {
         std::printf(
             "usage: %s serve <home> [listen-port] [dfs-payload-bytes] | "
@@ -77,10 +80,11 @@ int main(int argc, char *argv[]) {
 
     std::error_code directory_error;
     std::filesystem::create_directories(home, directory_error);
-    if (directory_error || !QDir::setCurrent(QString::fromStdString(home))) {
-        std::printf("[node-run] cannot use node home %s: %s\n",
-                    home.c_str(),
-                    directory_error ? directory_error.message().c_str() : "setCurrent failed");
+    if (!directory_error) {
+        std::filesystem::current_path(home, directory_error);
+    }
+    if (directory_error) {
+        std::printf("[node-run] cannot use node home %s: %s\n", home.c_str(), directory_error.message().c_str());
         return 73;
     }
 
@@ -98,14 +102,14 @@ int main(int argc, char *argv[]) {
     }
 
     const char *bind_ip = std::getenv("EXC_BIND_IP");
-    auto       *wrapper = new ExtraChainNodeWrapper(&app,
-                                              /*is_client*/ false,
-                                              /*is_custom*/ false,
-                                              listen_port,
-                                              std::nullopt,
-                                              bind_ip == nullptr ? std::string {} : std::string(bind_ip));
-    wrapper->init(/*makeAsync*/ false); // runs ExtraChainNode::process() synchronously
-    auto *node = wrapper->node;
+    auto        node    = std::make_unique<ExtraChain::Core::ExtraChainNode>(false,
+                                                                   false,
+                                                                   listen_port,
+                                                                   std::nullopt,
+                                                                   std::string {},
+                                                                   bind_ip == nullptr ? std::string {}
+                                                                                                : std::string(bind_ip));
+    node->process();
 
     if (mode == "serve") {
         // The core/creator: load its existing profile + chain and serve.
@@ -142,7 +146,13 @@ int main(int argc, char *argv[]) {
                     home.c_str(),
                     node->dag()->current_section().to_string().c_str());
         std::fflush(stdout);
-        return app.exec(); // listen + serve forever (killed by the harness)
+        std::signal(SIGINT, request_stop);
+        std::signal(SIGTERM, request_stop);
+        while (stop_requested == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        }
+        node->cleanUp();
+        return 0;
     }
 
     if (mode == "join") {
@@ -166,19 +176,15 @@ int main(int argc, char *argv[]) {
         std::printf("[node-run] joining %s, target section %lld\n", argv[3], target);
         std::fflush(stdout);
 
-        // Kick off the outbound connection to the peer (reconnect timer is not
-        // wired in this build path, so dial explicitly).
-        QTimer::singleShot(500, [node, peer_ip, peer_port]() {
-            node->network()->request_endpoint(peer_ip, peer_port, true, true);
-        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        node->network()->request_endpoint(peer_ip, peer_port, true, true);
 
-        // Poll sync progress; exit when we reach the target or time out.
-        auto *poll     = new QTimer(&app);
-        auto *deadline = new QTimer(&app);
-        int   ticks    = 0;
-        QObject::connect(poll, &QTimer::timeout, [&]() {
-            auto cur   = node->dag()->current_section();
-            auto conns = node->network()->active_connections_count();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(4);
+        int        ticks    = 0;
+        int        result   = 1;
+        while (std::chrono::steady_clock::now() < deadline) {
+            const auto cur   = node->dag()->current_section();
+            const auto conns = node->network()->active_connections_count();
             std::printf("[node-run] t=%ds conns=%d current_section=%s status=%d\n",
                         ticks * 3,
                         conns,
@@ -208,41 +214,32 @@ int main(int argc, char *argv[]) {
                 std::printf("[node-run] last_control section=%s\n",
                             lc.has_value() ? lc->section_id.to_string().c_str() : "(none)");
                 std::fflush(stdout);
-                app.exit(0);
+                result = 0;
+                break;
             }
             if (conns == 0) {
                 if (ticks % 3 == 0) {
                     node->network()->request_endpoint(peer_ip, peer_port, true, true);
                 }
-                return;
+            } else {
+                // Connected. A server-type node stays Ready and start_check() bails on
+                // Ready, so kick the client-style pull explicitly. start_sync() guards
+                // itself once a sync is already in flight.
+                node->dag()->start_sync();
             }
-            // Connected. A server-type node stays Ready and start_check() bails on
-            // Ready, so kick the client-style pull explicitly. start_sync() guards
-            // itself once a sync is already in flight.
-            node->dag()->start_sync();
-        });
-        poll->start(3000);
-
-        QObject::connect(deadline, &QTimer::timeout, [&]() {
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+        }
+        if (result != 0) {
             std::printf("[node-run] TIMEOUT at current_section=%s\n",
                         node->dag()->current_section().to_string().c_str());
             std::fflush(stdout);
-            app.exit(1);
-        });
-        deadline->setSingleShot(true);
-        deadline->start(240000); // 4 min
-
-        const int exit_code = app.exec();
-        // Destroy the node while Qt can still process queued shutdown work.
-        // If the wrapper stays parented to QCoreApplication, child destruction
-        // starts after the event dispatcher is gone. Active network timers can
-        // then access invalid Qt state during a normal test exit.
+        }
         std::printf("[node-run] stopping node\n");
         std::fflush(stdout);
-        delete wrapper;
+        node->cleanUp();
         std::printf("[node-run] node stopped\n");
         std::fflush(stdout);
-        return exit_code;
+        return result;
     }
 
     std::printf("[node-run] unknown mode '%s'\n", mode.c_str());

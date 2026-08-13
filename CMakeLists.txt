@@ -64,35 +64,10 @@ find_package(blake3 CONFIG REQUIRED)
 find_package(zstd CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 
-set(EXTRACHAIN_EMBEDDED_CONTRACTS_HEADER
-    ${CMAKE_CURRENT_BINARY_DIR}/generated/contracts/embedded_contracts.h)
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/generated/contracts)
-file(WRITE ${EXTRACHAIN_EMBEDDED_CONTRACTS_HEADER}
-     "#pragma once\nnamespace " "ExtraChain::Contracts::Embedded {\n")
-find_program(EXTRACHAIN_XXD_EXECUTABLE xxd)
-foreach(contract_name IN
-        ITEMS fungible_token_rust fungible_token_assemblyscript
-              non_fungible_token_rust non_fungible_token_assemblyscript)
-  if(EXTRACHAIN_XXD_EXECUTABLE)
-    set(contract_fragment
-        ${CMAKE_CURRENT_BINARY_DIR}/generated/contracts/${contract_name}.inc)
-    execute_process(
-      COMMAND ${EXTRACHAIN_XXD_EXECUTABLE} -i -n ${contract_name}
-              ${CMAKE_CURRENT_LIST_DIR}/contracts/standard/${contract_name}.wasm
-      OUTPUT_FILE ${contract_fragment} COMMAND_ERROR_IS_FATAL ANY)
-    file(APPEND ${EXTRACHAIN_EMBEDDED_CONTRACTS_HEADER}
-         "#include " "\"contracts/" "${contract_name}.inc\"\n")
-  else()
-    file(READ
-         ${CMAKE_CURRENT_LIST_DIR}/contracts/standard/${contract_name}.wasm
-         contract_hex HEX)
-    string(REGEX REPLACE "(..)" "0x\\1," contract_bytes "${contract_hex}")
-    file(APPEND ${EXTRACHAIN_EMBEDDED_CONTRACTS_HEADER}
-         "inline constexpr unsigned char " "${contract_name}[] = "
-         "{${contract_bytes}};\n")
-  endif()
-endforeach()
-file(APPEND ${EXTRACHAIN_EMBEDDED_CONTRACTS_HEADER} "}\n")
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/ExtraChainEmbeddedContracts.cmake)
+extrachain_generate_embedded_contracts(
+  ${CMAKE_CURRENT_BINARY_DIR}/generated
+  ${CMAKE_CURRENT_LIST_DIR}/contracts/standard)
 
 set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/extrachain_version.h

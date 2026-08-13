@@ -3,7 +3,8 @@ if(NOT DEFINED CORE_SOURCE_MANIFEST OR NOT EXISTS "${CORE_SOURCE_MANIFEST}")
 endif()
 
 file(STRINGS "${CORE_SOURCE_MANIFEST}" core_sources)
-set(qt_pattern "#[ \t]*include[ \t]*[<\"]Q|Q_OBJECT|Q_INVOKABLE|Qt6?::")
+set(qt_pattern
+    "#[ \t]*include[ \t]*[<\"]Q|Q_OBJECT|Q_INVOKABLE|Qt6?::|QtTest|QCoreApplication|QObject|QDir|QTimer|QByteArray|QString")
 
 foreach(source IN LISTS core_sources)
   if(NOT EXISTS "${source}")

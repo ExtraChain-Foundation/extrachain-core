@@ -26,8 +26,6 @@
 //   * migration            : a legacy hex section -> decimal on disk, with the
 //                            transaction signature still verifying afterwards
 
-#include <QtTest/QtTest>
-
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -53,6 +51,7 @@
 #include "utils/bignumber_float.h"
 #include "utils/exc_logs.h"
 #include "utils/exc_utils.h"
+#include "test_support.h"
 
 namespace {
 
@@ -77,24 +76,22 @@ namespace {
 
 } // namespace
 
-class SyncTest : public QObject {
-    Q_OBJECT
-
-private slots:
+class SyncTest {
+public:
     void actorIdUsesCanonicalCoreRepresentation() {
         const ActorId actor_id("abc");
-        QCOMPARE(actor_id.to_string().size(), ActorId::SIZE);
-        QVERIFY(actor_id.to_string().ends_with("abc"));
-        QVERIFY(!ActorId::create(std::string(ActorId::SIZE + 1, 'a')).has_value());
-        QVERIFY(!ActorId::create("ABC").has_value());
-        QVERIFY(ActorId(std::string(ActorId::SIZE + 1, 'a')).is_zero());
-        QVERIFY(ActorId("ABC").is_zero());
+        TEST_REQUIRE_EQ(actor_id.to_string().size(), ActorId::SIZE);
+        TEST_REQUIRE(actor_id.to_string().ends_with("abc"));
+        TEST_REQUIRE(!ActorId::create(std::string(ActorId::SIZE + 1, 'a')).has_value());
+        TEST_REQUIRE(!ActorId::create("ABC").has_value());
+        TEST_REQUIRE(ActorId(std::string(ActorId::SIZE + 1, 'a')).is_zero());
+        TEST_REQUIRE(ActorId("ABC").is_zero());
     }
 
     void hashModuleKeepsBlake3WireValue() {
         constexpr auto Expected = "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85";
-        QCOMPARE(Utils::calculate_hash(std::string("abc")), std::string(Expected));
-        QCOMPARE(Utils::calculate_hash_bytes("abc", 3), std::string(Expected));
+        TEST_REQUIRE_EQ(Utils::calculate_hash(std::string("abc")), std::string(Expected));
+        TEST_REQUIRE_EQ(Utils::calculate_hash_bytes("abc", 3), std::string(Expected));
 
         const auto root = std::filesystem::temp_directory_path() / "extrachain-hash-module-test";
         std::filesystem::remove_all(root);
@@ -103,16 +100,16 @@ private slots:
         std::ofstream(file_path, std::ios::binary) << "abc";
 
         const auto path = FsPath::create(file_path.string());
-        QVERIFY(path.has_value());
+        TEST_REQUIRE(path.has_value());
         const auto file_hash = Utils::calculate_hash_file(*path);
-        QVERIFY(file_hash.has_value());
-        QCOMPARE(*file_hash, std::string(Expected));
+        TEST_REQUIRE(file_hash.has_value());
+        TEST_REQUIRE_EQ(*file_hash, std::string(Expected));
 
         const auto missing_path = FsPath::create((root / "missing").string());
-        QVERIFY(missing_path.has_value());
+        TEST_REQUIRE(missing_path.has_value());
         const auto missing_hash = Utils::calculate_hash_file(*missing_path);
-        QVERIFY(!missing_hash.has_value());
-        QCOMPARE(missing_hash.error(), Utils::FileHashError::FileNotFound);
+        TEST_REQUIRE(!missing_hash.has_value());
+        TEST_REQUIRE_EQ(missing_hash.error(), Utils::FileHashError::FileNotFound);
         std::filesystem::remove_all(root);
     }
 
@@ -128,12 +125,12 @@ private slots:
         constexpr auto Expected =
             R"(["0000000000000000000000000000000000000abc",2,"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"])";
         const auto encoded = actor.toJson();
-        QCOMPARE(encoded, std::string(Expected));
+        TEST_REQUIRE_EQ(encoded, std::string(Expected));
 
         const auto restored = Actor<KeyPublic>::fromJson(encoded);
-        QCOMPARE(restored.id(), actor.id());
-        QCOMPARE(restored.type(), actor.type());
-        QCOMPARE(restored.key().public_key(), actor.key().public_key());
+        TEST_REQUIRE_EQ(restored.id(), actor.id());
+        TEST_REQUIRE_EQ(restored.type(), actor.type());
+        TEST_REQUIRE_EQ(restored.key().public_key(), actor.key().public_key());
 
         PrivateKey private_key {};
         private_key[0] = 2;
@@ -142,54 +139,54 @@ private slots:
         private_actor.set_type(actor.type());
         private_actor.set_secret_key(private_key, public_key);
         const auto restored_private = Actor<KeyPrivate>::fromJson(private_actor.toJson());
-        QCOMPARE(restored_private.id(), private_actor.id());
-        QCOMPARE(restored_private.key().public_key(), public_key);
-        QCOMPARE(restored_private.key().secret_key(), private_key);
+        TEST_REQUIRE_EQ(restored_private.id(), private_actor.id());
+        TEST_REQUIRE_EQ(restored_private.key().public_key(), public_key);
+        TEST_REQUIRE_EQ(restored_private.key().secret_key(), private_key);
 
-        QVERIFY(Actor<KeyPublic>::fromJson("").empty());
-        QVERIFY(Actor<KeyPublic>::fromJson("not-json").empty());
-        QVERIFY(Actor<KeyPublic>::fromJson(R"(["abc",8,"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"])")
-                    .empty());
-        QVERIFY(Actor<KeyPublic>::fromJson(R"(["abc",2,"AQ"])").empty());
+        TEST_REQUIRE(Actor<KeyPublic>::fromJson("").empty());
+        TEST_REQUIRE(Actor<KeyPublic>::fromJson("not-json").empty());
+        TEST_REQUIRE(
+            Actor<KeyPublic>::fromJson(R"(["abc",8,"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"])").empty());
+        TEST_REQUIRE(Actor<KeyPublic>::fromJson(R"(["abc",2,"AQ"])").empty());
     }
 
     void transactionAdmissionClosesAtCacheBoundary() {
-        QVERIFY(transaction_section_is_open(SectionId(14), SectionId(0)));
-        QVERIFY(!transaction_section_is_open(SectionId(15), SectionId(0)));
-        QVERIFY(!transaction_section_is_open(SectionId(30), SectionId(15)));
-        QVERIFY(transaction_section_is_open(SectionId(30), SectionId(16)));
-        QVERIFY(transaction_section_is_open(SectionId(30), SectionId(45)));
-        QVERIFY(!transaction_section_is_open(SectionId(30), SectionId(46)));
+        TEST_REQUIRE(transaction_section_is_open(SectionId(14), SectionId(0)));
+        TEST_REQUIRE(!transaction_section_is_open(SectionId(15), SectionId(0)));
+        TEST_REQUIRE(!transaction_section_is_open(SectionId(30), SectionId(15)));
+        TEST_REQUIRE(transaction_section_is_open(SectionId(30), SectionId(16)));
+        TEST_REQUIRE(transaction_section_is_open(SectionId(30), SectionId(45)));
+        TEST_REQUIRE(!transaction_section_is_open(SectionId(30), SectionId(46)));
     }
 
     void controlHashUsesOnlyClosedIntervals() {
-        QCOMPARE(control_interval_end(SectionId(0)), SectionId(0));
-        QCOMPARE(control_interval_end(SectionId(1)), SectionId(20));
-        QCOMPARE(control_interval_end(SectionId(21)), SectionId(40));
+        TEST_REQUIRE_EQ(control_interval_end(SectionId(0)), SectionId(0));
+        TEST_REQUIRE_EQ(control_interval_end(SectionId(1)), SectionId(20));
+        TEST_REQUIRE_EQ(control_interval_end(SectionId(21)), SectionId(40));
 
-        QVERIFY(control_interval_is_closed(SectionId(0), SectionId(0), SectionId(0)));
-        QVERIFY(!control_interval_is_closed(SectionId(1), SectionId(19), SectionId(19)));
-        QVERIFY(!control_interval_is_closed(SectionId(1), SectionId(20), SectionId(19)));
-        QVERIFY(control_interval_is_closed(SectionId(1), SectionId(20), SectionId(20)));
-        QVERIFY(!control_interval_is_closed(SectionId(21), SectionId(40), SectionId(39)));
-        QVERIFY(control_interval_is_closed(SectionId(21), SectionId(40), SectionId(40)));
+        TEST_REQUIRE(control_interval_is_closed(SectionId(0), SectionId(0), SectionId(0)));
+        TEST_REQUIRE(!control_interval_is_closed(SectionId(1), SectionId(19), SectionId(19)));
+        TEST_REQUIRE(!control_interval_is_closed(SectionId(1), SectionId(20), SectionId(19)));
+        TEST_REQUIRE(control_interval_is_closed(SectionId(1), SectionId(20), SectionId(20)));
+        TEST_REQUIRE(!control_interval_is_closed(SectionId(21), SectionId(40), SectionId(39)));
+        TEST_REQUIRE(control_interval_is_closed(SectionId(21), SectionId(40), SectionId(40)));
     }
 
     void vectorRevisionOrderIsIndependentOfDeliveryOrder() {
         const DbRow older { { "timestamp", "100" }, { "value", "old" } };
         const DbRow newer { { "timestamp", "101" }, { "value", "new" } };
-        QVERIFY(DfsVector::compare_row_revisions(older, newer) < 0);
-        QVERIFY(DfsVector::compare_row_revisions(newer, older) > 0);
+        TEST_REQUIRE(DfsVector::compare_row_revisions(older, newer) < 0);
+        TEST_REQUIRE(DfsVector::compare_row_revisions(newer, older) > 0);
 
         const DbRow same_a { { "timestamp", "101" }, { "value", "A" }, { "status", "1" } };
         const DbRow same_b { { "status", "1" }, { "value", "B" }, { "timestamp", "101" } };
         const auto  forward = DfsVector::compare_row_revisions(same_a, same_b);
         const auto  reverse = DfsVector::compare_row_revisions(same_b, same_a);
-        QVERIFY(forward != 0);
-        QCOMPARE(forward, -reverse);
+        TEST_REQUIRE(forward != 0);
+        TEST_REQUIRE_EQ(forward, -reverse);
 
         const DbRow same_a_reordered { { "value", "A" }, { "status", "1" }, { "timestamp", "101" } };
-        QCOMPARE(DfsVector::compare_row_revisions(same_a, same_a_reordered), 0);
+        TEST_REQUIRE_EQ(DfsVector::compare_row_revisions(same_a, same_a_reordered), 0);
     }
 
     void dagBatchCapabilityIsOptional() {
@@ -203,15 +200,15 @@ private slots:
         };
         auto encoded = Json::serialize(current);
         auto decoded = Json::deserialize<SocketService::HandshakeMessage>(encoded);
-        QVERIFY(decoded.has_value());
-        QVERIFY(decoded.value().capabilities.has_value());
-        QVERIFY(decoded.value().capabilities.value().contains(std::string(DAG_TX_BATCH_CAPABILITY)));
+        TEST_REQUIRE(decoded.has_value());
+        TEST_REQUIRE(decoded.value().capabilities.has_value());
+        TEST_REQUIRE(decoded.value().capabilities.value().contains(std::string(DAG_TX_BATCH_CAPABILITY)));
 
         current.capabilities = std::nullopt;
         encoded              = Json::serialize(current);
         decoded              = Json::deserialize<SocketService::HandshakeMessage>(encoded);
-        QVERIFY(decoded.has_value());
-        QVERIFY(!decoded.value().capabilities.has_value());
+        TEST_REQUIRE(decoded.has_value());
+        TEST_REQUIRE(!decoded.value().capabilities.has_value());
     }
 
     void dagTransactionBatchRoundTrips() {
@@ -228,10 +225,10 @@ private slots:
         const DagTransactionBatch batch { .transactions = { first, second } };
         const auto                encoded = MessagePack::serialize(batch);
         const auto                decoded = MessagePack::deserialize<DagTransactionBatch>(encoded);
-        QVERIFY(decoded.has_value());
-        QCOMPARE(decoded.value().transactions.size(), std::size_t(2));
-        QCOMPARE(decoded.value().transactions[0].section(), SectionId(21));
-        QCOMPARE(decoded.value().transactions[1].section(), SectionId(22));
+        TEST_REQUIRE(decoded.has_value());
+        TEST_REQUIRE_EQ(decoded.value().transactions.size(), std::size_t(2));
+        TEST_REQUIRE_EQ(decoded.value().transactions[0].section(), SectionId(21));
+        TEST_REQUIRE_EQ(decoded.value().transactions[1].section(), SectionId(22));
     }
 
     // ----- Pack-sync data path ------------------------------------------------
@@ -245,7 +242,7 @@ private slots:
         std::filesystem::remove_all(client_dir);
 
         const int packs = 3, per_pack = 100;
-        QVERIFY(!make_server_packs(server_dir, packs, per_pack).empty());
+        TEST_REQUIRE(!make_server_packs(server_dir, packs, per_pack).empty());
 
         Pack::Registry server(server_dir);
         server.rescan();
@@ -253,38 +250,38 @@ private slots:
 
         // Client learns which packs exist (network_pack_list_response uses spans()).
         auto spans = server.spans();
-        QCOMPARE(spans.size(), static_cast<std::size_t>(packs));
+        TEST_REQUIRE_EQ(spans.size(), static_cast<std::size_t>(packs));
 
         // Transfer each missing pack: read_raw on server -> install_raw on client.
         for (const auto &s : spans) {
             auto raw = server.read_raw(s.id);
-            QVERIFY2(raw.has_value(), "server read_raw failed");
+            TEST_REQUIRE_MESSAGE(raw.has_value(), "server read_raw failed");
             auto inst = client.install_raw(s.id, *raw);
-            QVERIFY2(inst.has_value(), "client install_raw failed");
+            TEST_REQUIRE_MESSAGE(inst.has_value(), "client install_raw failed");
         }
 
         // Client now holds the full history and reads it identically.
         for (int sid = 0; sid < packs * per_pack; ++sid) {
             auto got = client.read_section(SectionId(sid));
-            QVERIFY2(got.has_value(), qPrintable(QString("client missing section %1").arg(sid)));
-            QCOMPARE(*got, std::string("sec-") + std::to_string(sid));
+            TEST_REQUIRE_MESSAGE(got.has_value(), std::string("client missing section ") + std::to_string(sid));
+            TEST_REQUIRE_EQ(*got, std::string("sec-") + std::to_string(sid));
         }
 
         auto reopened = client.read_section(SectionId(0));
-        QVERIFY(reopened.has_value());
-        QCOMPARE(*reopened, std::string("sec-0"));
+        TEST_REQUIRE(reopened.has_value());
+        TEST_REQUIRE_EQ(*reopened, std::string("sec-0"));
 
         Pack::Registry zero_sized_cache(client_dir, 0);
         zero_sized_cache.rescan();
-        QVERIFY(zero_sized_cache.read_section(SectionId(0)).has_value());
-        QVERIFY(zero_sized_cache.read_section(SectionId(per_pack)).has_value());
-        QVERIFY(zero_sized_cache.read_section(SectionId(0)).has_value());
+        TEST_REQUIRE(zero_sized_cache.read_section(SectionId(0)).has_value());
+        TEST_REQUIRE(zero_sized_cache.read_section(SectionId(per_pack)).has_value());
+        TEST_REQUIRE(zero_sized_cache.read_section(SectionId(0)).has_value());
 
         // Coverage matches the server.
         auto cov = client.coverage();
-        QVERIFY(cov.has_value());
-        QCOMPARE(cov->first, SectionId(0));
-        QCOMPARE(cov->last, SectionId(packs * per_pack - 1));
+        TEST_REQUIRE(cov.has_value());
+        TEST_REQUIRE_EQ(cov->first, SectionId(0));
+        TEST_REQUIRE_EQ(cov->last, SectionId(packs * per_pack - 1));
 
         std::filesystem::remove_all(server_dir);
         std::filesystem::remove_all(client_dir);
@@ -296,37 +293,37 @@ private slots:
     void packSyncRejectsBadPayloads() {
         auto server_dir = std::filesystem::temp_directory_path() / "exc_sync_bad_server";
         auto client_dir = std::filesystem::temp_directory_path() / "exc_sync_bad_client";
-        QVERIFY(!make_server_packs(server_dir, 1, 50).empty());
+        TEST_REQUIRE(!make_server_packs(server_dir, 1, 50).empty());
 
         Pack::Registry server(server_dir);
         server.rescan();
         Pack::Registry client(client_dir);
 
         auto raw = server.read_raw(0);
-        QVERIFY(raw.has_value());
+        TEST_REQUIRE(raw.has_value());
 
         // Corrupt the bytes -> checksum/format check must fail, nothing installed.
         std::string corrupt = *raw;
         corrupt[corrupt.size() / 2] ^= 0xFF;
-        QVERIFY(!client.install_raw(0, corrupt).has_value());
-        QVERIFY(!client.read_section(SectionId(0)).has_value());
+        TEST_REQUIRE(!client.install_raw(0, corrupt).has_value());
+        TEST_REQUIRE(!client.read_section(SectionId(0)).has_value());
 
         // Valid bytes but wrong id -> rejected (embedded id != requested id).
-        QVERIFY(!client.install_raw(999, *raw).has_value());
+        TEST_REQUIRE(!client.install_raw(999, *raw).has_value());
 
         // A caller can apply chain-level checks before the pack becomes visible.
-        QVERIFY(!client
-                     .install_raw(0,
-                                  *raw,
-                                  [](const Pack::Reader &) {
-                                      return false;
-                                  })
-                     .has_value());
-        QVERIFY(!client.read_section(SectionId(0)).has_value());
+        TEST_REQUIRE(!client
+                          .install_raw(0,
+                                       *raw,
+                                       [](const Pack::Reader &) {
+                                           return false;
+                                       })
+                          .has_value());
+        TEST_REQUIRE(!client.read_section(SectionId(0)).has_value());
 
         // The honest install still works afterwards.
-        QVERIFY(client.install_raw(0, *raw).has_value());
-        QVERIFY(client.read_section(SectionId(0)).has_value());
+        TEST_REQUIRE(client.install_raw(0, *raw).has_value());
+        TEST_REQUIRE(client.read_section(SectionId(0)).has_value());
 
         std::filesystem::remove_all(server_dir);
         std::filesystem::remove_all(client_dir);
@@ -336,17 +333,17 @@ private slots:
         auto server_dir = std::filesystem::temp_directory_path() / "exc_sync_window_server";
         auto client_dir = std::filesystem::temp_directory_path() / "exc_sync_window_client";
         std::filesystem::remove_all(client_dir);
-        QVERIFY(!make_server_packs(server_dir, 1, 2000).empty());
+        TEST_REQUIRE(!make_server_packs(server_dir, 1, 2000).empty());
 
         Pack::Registry server(server_dir);
         server.rescan();
         Pack::Registry client(client_dir);
         auto           raw = server.read_raw(0);
-        QVERIFY(raw.has_value());
+        TEST_REQUIRE(raw.has_value());
 
         const std::size_t chunk_size = std::max<std::size_t>(1, (raw->size() + 3) / 4);
         auto              first_size = std::min(chunk_size, raw->size());
-        QVERIFY(client.install_chunk(0, 0, std::string_view(*raw).substr(0, first_size), false).has_value());
+        TEST_REQUIRE(client.install_chunk(0, 0, std::string_view(*raw).substr(0, first_size), false).has_value());
 
         std::vector<std::size_t> offsets;
         for (std::size_t offset = chunk_size; offset < raw->size(); offset += chunk_size) {
@@ -355,12 +352,12 @@ private slots:
         std::ranges::reverse(offsets);
         for (const auto offset : offsets) {
             auto size = std::min(chunk_size, raw->size() - offset);
-            QVERIFY(
+            TEST_REQUIRE(
                 client.install_chunk(0, offset, std::string_view(*raw).substr(offset, size), false).has_value());
         }
-        QVERIFY(client.install_chunk(0, raw->size(), {}, true).has_value());
-        QCOMPARE(client.read_section(SectionId(0)), std::optional<std::string>("sec-0"));
-        QCOMPARE(client.read_section(SectionId(1999)), std::optional<std::string>("sec-1999"));
+        TEST_REQUIRE(client.install_chunk(0, raw->size(), {}, true).has_value());
+        TEST_REQUIRE_EQ(client.read_section(SectionId(0)), std::optional<std::string>("sec-0"));
+        TEST_REQUIRE_EQ(client.read_section(SectionId(1999)), std::optional<std::string>("sec-1999"));
 
         std::filesystem::remove_all(server_dir);
         std::filesystem::remove_all(client_dir);
@@ -376,9 +373,9 @@ private slots:
         }
 
         const auto result = Pack::write(path, 0, sections);
-        QVERIFY(!result.has_value());
-        QCOMPARE(result.error(), Pack::Error::InvalidFormat);
-        QVERIFY(!std::filesystem::exists(path));
+        TEST_REQUIRE(!result.has_value());
+        TEST_REQUIRE_EQ(result.error(), Pack::Error::InvalidFormat);
+        TEST_REQUIRE(!std::filesystem::exists(path));
     }
 
     void hotSectionStorePersistsAndPrunesRevisions() {
@@ -388,47 +385,47 @@ private slots:
 
         {
             HotSectionStore store(path);
-            QVERIFY(store.is_open());
-            QVERIFY(store.put(SectionId(10), "section-10-v1"));
-            QVERIFY(store.put_many({ { SectionId(11), "section-11" }, { SectionId(12), "section-12" } }));
-            QVERIFY(store.put(SectionId(10), "section-10-v2"));
-            QVERIFY(store.commit_batch({ { SectionId(20), "section-20" }, { SectionId(21), "section-21" } },
-                                       std::pair { SectionId(10), SectionId(21) }));
+            TEST_REQUIRE(store.is_open());
+            TEST_REQUIRE(store.put(SectionId(10), "section-10-v1"));
+            TEST_REQUIRE(store.put_many({ { SectionId(11), "section-11" }, { SectionId(12), "section-12" } }));
+            TEST_REQUIRE(store.put(SectionId(10), "section-10-v2"));
+            TEST_REQUIRE(store.commit_batch({ { SectionId(20), "section-20" }, { SectionId(21), "section-21" } },
+                                            std::pair { SectionId(10), SectionId(21) }));
             const std::optional<std::pair<SectionId, SectionId>> expected_committed_range =
                 std::pair { SectionId(10), SectionId(21) };
-            QCOMPARE(store.committed_range(), expected_committed_range);
-            QVERIFY(!store.commit_batch({ { SectionId(-1), "invalid" }, { SectionId(22), "section-22" } },
-                                        std::pair { SectionId(10), SectionId(22) }));
-            QVERIFY(!store.contains(SectionId(22)));
-            QCOMPARE(store.committed_range(), expected_committed_range);
-            QCOMPARE(store.get(SectionId(10)), std::optional<std::string>("section-10-v2"));
+            TEST_REQUIRE_EQ(store.committed_range(), expected_committed_range);
+            TEST_REQUIRE(!store.commit_batch({ { SectionId(-1), "invalid" }, { SectionId(22), "section-22" } },
+                                             std::pair { SectionId(10), SectionId(22) }));
+            TEST_REQUIRE(!store.contains(SectionId(22)));
+            TEST_REQUIRE_EQ(store.committed_range(), expected_committed_range);
+            TEST_REQUIRE_EQ(store.get(SectionId(10)), std::optional<std::string>("section-10-v2"));
 
             const auto range = store.read_range(SectionId(10), SectionId(11));
-            QCOMPARE(range.size(), static_cast<std::size_t>(2));
-            QCOMPARE(range.at(SectionId(11)), std::string("section-11"));
+            TEST_REQUIRE_EQ(range.size(), static_cast<std::size_t>(2));
+            TEST_REQUIRE_EQ(range.at(SectionId(11)), std::string("section-11"));
             const std::optional<std::pair<SectionId, SectionId>> expected_bounds =
                 std::pair { SectionId(10), SectionId(21) };
-            QCOMPARE(store.bounds(), expected_bounds);
+            TEST_REQUIRE_EQ(store.bounds(), expected_bounds);
 
-            QVERIFY(store.erase_range(SectionId(10), SectionId(10)));
-            QVERIFY(!store.contains(SectionId(10)));
-            QVERIFY(store.erase_from(SectionId(12)));
-            QVERIFY(!store.contains(SectionId(12)));
+            TEST_REQUIRE(store.erase_range(SectionId(10), SectionId(10)));
+            TEST_REQUIRE(!store.contains(SectionId(10)));
+            TEST_REQUIRE(store.erase_from(SectionId(12)));
+            TEST_REQUIRE(!store.contains(SectionId(12)));
             const std::optional<std::pair<SectionId, SectionId>> expected_rewound_range =
                 std::pair { SectionId(10), SectionId(12) };
-            QCOMPARE(store.committed_range(), expected_rewound_range);
+            TEST_REQUIRE_EQ(store.committed_range(), expected_rewound_range);
         }
 
         {
             HotSectionStore reopened(path);
-            QCOMPARE(reopened.get(SectionId(11)), std::optional<std::string>("section-11"));
+            TEST_REQUIRE_EQ(reopened.get(SectionId(11)), std::optional<std::string>("section-11"));
             const std::optional<std::pair<SectionId, SectionId>> expected_committed_range =
                 std::pair { SectionId(10), SectionId(12) };
-            QCOMPARE(reopened.committed_range(), expected_committed_range);
-            QVERIFY(reopened.clear());
-            QVERIFY(!reopened.contains(SectionId(11)));
-            QVERIFY(!reopened.bounds().has_value());
-            QVERIFY(!reopened.committed_range().has_value());
+            TEST_REQUIRE_EQ(reopened.committed_range(), expected_committed_range);
+            TEST_REQUIRE(reopened.clear());
+            TEST_REQUIRE(!reopened.contains(SectionId(11)));
+            TEST_REQUIRE(!reopened.bounds().has_value());
+            TEST_REQUIRE(!reopened.committed_range().has_value());
         }
 
         std::filesystem::remove_all(dir);
@@ -451,20 +448,20 @@ private slots:
             WireFormat::Scope s(WireFormat::Mode::Legacy);
             hex_wire = MessagePack::serialize(n);
         }
-        QVERIFY(decimal_wire != hex_wire); // "255" vs "ff"
+        TEST_REQUIRE(decimal_wire != hex_wire); // "255" vs "ff"
 
         // Decode each under the matching scope -> original value.
         {
             WireFormat::Scope s(WireFormat::Mode::Canonical);
             auto              back = MessagePack::deserialize<BigNumber>(decimal_wire);
-            QVERIFY(back.has_value());
-            QCOMPARE(back->to_string(), std::string("255"));
+            TEST_REQUIRE(back.has_value());
+            TEST_REQUIRE_EQ(back->to_string(), std::string("255"));
         }
         {
             WireFormat::Scope s(WireFormat::Mode::Legacy);
             auto              back = MessagePack::deserialize<BigNumber>(hex_wire);
-            QVERIFY(back.has_value());
-            QCOMPARE(back->to_string(), std::string("255"));
+            TEST_REQUIRE(back.has_value());
+            TEST_REQUIRE_EQ(back->to_string(), std::string("255"));
         }
     }
 
@@ -482,39 +479,39 @@ private slots:
 
         WireFormat::Scope s(WireFormat::Mode::Legacy);
         auto              decoded = MessagePack::deserialize<BigNumber>(hex_wire);
-        QVERIFY(decoded.has_value());
-        QCOMPARE(decoded->to_string(), std::string("256"));
+        TEST_REQUIRE(decoded.has_value());
+        TEST_REQUIRE_EQ(decoded->to_string(), std::string("256"));
 
         // And the strict decimal constructor never sniffs hex.
-        QCOMPARE(BigNumber("100").to_string(), std::string("100"));
-        QCOMPARE(BigNumber::from_hex("100").to_string(), std::string("256"));
+        TEST_REQUIRE_EQ(BigNumber("100").to_string(), std::string("100"));
+        TEST_REQUIRE_EQ(BigNumber::from_hex("100").to_string(), std::string("256"));
     }
 
     // Existing desktop and mobile clients select the display or input base
     // explicitly. These overloads must not change the canonical decimal default.
     void numeralBaseCompatibility() {
         const BigNumber integer("100");
-        QCOMPARE(integer.to_string(), std::string("100"));
-        QCOMPARE(integer.to_string(NumeralBase::Dec), std::string("100"));
-        QCOMPARE(integer.to_string(NumeralBase::Hex), std::string("64"));
-        QCOMPARE(BigNumber("100", NumeralBase::Hex).to_string(), std::string("256"));
+        TEST_REQUIRE_EQ(integer.to_string(), std::string("100"));
+        TEST_REQUIRE_EQ(integer.to_string(NumeralBase::Dec), std::string("100"));
+        TEST_REQUIRE_EQ(integer.to_string(NumeralBase::Hex), std::string("64"));
+        TEST_REQUIRE_EQ(BigNumber("100", NumeralBase::Hex).to_string(), std::string("256"));
 
         auto numeric_hex = BigNumber::create("100", NumeralBase::Hex);
-        QVERIFY(numeric_hex.has_value());
-        QCOMPARE(numeric_hex->to_string(), std::string("256"));
-        QVERIFY(!BigNumber::create("10g", NumeralBase::Hex).has_value());
+        TEST_REQUIRE(numeric_hex.has_value());
+        TEST_REQUIRE_EQ(numeric_hex->to_string(), std::string("256"));
+        TEST_REQUIRE(!BigNumber::create("10g", NumeralBase::Hex).has_value());
 
         const BigNumberFloat decimal("1.25", NumeralBase::Dec);
-        QCOMPARE(decimal.to_string(NumeralBase::Dec), std::string("1.25"));
+        TEST_REQUIRE_EQ(decimal.to_string(NumeralBase::Dec), std::string("1.25"));
 
         auto float_hex = BigNumberFloat::create("a.5", NumeralBase::Hex);
-        QVERIFY(float_hex.has_value());
-        QCOMPARE(float_hex->to_string(), std::string("10.5"));
-        QVERIFY(!BigNumberFloat::create("a.5.1", NumeralBase::Hex).has_value());
+        TEST_REQUIRE(float_hex.has_value());
+        TEST_REQUIRE_EQ(float_hex->to_string(), std::string("10.5"));
+        TEST_REQUIRE(!BigNumberFloat::create("a.5.1", NumeralBase::Hex).has_value());
 
-        QCOMPARE(BigNumber("12345").to_printable_string(), std::string("12345"));
-        QCOMPARE(BigNumber("1234567").to_printable_string(), std::string("1 234 567"));
-        QCOMPARE(BigNumber("-1234567").to_printable_string(), std::string("-1 234 567"));
+        TEST_REQUIRE_EQ(BigNumber("12345").to_printable_string(), std::string("12345"));
+        TEST_REQUIRE_EQ(BigNumber("1234567").to_printable_string(), std::string("1 234 567"));
+        TEST_REQUIRE_EQ(BigNumber("-1234567").to_printable_string(), std::string("-1 234 567"));
     }
 
     void encryptionRoundTripsWithoutIntermediateFormats() {
@@ -523,63 +520,63 @@ private slots:
 
         for (const bool nonce_from_key : { false, true }) {
             auto encrypted = Cryptography::symmetric_encrypt(data, key, nonce_from_key);
-            QVERIFY(encrypted.has_value());
+            TEST_REQUIRE(encrypted.has_value());
             const auto expected_overhead =
                 crypto_secretbox_MACBYTES + (nonce_from_key ? 0 : crypto_secretbox_NONCEBYTES);
-            QCOMPARE(encrypted->size(), data.size() + expected_overhead);
+            TEST_REQUIRE_EQ(encrypted->size(), data.size() + expected_overhead);
 
             auto decrypted = Cryptography::symmetric_decrypt(*encrypted, key, nonce_from_key);
-            QVERIFY(decrypted.has_value());
-            QCOMPARE(*decrypted, data);
+            TEST_REQUIRE(decrypted.has_value());
+            TEST_REQUIRE_EQ(*decrypted, data);
 
             encrypted->back() ^= 0x01;
-            QVERIFY(!Cryptography::symmetric_decrypt(*encrypted, key, nonce_from_key).has_value());
+            TEST_REQUIRE(!Cryptography::symmetric_decrypt(*encrypted, key, nonce_from_key).has_value());
         }
 
         const auto [sender_private, sender_public]     = Cryptography::asymmetric_create_pair();
         const auto [receiver_private, receiver_public] = Cryptography::asymmetric_create_pair();
         auto encrypted = Cryptography::asymmetric_encrypt(data, sender_private, receiver_public);
-        QVERIFY(encrypted.has_value());
-        QCOMPARE(encrypted->size(), data.size() + Cryptography::MIN_ENCRYPTED_SIZE_ASYMMETRIC);
+        TEST_REQUIRE(encrypted.has_value());
+        TEST_REQUIRE_EQ(encrypted->size(), data.size() + Cryptography::MIN_ENCRYPTED_SIZE_ASYMMETRIC);
 
         auto decrypted = Cryptography::asymmetric_decrypt(*encrypted, receiver_private, sender_public);
-        QVERIFY(decrypted.has_value());
-        QCOMPARE(*decrypted, data);
+        TEST_REQUIRE(decrypted.has_value());
+        TEST_REQUIRE_EQ(*decrypted, data);
 
         auto self_encrypted = Cryptography::asymmetric_encrypt_self(data, sender_private, sender_public);
-        QVERIFY(self_encrypted.has_value());
+        TEST_REQUIRE(self_encrypted.has_value());
         auto self_decrypted =
             Cryptography::asymmetric_decrypt_self(*self_encrypted, sender_private, sender_public);
-        QVERIFY(self_decrypted.has_value());
-        QCOMPARE(*self_decrypted, data);
+        TEST_REQUIRE(self_decrypted.has_value());
+        TEST_REQUIRE_EQ(*self_decrypted, data);
     }
 
     void dfsNameValidationMatchesCrossPlatformRules() {
-        QVERIFY(NameValidator::validate("normal-file.txt").has_value());
-        QVERIFY(NameValidator::validate("привет.txt").has_value());
+        TEST_REQUIRE(NameValidator::validate("normal-file.txt").has_value());
+        TEST_REQUIRE(NameValidator::validate("привет.txt").has_value());
 
         auto reserved = NameValidator::validate("cOm1.txt");
-        QVERIFY(!reserved.has_value());
-        QCOMPARE(reserved.error().code, NameValidator::ErrorCode::ReservedName);
+        TEST_REQUIRE(!reserved.has_value());
+        TEST_REQUIRE_EQ(reserved.error().code, NameValidator::ErrorCode::ReservedName);
 
-        QVERIFY(NameValidator::validate(".hidden").has_value());
+        TEST_REQUIRE(NameValidator::validate(".hidden").has_value());
 
         auto leading_space = NameValidator::validate(" file.txt");
-        QVERIFY(!leading_space.has_value());
-        QCOMPARE(leading_space.error().code, NameValidator::ErrorCode::LeadingDotSpace);
+        TEST_REQUIRE(!leading_space.has_value());
+        TEST_REQUIRE_EQ(leading_space.error().code, NameValidator::ErrorCode::LeadingDotSpace);
 
         auto trailing_space = NameValidator::validate("file.txt ");
-        QVERIFY(!trailing_space.has_value());
-        QCOMPARE(trailing_space.error().code, NameValidator::ErrorCode::TrailingDotSpace);
+        TEST_REQUIRE(!trailing_space.has_value());
+        TEST_REQUIRE_EQ(trailing_space.error().code, NameValidator::ErrorCode::TrailingDotSpace);
 
-        QVERIFY(PathValidator::validate("C:\\folder\\file.txt").has_value());
-        QVERIFY(!PathValidator::validate("folder//file.txt").has_value());
+        TEST_REQUIRE(PathValidator::validate("C:\\folder\\file.txt").has_value());
+        TEST_REQUIRE(!PathValidator::validate("folder//file.txt").has_value());
     }
 
     void networkMessageEnvelopeRoundTrip() {
         const SocketService::HandshakeMessage legacy_handshake;
-        QCOMPARE(legacy_handshake.socket_mode, SocketMode::Full);
-        QCOMPARE(legacy_handshake.dfs_mode, DfsMode::Full);
+        TEST_REQUIRE_EQ(legacy_handshake.socket_mode, SocketMode::Full);
+        TEST_REQUIRE_EQ(legacy_handshake.dfs_mode, DfsMode::Full);
 
         const ActorId sender("1");
         auto          message = make_init_message("payload",
@@ -593,27 +590,27 @@ private slots:
 
         const auto serialized = message.serialize();
         auto       decoded    = MessagePack::deserialize<MessageBody>(serialized);
-        QVERIFY(decoded.has_value());
-        QCOMPARE(decoded->send_type, message.send_type);
-        QCOMPARE(decoded->message_type, message.message_type);
-        QCOMPARE(decoded->status, message.status);
-        QCOMPARE(decoded->message_id, message.message_id);
-        QCOMPARE(decoded->sender_id, message.sender_id);
-        QCOMPARE(decoded->data, message.data);
-        QCOMPARE(decoded->nodes_identifiers_to_ignore, message.nodes_identifiers_to_ignore);
-        QCOMPARE(decoded->calculate_hash(), message.calculate_hash());
-        QCOMPARE(MessagePack::deserialize<MessageBody>(std::string()).error(),
-                 MessagePack::DeserializeError::EmptyData);
-        QCOMPARE(MessagePack::deserialize<MessageBody>(std::string("invalid")).error(),
-                 MessagePack::DeserializeError::DeserializationFailed);
-        QCOMPARE(MessagePack::deserialize<MessageBody>(serialized, serialized.size() - 1).error(),
-                 MessagePack::DeserializeError::DeserializationFailed);
+        TEST_REQUIRE(decoded.has_value());
+        TEST_REQUIRE_EQ(decoded->send_type, message.send_type);
+        TEST_REQUIRE_EQ(decoded->message_type, message.message_type);
+        TEST_REQUIRE_EQ(decoded->status, message.status);
+        TEST_REQUIRE_EQ(decoded->message_id, message.message_id);
+        TEST_REQUIRE_EQ(decoded->sender_id, message.sender_id);
+        TEST_REQUIRE_EQ(decoded->data, message.data);
+        TEST_REQUIRE_EQ(decoded->nodes_identifiers_to_ignore, message.nodes_identifiers_to_ignore);
+        TEST_REQUIRE_EQ(decoded->calculate_hash(), message.calculate_hash());
+        TEST_REQUIRE_EQ(MessagePack::deserialize<MessageBody>(std::string()).error(),
+                        MessagePack::DeserializeError::EmptyData);
+        TEST_REQUIRE_EQ(MessagePack::deserialize<MessageBody>(std::string("invalid")).error(),
+                        MessagePack::DeserializeError::DeserializationFailed);
+        TEST_REQUIRE_EQ(MessagePack::deserialize<MessageBody>(serialized, serialized.size() - 1).error(),
+                        MessagePack::DeserializeError::DeserializationFailed);
 
         std::unordered_set<std::string> generated_ids;
         for (std::size_t index = 0; index < 1024; ++index) {
             const auto id = generate_message_id("same-body");
-            QCOMPARE(id.size(), std::size_t(15));
-            QVERIFY(generated_ids.insert(id).second);
+            TEST_REQUIRE_EQ(id.size(), std::size_t(15));
+            TEST_REQUIRE(generated_ids.insert(id).second);
         }
 
         bool invalid_response_id_rejected = false;
@@ -628,7 +625,7 @@ private slots:
         } catch (const std::invalid_argument &) {
             invalid_response_id_rejected = true;
         }
-        QVERIFY(invalid_response_id_rejected);
+        TEST_REQUIRE(invalid_response_id_rejected);
 
         invalid_response_id_rejected = false;
         try {
@@ -642,7 +639,7 @@ private slots:
         } catch (const std::invalid_argument &) {
             invalid_response_id_rejected = true;
         }
-        QVERIFY(invalid_response_id_rejected);
+        TEST_REQUIRE(invalid_response_id_rejected);
     }
 
     void chatFolderSerializationRoundTrip() {
@@ -661,14 +658,14 @@ private slots:
 
         const auto serialized = Json::serialize(folder);
         auto       decoded    = Json::deserialize<Chat::ChatFolder>(serialized);
-        QVERIFY(decoded.has_value());
-        QCOMPARE(decoded->id, folder.id);
-        QCOMPARE(decoded->name, folder.name);
-        QCOMPARE(decoded->chat_ids, folder.chat_ids);
-        QCOMPARE(decoded->pinned_chat_ids, folder.pinned_chat_ids);
-        QCOMPARE(decoded->include_types, folder.include_types);
-        QCOMPARE(decoded->excluded_chat_ids, folder.excluded_chat_ids);
-        QCOMPARE(decoded->order, folder.order);
+        TEST_REQUIRE(decoded.has_value());
+        TEST_REQUIRE_EQ(decoded->id, folder.id);
+        TEST_REQUIRE_EQ(decoded->name, folder.name);
+        TEST_REQUIRE_EQ(decoded->chat_ids, folder.chat_ids);
+        TEST_REQUIRE_EQ(decoded->pinned_chat_ids, folder.pinned_chat_ids);
+        TEST_REQUIRE_EQ(decoded->include_types, folder.include_types);
+        TEST_REQUIRE_EQ(decoded->excluded_chat_ids, folder.excluded_chat_ids);
+        TEST_REQUIRE_EQ(decoded->order, folder.order);
     }
 
     // ----- Migration round-trip ----------------------------------------------
@@ -690,8 +687,8 @@ private slots:
         tx.set_token(ActorId());
         tx.set_amount(BigNumberFloat("100"));
         tx.set_timestamp(1774951775152ULL);
-        QVERIFY2(tx.sign(signer), "sign failed");
-        QVERIFY2(tx.verify(signer_pub), "fresh signature must verify");
+        TEST_REQUIRE_MESSAGE(tx.sign(signer), "sign failed");
+        TEST_REQUIRE_MESSAGE(tx.verify(signer_pub), "fresh signature must verify");
 
         Section section { .id = SectionId(256), .transactions = { tx } };
 
@@ -702,31 +699,31 @@ private slots:
             legacy_json = Json::serialize(section);
         }
         // It really is hex: the amount 100 appears as "64".
-        QVERIFY(legacy_json.find("\"64\"") != std::string::npos);
+        TEST_REQUIRE(legacy_json.find("\"64\"") != std::string::npos);
 
         // Migration step: read as legacy, write as canonical.
         std::string canonical_json;
         {
             WireFormat::Scope s(WireFormat::Mode::Legacy);
             auto              parsed = Json::deserialize<Section>(legacy_json);
-            QVERIFY2(parsed.has_value(), "legacy section must parse under Legacy scope");
+            TEST_REQUIRE_MESSAGE(parsed.has_value(), "legacy section must parse under Legacy scope");
             WireFormat::Scope c(WireFormat::Mode::Canonical);
             canonical_json = Json::serialize(*parsed);
         }
         // Now decimal on disk: amount is "100", not "64".
-        QVERIFY(canonical_json.find("\"100\"") != std::string::npos);
-        QVERIFY(canonical_json.find("\"64\"") == std::string::npos);
+        TEST_REQUIRE(canonical_json.find("\"100\"") != std::string::npos);
+        TEST_REQUIRE(canonical_json.find("\"64\"") == std::string::npos);
 
         // Read back the migrated section the way the running node does (Canonical)
         // and confirm values + signature survived the hex->decimal conversion.
         WireFormat::Scope read_scope(WireFormat::Mode::Canonical);
         auto              migrated = Json::deserialize<Section>(canonical_json);
-        QVERIFY2(migrated.has_value(), "migrated section must parse under Canonical scope");
-        QCOMPARE(migrated->transactions.size(), static_cast<std::size_t>(1));
+        TEST_REQUIRE_MESSAGE(migrated.has_value(), "migrated section must parse under Canonical scope");
+        TEST_REQUIRE_EQ(migrated->transactions.size(), static_cast<std::size_t>(1));
 
         const Transaction &mtx = *migrated->transactions.begin();
-        QCOMPARE(mtx.amount().to_string(), std::string("100"));
-        QVERIFY2(mtx.verify(signer_pub), "signature must still verify after migration");
+        TEST_REQUIRE_EQ(mtx.amount().to_string(), std::string("100"));
+        TEST_REQUIRE_MESSAGE(mtx.verify(signer_pub), "signature must still verify after migration");
     }
 
     void migrationKeepsRecoverableLegacyBackup() {
@@ -755,10 +752,10 @@ private slots:
         const auto migrated = DagMigration::migrate();
         fs::current_path(original_path);
 
-        QVERIFY2(migrated.has_value(), "staged migration must succeed");
-        QVERIFY(fs::exists(root / "dag" / "hot" / "0"));
-        QVERIFY(fs::exists(root / "dag.legacy-backup" / "0" / "0"));
-        QVERIFY(!fs::exists(root / "dag.migration-staging"));
+        TEST_REQUIRE_MESSAGE(migrated.has_value(), "staged migration must succeed");
+        TEST_REQUIRE(fs::exists(root / "dag" / "hot" / "0"));
+        TEST_REQUIRE(fs::exists(root / "dag.legacy-backup" / "0" / "0"));
+        TEST_REQUIRE(!fs::exists(root / "dag.migration-staging"));
 
         fs::remove_all(root);
     }
@@ -788,18 +785,90 @@ private slots:
         std::ofstream(root / "dag.migration-staging" / "copy.complete") << "complete";
         fs::rename(root / "dag", root / "dag.legacy-backup");
 
-        QVERIFY(DagMigration::needs_migration());
+        TEST_REQUIRE(DagMigration::needs_migration());
         const auto migrated = DagMigration::migrate();
         fs::current_path(original_path);
 
-        QVERIFY2(migrated.has_value(), "migration must resume between activation renames");
-        QVERIFY(fs::exists(root / "dag" / "hot" / "0"));
-        QVERIFY(fs::exists(root / "dag.legacy-backup" / "0" / "0"));
-        QVERIFY(!fs::exists(root / "dag.migration-staging"));
+        TEST_REQUIRE_MESSAGE(migrated.has_value(), "migration must resume between activation renames");
+        TEST_REQUIRE(fs::exists(root / "dag" / "hot" / "0"));
+        TEST_REQUIRE(fs::exists(root / "dag.legacy-backup" / "0" / "0"));
+        TEST_REQUIRE(!fs::exists(root / "dag.migration-staging"));
 
         fs::remove_all(root);
     }
 };
 
-QTEST_MAIN(SyncTest)
-#include "sync_test.moc"
+int main() {
+    SyncTest            tests;
+    TestSupport::Runner runner;
+    runner.run("actor ID canonical representation", [&] {
+        tests.actorIdUsesCanonicalCoreRepresentation();
+    });
+    runner.run("BLAKE3 wire value", [&] {
+        tests.hashModuleKeepsBlake3WireValue();
+    });
+    runner.run("actor compact JSON", [&] {
+        tests.actorJsonKeepsCompactStorageFormat();
+    });
+    runner.run("transaction admission cache boundary", [&] {
+        tests.transactionAdmissionClosesAtCacheBoundary();
+    });
+    runner.run("closed control hash intervals", [&] {
+        tests.controlHashUsesOnlyClosedIntervals();
+    });
+    runner.run("vector revision delivery order", [&] {
+        tests.vectorRevisionOrderIsIndependentOfDeliveryOrder();
+    });
+    runner.run("optional DAG batch capability", [&] {
+        tests.dagBatchCapabilityIsOptional();
+    });
+    runner.run("DAG transaction batch round trip", [&] {
+        tests.dagTransactionBatchRoundTrips();
+    });
+    runner.run("pack sync transfer", [&] {
+        tests.packSyncTransfersAllSections();
+    });
+    runner.run("pack sync bad payload rejection", [&] {
+        tests.packSyncRejectsBadPayloads();
+    });
+    runner.run("pack sync out-of-order chunks", [&] {
+        tests.packSyncInstallsOutOfOrderChunks();
+    });
+    runner.run("oversized pack section range", [&] {
+        tests.packWriterRejectsOversizedSectionRange();
+    });
+    runner.run("hot section store revisions", [&] {
+        tests.hotSectionStorePersistsAndPrunesRevisions();
+    });
+    runner.run("wire format round trip", [&] {
+        tests.wireFormatRoundTrip();
+    });
+    runner.run("legacy hex ambiguity", [&] {
+        tests.wireFormatLegacyHexIsUnambiguous();
+    });
+    runner.run("numeral base compatibility", [&] {
+        tests.numeralBaseCompatibility();
+    });
+    runner.run("encryption round trip", [&] {
+        tests.encryptionRoundTripsWithoutIntermediateFormats();
+    });
+    runner.run("DFS name validation", [&] {
+        tests.dfsNameValidationMatchesCrossPlatformRules();
+    });
+    runner.run("network message envelope", [&] {
+        tests.networkMessageEnvelopeRoundTrip();
+    });
+    runner.run("chat folder serialization", [&] {
+        tests.chatFolderSerializationRoundTrip();
+    });
+    runner.run("migration value and signature", [&] {
+        tests.migrationPreservesValuesAndSignature();
+    });
+    runner.run("migration backup", [&] {
+        tests.migrationKeepsRecoverableLegacyBackup();
+    });
+    runner.run("migration interrupted activation", [&] {
+        tests.migrationRecoversInterruptedActivation();
+    });
+    return runner.result();
+}

@@ -1,11 +1,10 @@
-#include <QCoreApplication>
-
 #include <cstdio>
 
 #include "chain/dag_cache.h"
 
 int main(int argc, char* argv[]) {
-    QCoreApplication app(argc, argv);
+    (void)argc;
+    (void)argv;
 
     const auto sender   = ActorId::create("1111111111111111111111111111111111111111");
     const auto receiver = ActorId::create("2222222222222222222222222222222222222222");

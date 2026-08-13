@@ -30,15 +30,13 @@
 // reward (sender == receiver, amount <= 3, valid signature) and the per-sender
 // rate guard only applies to Regular transactions, so no guard has to be removed.
 
-#include <QCoreApplication>
-#include <QDir>
-
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <filesystem>
 #include <mutex>
+#include <memory>
 #include <optional>
 #include <string_view>
 
@@ -46,8 +44,9 @@
 #include "chain/dag.h"
 #include "chain/transaction.h"
 #include "managers/account_controller.h"
-#include "managers/extrachain_node.h"
-#include "network/network_manager.h" // Responder
+#include "core/extrachain_node.h"
+#include "network/network_service.h"
+#include "network/responder.h"
 #include "utils/bignumber_float.h"
 #include "utils/exc_logs.h"
 #include "utils/exc_utils.h"
@@ -69,8 +68,6 @@ namespace {
 } // namespace
 
 int main(int argc, char *argv[]) {
-    QCoreApplication app(argc, argv);
-
     const long long   target  = (argc > 1) ? std::atoll(argv[1]) : 25000;
     const std::string workdir = (argc > 2) ? argv[2] : "gen-data";
 
@@ -78,7 +75,12 @@ int main(int argc, char *argv[]) {
     // already exists. Data is cwd-relative, so chdir into it first.
     std::filesystem::remove_all(workdir);
     std::filesystem::create_directories(workdir);
-    QDir::setCurrent(QString::fromStdString(workdir));
+    std::error_code directory_error;
+    std::filesystem::current_path(workdir, directory_error);
+    if (directory_error) {
+        eCritical("[Gen] cannot use work directory {}: {}", workdir, directory_error.message());
+        return 1;
+    }
     Utils::wipeDataFiles();
     if (argc > 3 && std::string_view(argv[3]) == "--no-index") {
         ExtraChainSettings settings;
@@ -89,9 +91,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    ExtraChainNodeWrapper wrapper(&app, /*is_client*/ false, /*is_custom*/ false, /*port*/ 0);
-    wrapper.init(/*makeAsync*/ false); // runs node->process() synchronously
-    auto *node = wrapper.node;
+    auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 0);
+    node->process();
     if (!node->create_new_network("gen-login", "gen-password")) {
         eCritical("[Gen] create_new_network failed");
         return 1;
@@ -227,5 +228,7 @@ int main(int argc, char *argv[]) {
     }
     std::fflush(stdout);
 
-    return (ok.load() > 0 && rejected.load() == 0 && admission_checks) ? 0 : 2;
+    const int result = (ok.load() > 0 && rejected.load() == 0 && admission_checks) ? 0 : 2;
+    node->cleanUp();
+    return result;
 }

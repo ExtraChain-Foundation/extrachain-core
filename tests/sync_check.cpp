@@ -28,8 +28,6 @@
 //   client: Registry::install_raw -> what network_pack_data_response stores
 // then verifies every packed section reads back byte-identically on the client.
 
-#include <QByteArray>
-
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -43,6 +41,7 @@
 #include "chain/pack_registry.h"
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h" // MessagePack
+#include "utils/legacy_compression.h"
 
 namespace {
 
@@ -82,10 +81,18 @@ namespace {
         }
 
         // Real wire transform: serialize -> compress -> (network) -> decompress -> deserialize.
-        auto ser        = MessagePack::serialize(sync);
-        auto compressed = qCompress(QByteArray::fromStdString(ser));
-        auto restored   = qUncompress(compressed);
-        auto back       = MessagePack::deserialize<FileSectionsSync>(restored.toStdString());
+        const auto serialized = MessagePack::serialize(sync);
+        const auto compressed = LegacyCompression::compress(serialized);
+        if (!compressed.has_value()) {
+            std::printf("[SyncCheck] hot tail: compression FAILED\n");
+            return sync.sections.size();
+        }
+        const auto restored = LegacyCompression::decompress(compressed.value(), serialized.size());
+        if (!restored.has_value()) {
+            std::printf("[SyncCheck] hot tail: decompression FAILED\n");
+            return sync.sections.size();
+        }
+        auto back = MessagePack::deserialize<FileSectionsSync>(restored.value());
 
         std::uint64_t mism = 0;
         if (!back.has_value()) {
