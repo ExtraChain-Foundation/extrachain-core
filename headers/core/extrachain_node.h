@@ -37,6 +37,7 @@
 #include <vector>
 
 #include <boost/asio/any_io_executor.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/signals2/connection.hpp>
 
@@ -96,9 +97,9 @@ enum class RuntimeActivity {
 };
 
 struct RuntimeLimits {
-    std::size_t dfs_workers;
-    std::size_t general_workers;
-    std::size_t dag_sync_workers;
+    std::size_t io_workers;
+    std::size_t storage_workers;
+    std::size_t compute_workers;
     std::size_t peer_limit;
     std::size_t dfs_downloads;
     std::size_t pack_sync_window;
@@ -148,17 +149,17 @@ namespace ExtraChain::Core {
 
     private:
         // common object for
-        DfsService*                                               dfs_ = nullptr;
+        std::unique_ptr<DfsService>                                                    dfs_;
         std::unique_ptr<ActorIndex>                               actor_index_;
-        Dag*                                                      dag_                = nullptr;
-        LuminanceManager*                                         luminance_manager_  = nullptr;
-        NetworkService*                                           network_service_    = nullptr;
-        AccountController*                                        account_controller_ = nullptr;
-        DataMiningManager*                                        dmm_                = nullptr;
-        TokenManager*                                             token_manager_      = nullptr;
-        ChatManager*                                              chat_manager_       = nullptr;
-        ThothManager*                                             thoth_manager_      = nullptr;
-        JanusManager*                                             janus_manager_      = nullptr;
+        std::unique_ptr<Dag>                                                           dag_;
+        std::unique_ptr<LuminanceManager>                                              luminance_manager_;
+        std::unique_ptr<NetworkService>                                                network_service_;
+        std::unique_ptr<AccountController>                                             account_controller_;
+        std::unique_ptr<DataMiningManager>                                             dmm_;
+        std::unique_ptr<TokenManager>                                                  token_manager_;
+        std::unique_ptr<ChatManager>                                                   chat_manager_;
+        std::unique_ptr<ThothManager>                                                  thoth_manager_;
+        std::unique_ptr<JanusManager>                                                  janus_manager_;
         std::unique_ptr<ExtraChain::Contracts::ContractManager>   contract_manager_;
         std::unique_ptr<ExtraChain::Contracts::ToolchainRegistry> toolchain_registry_;
         std::mutex                                                pending_contracts_mutex_;
@@ -196,13 +197,14 @@ namespace ExtraChain::Core {
         std::unordered_map<ActorId, std::string>      renames_todo_;
         std::string                                   node_identifier_;
         std::string                                   application_version_;
+        std::string                                   bind_address_;
         RuntimeProfile                                runtime_profile_;
         std::atomic<RuntimeActivity>                  runtime_activity_ { RuntimeActivity::Foreground };
         std::atomic_bool                              core_released_ { false };
         std::vector<Actor<KeyPublic>>                 actors_broadcast_;
         std::set<std::pair<std::string, std::string>> identifiers_after_actors_sync_;
 
-        uint16_t ws_port;
+        std::uint16_t ws_port_;
 
     public:
         static constexpr const char* CHANNELS_VECTOR_NAME = "Channels";
@@ -211,7 +213,8 @@ namespace ExtraChain::Core {
                                 bool                          is_custom_app         = false,
                                 std::uint16_t                 port                  = 17593,
                                 std::optional<RuntimeProfile> runtime_profile       = std::nullopt,
-                                std::string                   application_version   = {});
+                                std::string                   application_version   = {},
+                                std::string                   bind_address          = {});
         virtual ~ExtraChainNode();
 
         bool create_new_network(const std::string& login, const std::string& password);
@@ -242,11 +245,14 @@ namespace ExtraChain::Core {
         bool            is_client_application() const;
         RuntimeProfile  runtime_profile() const;
         RuntimeActivity runtime_activity() const;
+        [[nodiscard]] const std::string& bind_address() const noexcept;
 
         [[nodiscard]] bool                                       info_timer_active() const;
         RuntimeLimits                                            runtime_limits() const;
         void                                                     set_runtime_activity(RuntimeActivity activity);
         [[nodiscard]] boost::asio::any_io_executor               runtime_executor();
+        [[nodiscard]] boost::asio::any_io_executor               storage_executor();
+        [[nodiscard]] boost::asio::any_io_executor               compute_executor();
         [[nodiscard]] boost::asio::any_io_executor               serial_executor();
         [[nodiscard]] bool                                       on_serial_executor() const noexcept;
         [[nodiscard]] ExtraChain::Core::NetworkRuntime&          network_runtime();
@@ -256,6 +262,16 @@ namespace ExtraChain::Core {
         [[nodiscard]] Event<const ActorId&, const std::string&>& actor_renamed_event() noexcept;
         [[nodiscard]] Event<>&                                   actor_renames_loaded_event() noexcept;
         [[nodiscard]] Event<const ActorId&, const std::string&>& subscription_added_event() noexcept;
+
+        template <typename Function>
+        void post_storage(Function&& function) {
+            boost::asio::post(storage_executor(), std::forward<Function>(function));
+        }
+
+        template <typename Function>
+        void post_compute(Function&& function) {
+            boost::asio::post(compute_executor(), std::forward<Function>(function));
+        }
 
         [[nodiscard]] const std::pair<std::string, std::string>& public_ip_and_country_value() const noexcept;
         void set_public_ip_and_country(std::string ip, std::string country);
@@ -366,8 +382,8 @@ namespace ExtraChain::Core {
                                                                       const TokenId&     token_id);
 
     protected:
-        virtual DfsService*         create_dfs_service();
-        virtual NetworkService*     create_network_service();
+        virtual std::unique_ptr<DfsService>     create_dfs_service();
+        virtual std::unique_ptr<NetworkService> create_network_service();
         [[nodiscard]] std::uint16_t configured_port() const noexcept;
 
     private:

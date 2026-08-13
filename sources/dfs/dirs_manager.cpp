@@ -27,7 +27,6 @@
 #include "dfs/load_manager.h"
 #include "utils/exc_logs.h"
 #include "chain/actor_index.h"
-#include "utils/thread_pool_boost.h"
 
 DirsManager::DirsManager(ExtraChain::Core::ExtraChainNode* node)
     : node(node) {
@@ -284,7 +283,7 @@ void DirsManager::network_response_dir_rows(
         return node->dfs()->is_priority(left.first) && !node->dfs()->is_priority(right.first);
     });
 
-    ThreadPoolBoost::instance_dfs()->post([this, response_data = std::move(response_data), responder]() {
+    node->post_storage([this, response_data = std::move(response_data), responder]() {
         for (auto& [owner_id, dir_rows] : response_data) {
             // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
             // TODO: add merge for sync dir file
@@ -427,7 +426,7 @@ void DirsManager::temp_sync_actors(const std::string& identifier, const std::vec
 }
 
 void DirsManager::network_request_all(const Responder& responder, const std::vector<ActorId>& requested_actors) {
-    ThreadPoolBoost::instance_dfs()->post([this, responder, requested_actors] {
+    node->post_storage([this, responder, requested_actors] {
         std::vector<ActorId> actors;
 
         auto network_id = node->actor_index()->network_id();

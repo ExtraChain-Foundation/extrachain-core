@@ -11,6 +11,7 @@ find_package(QT NAMES Qt6 Qt5 COMPONENTS Test REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Test REQUIRED)
 
 set(EXTRACHAIN_STATIC_BUILD true)
+set(EXTRACHAIN_BUILD_QT_COMPAT ON CACHE BOOL "" FORCE)
 include(../CMakeLists.txt)
 
 option(EXTRACHAIN_BUILD_LEGACY_TESTS "Build the obsolete monolithic test target" OFF)

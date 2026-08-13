@@ -30,6 +30,11 @@
 
 namespace ExtraChain::Core {
 
+    struct NetworkConfig {
+        std::string   bind_address;
+        std::uint16_t port = 17593;
+    };
+
     /**
      * Owns the Boost network execution context and the inbound TCP listener.
      *
@@ -52,12 +57,16 @@ namespace ExtraChain::Core {
         NetworkRuntime(NetworkRuntime&&)                 = delete;
         NetworkRuntime& operator=(NetworkRuntime&&)      = delete;
 
-        [[nodiscard]] std::expected<std::uint16_t, std::string> listen(std::uint16_t port, AcceptHandler handler);
+        [[nodiscard]] std::expected<std::uint16_t, std::string> listen(const NetworkConfig& config,
+                                                                       AcceptHandler        handler);
         void                                                    stop_listening();
         void                                                    stop();
 
         [[nodiscard]] bool              listening() const noexcept;
         [[nodiscard]] Runtime::Executor executor();
+        [[nodiscard]] Runtime::Executor storage_executor();
+        [[nodiscard]] Runtime::Executor compute_executor();
+        void                            spawn(boost::asio::awaitable<void> operation);
 
         template <typename Function>
         [[nodiscard]] auto async_blocking(Function function) {
@@ -88,17 +97,16 @@ namespace ExtraChain::Core {
     private:
         struct AsyncOperation;
 
+        [[nodiscard]] std::expected<std::uint16_t, std::string> listen_on_executor(NetworkConfig config,
+                                                                                   AcceptHandler handler);
+        void                                                    stop_listening_on_executor();
         void                         register_operation(const std::shared_ptr<AsyncOperation>& operation);
         void                         cancel_operations();
-        [[nodiscard]] bool           open_acceptor(const Tcp&                 protocol,
-                                                   std::uint16_t              port,
-                                                   boost::system::error_code& error);
-        boost::asio::awaitable<void> accept_loop();
+        [[nodiscard]] bool open_acceptor(const Tcp::endpoint& endpoint, boost::system::error_code& error);
+        boost::asio::awaitable<void> accept_loop(std::shared_ptr<Tcp::acceptor> acceptor, AcceptHandler handler);
 
         Runtime                                    runtime_;
-        std::unique_ptr<Tcp::acceptor>             acceptor_;
-        AcceptHandler                              accept_handler_;
-        mutable std::mutex                         accept_handler_mutex_;
+        std::shared_ptr<Tcp::acceptor>             acceptor_;
         std::mutex                                 operations_mutex_;
         std::vector<std::weak_ptr<AsyncOperation>> operations_;
         std::atomic_bool                           listening_ { false };

@@ -15,7 +15,6 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -182,7 +181,11 @@ asio::awaitable<void> WebSocketService::run_on_strand(bool accepted_socket) {
             } operation_guard { self.get() };
             co_await self->write_loop();
         },
-        asio::detached);
+        [self](std::exception_ptr error) {
+            if (error) {
+                self->report_error(Network::SocketServiceError::Unknown, "write loop failed");
+            }
+        });
     co_await read_loop();
 }
 
@@ -404,7 +407,7 @@ asio::awaitable<void> WebSocketService::process_binary(std::vector<std::uint8_t>
 }
 
 bool WebSocketService::is_active() const {
-    // The Beast stream is confined to strand_. Do not read its state from Qt or
+    // The Beast stream is confined to strand_. Do not read its state from UI or
     // worker threads. The lifecycle atomics are updated on every open/close path.
     return activated_.load(std::memory_order_acquire) && running_.load(std::memory_order_acquire)
            && !closed_.load(std::memory_order_acquire);

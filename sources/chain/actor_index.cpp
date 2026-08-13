@@ -23,7 +23,6 @@
 
 #include "network/network_service.h"
 #include "utils/file_io.h"
-#include "utils/thread_pool_boost.h"
 
 ActorId ActorIndex::network_id() {
     return network_id_;
@@ -226,7 +225,7 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
     }
 
     auto r = responder;
-    ThreadPoolBoost::instance()->post([this, responder = r, actor_ids] {
+    node->post_storage([this, responder = r, actor_ids] {
         std::vector<Actor<KeyPublic>> actors;
         auto                          min_size = actor_ids.size() > 100 ? 100 : actor_ids.size();
         actors.reserve(min_size);

@@ -39,11 +39,11 @@ endif()
 set(EXTRACHAIN_CORE_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_LIST_DIR}/headers
     ${CMAKE_CURRENT_BINARY_DIR}/generated)
-option(EXTRACHAIN_BUILD_QT_COMPAT "Build the Qt compatibility layer" ON)
+option(EXTRACHAIN_BUILD_QT_COMPAT "Build the Qt compatibility layer" OFF)
 option(EXTRACHAIN_BUILD_LEGACY_QT_NODE
-       "Deprecated alias for EXTRACHAIN_BUILD_QT_COMPAT" ON)
-if(NOT EXTRACHAIN_BUILD_LEGACY_QT_NODE)
-  set(EXTRACHAIN_BUILD_QT_COMPAT OFF)
+       "Deprecated alias for EXTRACHAIN_BUILD_QT_COMPAT" OFF)
+if(EXTRACHAIN_BUILD_LEGACY_QT_NODE)
+  set(EXTRACHAIN_BUILD_QT_COMPAT ON)
 endif()
 
 if(EXTRACHAIN_BUILD_QT_COMPAT)
@@ -164,7 +164,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils_base64.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/serialization.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/thread_pool_boost.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/version.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
@@ -243,7 +242,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/legacy_compression.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/thread_pool_boost.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/version.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/deadline_task.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/periodic_task.cpp
@@ -333,6 +331,27 @@ if(MSVC)
   endif()
 endif()
 target_include_directories(extrachain-core PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
+set_target_properties(
+  extrachain-core
+  PROPERTIES AUTOMOC OFF
+             AUTOUIC OFF
+             AUTORCC OFF)
+
+string(REPLACE ";" "\n" EXTRACHAIN_CORE_SOURCE_MANIFEST
+               "${EXTRACHAIN_CORE_SOURCES}")
+set(EXTRACHAIN_CORE_SOURCE_MANIFEST_FILE
+    ${CMAKE_CURRENT_BINARY_DIR}/extrachain-core-sources.txt)
+file(GENERATE OUTPUT ${EXTRACHAIN_CORE_SOURCE_MANIFEST_FILE}
+     CONTENT "${EXTRACHAIN_CORE_SOURCE_MANIFEST}\n")
+add_custom_target(
+  extrachain-core-qt-boundary-check
+  COMMAND
+    ${CMAKE_COMMAND}
+    -DCORE_SOURCE_ROOT=${CMAKE_CURRENT_LIST_DIR}
+    -DCORE_SOURCE_MANIFEST=${EXTRACHAIN_CORE_SOURCE_MANIFEST_FILE}
+    -P ${CMAKE_CURRENT_LIST_DIR}/cmake/CheckCoreQtBoundary.cmake
+  VERBATIM)
+add_dependencies(extrachain-core extrachain-core-qt-boundary-check)
 
 set(bip3x_BUILD_SHARED_LIBS
     OFF
@@ -359,6 +378,7 @@ target_include_directories(
 
 target_link_libraries(
   extrachain-core
+  PUBLIC
   unofficial-sodium::sodium
   unofficial::sqlite3::sqlite3
   msgpack-cxx
@@ -405,29 +425,29 @@ if(EXTRACHAIN_BUILD_QT_COMPAT)
       ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/toolchain_installer.cpp
       ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp)
   if(EXTRACHAIN_STATIC_BUILD)
-    add_library(extrachain STATIC ${EXTRACHAIN_QT_SOURCES})
+    add_library(extrachain-qt-compat STATIC ${EXTRACHAIN_QT_SOURCES})
   else()
-    add_library(extrachain SHARED ${EXTRACHAIN_QT_SOURCES})
+    add_library(extrachain-qt-compat SHARED ${EXTRACHAIN_QT_SOURCES})
     target_compile_definitions(
-      extrachain
+      extrachain-qt-compat
       PUBLIC EXTRACHAIN_QT_LIBRARY_ACTIVATE
       PRIVATE EXTRACHAIN_QT_LIBRARY)
   endif()
   set_target_properties(
-    extrachain
+    extrachain-qt-compat
     PROPERTIES AUTOMOC ON
                AUTOUIC ON
                AUTORCC ON)
-  target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
-  # Keep the plain signature for compatibility with existing client projects
-  # that extend this target with the same CMake signature.
-  target_link_libraries(extrachain extrachain-core Qt6::Core Qt6::Network
-                        fmt::fmt-header-only)
-  target_compile_features(extrachain PUBLIC cxx_std_23)
-  set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE ON)
+  target_include_directories(extrachain-qt-compat
+                             PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
+  target_link_libraries(extrachain-qt-compat PUBLIC extrachain-core Qt6::Core
+                                                    Qt6::Network
+                                                    fmt::fmt-header-only)
+  target_compile_features(extrachain-qt-compat PUBLIC cxx_std_23)
+  set_property(TARGET extrachain-qt-compat PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-  add_library(extrachain-qt-compat INTERFACE)
-  target_link_libraries(extrachain-qt-compat INTERFACE extrachain)
+  add_library(extrachain INTERFACE)
+  target_link_libraries(extrachain INTERFACE extrachain-qt-compat)
 else()
   add_library(extrachain INTERFACE)
   target_link_libraries(extrachain INTERFACE extrachain-core)

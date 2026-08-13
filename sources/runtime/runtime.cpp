@@ -25,17 +25,20 @@ namespace ExtraChain::Core {
 
         explicit State(RuntimeConfig runtime_config)
             : config(runtime_config)
-            , blocking_pool(runtime_config.blocking_threads) {
+            , storage_pool(runtime_config.storage_threads)
+            , compute_pool(runtime_config.compute_threads) {
         }
 
         RuntimeConfig            config;
         boost::asio::io_context  io_context;
         std::optional<WorkGuard> work_guard;
-        boost::asio::thread_pool blocking_pool;
+        boost::asio::thread_pool storage_pool;
+        boost::asio::thread_pool compute_pool;
         std::vector<std::thread> io_threads;
         std::mutex               lifecycle_mutex;
         std::atomic_bool         running { false };
-        bool                     stopped = false;
+        bool                     stop_requested = false;
+        bool                     joined         = false;
     };
 
     namespace {
@@ -49,7 +52,8 @@ namespace ExtraChain::Core {
 
     Runtime::Runtime(RuntimeConfig config)
         : state_(std::make_shared<State>(RuntimeConfig { checked_thread_count(config.io_threads),
-                                                         checked_thread_count(config.blocking_threads) })) {
+                                                         checked_thread_count(config.storage_threads),
+                                                         checked_thread_count(config.compute_threads) })) {
     }
 
     Runtime::~Runtime() {
@@ -59,7 +63,7 @@ namespace ExtraChain::Core {
     void Runtime::start() {
         const auto       state = state_;
         std::scoped_lock lock(state->lifecycle_mutex);
-        if (state->stopped) {
+        if (state->stop_requested) {
             throw std::logic_error("ExtraChain Core runtime cannot restart after stop");
         }
         if (state->running.exchange(true, std::memory_order_acq_rel)) {
@@ -79,7 +83,7 @@ namespace ExtraChain::Core {
         const auto state = state_;
         {
             std::scoped_lock lock(state->lifecycle_mutex);
-            if (state->stopped) {
+            if (state->stop_requested) {
                 throw std::logic_error("ExtraChain Core runtime cannot restart after stop");
             }
             if (!state->running.exchange(true, std::memory_order_acq_rel)) {
@@ -89,29 +93,50 @@ namespace ExtraChain::Core {
         state->io_context.run();
     }
 
-    void Runtime::stop() {
+    void Runtime::request_stop() {
+        const auto       state = state_;
+        std::scoped_lock lock(state->lifecycle_mutex);
+        if (state->stop_requested) {
+            return;
+        }
+        state->stop_requested = true;
+        state->running.store(false, std::memory_order_release);
+    }
+
+    void Runtime::join() {
         const auto               state = state_;
         std::vector<std::thread> threads;
         {
             std::scoped_lock lock(state->lifecycle_mutex);
-            if (state->stopped) {
+            if (state->joined) {
                 return;
             }
-            state->stopped = true;
-            state->running.store(false, std::memory_order_release);
-            state->work_guard.reset();
+            const auto caller = std::this_thread::get_id();
+            if (std::ranges::any_of(state->io_threads, [caller](const auto& thread) {
+                    return thread.get_id() == caller;
+                })) {
+                throw std::logic_error("ExtraChain Core runtime must be joined outside its I/O workers");
+            }
+            state->joined = true;
             threads.swap(state->io_threads);
         }
 
-        const auto caller = std::this_thread::get_id();
+        state->storage_pool.join();
+        state->compute_pool.join();
+        {
+            std::scoped_lock lock(state->lifecycle_mutex);
+            state->work_guard.reset();
+        }
         for (auto& thread : threads) {
-            if (thread.get_id() == caller) {
-                thread.detach();
-            } else if (thread.joinable()) {
+            if (thread.joinable()) {
                 thread.join();
             }
         }
-        state->blocking_pool.join();
+    }
+
+    void Runtime::stop() {
+        request_stop();
+        join();
     }
 
     bool Runtime::running() const noexcept {
@@ -126,8 +151,20 @@ namespace ExtraChain::Core {
         return state_->io_context;
     }
 
-    boost::asio::thread_pool& Runtime::blocking_pool() noexcept {
-        return state_->blocking_pool;
+    Runtime::Executor Runtime::storage_executor() noexcept {
+        return state_->storage_pool.get_executor();
+    }
+
+    Runtime::Executor Runtime::compute_executor() noexcept {
+        return state_->compute_pool.get_executor();
+    }
+
+    boost::asio::thread_pool& Runtime::storage_pool() noexcept {
+        return state_->storage_pool;
+    }
+
+    boost::asio::thread_pool& Runtime::compute_pool() noexcept {
+        return state_->compute_pool;
     }
 
 } // namespace ExtraChain::Core

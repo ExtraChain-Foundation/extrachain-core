@@ -11,11 +11,11 @@
 #include "network/network_runtime.h"
 
 #include <algorithm>
+#include <future>
 #include <utility>
 
 #include <boost/asio/connect.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ip/udp.hpp>
 #include <boost/asio/ip/v6_only.hpp>
@@ -26,6 +26,8 @@
 #include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/http.hpp>
+
+#include "utils/exc_logs.h"
 
 namespace ExtraChain::Core {
 
@@ -57,48 +59,78 @@ namespace ExtraChain::Core {
         stop();
     }
 
-    std::expected<std::uint16_t, std::string> NetworkRuntime::listen(std::uint16_t port, AcceptHandler handler) {
+    std::expected<std::uint16_t, std::string> NetworkRuntime::listen(const NetworkConfig& config,
+                                                                     AcceptHandler        handler) {
+        if (stopping_.load(std::memory_order_acquire)) {
+            return std::unexpected("network runtime is stopping");
+        }
+        if (runtime_.io_context().get_executor().running_in_this_thread()) {
+            return listen_on_executor(config, std::move(handler));
+        }
+
+        std::promise<std::expected<std::uint16_t, std::string>> promise;
+        auto                                                    result = promise.get_future();
+        boost::asio::post(runtime_.executor(),
+                          [this, config, handler = std::move(handler), promise = std::move(promise)]() mutable {
+                              try {
+                                  promise.set_value(listen_on_executor(config, std::move(handler)));
+                              } catch (...) {
+                                  promise.set_exception(std::current_exception());
+                              }
+                          });
+        return result.get();
+    }
+
+    std::expected<std::uint16_t, std::string> NetworkRuntime::listen_on_executor(NetworkConfig config,
+                                                                                 AcceptHandler handler) {
         if (stopping_.load(std::memory_order_acquire)) {
             return std::unexpected("network runtime is stopping");
         }
         if (listening()) {
             boost::system::error_code error;
-            return acceptor_->local_endpoint(error).port();
+            const auto                endpoint = acceptor_->local_endpoint(error);
+            if (error) {
+                return std::unexpected(error.message());
+            }
+            return endpoint.port();
         }
 
-        {
-            std::scoped_lock lock(accept_handler_mutex_);
-            accept_handler_ = std::move(handler);
-        }
         boost::system::error_code error;
-        if (!open_acceptor(Tcp::v6(), port, error) && !open_acceptor(Tcp::v4(), port, error)) {
-            std::scoped_lock lock(accept_handler_mutex_);
-            accept_handler_ = {};
+        if (!config.bind_address.empty()) {
+            const auto address = boost::asio::ip::make_address(config.bind_address, error);
+            if (error || !open_acceptor(Tcp::endpoint(address, config.port), error)) {
+                return std::unexpected(error.message());
+            }
+        } else if (!open_acceptor(Tcp::endpoint(Tcp::v6(), config.port), error)
+                   && !open_acceptor(Tcp::endpoint(Tcp::v4(), config.port), error)) {
             return std::unexpected(error.message());
         }
 
-        const auto local_port = acceptor_->local_endpoint(error).port();
+        const auto acceptor   = acceptor_;
+        const auto local_port = acceptor->local_endpoint(error).port();
         if (error) {
-            stop_listening();
+            boost::system::error_code ignored;
+            acceptor->close(ignored);
+            acceptor_.reset();
             return std::unexpected(error.message());
         }
         listening_.store(true, std::memory_order_release);
-        boost::asio::co_spawn(runtime_.executor(), accept_loop(), boost::asio::detached);
+        spawn(accept_loop(acceptor, std::move(handler)));
         return local_port;
     }
 
-    bool NetworkRuntime::open_acceptor(const Tcp& protocol, std::uint16_t port, boost::system::error_code& error) {
+    bool NetworkRuntime::open_acceptor(const Tcp::endpoint& endpoint, boost::system::error_code& error) {
         error.clear();
-        acceptor_ = std::make_unique<Tcp::acceptor>(runtime_.executor());
-        acceptor_->open(protocol, error);
-        if (!error && protocol == Tcp::v6()) {
+        acceptor_ = std::make_shared<Tcp::acceptor>(runtime_.executor());
+        acceptor_->open(endpoint.protocol(), error);
+        if (!error && endpoint.protocol() == Tcp::v6() && endpoint.address().is_unspecified()) {
             acceptor_->set_option(boost::asio::ip::v6_only(false), error);
         }
         if (!error) {
             acceptor_->set_option(boost::asio::socket_base::reuse_address(true), error);
         }
         if (!error) {
-            acceptor_->bind(Tcp::endpoint(protocol, port), error);
+            acceptor_->bind(endpoint, error);
         }
         if (!error) {
             acceptor_->listen(boost::asio::socket_base::max_listen_connections, error);
@@ -112,40 +144,64 @@ namespace ExtraChain::Core {
         return true;
     }
 
-    boost::asio::awaitable<void> NetworkRuntime::accept_loop() {
-        auto* const acceptor = acceptor_.get();
+    boost::asio::awaitable<void> NetworkRuntime::accept_loop(std::shared_ptr<Tcp::acceptor> acceptor,
+                                                             AcceptHandler                  handler) {
         while (!stopping_.load(std::memory_order_acquire) && listening_.load(std::memory_order_acquire)) {
             boost::system::error_code error;
             auto                      socket =
                 co_await acceptor->async_accept(boost::asio::redirect_error(boost::asio::use_awaitable, error));
             if (error) {
+                if (acceptor_ == acceptor) {
+                    listening_.store(false, std::memory_order_release);
+                    acceptor_.reset();
+                }
                 co_return;
             }
-            AcceptHandler handler;
-            {
-                std::scoped_lock lock(accept_handler_mutex_);
-                handler = accept_handler_;
-            }
-            if (handler) {
-                handler(std::move(socket));
+            if (acceptor->is_open() && handler) {
+                try {
+                    handler(std::move(socket));
+                } catch (const std::exception& exception) {
+                    eWarning("[NetworkRuntime] Accept handler failed: {}", exception.what());
+                }
             } else {
                 socket.close(error);
+                co_return;
             }
         }
     }
 
     void NetworkRuntime::stop_listening() {
-        listening_.store(false, std::memory_order_release);
-        {
-            std::scoped_lock lock(accept_handler_mutex_);
-            accept_handler_ = {};
+        if (!runtime_.running()) {
+            listening_.store(false, std::memory_order_release);
+            return;
         }
-        if (!acceptor_) {
+        if (runtime_.io_context().get_executor().running_in_this_thread()) {
+            stop_listening_on_executor();
+            return;
+        }
+
+        std::promise<void> promise;
+        auto               result = promise.get_future();
+        boost::asio::post(runtime_.executor(), [this, promise = std::move(promise)]() mutable {
+            try {
+                stop_listening_on_executor();
+                promise.set_value();
+            } catch (...) {
+                promise.set_exception(std::current_exception());
+            }
+        });
+        result.get();
+    }
+
+    void NetworkRuntime::stop_listening_on_executor() {
+        listening_.store(false, std::memory_order_release);
+        const auto acceptor = std::exchange(acceptor_, {});
+        if (!acceptor) {
             return;
         }
         boost::system::error_code ignored;
-        acceptor_->cancel(ignored);
-        acceptor_->close(ignored);
+        acceptor->cancel(ignored);
+        acceptor->close(ignored);
     }
 
     void NetworkRuntime::stop() {
@@ -163,6 +219,26 @@ namespace ExtraChain::Core {
 
     Runtime::Executor NetworkRuntime::executor() {
         return runtime_.executor();
+    }
+
+    Runtime::Executor NetworkRuntime::storage_executor() {
+        return runtime_.storage_executor();
+    }
+
+    Runtime::Executor NetworkRuntime::compute_executor() {
+        return runtime_.compute_executor();
+    }
+
+    void NetworkRuntime::spawn(boost::asio::awaitable<void> operation) {
+        boost::asio::co_spawn(runtime_.executor(), std::move(operation), [](std::exception_ptr error) {
+            if (error) {
+                try {
+                    std::rethrow_exception(error);
+                } catch (const std::exception& exception) {
+                    eWarning("[NetworkRuntime] Async operation failed: {}", exception.what());
+                }
+            }
+        });
     }
 
     void NetworkRuntime::register_operation(const std::shared_ptr<AsyncOperation>& operation) {
@@ -245,7 +321,12 @@ namespace ExtraChain::Core {
                 operation->complete();
                 handler(!error, error.message());
             },
-            boost::asio::detached);
+            [operation](std::exception_ptr error) {
+                operation->complete();
+                if (error) {
+                    eWarning("[NetworkRuntime] Probe operation failed");
+                }
+            });
     }
 
     void NetworkRuntime::async_http_get(std::string               host,
@@ -338,7 +419,12 @@ namespace ExtraChain::Core {
                 }
                 handler(std::move(response.body()));
             },
-            boost::asio::detached);
+            [operation](std::exception_ptr error) {
+                operation->complete();
+                if (error) {
+                    eWarning("[NetworkRuntime] HTTP GET operation failed");
+                }
+            });
     }
 
     void NetworkRuntime::async_http_post(std::string               host,
@@ -438,7 +524,12 @@ namespace ExtraChain::Core {
                 }
                 handler(std::move(response.body()));
             },
-            boost::asio::detached);
+            [operation](std::exception_ptr error) {
+                operation->complete();
+                if (error) {
+                    eWarning("[NetworkRuntime] HTTP POST operation failed");
+                }
+            });
     }
 
     std::expected<void, std::string> NetworkRuntime::probe(std::string_view          host,

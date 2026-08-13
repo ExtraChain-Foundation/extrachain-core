@@ -1,6 +1,7 @@
 // Tiny unit check for ControlIndex put/get/last/erase, no full node.
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <string_view>
 
 #include "chain/control_index.h"
@@ -12,39 +13,41 @@
 int main(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    const auto process_path = std::filesystem::current_path();
     std::filesystem::remove_all("/tmp/ci-unit");
     std::filesystem::create_directories("/tmp/ci-unit");
     std::filesystem::current_path("/tmp/ci-unit");
 
-    ControlIndex ci(nullptr);
-    std::printf("initial rows=%llu\n", (unsigned long long)ci.row_count());
+    auto ci = std::make_unique<ControlIndex>(nullptr);
+    std::printf("initial rows=%llu\n", (unsigned long long)ci->row_count());
 
-    ci.put(SectionId(20), "hash20");
-    ci.put(SectionId(40), "hash40");
-    ci.put(SectionId(60), "hash60");
-    std::printf("after 3 puts rows=%llu\n", (unsigned long long)ci.row_count());
+    ci->put(SectionId(20), "hash20");
+    ci->put(SectionId(40), "hash40");
+    ci->put(SectionId(60), "hash60");
+    std::printf("after 3 puts rows=%llu\n", (unsigned long long)ci->row_count());
 
-    auto g = ci.get(SectionId(40));
+    auto g = ci->get(SectionId(40));
     std::printf("get(40)=%s\n", g.has_value() ? g.value().c_str() : "MISSING");
 
-    auto l = ci.last_at_or_below(SectionId(55));
+    auto l = ci->last_at_or_below(SectionId(55));
     std::printf("last<=55: %s -> %s\n",
                 l.has_value() ? l.value().first.to_string().c_str() : "?",
                 l.has_value() ? l.value().second.c_str() : "MISSING");
 
-    auto top = ci.last_at_or_below(SectionId(-1));
+    auto top = ci->last_at_or_below(SectionId(-1));
     std::printf("last<=top: %s -> %s\n",
                 top.has_value() ? top.value().first.to_string().c_str() : "?",
                 top.has_value() ? top.value().second.c_str() : "MISSING");
 
-    ci.erase(SectionId(40));
+    ci->erase(SectionId(40));
     std::printf("after erase(40) get(40)=%s rows=%llu\n",
-                ci.get(SectionId(40)).has_value() ? "present" : "gone",
-                (unsigned long long)ci.row_count());
+                ci->get(SectionId(40)).has_value() ? "present" : "gone",
+                (unsigned long long)ci->row_count());
 
     // overwrite
-    ci.put(SectionId(20), "hash20b");
-    std::printf("overwrite get(20)=%s\n", ci.get(SectionId(20)).value_or("?").c_str());
+    ci->put(SectionId(20), "hash20b");
+    std::printf("overwrite get(20)=%s\n", ci->get(SectionId(20)).value_or("?").c_str());
 
     // --- edge cases ---
     int  pass = 0, fail = 0;
@@ -97,23 +100,24 @@ int main(int argc, char *argv[]) {
     check("atomic file read", atomic_data.has_value() && atomic_data.value() == "second");
 
     // state now: {20:hash20b, 60:hash60} (40 erased)
-    check("get missing -> nullopt", !ci.get(SectionId(99)).has_value());
-    check("last<=below-all -> nullopt", !ci.last_at_or_below(SectionId(5)).has_value());
-    check("last<=exact boundary 60", ci.last_at_or_below(SectionId(60)).value().first == SectionId(60));
-    check("last<=between 20 and 60 -> 20", ci.last_at_or_below(SectionId(59)).value().first == SectionId(20));
-    check("last<=above-all -> top 60", ci.last_at_or_below(SectionId(1000)).value().first == SectionId(60));
-    check("count through 40", ci.row_count_at_or_below(SectionId(40)) == 1);
-    check("count through 60", ci.row_count_at_or_below(SectionId(60)) == 2);
-    check("erased 40 skipped: last<=50 -> 20", ci.last_at_or_below(SectionId(50)).value().first == SectionId(20));
-    check("erase non-existent is safe", (ci.erase(SectionId(12345)), true));
-    ci.put(SectionId(0), "genesis");
-    check("section 0 stored", ci.get(SectionId(0)).value_or("") == "genesis");
-    check("last<=0 -> 0", ci.last_at_or_below(SectionId(0)).value().first == SectionId(0));
-    ci.clear();
-    check("clear empties", ci.row_count() == 0);
-    check("get after clear -> nullopt", !ci.get(SectionId(20)).has_value());
+    check("get missing -> nullopt", !ci->get(SectionId(99)).has_value());
+    check("last<=below-all -> nullopt", !ci->last_at_or_below(SectionId(5)).has_value());
+    check("last<=exact boundary 60", ci->last_at_or_below(SectionId(60)).value().first == SectionId(60));
+    check("last<=between 20 and 60 -> 20", ci->last_at_or_below(SectionId(59)).value().first == SectionId(20));
+    check("last<=above-all -> top 60", ci->last_at_or_below(SectionId(1000)).value().first == SectionId(60));
+    check("count through 40", ci->row_count_at_or_below(SectionId(40)) == 1);
+    check("count through 60", ci->row_count_at_or_below(SectionId(60)) == 2);
+    check("erased 40 skipped: last<=50 -> 20", ci->last_at_or_below(SectionId(50)).value().first == SectionId(20));
+    check("erase non-existent is safe", (ci->erase(SectionId(12345)), true));
+    ci->put(SectionId(0), "genesis");
+    check("section 0 stored", ci->get(SectionId(0)).value_or("") == "genesis");
+    check("last<=0 -> 0", ci->last_at_or_below(SectionId(0)).value().first == SectionId(0));
+    ci->clear();
+    check("clear empties", ci->row_count() == 0);
+    check("get after clear -> nullopt", !ci->get(SectionId(20)).has_value());
 
-    const auto original_path = std::filesystem::current_path();
+    ci.reset();
+    std::filesystem::current_path(process_path);
     std::filesystem::remove_all("/tmp/ci-clean-state");
     std::filesystem::create_directories("/tmp/ci-clean-state");
     std::filesystem::current_path("/tmp/ci-clean-state");
@@ -125,7 +129,7 @@ int main(int argc, char *argv[]) {
         ControlIndex clean_reopen(nullptr);
         check("cleanly closed index skips rebuild", !clean_reopen.rebuild_required());
     }
-    std::filesystem::current_path(original_path);
+    std::filesystem::current_path(process_path);
     std::filesystem::remove_all("/tmp/ci-unit");
     std::filesystem::remove_all("/tmp/ci-clean-state");
 

@@ -25,7 +25,6 @@
 #include "utils/exc_logs.h"
 #include "dfs/dfs_utils.h"
 
-#include "utils/thread_pool_boost.h"
 #include "runtime/deadline_task.h"
 
 #include <boost/asio/dispatch.hpp>
@@ -834,7 +833,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     auto max_offsets = calculate_max_offsets(total_size, Dfs::Basic::FRAGMENT_SIZE);
 
     std::string identifier = *responder.identifiers().begin();
-    ThreadPoolBoost::instance_dfs()->post(
+    node->post_storage(
         [this, identifier, max_offsets, total_size, file_link_fragment, path = *path, dir_row]() {
             uint64_t offset = 0;
 
@@ -998,7 +997,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
         }
     }
 
-    ThreadPoolBoost::instance_dfs()->post([this, file_content, identifier]() {
+    node->post_storage([this, file_content, identifier]() {
         const auto file_link =
             Dfs::FileLink { .owner_id = file_content.owner_id, .file_id = file_content.file_id };
         // eLog("[Dfs] LoadManager::file_fragment_achieved, achieved fragment to save. file_link: {}, offset: {},

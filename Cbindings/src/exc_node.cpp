@@ -22,7 +22,8 @@ namespace exc_ffi {
 
 namespace {
     ExcError initialize_node(uint16_t ws_port, bool main_thread_mode) {
-        auto& gs = GlobalState::instance();
+        auto&        gs = GlobalState::instance();
+        std::jthread previous_shutdown;
         {
             std::lock_guard lock(gs.mutex);
             if (gs.initialized || gs.initializing || gs.shutdown_in_progress) {
@@ -32,6 +33,10 @@ namespace {
             gs.main_thread_mode     = main_thread_mode;
             gs.shutdown_requested   = false;
             gs.shutdown_in_progress = false;
+            previous_shutdown       = std::move(gs.shutdown_worker);
+        }
+        if (previous_shutdown.joinable()) {
+            previous_shutdown.join();
         }
 
         std::unique_ptr<ExtraChain::Core::ExtraChainNode> node;
@@ -64,8 +69,6 @@ namespace {
 
 /* ── Static version string ──────────────────────────────────────── */
 
-static const char* s_version = nullptr;
-
 /* ── Public API ──────────────────────────────────────────────────── */
 
 extern "C" {
@@ -84,9 +87,9 @@ EXC_API ExcError exc_init_main_thread(int argc, char** argv, uint16_t ws_port) {
 
 EXC_API ExcError exc_run(void) {
     auto& gs = GlobalState::instance();
+    std::unique_lock lock(gs.mutex);
     if (!gs.main_thread_mode)
         return EXC_ERR_INVALID_ARGUMENT;
-    std::unique_lock lock(gs.mutex);
     if (!gs.initialized)
         return EXC_ERR_NOT_INITIALIZED;
     gs.stopped.wait(lock, [&gs] {
@@ -101,11 +104,8 @@ EXC_API bool exc_is_initialized(void) {
 }
 
 EXC_API const char* exc_version(void) {
-    if (!s_version) {
-        /* Real release version; extrachain_version is only a handshake compat anchor */
-        s_version = extrachain_node_version.c_str();
-    }
-    return s_version;
+    /* Real release version; extrachain_version is only a handshake compat anchor */
+    return extrachain_node_version.c_str();
 }
 
 EXC_API uint32_t exc_api_version(void) {
@@ -231,7 +231,8 @@ EXC_API ExcError exc_shutdown(void) {
         gs.shutdown_in_progress = false;
     };
     if (event_dispatch_depth > 0) {
-        std::thread(std::move(finish)).detach();
+        std::lock_guard lock(gs.mutex);
+        gs.shutdown_worker = std::jthread(std::move(finish));
     } else {
         finish();
     }

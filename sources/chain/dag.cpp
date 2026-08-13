@@ -32,10 +32,9 @@
 #include "network/network_service.h"
 #include "utils/file_io.h"
 #include "utils/legacy_compression.h"
-#include "utils/thread_pool_boost.h"
 
-static constexpr int SYNC_SECTIONS_BATCH   = 2100;
-static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
+static constexpr int  SYNC_SECTIONS_BATCH             = 2100;
+static constexpr int  SYNC_SECTIONS_MAX_REQ           = 2500;
 static constexpr auto SYNC_LAST_INFO_COLLECTION_DELAY = std::chrono::milliseconds(250);
 
 // Pack files are shipped in fixed-size chunks so neither side holds a whole pack
@@ -349,7 +348,9 @@ void Dag::stop() {
     pack_hot_generation_.fetch_add(1);
     {
         std::unique_lock completion_lock(pack_hot_completion_mutex_);
-        pack_hot_completion_.wait(completion_lock, [this]() { return !pack_hot_running_.load(); });
+        pack_hot_completion_.wait(completion_lock, [this]() {
+            return !pack_hot_running_.load();
+        });
     }
 
     if (chain_index_enabled_ && chain_index_)
@@ -435,7 +436,7 @@ void Dag::clear_pending_sync_responses() {
 
 std::optional<std::pair<SectionId, SectionId>> Dag::pending_sync_range(const Responder &responder,
                                                                        const SectionId &to,
-                                                                       bool file_response) const {
+                                                                       bool             file_response) const {
     std::lock_guard lock(sync_response_request_mutex_);
     const auto     &pending = file_response ? pending_file_response_ : pending_section_response_;
     if (!pending.has_value() || responder.message_id() != pending->message_id || to != pending->to) {
@@ -708,9 +709,10 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
             && !deferred_contracts_.contains(transaction.hash())) {
             deferred_contracts_.erase(deferred_contracts_.begin());
         }
-        deferred_contracts_.insert_or_assign(
-            transaction.hash(),
-            DeferredContractTransaction { transaction, std::make_shared<Responder>(responder) });
+        deferred_contracts_.insert_or_assign(transaction.hash(),
+                                             DeferredContractTransaction {
+                                                 transaction,
+                                                 std::make_shared<Responder>(responder) });
         return {};
     }
 
@@ -1505,12 +1507,11 @@ TransactionProveError Dag::prove_transaction(const Transaction           &tx,
     return prove_transaction_with_facts(tx, transactions, pending_transactions, validation_frontier, nullptr);
 }
 
-TransactionProveError Dag::prove_transaction_with_facts(
-    const Transaction               &tx,
-    const std::set<Transaction>      &transactions,
-    const std::set<Transaction>      *pending_transactions,
-    const SectionId                  *validation_frontier,
-    const TransactionValidationFacts *facts) {
+TransactionProveError Dag::prove_transaction_with_facts(const Transaction                &tx,
+                                                        const std::set<Transaction>      &transactions,
+                                                        const std::set<Transaction>      *pending_transactions,
+                                                        const SectionId                  *validation_frontier,
+                                                        const TransactionValidationFacts *facts) {
     // Check Genesis transactions
     if (tx.type() == TransactionType::Genesis) {
         if (tx.section() != SectionId(0)) {
@@ -1601,7 +1602,7 @@ TransactionProveError Dag::prove_transaction_with_facts(
     }
 
     Actor<KeyPublic> senderActor;
-    const auto sender_exists = [&]() {
+    const auto       sender_exists = [&]() {
         if (facts != nullptr && facts->sender_exists.has_value())
             return facts->sender_exists.value();
         senderActor = node->actor_index()->read_actor_old(targetSender);
@@ -1670,7 +1671,7 @@ TransactionProveError Dag::prove_transaction_with_facts(
     }
 
     Actor<KeyPublic> receiverActor;
-    const auto receiver_exists = [&]() {
+    const auto       receiver_exists = [&]() {
         if (facts != nullptr && facts->receiver_exists.has_value())
             return facts->receiver_exists.value();
         receiverActor = node->actor_index()->read_actor_old(targetReceiver);
@@ -2030,8 +2031,7 @@ void Dag::start_check() {
             // "Not need sync" and goes straight back to Ready, which is the same
             // outcome this early return produced, only now it is a decision rather than
             // an assumption. See docs/TODO.md 1.1 and 0.75.
-            eLog("[Dag] start_check: at section {}, asking peers whether we are behind",
-                 current_section_);
+            eLog("[Dag] start_check: at section {}, asking peers whether we are behind", current_section_);
         } else {
             eLog("[Dag] start_check: no genesis section yet — running initial sync");
         }
@@ -2238,7 +2238,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
     // Same reasoning as network_file_sections_response: the retry clock stays running
     // until the answer proves usable, so a corrupt or undecodable one does not silently
     // cancel the retry it should have caused.
-    ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
+    node->post_storage([this, compressed, responder]() {
         const auto uncompressed = LegacyCompression::decompress(compressed, FILE_SYNC_MAX_UNCOMPRESSED_BYTES);
         if (!uncompressed.has_value()) {
             eWarning("[Dag] Failed to decompress section response");
@@ -2254,10 +2254,11 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         const auto expected_range = pending_sync_range(responder, section_sync->to, false);
         if (!expected_range.has_value()
-            || std::ranges::any_of(section_sync->txs, [&](const auto &transaction) {
-                   return transaction.section() < expected_range.value().first
-                          || transaction.section() > expected_range.value().second;
-               })
+            || std::ranges::any_of(section_sync->txs,
+                                   [&](const auto &transaction) {
+                                       return transaction.section() < expected_range.value().first
+                                              || transaction.section() > expected_range.value().second;
+                                   })
             || std::ranges::any_of(section_sync->controls, [&](const auto &control) {
                    return control.section_id < expected_range.value().first
                           || control.section_id > expected_range.value().second;
@@ -2379,7 +2380,7 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
     auto meta        = node->network()->peer_meta_for(peer_id);
     bool peer_legacy = !meta.has_value() || meta->is_legacy_dag();
 
-    ThreadPoolBoost::instance_dag_sync()->post([this, from, to, responder, peer_legacy]() {
+    node->post_storage([this, from, to, responder, peer_legacy]() {
         std::vector<SectionFileData> sections;
 
         for (SectionId i = from; i <= to; i++) {
@@ -2450,7 +2451,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
     }
     bool peer_legacy = meta->is_legacy_dag();
 
-    ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder, peer_legacy]() {
+    node->post_storage([this, compressed, responder, peer_legacy]() {
         // Dense paths can deliver the same response more than once. Serialize
         // state mutation so two workers cannot write sections and finish the
         // same sync at the same time.
@@ -2477,11 +2478,10 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
 
         const auto expected_range = pending_sync_range(responder, file_sync->to, true);
-        if (!expected_range.has_value()
-            || std::ranges::any_of(file_sync->sections, [&](const auto &section) {
-                   return section.section_id < expected_range.value().first
-                          || section.section_id > expected_range.value().second;
-               })) {
+        if (!expected_range.has_value() || std::ranges::any_of(file_sync->sections, [&](const auto &section) {
+                return section.section_id < expected_range.value().first
+                       || section.section_id > expected_range.value().second;
+            })) {
             eWarning("[Dag] Reject stale or out-of-range file section response {}", responder.message_id());
             return;
         }
@@ -2631,7 +2631,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             try_pack_hot();
             if (mode_ == DagMode::Full && chain_index_enabled_ && chain_index_) {
                 auto *index = chain_index_.get();
-                ThreadPoolBoost::instance_dag_sync()->post([index]() {
+                node->post_storage([index]() {
                     index->rebuild_from_disk();
                 });
             }
@@ -2671,7 +2671,7 @@ void Dag::request_file_sections(const SectionId &from, const SectionId &to, cons
 }
 
 void Dag::network_request_light(const Responder &responder) {
-    ThreadPoolBoost::instance_dag_sync()->post([this, responder]() {
+    node->post_storage([this, responder]() {
         const auto                                     started_at = std::chrono::steady_clock::now();
         std::set<Transaction>                          txs;
         std::vector<std::pair<SectionId, std::string>> controls;
@@ -2769,7 +2769,7 @@ void Dag::network_request_light(const Responder &responder) {
 void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
     // eLog("network_response_light {}", dag_light);
 
-    ThreadPoolBoost::instance()->post([this, responder, dag_light]() {
+    node->post_storage([this, responder, dag_light]() {
         // TIMER_START(network_response_light)
         cache_.reset_db();
         cache_.init_db();
@@ -3214,7 +3214,7 @@ void Dag::clear_dag_folder() {
     std::error_code             error;
 
     if (std::filesystem::exists(remove_path, error)) {
-        ThreadPoolBoost::instance()->post([remove_path]() {
+        node->post_storage([remove_path]() {
             std::error_code remove_error;
             std::filesystem::remove_all(remove_path, remove_error);
         });
@@ -3225,7 +3225,7 @@ void Dag::clear_dag_folder() {
         && FileIo::write_atomic(migrated_path, {}).has_value()) {
         std::filesystem::rename(dag_path, remove_path, error);
         if (!error) {
-            ThreadPoolBoost::instance()->post([remove_path]() {
+            node->post_storage([remove_path]() {
                 std::error_code remove_error;
                 std::filesystem::remove_all(remove_path, remove_error);
             });
@@ -3244,7 +3244,7 @@ void Dag::clear_dag() {
     eLog("[Dag] Clearing...");
     pack_hot_generation_.fetch_add(1);
     std::lock_guard pack_lock(pack_mutex_);
-    auto max_section = file_section(current_section_);
+    auto            max_section = file_section(current_section_);
 
     std::error_code error;
     std::filesystem::remove(ChainConst::BALANCE_CACHE, error);
@@ -3273,7 +3273,7 @@ void Dag::clear_dag() {
     }
 
     if (!to_delete.empty()) {
-        ThreadPoolBoost::instance()->post([paths = std::move(to_delete)]() {
+        node->post_storage([paths = std::move(to_delete)]() {
             for (const auto &path : paths) {
                 std::error_code remove_error;
                 std::filesystem::remove_all(path, remove_error);
@@ -3539,7 +3539,7 @@ void Dag::issue_next_pack_request(const Responder &responder) {
 
             if (installed_any && chain_index_enabled_ && chain_index_) {
                 auto *index = chain_index_.get();
-                ThreadPoolBoost::instance_dag_sync()->post([index]() {
+                node->post_storage([index]() {
                     index->rebuild_from_disk();
                 });
             }
@@ -3868,7 +3868,7 @@ void Dag::try_pack_hot() {
         return;
 
     try {
-        ThreadPoolBoost::instance_dag_sync()->post([this, max_pack_idx, first_saved, generation]() {
+        node->post_storage([this, max_pack_idx, first_saved, generation]() {
             try {
                 pack_hot_sections(max_pack_idx, first_saved, generation);
             } catch (const std::exception &error) {
@@ -4879,36 +4879,9 @@ void Dag::clear_controls(const SectionId &from) {
 }
 
 void Dag::clear_controls_async(const SectionId &from) {
-    eLog("[Dag] Clear controls from {}...", from);
-
-    if (current_section_ < from) {
-        return;
-    }
-
-    const SectionId total       = current_section_ - from + 1;
-    const auto      total_count = static_cast<std::size_t>(std::max(1, total.to_int().value_or(1)));
-    const size_t    num_threads = std::min(node->runtime_limits().general_workers, total_count);
-    const SectionId chunk       = total / num_threads;
-
-    std::vector<std::future<void>> futures;
-
-    for (size_t t = 0; t < num_threads; ++t) {
-        SectionId start = from + SectionId(t) * chunk;
-        SectionId end   = (t == num_threads - 1) ? current_section_ : start + chunk - 1;
-
-        futures.emplace_back(std::async(std::launch::async, [this, start, end]() {
-            for (SectionId i = start; i <= end; i++) {
-                auto section = read_section(i);
-                if (section.has_value() && section->control.has_value()) {
-                    remove_control(i);
-                }
-            }
-        }));
-    }
-
-    for (auto &f : futures) {
-        f.wait();
-    }
+    node->post_storage([this, from] {
+        clear_controls(from);
+    });
 }
 
 void Dag::request_control_section(const SectionId &from_top, const Responder &responder) {

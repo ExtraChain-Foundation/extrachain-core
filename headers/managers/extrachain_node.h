@@ -72,14 +72,15 @@ public slots:
     void notificationToken(QString os, QString actor_id, QString token);
 
 protected:
-    DfsService*     create_dfs_service() override;
-    NetworkService* create_network_service() override;
+    std::unique_ptr<DfsService>     create_dfs_service() override;
+    std::unique_ptr<NetworkService> create_network_service() override;
 
 private:
     ExtraChainNode(bool                          is_client_application,
                    bool                          is_custom_app,
                    std::uint16_t                 port,
-                   std::optional<RuntimeProfile> runtime_profile);
+                   std::optional<RuntimeProfile> runtime_profile,
+                   std::string                   bind_address);
 
     void bridge_node_events();
     void bridge_service_events();
@@ -97,7 +98,8 @@ public:
                           bool                          is_client_application = false,
                           bool                          is_custom_app         = false,
                           std::uint16_t                 ws_port               = 17593,
-                          std::optional<RuntimeProfile> runtime_profile       = std::nullopt);
+                          std::optional<RuntimeProfile> runtime_profile       = std::nullopt,
+                          std::string                   bind_address          = {});
     ~ExtraChainNodeWrapper() override;
 
     void init(bool make_async = false);

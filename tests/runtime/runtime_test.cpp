@@ -9,7 +9,6 @@
 
 #include <boost/asio/post.hpp>
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/read_until.hpp>
 #include <boost/asio/streambuf.hpp>
 #include <boost/asio/write.hpp>
@@ -25,7 +24,6 @@
 #include "runtime/deadline_task.h"
 #include "runtime/periodic_task.h"
 #include "runtime/runtime.h"
-#include "utils/thread_pool_boost.h"
 #include "utils/version.h"
 
 namespace {
@@ -173,7 +171,7 @@ int main() {
     require(traffic_meter->total_bytes() == std::pair<std::uint64_t, std::uint64_t> { 17, 23 },
             "traffic meter must keep constant-time total counters");
 
-    Runtime                 runtime({ .io_threads = 2, .blocking_threads = 1 });
+    Runtime                 runtime({ .io_threads = 2, .storage_threads = 1, .compute_threads = 1 });
     std::mutex              mutex;
     std::condition_variable condition;
     std::atomic_int         ticks { 0 };
@@ -189,6 +187,8 @@ int main() {
 
     std::atomic_bool blocking_complete { false };
     std::atomic_bool blocking_exception_caught { false };
+    std::atomic_bool blocking_coroutine_finished { false };
+    std::atomic_bool blocking_coroutine_failed { false };
     std::thread::id  blocking_thread;
     boost::asio::co_spawn(
         runtime.executor(),
@@ -210,19 +210,26 @@ int main() {
             blocking_complete.store(true, std::memory_order_release);
             condition.notify_one();
         },
-        boost::asio::detached);
+        [&](std::exception_ptr error) {
+            blocking_coroutine_failed.store(error != nullptr, std::memory_order_release);
+            blocking_coroutine_finished.store(true, std::memory_order_release);
+            condition.notify_one();
+        });
 
     {
         std::unique_lock lock(mutex);
         require(condition.wait_for(lock,
                                    2s,
                                    [&] {
-                                       return blocking_complete.load(std::memory_order_acquire);
+                                       return blocking_coroutine_finished.load(std::memory_order_acquire);
                                    }),
                 "blocking work must complete through the coroutine bridge");
     }
+    require(blocking_complete.load(std::memory_order_acquire), "blocking work must reach its completion point");
     require(blocking_exception_caught.load(std::memory_order_acquire),
             "blocking work must propagate exceptions on the I/O executor");
+    require(!blocking_coroutine_failed.load(std::memory_order_acquire),
+            "blocking coroutine must finish without an unhandled error");
 
     {
         std::unique_lock lock(mutex);
@@ -278,7 +285,7 @@ int main() {
     runtime.stop();
     require(!runtime.running(), "runtime must report the stopped state");
 
-    Runtime          draining_runtime({ .io_threads = 1, .blocking_threads = 1 });
+    Runtime          draining_runtime({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
     std::atomic_bool drained { false };
     const auto       draining_task = DeadlineTask::create(draining_runtime.executor(), [&] {
         drained.store(true, std::memory_order_release);
@@ -288,20 +295,62 @@ int main() {
     draining_runtime.stop();
     require(drained.load(std::memory_order_acquire), "runtime stop must drain accepted asynchronous work");
 
-    NetworkRuntime  network({ .io_threads = 1, .blocking_threads = 1 });
-    std::atomic_int accepted { 0 };
-    const auto      listen_port = network.listen(0, [&](NetworkRuntime::Tcp::socket socket) {
-        boost::system::error_code ignored;
-        socket.close(ignored);
-        accepted.fetch_add(1, std::memory_order_acq_rel);
-        condition.notify_one();
+    Runtime          self_join_runtime({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
+    std::atomic_bool self_join_rejected { false };
+    self_join_runtime.start();
+    boost::asio::post(self_join_runtime.executor(), [&] {
+        try {
+            self_join_runtime.join();
+        } catch (const std::logic_error&) {
+            self_join_rejected.store(true, std::memory_order_release);
+            condition.notify_one();
+        }
     });
+    {
+        std::unique_lock lock(mutex);
+        require(condition.wait_for(lock,
+                                   2s,
+                                   [&] {
+                                       return self_join_rejected.load(std::memory_order_acquire);
+                                   }),
+                "runtime must reject a join from its own I/O worker");
+    }
+    self_join_runtime.stop();
+
+    NetworkRuntime invalid_network({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
+    const auto     invalid_listener =
+        invalid_network.listen({ .bind_address = "not-an-ip", .port = 0 }, [](NetworkRuntime::Tcp::socket) {
+        });
+    require(!invalid_listener.has_value(), "network runtime must reject an invalid bind address");
+    invalid_network.stop();
+
+    NetworkRuntime  network({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
+    std::atomic_int accepted { 0 };
+    const auto      listen_port =
+        network.listen({ .bind_address = "127.0.0.1", .port = 0 }, [&](NetworkRuntime::Tcp::socket socket) {
+            boost::system::error_code ignored;
+            socket.close(ignored);
+            accepted.fetch_add(1, std::memory_order_acq_rel);
+            condition.notify_one();
+        });
     require(listen_port.has_value(), "network runtime must bind an ephemeral listener");
 
     const auto sync_probe = NetworkRuntime::probe("127.0.0.1", listen_port.value(), 1s);
     require(sync_probe.has_value(), "synchronous probe must reach the Boost listener");
     const auto hostname_probe = NetworkRuntime::probe("localhost", listen_port.value(), 1s);
     require(hostname_probe.has_value(), "synchronous probe must resolve a host name");
+
+    network.stop_listening();
+    const auto restarted_port =
+        network.listen({ .bind_address = "127.0.0.1", .port = 0 }, [&](NetworkRuntime::Tcp::socket socket) {
+            boost::system::error_code ignored;
+            socket.close(ignored);
+            accepted.fetch_add(1, std::memory_order_acq_rel);
+            condition.notify_one();
+        });
+    require(restarted_port.has_value(), "network runtime must restart its listener after a stop");
+    require(NetworkRuntime::probe("127.0.0.1", restarted_port.value(), 1s).has_value(),
+            "synchronous probe must reach the restarted listener");
 
     boost::asio::io_context       http_context;
     NetworkRuntime::Tcp::acceptor http_acceptor(http_context, { boost::asio::ip::address_v4::loopback(), 0 });
@@ -400,7 +449,7 @@ int main() {
             "asynchronous HTTP POST must preserve target, content type, and body");
 
     std::atomic_bool async_probe_ok { false };
-    network.async_probe("127.0.0.1", listen_port.value(), 1s, [&](bool connected, std::string) {
+    network.async_probe("127.0.0.1", restarted_port.value(), 1s, [&](bool connected, std::string) {
         async_probe_ok.store(connected, std::memory_order_release);
         condition.notify_one();
     });
@@ -456,42 +505,25 @@ int main() {
             "network stop must cancel an active HTTP request");
     require(stop_duration < 1s, "network stop must not wait for an active HTTP timeout");
 
+    Runtime         worker_runtime({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
     std::atomic_int pool_tasks { 0 };
-    auto            pool = ThreadPoolBoost::instance(2);
     for (int index = 0; index < 64; ++index) {
-        pool->post([&] {
+        boost::asio::post(worker_runtime.storage_executor(), [&] {
             if (pool_tasks.fetch_add(1, std::memory_order_acq_rel) + 1 == 64) {
                 condition.notify_one();
             }
         });
     }
-    {
-        std::unique_lock lock(mutex);
-        require(condition.wait_for(lock,
-                                   2s,
-                                   [&] {
-                                       return pool_tasks.load(std::memory_order_acquire) == 64;
-                                   }),
-                "shared Boost pool must execute queued tasks");
-    }
-    ThreadPoolBoost::terminate();
+    worker_runtime.stop();
+    require(pool_tasks.load(std::memory_order_acquire) == 64, "runtime stop must drain all accepted storage work");
 
-    auto replacement_pool = ThreadPoolBoost::instance(1);
-    require(replacement_pool != pool, "shared Boost pool must allow clean creation after termination");
-    replacement_pool->post([&] {
+    Runtime compute_runtime({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
+    boost::asio::post(compute_runtime.compute_executor(), [&] {
         pool_tasks.fetch_add(1, std::memory_order_acq_rel);
         condition.notify_one();
     });
-    {
-        std::unique_lock lock(mutex);
-        require(condition.wait_for(lock,
-                                   2s,
-                                   [&] {
-                                       return pool_tasks.load(std::memory_order_acquire) == 65;
-                                   }),
-                "replacement Boost pool must execute work");
-    }
-    ThreadPoolBoost::terminate();
+    compute_runtime.stop();
+    require(pool_tasks.load(std::memory_order_acquire) == 65, "runtime stop must drain all accepted compute work");
 
-    std::cout << "PASS: runtime, event, timer, listener, probe, and shared pool lifecycle\n";
+    std::cout << "PASS: runtime, event, timer, listener, probe, and owned pool lifecycle\n";
 }

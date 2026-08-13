@@ -1,0 +1,17 @@
+if(NOT DEFINED CORE_SOURCE_MANIFEST OR NOT EXISTS "${CORE_SOURCE_MANIFEST}")
+  message(FATAL_ERROR "CORE_SOURCE_MANIFEST is required")
+endif()
+
+file(STRINGS "${CORE_SOURCE_MANIFEST}" core_sources)
+set(qt_pattern "#[ \t]*include[ \t]*[<\"]Q|Q_OBJECT|Q_INVOKABLE|Qt6?::")
+
+foreach(source IN LISTS core_sources)
+  if(NOT EXISTS "${source}")
+    continue()
+  endif()
+  file(READ "${source}" contents)
+  if(contents MATCHES "${qt_pattern}")
+    file(RELATIVE_PATH relative_source "${CORE_SOURCE_ROOT}" "${source}")
+    message(FATAL_ERROR "Qt token found in pure Core source: ${relative_source}")
+  endif()
+endforeach()

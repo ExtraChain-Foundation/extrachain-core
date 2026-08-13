@@ -30,7 +30,6 @@
 #include "dfs/dirs_manager.h"
 #include "dfs/load_manager.h"
 
-#include "utils/thread_pool_boost.h"
 #include "runtime/deadline_task.h"
 
 #include <algorithm>
@@ -2016,7 +2015,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsService::mak
 
 void DfsService::network_response_content_vector(
     const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
-    ThreadPoolBoost::instance_dfs()->post([this, dfs_vector_content] {
+    node->post_storage([this, dfs_vector_content] {
         eLog("[Dfs] Vector content package: {} / {}", dfs_vector_content.owner_id, dfs_vector_content.file_id);
         auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
         if (!dfs_vector_result.has_value()) {
@@ -2060,7 +2059,7 @@ void DfsService::network_vector_add(const ActorId &owner_id, const std::string &
     // instead of dropping the row, doing it inline could stall message dispatch for
     // seconds — the same starvation that used to push consensus traffic out of the
     // acceptance window behind bulk transfers.
-    ThreadPoolBoost::instance_dfs()->post([this, owner_id, file_id, row] {
+    node->post_storage([this, owner_id, file_id, row] {
         auto res = make_vector(owner_id, file_id);
         if (!res.has_value()) {
             boost::asio::post(node->serial_executor(), [this, owner_id, file_id] {
@@ -3013,7 +3012,7 @@ std::vector<ActorId> DfsService::startup_sync_actors() const {
 }
 
 void DfsService::sync(const std::string &identifier) {
-    ThreadPoolBoost::instance_dfs()->post([this, identifier]() {
+    node->post_storage([this, identifier]() {
         // Not once-per-process: a file left in a non-final state (peer had it only
         // as Known when we first asked, or our queue was lost to a restart mid-
         // download) gets re-offered on every sync until it actually lands.
@@ -3036,7 +3035,7 @@ void DfsService::sync(const std::string &identifier) {
         // sync used to pay this timeout in full (was 15s).
         constexpr auto stagedFallbackDelay = std::chrono::seconds(3);
         schedule_after(stagedFallbackDelay, [this, identifier, responses_before]() {
-            ThreadPoolBoost::instance_dfs()->post([this, identifier, responses_before]() {
+            node->post_storage([this, identifier, responses_before]() {
                 if (mode() != DfsMode::Selective) {
                     return;
                 }
@@ -3082,13 +3081,12 @@ bool DfsService::refresh_actors(const std::vector<ActorId> &actors) {
 
     std::vector<ActorId> requestedActors(uniqueActors.begin(), uniqueActors.end());
     const auto           responses_before = staged_startup_response_count();
-    ThreadPoolBoost::instance_dfs()->post(
-        [this, identifiers = std::move(identifiers), actors = std::move(requestedActors)]() {
-            for (const auto &identifier : identifiers) {
-                eLog("[Dfs] Targeted actor refresh: identifier={}, actors={}", identifier, actors.size());
-                dirs_manager_.temp_sync_actors(identifier, actors);
-            }
-        });
+    node->post_storage([this, identifiers = std::move(identifiers), actors = std::move(requestedActors)]() {
+        for (const auto &identifier : identifiers) {
+            eLog("[Dfs] Targeted actor refresh: identifier={}, actors={}", identifier, actors.size());
+            dirs_manager_.temp_sync_actors(identifier, actors);
+        }
+    });
 
     // Prod nodes without staged support ignore the targeted request (same as in sync()).
     // If no staged response arrives within 3s, request a full sync: network_response_dir_rows
@@ -3098,7 +3096,7 @@ bool DfsService::refresh_actors(const std::vector<ActorId> &actors) {
     if (has_new_actors) {
         constexpr auto stagedFallbackDelay = std::chrono::seconds(3);
         schedule_after(stagedFallbackDelay, [this, responses_before]() {
-            ThreadPoolBoost::instance_dfs()->post([this, responses_before]() {
+            node->post_storage([this, responses_before]() {
                 if (staged_startup_response_count() != responses_before) {
                     return;
                 }

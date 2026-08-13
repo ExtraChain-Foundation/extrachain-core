@@ -25,8 +25,6 @@
 #include "network/network_service.h"
 #include "utils/db_connector.h"
 
-#include "utils/thread_pool_boost.h"
-
 #include <msgpack.hpp>
 
 namespace {
@@ -575,7 +573,6 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
         return;
     }
     if (dag->status() != DagStatus::Ready) {
-        // ThreadPoolBoost::instance()->post([this] { // remove
         auto res = this->check_and_update_cache(dag->current_section());
 
         if (res.result) {
@@ -621,7 +618,6 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
                 return;
             }
 
-            // ThreadPoolBoost::instance()->post([this, res] {
             auto last_hash    = node->dag()->generate_hash_from_section(res.from);
             auto control_hash = node->dag()->read_control(res.to);
             if (!control_hash.has_value()) {

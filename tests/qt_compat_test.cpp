@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
     ExtraChainNodeWrapper mobile_node(&app, true, false, 0, RuntimeProfile::MobileLight);
     require(mobile_node.node->runtime_profile() == RuntimeProfile::MobileLight,
             "Explicit mobile profile must override the desktop platform default");
-    require(mobile_node.node->runtime_limits().general_workers == 1,
+    require(mobile_node.node->runtime_limits().compute_workers == 1,
             "Mobile profile must keep the bounded worker limit");
 
     VariantModel model(nullptr, { "name", "value" });

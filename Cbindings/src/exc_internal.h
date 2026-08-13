@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <type_traits>
 #include <typeindex>
 #include <unordered_map>
@@ -114,6 +115,7 @@ namespace exc_ffi {
         bool                                              shutdown_requested   = false;
         bool                                              shutdown_in_progress = false;
         std::size_t                                       active_calls         = 0;
+        std::jthread                                      shutdown_worker;
 
         static GlobalState& instance() {
             static GlobalState gs;

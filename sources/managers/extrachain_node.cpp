@@ -33,13 +33,15 @@ namespace {
 ExtraChainNode::ExtraChainNode(bool                          is_client_application,
                                bool                          is_custom_app,
                                std::uint16_t                 port,
-                               std::optional<RuntimeProfile> runtime_profile)
+                               std::optional<RuntimeProfile> runtime_profile,
+                               std::string                   bind_address)
     : QObject(nullptr)
     , ExtraChain::Core::ExtraChainNode(is_client_application,
                                        is_custom_app,
                                        port,
                                        runtime_profile,
-                                       QCoreApplication::applicationVersion().toStdString()) {
+                                       QCoreApplication::applicationVersion().toStdString(),
+                                       std::move(bind_address)) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
     bridge_node_events();
 }
@@ -76,12 +78,12 @@ void ExtraChainNode::notificationToken(QString os, QString actor_id, QString tok
     notification_token(os.toStdString(), actor_id.toStdString(), token.toStdString());
 }
 
-DfsService* ExtraChainNode::create_dfs_service() {
-    return new DfsController(this, this);
+std::unique_ptr<DfsService> ExtraChainNode::create_dfs_service() {
+    return std::make_unique<DfsController>(this, this);
 }
 
-NetworkService* ExtraChainNode::create_network_service() {
-    return new NetworkManager(this, network_runtime(), configured_port(), this);
+std::unique_ptr<NetworkService> ExtraChainNode::create_network_service() {
+    return std::make_unique<NetworkManager>(this, network_runtime(), configured_port(), this);
 }
 
 void ExtraChainNode::bridge_node_events() {
@@ -266,9 +268,14 @@ ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject*                      paren
                                              bool                          is_client_application,
                                              bool                          is_custom_app,
                                              std::uint16_t                 ws_port,
-                                             std::optional<RuntimeProfile> runtime_profile)
+                                             std::optional<RuntimeProfile> runtime_profile,
+                                             std::string                   bind_address)
     : QObject(parent)
-    , node(new ExtraChainNode(is_client_application, is_custom_app, ws_port, runtime_profile)) {
+    , node(new ExtraChainNode(is_client_application,
+                              is_custom_app,
+                              ws_port,
+                              runtime_profile,
+                              std::move(bind_address))) {
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {

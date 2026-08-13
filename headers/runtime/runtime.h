@@ -27,15 +27,17 @@
 namespace ExtraChain::Core {
 
     struct RuntimeConfig {
-        std::size_t io_threads       = 1;
-        std::size_t blocking_threads = 1;
+        std::size_t io_threads      = 1;
+        std::size_t storage_threads = 1;
+        std::size_t compute_threads = 1;
     };
 
     /**
      * Owns all asynchronous Core execution resources.
      *
-     * Network and timer handlers use the io_context. Blocking database,
-     * filesystem, and WebAssembly work uses the bounded blocking pool.
+     * Network and timer handlers use the io_context. Database and filesystem
+     * work uses the storage pool. CPU-bound and WebAssembly work uses the
+     * compute pool.
      */
     class Runtime final {
     public:
@@ -51,18 +53,23 @@ namespace ExtraChain::Core {
 
         void start();
         void run();
+        void request_stop();
+        void join();
         void stop();
 
         [[nodiscard]] bool                      running() const noexcept;
         [[nodiscard]] Executor                  executor();
         [[nodiscard]] boost::asio::io_context&  io_context() noexcept;
-        [[nodiscard]] boost::asio::thread_pool& blocking_pool() noexcept;
+        [[nodiscard]] Executor                  storage_executor() noexcept;
+        [[nodiscard]] Executor                  compute_executor() noexcept;
+        [[nodiscard]] boost::asio::thread_pool& storage_pool() noexcept;
+        [[nodiscard]] boost::asio::thread_pool& compute_pool() noexcept;
 
         /**
-         * Run blocking work on the bounded worker pool.
+         * Run CPU-bound work on the bounded compute pool.
          *
-         * The coroutine resumes on its original executor. This keeps database,
-         * filesystem, and WebAssembly work away from network and timer threads.
+         * The coroutine resumes on its original executor. This keeps CPU-bound
+         * and WebAssembly work away from network and timer threads.
          */
         template <typename Function>
         [[nodiscard]] boost::asio::awaitable<std::invoke_result_t<Function&>> async_blocking(Function function) {
@@ -71,7 +78,7 @@ namespace ExtraChain::Core {
 
             if constexpr (std::is_void_v<Result>) {
                 co_await boost::asio::co_spawn(
-                    blocking_pool(),
+                    compute_pool(),
                     [function = std::move(function)]() mutable -> boost::asio::awaitable<void> {
                         std::invoke(function);
                         co_return;
@@ -80,7 +87,7 @@ namespace ExtraChain::Core {
                 co_return;
             } else {
                 co_return co_await boost::asio::co_spawn(
-                    blocking_pool(),
+                    compute_pool(),
                     [function = std::move(function)]() mutable -> boost::asio::awaitable<Result> {
                         co_return std::invoke(function);
                     },

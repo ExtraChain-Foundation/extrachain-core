@@ -197,11 +197,9 @@ public:
     [[nodiscard]] CustomMessageEvent&              custom_message_event() noexcept;
     [[nodiscard]] ExtraChain::Core::NetworkStatus& network_status() noexcept;
 
-    // protected:
-    // std::uint16_t tcp_port = 17593;
-    std::uint16_t ws_port = 17593;
-
 private:
+    std::uint16_t ws_port_ = 17593;
+
     void connectWsService(const std::shared_ptr<WebSocketService>& service, bool requestListNodes = false);
     boost::asio::awaitable<void> connect_websocket(std::string   ip,
                                                    std::uint16_t port,

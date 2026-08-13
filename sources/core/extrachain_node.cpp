@@ -55,7 +55,6 @@
 #include "runtime/deadline_task.h"
 #include "runtime/periodic_task.h"
 #include "chat/chat_manager.h"
-#include "utils/thread_pool_boost.h"
 #include "contracts/contract_manager.h"
 #include "contracts/contract_codec.h"
 #include "contracts/contract_hash.h"
@@ -225,11 +224,13 @@ namespace ExtraChain::Core {
                                    bool                          is_custom_app,
                                    std::uint16_t                 port,
                                    std::optional<RuntimeProfile> runtime_profile,
-                                   std::string                   application_version)
+                                   std::string                   application_version,
+                                   std::string                   bind_address)
         : is_client_application_(is_client_application)
         , is_custom_app_(is_custom_app)
         , application_version_(std::move(application_version))
-        , ws_port(port) {
+        , bind_address_(std::move(bind_address))
+        , ws_port_(port) {
         if (runtime_profile.has_value()) {
             runtime_profile_ = runtime_profile.value();
         } else {
@@ -239,11 +240,13 @@ namespace ExtraChain::Core {
             runtime_profile_ = is_client_application_ ? RuntimeProfile::DesktopLight : RuntimeProfile::FullNode;
 #endif
         }
-        runtime_         = std::make_unique<NetworkRuntime>(RuntimeConfig {
-                    .io_threads       = runtime_profile_ == RuntimeProfile::MobileLight ? 1U : 2U,
-                    .blocking_threads = runtime_profile_ == RuntimeProfile::FullNode ? 2U : 1U,
+        const auto limits = runtime_limits();
+        runtime_          = std::make_unique<NetworkRuntime>(RuntimeConfig {
+                     .io_threads      = limits.io_workers,
+                     .storage_threads = limits.storage_workers,
+                     .compute_threads = limits.compute_workers,
         });
-        serial_executor_ = std::make_unique<SerialExecutor>(boost::asio::make_strand(runtime_->executor()));
+        serial_executor_  = std::make_unique<SerialExecutor>(boost::asio::make_strand(runtime_->executor()));
     }
 
     void ExtraChainNode::process() {
@@ -260,10 +263,6 @@ namespace ExtraChain::Core {
         }
 
         const auto limits = runtime_limits();
-        ThreadPoolBoost::instance_dfs(limits.dfs_workers);
-        ThreadPoolBoost::instance(limits.general_workers);
-        ThreadPoolBoost::instance_dag_sync(limits.dag_sync_workers);
-
         prepare_folders();
 
         // Auto-migrate legacy hex-shard DAG layout into decimal hot/ + packs/.
@@ -286,10 +285,10 @@ namespace ExtraChain::Core {
         }
 
         actor_index_        = std::make_unique<ActorIndex>(this);
-        account_controller_ = new AccountController(this);
-        luminance_manager_  = new LuminanceManager(this);
+        account_controller_ = std::make_unique<AccountController>(this);
+        luminance_manager_  = std::make_unique<LuminanceManager>(this);
         network_service_    = create_network_service();
-        dag_                = new Dag(this);
+        dag_                = std::make_unique<Dag>(this);
 
         dag_sync_timer_          = DeadlineTask::create(runtime_executor(), [this] {
             dagTimerTick();
@@ -309,7 +308,8 @@ namespace ExtraChain::Core {
         dfs_              = create_dfs_service();
         contract_manager_ = std::make_unique<
             ExtraChain::Contracts::ContractManager>(std::make_unique<
-                                                        ExtraChain::Contracts::DfsContractStorage>(dfs_, dag_),
+                                                        ExtraChain::Contracts::DfsContractStorage>(dfs_.get(),
+                                                                                                   dag_.get()),
                                                     ExtraChain::Contracts::ExecutionLimits {},
                                                     ExtraChain::Contracts::RuntimeTuning {
                                                         .max_concurrent_executions = limits.wasm_concurrency,
@@ -338,9 +338,9 @@ namespace ExtraChain::Core {
                 dag_->retry_contract_transactions();
             });
         }));
-        dmm_           = new DataMiningManager(this);
-        token_manager_ = new TokenManager(this);
-        chat_manager_  = new ChatManager(this);
+        dmm_           = std::make_unique<DataMiningManager>(this);
+        token_manager_ = std::make_unique<TokenManager>(this);
+        chat_manager_  = std::make_unique<ChatManager>(this);
         core_connections_.emplace_back(
             dfs_->downloaded_event().subscribe([this](const ActorId& owner_id, const Dfs::DirRow& row) {
                 boost::asio::post(serial_executor(), [this, owner_id, row] {
@@ -365,7 +365,7 @@ namespace ExtraChain::Core {
                     }
                 });
             }));
-        thoth_manager_                 = new ThothManager(this, application_version_);
+        thoth_manager_                 = std::make_unique<ThothManager>(this, application_version_);
         auto thoth_registry_downloaded = [this](const ActorId& owner_id, const Dfs::DirRow& row) {
             if (thoth_manager_) {
                 thoth_manager_->on_registry_file_downloaded(owner_id, row);
@@ -373,7 +373,7 @@ namespace ExtraChain::Core {
         };
         core_connections_.emplace_back(dfs_->wait_downloaded_event().subscribe(thoth_registry_downloaded));
         core_connections_.emplace_back(dfs_->downloaded_event().subscribe(thoth_registry_downloaded));
-        janus_manager_ = new JanusManager(this);
+        janus_manager_ = std::make_unique<JanusManager>(this);
 
         // auto address         = "12.12.12.12";
         // auto port            = "1212";
@@ -452,23 +452,22 @@ namespace ExtraChain::Core {
         if (dag_) {
             dag_->stop();
         }
-        ThreadPoolBoost::terminate();
         if (runtime_) {
             runtime_->stop();
         }
 
-        delete std::exchange(janus_manager_, nullptr);
-        delete std::exchange(thoth_manager_, nullptr);
-        delete std::exchange(chat_manager_, nullptr);
-        delete std::exchange(token_manager_, nullptr);
-        delete std::exchange(dmm_, nullptr);
+        janus_manager_.reset();
+        thoth_manager_.reset();
+        chat_manager_.reset();
+        token_manager_.reset();
+        dmm_.reset();
         toolchain_registry_.reset();
         contract_manager_.reset();
-        delete std::exchange(dfs_, nullptr);
-        delete std::exchange(dag_, nullptr);
-        delete std::exchange(network_service_, nullptr);
-        delete std::exchange(luminance_manager_, nullptr);
-        delete std::exchange(account_controller_, nullptr);
+        dfs_.reset();
+        dag_.reset();
+        network_service_.reset();
+        luminance_manager_.reset();
+        account_controller_.reset();
         actor_index_.reset();
     }
 
@@ -701,7 +700,7 @@ namespace ExtraChain::Core {
 
     void ExtraChainNode::backfill_token_allocations() {
         backfill_timer_ = DeadlineTask::create(runtime_executor(), [this] {
-            ThreadPoolBoost::instance()->post([this]() {
+            post_storage([this]() {
                 auto network_id = actor_index()->network_id();
                 auto alloc_row  = Dfs::Tables::DirsFile::ActorSpace::
                     search_file_by_folder_and_name(dfs_->get_db_instance(),
@@ -1054,7 +1053,7 @@ namespace ExtraChain::Core {
 
         // Version compatibility: 0.17.0 (temp)
 #ifdef IS_APP_UI_CLIENT
-        ThreadPoolBoost::instance()->post([this]() {
+        post_storage([this]() {
             auto system_id     = account_controller_->system_actor().id();
             auto main_id       = account_controller_->current_profile().main_id();
             auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
@@ -1091,7 +1090,7 @@ namespace ExtraChain::Core {
 
         // Version compatibility: 0.19.2 (temp)
 #ifdef IS_APP_UI_CLIENT
-        ThreadPoolBoost::instance()->post([this]() {
+        post_storage([this]() {
             auto main_id       = account_controller_->current_profile().main_id();
             auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
@@ -1130,7 +1129,7 @@ namespace ExtraChain::Core {
 #endif
 
         // Version compatibility: 0.20.0
-        ThreadPoolBoost::instance()->post([]() {
+        post_storage([]() {
             std::error_code error;
             std::filesystem::remove_all("blocks", error);
         });
@@ -1148,6 +1147,10 @@ namespace ExtraChain::Core {
         return runtime_activity_.load(std::memory_order_acquire);
     }
 
+    const std::string& ExtraChainNode::bind_address() const noexcept {
+        return bind_address_;
+    }
+
     bool ExtraChainNode::info_timer_active() const {
         return info_timer_ && info_timer_->active();
     }
@@ -1156,33 +1159,50 @@ namespace ExtraChain::Core {
         const auto activity = runtime_activity();
         switch (runtime_profile_) {
         case RuntimeProfile::MobileLight:
-            return { 1,
-                     1,
-                     2,
-                     activity == RuntimeActivity::Background ? 1U : 3U,
-                     activity == RuntimeActivity::Background ? 0U : 3U,
-                     2,
-                     1024,
-                     64,
-                     64,
-                     0,
-                     1,
-                     4 * 1024 * 1024 };
+            return {
+                .io_workers                      = 1,
+                .storage_workers                 = 1,
+                .compute_workers                 = 1,
+                .peer_limit                      = activity == RuntimeActivity::Background ? 1U : 3U,
+                .dfs_downloads                   = activity == RuntimeActivity::Background ? 0U : 3U,
+                .pack_sync_window                = 2,
+                .cached_transactions             = 1024,
+                .sync_transactions               = 64,
+                .derived_sections                = 64,
+                .admission_prevalidation_workers = 0,
+                .wasm_concurrency                = 1,
+                .wasm_cache_bytes_per_thread     = 4 * 1024 * 1024,
+            };
         case RuntimeProfile::DesktopLight:
-            return { 2,
-                     2,
-                     4,
-                     activity == RuntimeActivity::Background ? 2U : 5U,
-                     activity == RuntimeActivity::Background ? 1U : 5U,
-                     activity == RuntimeActivity::Background ? 2U : 4U,
-                     4096,
-                     128,
-                     128,
-                     0,
-                     2,
-                     8 * 1024 * 1024 };
+            return {
+                .io_workers                      = 2,
+                .storage_workers                 = 2,
+                .compute_workers                 = 2,
+                .peer_limit                      = activity == RuntimeActivity::Background ? 2U : 5U,
+                .dfs_downloads                   = activity == RuntimeActivity::Background ? 1U : 5U,
+                .pack_sync_window                = activity == RuntimeActivity::Background ? 2U : 4U,
+                .cached_transactions             = 4096,
+                .sync_transactions               = 128,
+                .derived_sections                = 128,
+                .admission_prevalidation_workers = 0,
+                .wasm_concurrency                = 2,
+                .wasm_cache_bytes_per_thread     = 8 * 1024 * 1024,
+            };
         case RuntimeProfile::FullNode:
-            return { 4, 4, 8, 0, 5, 8, 16384, 256, 256, 2, 4, 16 * 1024 * 1024 };
+            return {
+                .io_workers                      = 2,
+                .storage_workers                 = 4,
+                .compute_workers                 = 8,
+                .peer_limit                      = 0,
+                .dfs_downloads                   = 5,
+                .pack_sync_window                = 8,
+                .cached_transactions             = 16384,
+                .sync_transactions               = 256,
+                .derived_sections                = 256,
+                .admission_prevalidation_workers = 2,
+                .wasm_concurrency                = 4,
+                .wasm_cache_bytes_per_thread     = 16 * 1024 * 1024,
+            };
         }
         return {};
     }
@@ -1192,6 +1212,20 @@ namespace ExtraChain::Core {
             throw std::logic_error("ExtraChain runtime is not initialized");
         }
         return runtime_->executor();
+    }
+
+    boost::asio::any_io_executor ExtraChainNode::storage_executor() {
+        if (!runtime_) {
+            throw std::logic_error("ExtraChain runtime is not initialized");
+        }
+        return runtime_->storage_executor();
+    }
+
+    boost::asio::any_io_executor ExtraChainNode::compute_executor() {
+        if (!runtime_) {
+            throw std::logic_error("ExtraChain runtime is not initialized");
+        }
+        return runtime_->compute_executor();
     }
 
     boost::asio::any_io_executor ExtraChainNode::serial_executor() {
@@ -1264,15 +1298,15 @@ namespace ExtraChain::Core {
     }
 
     Dag* ExtraChainNode::dag() const {
-        return dag_;
+        return dag_.get();
     }
 
     NetworkService* ExtraChainNode::network() const {
-        return network_service_;
+        return network_service_.get();
     }
 
     LuminanceManager* ExtraChainNode::luminance_manager() const {
-        return luminance_manager_;
+        return luminance_manager_.get();
     }
 
     std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(Transaction tx) {
@@ -1330,7 +1364,7 @@ namespace ExtraChain::Core {
     }
 
     TokenManager* ExtraChainNode::token_manager() const {
-        return token_manager_;
+        return token_manager_.get();
     }
 
     ExtraChain::Contracts::ContractManager* ExtraChainNode::contract_manager() const {
@@ -1460,8 +1494,8 @@ namespace ExtraChain::Core {
 
         const auto contract_id = transaction.receiver();
         const auto verified_inputs =
-            verify_contract_inputs(dag_,
-                                   dfs_,
+            verify_contract_inputs(dag_.get(),
+                                   dfs_.get(),
                                    metadata->verified_inputs,
                                    static_cast<std::uint64_t>(transaction.section().to_int().value_or(0)));
         if (!verified_inputs.has_value()
@@ -1578,7 +1612,7 @@ namespace ExtraChain::Core {
                                                           block,
                                                           *verified_inputs);
             if (!change.has_value() || change->kind == ExtraChain::Contracts::ContractChangeKind::ReadOnly
-                || !verify_dfs_effect_authors(dfs_, *change, transaction.sender())
+                || !verify_dfs_effect_authors(dfs_.get(), *change, transaction.sender())
                 || change->checkpoint != metadata->checkpoint
                 || Json::serialize(contract_transitions(*change)) != Json::serialize(metadata->transitions)) {
                 return TransactionProveError::InvalidContractPayload;
@@ -1728,7 +1762,7 @@ namespace ExtraChain::Core {
             });
         }
         auto block    = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
-        auto verified = verify_contract_inputs(dag_, dfs_, verified_inputs, block);
+        auto verified = verify_contract_inputs(dag_.get(), dfs_.get(), verified_inputs, block);
         if (!verified.has_value()) {
             return std::unexpected(verified.error());
         }
@@ -1741,7 +1775,7 @@ namespace ExtraChain::Core {
         if (!change.has_value()) {
             return std::unexpected(change.error());
         }
-        if (!verify_dfs_effect_authors(dfs_, *change, signer.id())) {
+        if (!verify_dfs_effect_authors(dfs_.get(), *change, signer.id())) {
             return std::unexpected(ExtraChain::Contracts::ContractFailure {
                 .error  = ExtraChain::Contracts::ContractError::InvalidProof,
                 .detail = "A DFS effect references data from another author",
@@ -1873,15 +1907,15 @@ namespace ExtraChain::Core {
     }
 
     ChatManager* ExtraChainNode::chat_manager() {
-        return chat_manager_;
+        return chat_manager_.get();
     }
 
     ThothManager* ExtraChainNode::thoth_manager() {
-        return thoth_manager_;
+        return thoth_manager_.get();
     }
 
     JanusManager* ExtraChainNode::janus_manager() {
-        return janus_manager_;
+        return janus_manager_.get();
     }
 
     std::expected<Transaction, TransactionError> ExtraChainNode::add_subscription(const ActorId&     owner_id,
@@ -2372,7 +2406,7 @@ namespace ExtraChain::Core {
                     }
                 }
 
-                Responder responder(network_service_);
+                Responder responder(network_service_.get());
                 responder.add_identifier(identifier);
                 actor_index_->send_system_actor(responder);
 
@@ -2456,7 +2490,7 @@ namespace ExtraChain::Core {
     }
 
     AccountController* ExtraChainNode::account_controller() const {
-        return account_controller_;
+        return account_controller_.get();
     }
 
     ActorIndex* ExtraChainNode::actor_index() const {
@@ -2464,15 +2498,15 @@ namespace ExtraChain::Core {
     }
 
     DfsService* ExtraChainNode::dfs() const {
-        return dfs_;
+        return dfs_.get();
     }
 
     DfsService* ExtraChainNode::dfs_service() const {
-        return dfs_;
+        return dfs_.get();
     }
 
     DataMiningManager* ExtraChainNode::data_mining_manager() const {
-        return dmm_;
+        return dmm_.get();
     }
 
     std::expected<void, LoadError> ExtraChainNode::login(const std::string& login, const std::string& password) {
@@ -2499,16 +2533,16 @@ namespace ExtraChain::Core {
         cleanup_callback_ = callback;
     }
 
-    DfsService* ExtraChainNode::create_dfs_service() {
-        return new DfsService(this);
+    std::unique_ptr<DfsService> ExtraChainNode::create_dfs_service() {
+        return std::make_unique<DfsService>(this);
     }
 
-    NetworkService* ExtraChainNode::create_network_service() {
-        return new NetworkService(this, *runtime_, ws_port);
+    std::unique_ptr<NetworkService> ExtraChainNode::create_network_service() {
+        return std::make_unique<NetworkService>(this, *runtime_, ws_port_);
     }
 
     std::uint16_t ExtraChainNode::configured_port() const noexcept {
-        return ws_port;
+        return ws_port_;
     }
 
     void ExtraChainNode::dagTimerStarting(int ms) {

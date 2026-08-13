@@ -33,6 +33,8 @@
 // must run as separate processes.
 
 #include <QCoreApplication>
+
+#include <cstdlib>
 #include <QDir>
 #include <QTimer>
 
@@ -95,7 +97,13 @@ int main(int argc, char *argv[]) {
         Utils::write_settings(settings);
     }
 
-    auto *wrapper = new ExtraChainNodeWrapper(&app, /*is_client*/ false, /*is_custom*/ false, listen_port);
+    const char *bind_ip = std::getenv("EXC_BIND_IP");
+    auto       *wrapper = new ExtraChainNodeWrapper(&app,
+                                              /*is_client*/ false,
+                                              /*is_custom*/ false,
+                                              listen_port,
+                                              std::nullopt,
+                                              bind_ip == nullptr ? std::string {} : std::string(bind_ip));
     wrapper->init(/*makeAsync*/ false); // runs ExtraChainNode::process() synchronously
     auto *node = wrapper->node;
 

@@ -28,7 +28,6 @@
 #include "utils/exc_logs.h"
 #include "dfs/historical_collection.h"
 #include "dfs/dirs_manager.h"
-#include "utils/thread_pool_boost.h"
 
 #include <filesystem>
 #include <fstream>
@@ -36,7 +35,6 @@
 #include <vector>
 
 #include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/ip/address.hpp>
 
@@ -116,7 +114,7 @@ void NetworkService::probe_first_node_candidate(std::size_t index) {
 
     const auto address = first_nodes_[index];
     network_runtime_->async_probe(address,
-                                  ws_port,
+                                  ws_port_,
                                   std::chrono::milliseconds(1600),
                                   [this, address, index](bool connected, std::string) {
                                       dispatch_serial([this, address, index, connected] {
@@ -267,7 +265,7 @@ void NetworkService::peer_authenticated(std::string_view identifier, std::string
 }
 
 std::uint16_t NetworkService::local_server_port() const {
-    return ws_port;
+    return ws_port_;
 }
 
 bool NetworkService::peer_processing_enabled() const {
@@ -280,7 +278,7 @@ NetworkService::NetworkService(ExtraChain::Core::ExtraChainNode *node,
     : node(node)
     , network_runtime_(&runtime)
     , serial_executor_(node->serial_executor())
-    , ws_port(port) {
+    , ws_port_(port) {
     if (!first_nodes_.empty()) {
         first_node_ = first_nodes_.front();
     }
@@ -684,7 +682,7 @@ void NetworkService::check_port(std::string       ip,
     const auto pending_probe = std::make_shared<PendingProbe>(pending_probes);
 
     network_runtime_->async_probe(ip,
-                                  ws_port,
+                                  ws_port_,
                                   std::chrono::seconds(3),
                                   [this,
                                    ip = std::move(ip),
@@ -771,7 +769,7 @@ void NetworkService::check_connections_status() {
 }
 
 void NetworkService::start_network() {
-    eLog("[NetworkService] Start servers... {}", (ws_port == 17593 ? "Network" : "Else"));
+    eLog("[NetworkService] Start servers... {}", (ws_port_ == 17593 ? "Network" : "Else"));
 
     if (node->runtime_profile() == RuntimeProfile::MobileLight) {
         eLog("[NetworkService] Inbound server is disabled for the mobile light profile");
@@ -790,24 +788,28 @@ void NetworkService::start_network() {
     }
 
     const auto result =
-        network_runtime_->listen(ws_port, [this](ExtraChain::Core::NetworkRuntime::Tcp::socket socket) {
-            if (active_connections_count() >= max_connections()) {
-                boost::system::error_code error;
-                socket.close(error);
-                return;
-            }
+        network_runtime_->listen(ExtraChain::Core::NetworkConfig { .bind_address = node->bind_address(),
+                                                                   .port         = ws_port_ },
+                                 [this](ExtraChain::Core::NetworkRuntime::Tcp::socket socket) {
+                                     if (active_connections_count() >= max_connections()) {
+                                         boost::system::error_code error;
+                                         socket.close(error);
+                                         return;
+                                     }
 
-            auto service = WebSocketService::from_accepted(*network_runtime_, std::move(socket), *this);
-            service->set_direction(SocketDirection::Incoming);
-            connectWsService(service);
-            boost::asio::co_spawn(network_runtime_->executor(), service->run(true), boost::asio::detached);
-        });
+                                     auto service = WebSocketService::from_accepted(*network_runtime_,
+                                                                                    std::move(socket),
+                                                                                    *this);
+                                     service->set_direction(SocketDirection::Incoming);
+                                     connectWsService(service);
+                                     network_runtime_->spawn(service->run(true));
+                                 });
     if (!result.has_value()) {
-        eWarning("[NetworkService] Can't listen on port {}: {}", ws_port, result.error());
+        eWarning("[NetworkService] Can't listen on port {}: {}", ws_port_, result.error());
         return;
     }
 
-    eLog("[WS] Start listening on port {}", ws_port);
+    eLog("[WS] Start listening on port {}", ws_port_);
 }
 
 boost::asio::awaitable<void> NetworkService::connect_websocket(std::string   ip,
@@ -857,7 +859,7 @@ void NetworkService::connect_node(std::string       ip,
         return;
     }
 
-    const std::uint16_t port = (protocol == Network::Protocol::WebSocket ? ws_port : 0);
+    const std::uint16_t port = (protocol == Network::Protocol::WebSocket ? ws_port_ : 0);
     eLog("[NetworkService] Connect to {}, protocol: {}, port: {}", ip, Utils::enum_value_name(protocol), port);
 
     using Network::Protocol;
@@ -918,9 +920,7 @@ void NetworkService::connect_to_websocket(std::string   ip,
         }
     }
 
-    boost::asio::co_spawn(network_runtime_->executor(),
-                          connect_websocket(std::move(ip), port, request_list_nodes, is_constant, is_light),
-                          boost::asio::detached);
+    network_runtime_->spawn(connect_websocket(std::move(ip), port, request_list_nodes, is_constant, is_light));
 }
 
 void NetworkService::clear_network_caches() {
@@ -2150,7 +2150,7 @@ void NetworkService::message_received(const std::string &message,
         // messages and delayed transactions fell out of the accept window
         // (TooSectionDiff). Per-file striped locks serialize disk writes, and
         // SafePtr guards bookkeeping, so pool execution is safe.
-        ThreadPoolBoost::instance_dfs()->post([this, serialized = std::string(serialized), identifier]() {
+        node->post_storage([this, serialized = std::string(serialized), identifier]() {
             auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
             if (!fragment_data_result.has_value()) {
                 eWarning("[NetworkService] DfsFileFragment deserialization failed");

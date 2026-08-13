@@ -502,7 +502,6 @@ std::uint64_t DbConnector::count(const std::string &table, const std::string &wh
 }
 
 std::string DbConnector::file() const {
-    // dbFile = dbFile.remove(0, QDir::currentPath().length());
     return m_file;
 }
 
