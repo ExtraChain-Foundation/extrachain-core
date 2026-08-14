@@ -310,8 +310,13 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 const size_t active_request_limit =
                     load_info.forced ? download_limit + max_forced_downloads() : download_limit;
 
-                if (m_amount_file_fragments_requests->size() >= active_request_limit)
-                    return false;
+                // A full request budget must not abort the whole pass. Returning here
+                // starved every transfer sorted after this point: they got no requests,
+                // but ALSO no bookkeeping — no disconnect cleanup, no cooldown exit, no
+                // source refresh. Measured: a 9-fragment file stalled at 6 fragments for
+                // 16 minutes with the pool alive, because the pass kept ending before
+                // reaching it. Keep walking; only the send below is gated.
+                const bool budget_full = m_amount_file_fragments_requests->size() >= active_request_limit;
 
                 // Remove disconnected identifiers from the list
                 load_info.identifier_list.erase(std::remove_if(load_info.identifier_list.begin(),
@@ -355,9 +360,15 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     }
                 }
 
+                bool budget_hit = false;
                 for (auto& identifier : load_info.identifier_list) {
-                    if (m_amount_file_fragments_requests->size() >= active_request_limit)
-                        return false;
+                    // Budget gate belongs to the SEND, not the pass: stop trying to
+                    // send for this file, but let the loop finish its bookkeeping and
+                    // move on to the next transfer.
+                    if (budget_full || m_amount_file_fragments_requests->size() >= active_request_limit) {
+                        budget_hit = true;
+                        break;
+                    }
 
                     auto now      = std::chrono::system_clock::now();
                     auto duration = now - identifier.second.last_attempt;
@@ -452,7 +463,9 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     }
                 }
                 auto identifier_list_size = load_info.identifier_list.size();
-                if (!is_requested && identifier_list_size > 0) {
+                // A pass cut short by the request budget says nothing about the
+                // sources — do not let it climb the refresh/cooldown counters.
+                if (!is_requested && !budget_hit && identifier_list_size > 0) {
                     if (++load_info.source_refresh_cycles > 3) {
                         // Sources exhausted, but this is rarely terminal (the hub may not
                         // have fetched the content yet): back off exponentially and retry.
