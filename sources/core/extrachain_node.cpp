@@ -1229,7 +1229,11 @@ namespace ExtraChain::Core {
                 .storage_workers                 = 4,
                 .compute_workers                 = 8,
                 .peer_limit                      = 0,
-                .dfs_downloads                   = 5,
+                // In-flight fragment requests across ALL transfers. 5 was a phone-sized
+                // budget on a full node: with 256K fragments that caps replication at
+                // ~1.25MB in flight, and a busy stand (dozens of files) crawled at one
+                // file per ~12s while the wire sat idle. 32 ≈ 8MB in flight.
+                .dfs_downloads                   = 32,
                 .pack_sync_window                = 8,
                 .cached_transactions             = 16384,
                 .sync_transactions               = 256,
