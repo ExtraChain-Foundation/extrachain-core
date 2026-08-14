@@ -15,6 +15,8 @@
 #include "contracts/contract_module.h"
 
 #include <algorithm>
+#include <array>
+#include <barrier>
 #include <chrono>
 #include <cstdint>
 #include <fstream>
@@ -389,9 +391,11 @@ namespace {
                     std::string_view                    sender,
                     std::string_view                    method,
                     const Bytes                        &arguments,
-                    const Bytes                        &state) {
-        auto input  = request(sender, method, arguments, state);
-        auto result = runtime.invoke(module, input);
+                    const Bytes                        &state,
+                    std::string_view                    module_hash = {}) {
+        auto input = request(sender, method, arguments, state);
+        auto result =
+            module_hash.empty() ? runtime.invoke(module, input) : runtime.invoke(module, module_hash, input);
         if (!result.has_value()) {
             throw std::runtime_error(result.error().detail);
         }
@@ -633,6 +637,20 @@ namespace {
         require(!input_result.has_value()
                     && input_result.error().error == ExtraChain::Contracts::ExecutionError::InputTooLarge,
                 "Runtime accepted oversized input");
+
+        const auto module_hash    = ExtraChain::Contracts::content_hash(module);
+        auto       changed_module = module;
+        changed_module.back() ^= 1;
+        const auto mismatched = runtime.invoke(changed_module, module_hash, {});
+        require(!mismatched.has_value()
+                    && mismatched.error().error == ExtraChain::Contracts::ExecutionError::InvalidModule,
+                "Runtime accepted bytes that do not match the trusted module hash");
+
+        require(runtime.invoke(module, module_hash, {}).has_value(), "Runtime could not cache a trusted module");
+        const auto cached_mismatch = runtime.invoke(changed_module, module_hash, {});
+        require(!cached_mismatch.has_value()
+                    && cached_mismatch.error().error == ExtraChain::Contracts::ExecutionError::InvalidModule,
+                "Runtime reused a cached module for changed bytes");
 
         auto module_with_float_bytes_in_custom_data = module;
         module_with_float_bytes_in_custom_data.insert(module_with_float_bytes_in_custom_data.end(),
@@ -941,18 +959,22 @@ namespace {
     void benchmark_token_x(ExtraChain::Contracts::WasmRuntime &runtime,
                            const Bytes                        &module,
                            std::string_view                    language) {
-        constexpr std::size_t      Samples = 500;
+        constexpr std::size_t      Samples     = 500;
+        const auto                 module_hash = ExtraChain::Contracts::content_hash(module);
         std::vector<std::uint64_t> samples;
         samples.reserve(Samples);
         for (std::size_t index = 0; index < Samples; ++index) {
-            const auto started     = std::chrono::steady_clock::now();
-            auto       initialized = invoke(runtime, module, Alice, "init", token_init_argument(), {});
+            const auto started = std::chrono::steady_clock::now();
+            auto initialized   = invoke(runtime, module, Alice, "init", token_init_argument(), {}, module_hash);
             require(initialized.ok, "Token X benchmark initialization failed");
-            auto migrated = invoke(runtime, module, Alice, "migrate", empty_arguments(), initialized.state);
+            auto migrated =
+                invoke(runtime, module, Alice, "migrate", empty_arguments(), initialized.state, module_hash);
             require(migrated.ok, "Token X benchmark migration failed");
-            auto frozen = invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 999), migrated.state);
+            auto frozen =
+                invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 999), migrated.state, module_hash);
             require(frozen.ok, "Token X benchmark freeze transfer failed");
-            auto denied = invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 1), frozen.state);
+            auto denied =
+                invoke(runtime, module, Alice, "transfer", pair_argument(Bob, 1), frozen.state, module_hash);
             require(!denied.ok && denied.state == frozen.state, "Token X benchmark freeze rule failed");
             const auto elapsed =
                 std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started);
@@ -967,6 +989,93 @@ namespace {
         std::cout << "BENCHMARK {\"language\":\"" << language << "\",\"samples\":" << Samples
                   << ",\"mean_ns\":" << total / Samples << ",\"p50_ns\":" << percentile(50)
                   << ",\"p95_ns\":" << percentile(95) << ",\"p99_ns\":" << percentile(99) << "}\n";
+    }
+
+    void benchmark_parallel_contract_calls(const Bytes &module, std::string_view language) {
+        constexpr std::size_t                  Workers        = 4;
+        constexpr std::size_t                  CallsPerWorker = 100;
+        ExtraChain::Contracts::ContractManager manager;
+        std::array<std::string, Workers>       contract_ids;
+        for (std::size_t index = 0; index < Workers; ++index) {
+            contract_ids[index] = "parallel-token-" + std::to_string(index);
+            require(manager
+                        .deploy(contract_ids[index],
+                                Alice,
+                                "fungible-token",
+                                module,
+                                token_init_argument(),
+                                index + 1)
+                        .has_value(),
+                    "Parallel contract benchmark deployment failed");
+        }
+
+        std::atomic<std::size_t> completed = 0;
+        std::atomic<bool>        failed    = false;
+        const auto               started   = std::chrono::steady_clock::now();
+        std::vector<std::thread> workers;
+        workers.reserve(Workers);
+        for (std::size_t worker = 0; worker < Workers; ++worker) {
+            workers.emplace_back([&, worker] {
+                for (std::size_t call = 0; call < CallsPerWorker; ++call) {
+                    auto result = manager.call(contract_ids[worker],
+                                               Alice,
+                                               "approve",
+                                               pair_argument(Bob, call + 1),
+                                               call + Workers + 1);
+                    if (!result.has_value()) {
+                        failed = true;
+                        return;
+                    }
+                    ++completed;
+                }
+            });
+        }
+        for (auto &worker : workers)
+            worker.join();
+        require(!failed.load(), "Parallel contract benchmark call failed");
+        const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        std::cout << "CONTRACT_THROUGHPUT {\"language\":\"" << language << "\",\"workers\":" << Workers
+                  << ",\"calls\":" << completed.load() << ",\"elapsed_s\":" << elapsed
+                  << ",\"calls_per_s\":" << completed.load() / elapsed << "}\n";
+    }
+
+    void test_parallel_contract_conflict(const Bytes &module) {
+        ExtraChain::Contracts::ContractManager manager;
+        require(manager.deploy("parallel-conflict", Alice, "fungible-token", module, token_init_argument(), 1)
+                    .has_value(),
+                "Parallel conflict test deployment failed");
+
+        std::array<std::optional<std::expected<ExtraChain::Contracts::ContractReceipt,
+                                               ExtraChain::Contracts::ContractFailure>>,
+                   2>
+                                   results;
+        std::barrier               start(2);
+        std::array<std::thread, 2> workers;
+        for (std::size_t index = 0; index < workers.size(); ++index) {
+            workers[index] = std::thread([&, index] {
+                start.arrive_and_wait();
+                results[index] =
+                    manager.call("parallel-conflict", Alice, "approve", pair_argument(Bob, index + 1), 2);
+            });
+        }
+        for (auto &worker : workers)
+            worker.join();
+
+        const auto successful = std::ranges::count_if(results, [](const auto &result) {
+            return result.has_value() && result->has_value();
+        });
+        require(successful >= 1, "Both parallel calls failed");
+        for (const auto &result : results) {
+            require(result.has_value()
+                        && (result->has_value()
+                            || result->error().error == ExtraChain::Contracts::ContractError::Conflict),
+                    "Parallel calls returned an unexpected error");
+        }
+        const auto record = manager.inspect("parallel-conflict");
+        require(record.has_value()
+                    && record->versions.back().revisions.back().revision
+                           == static_cast<std::uint64_t>(successful + 1),
+                "Parallel conflict resolution produced an invalid revision");
     }
 
     void test_checkpoint_schedule(const Bytes &fungible_module) {
@@ -1146,6 +1255,9 @@ int main(int argc, char **argv) {
         test_language_lock(rust_fungible_module, as_fungible_module);
         benchmark_token_x(runtime, rust_fungible_module, "rust");
         benchmark_token_x(runtime, as_fungible_module, "assemblyscript");
+        benchmark_parallel_contract_calls(rust_fungible_module, "rust");
+        benchmark_parallel_contract_calls(as_fungible_module, "assemblyscript");
+        test_parallel_contract_conflict(rust_fungible_module);
         test_checkpoint_schedule(rust_fungible_module);
         test_checkpoint_schedule(as_fungible_module);
         test_prepare_and_artifact_stage_are_separate(message_module);

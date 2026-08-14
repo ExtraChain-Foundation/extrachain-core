@@ -273,7 +273,8 @@ namespace ExtraChain::Contracts {
         std::string_view              contract_id,
         std::string_view              caller,
         const VerifiedInputs         &verified,
-        std::uint32_t                 depth) const {
+        std::uint32_t                 depth,
+        std::string_view              module_hash) const {
         if (depth > ContractMaximumCallDepth) {
             return std::unexpected(failure(ContractError::CallDepthExceeded, "Contract call depth is too large"));
         }
@@ -288,7 +289,7 @@ namespace ExtraChain::Contracts {
             .depth       = depth,
         };
         auto input     = Codec::encode_request(context, method, arguments, state, verified);
-        auto execution = runtime_.invoke(module, input);
+        auto execution = runtime_.invoke(module, module_hash, input);
         if (!execution.has_value()) {
             return std::unexpected(failure(ContractError::ExecutionFailed, execution.error().detail));
         }
@@ -335,17 +336,18 @@ namespace ExtraChain::Contracts {
         const auto make_checkpoint =
             previous == nullptr || previous->checkpoint_revision == 0
             || next_revision - previous->checkpoint_revision >= ContractCheckpointInterval;
+        auto state_hash = content_hash(output.state);
         return StateRevision {
-            .revision            = next_revision,
-            .block               = block,
-            .previous_hash       = previous == nullptr ? std::string() : previous->state_hash,
-            .state_hash          = content_hash(output.state),
-            .transaction_hash    = {},
-            .author_id           = author_id,
-            .state               = output.state,
-            .checkpoint_revision = make_checkpoint ? next_revision : previous->checkpoint_revision,
-            .checkpoint_block    = make_checkpoint ? block : previous->checkpoint_block,
-            .checkpoint_hash     = make_checkpoint ? content_hash(output.state) : previous->checkpoint_hash,
+            .revision                    = next_revision,
+            .block                       = block,
+            .previous_hash               = previous == nullptr ? std::string() : previous->state_hash,
+            .state_hash                  = state_hash,
+            .transaction_hash            = {},
+            .author_id                   = author_id,
+            .state                       = output.state,
+            .checkpoint_revision         = make_checkpoint ? next_revision : previous->checkpoint_revision,
+            .checkpoint_block            = make_checkpoint ? block : previous->checkpoint_block,
+            .checkpoint_hash             = make_checkpoint ? std::move(state_hash) : previous->checkpoint_hash,
             .checkpoint_transaction_hash = make_checkpoint ? std::string() : previous->checkpoint_transaction_hash,
             .checkpoint_storage_id       = make_checkpoint ? std::string() : previous->checkpoint_storage_id,
             .checkpoint_author_id = make_checkpoint ? std::string(author_id) : previous->checkpoint_author_id,
@@ -390,7 +392,7 @@ namespace ExtraChain::Contracts {
         std::span<const std::uint8_t> module,
         std::span<const std::uint8_t> init_arguments,
         std::uint64_t                 block) {
-        std::unique_lock lock(mutex_);
+        std::shared_lock lock(mutex_);
         if (contract_id.empty() || owner_id.empty() || kind.empty() || kind.size() > 64
             || init_arguments.size() > 512 * 1024) {
             return std::unexpected(failure(ContractError::InvalidArguments, "Invalid contract identity"));
@@ -399,7 +401,9 @@ namespace ExtraChain::Contracts {
         if (is_system_token_kind(kind) && !language.has_value()) {
             return std::unexpected(failure(ContractError::InvalidModule, language.error()));
         }
-        auto output = evaluate(module, owner_id, "init", init_arguments, {}, block, contract_id);
+        const auto module_hash = content_hash(module);
+        auto       output =
+            evaluate(module, owner_id, "init", init_arguments, {}, block, contract_id, {}, {}, 0, module_hash);
         if (!output.has_value()) {
             return std::unexpected(output.error());
         }
@@ -424,7 +428,7 @@ namespace ExtraChain::Contracts {
             .active_version = 1,
             .versions       = { ContractVersion {
                       .version              = 1,
-                      .module_hash          = content_hash(module),
+                      .module_hash          = module_hash,
                       .previous_module_hash = {},
                       .module               = { module.begin(), module.end() },
                       .revisions            = { std::move(initial_revision.value()) },
@@ -461,7 +465,7 @@ namespace ExtraChain::Contracts {
         std::span<const std::uint8_t> arguments,
         std::uint64_t                 block,
         const VerifiedInputs         &verified) {
-        std::unique_lock                lock(mutex_);
+        std::shared_lock                lock(mutex_);
         std::vector<std::string>        stack { std::string(contract_id) };
         std::unordered_set<std::string> touched { std::string(contract_id) };
         std::uint32_t                   call_count = 1;
@@ -510,7 +514,8 @@ namespace ExtraChain::Contracts {
                                contract_id,
                                caller_id,
                                verified,
-                               depth);
+                               depth,
+                               version.module_hash);
         if (!output.has_value()) {
             return std::unexpected(output.error());
         }
@@ -597,7 +602,18 @@ namespace ExtraChain::Contracts {
         }
         const auto &version  = active_version(*record);
         const auto &previous = latest_revision(version);
-        auto output = evaluate(version.module, sender_id, method, arguments, previous.state, block, contract_id);
+
+        auto output = evaluate(version.module,
+                               sender_id,
+                               method,
+                               arguments,
+                               previous.state,
+                               block,
+                               contract_id,
+                               std::string_view {},
+                               VerifiedInputs {},
+                               0,
+                               version.module_hash);
         if (!output.has_value()) {
             return std::unexpected(output.error());
         }
@@ -631,7 +647,7 @@ namespace ExtraChain::Contracts {
         std::span<const std::uint8_t> module,
         std::span<const std::uint8_t> migration_arguments,
         std::uint64_t                 block) {
-        std::unique_lock lock(mutex_);
+        std::shared_lock lock(mutex_);
         if (contract_id.empty() || sender_id.empty() || module.empty() || module.size() > limits_.module_bytes
             || migration_arguments.size() > 512 * 1024) {
             return std::unexpected(failure(ContractError::InvalidArguments, "Invalid contract upgrade"));
@@ -655,13 +671,18 @@ namespace ExtraChain::Contracts {
         const auto previous                = latest_revision(current);
         const auto new_module_hash         = content_hash(module);
         auto       authorization_arguments = Codec::encode_string_argument(new_module_hash);
-        auto       authorization           = evaluate(current.module,
+
+        auto authorization = evaluate(current.module,
                                       sender_id,
                                       "authorize_upgrade",
                                       authorization_arguments,
                                       previous.state,
                                       block,
-                                      contract_id);
+                                      contract_id,
+                                      std::string_view {},
+                                      VerifiedInputs {},
+                                      0,
+                                      current.module_hash);
         if (!authorization.has_value()) {
             return std::unexpected(failure(ContractError::UpgradeDenied, authorization.error().detail));
         }
@@ -669,8 +690,17 @@ namespace ExtraChain::Contracts {
             return std::unexpected(
                 failure(ContractError::UpgradeDenied, "Upgrade authorization changed contract state"));
         }
-        auto migration =
-            evaluate(module, sender_id, "migrate", migration_arguments, previous.state, block, contract_id);
+        auto migration = evaluate(module,
+                                  sender_id,
+                                  "migrate",
+                                  migration_arguments,
+                                  previous.state,
+                                  block,
+                                  contract_id,
+                                  {},
+                                  {},
+                                  0,
+                                  new_module_hash);
         if (!migration.has_value()) {
             return std::unexpected(migration.error());
         }
@@ -678,17 +708,18 @@ namespace ExtraChain::Contracts {
             return std::unexpected(
                 failure(ContractError::InvalidResponse, "Contract migration cannot emit effects"));
         }
+        auto          migration_state_hash = content_hash(migration->state);
         StateRevision migrated {
             .revision             = previous.revision + 1,
             .block                = block,
             .previous_hash        = previous.state_hash,
-            .state_hash           = content_hash(migration->state),
+            .state_hash           = migration_state_hash,
             .transaction_hash     = {},
             .author_id            = std::string(sender_id),
             .state                = migration->state,
             .checkpoint_revision  = previous.revision + 1,
             .checkpoint_block     = block,
-            .checkpoint_hash      = content_hash(migration->state),
+            .checkpoint_hash      = std::move(migration_state_hash),
             .checkpoint_author_id = std::string(sender_id),
         };
         record.active_version += 1;
@@ -711,7 +742,7 @@ namespace ExtraChain::Contracts {
     }
 
     std::expected<void, ContractFailure> ContractManager::stage(const PreparedContractChange &change) {
-        std::unique_lock                            lock(mutex_);
+        std::shared_lock                            lock(mutex_);
         std::vector<const PreparedContractChange *> changes;
         const auto collect = [&](const auto &self, const PreparedContractChange &current) -> void {
             changes.push_back(&current);

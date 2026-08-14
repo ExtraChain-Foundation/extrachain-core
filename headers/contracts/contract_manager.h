@@ -132,7 +132,8 @@ namespace ExtraChain::Contracts {
             std::string_view              contract_id = {},
             std::string_view              caller      = {},
             const VerifiedInputs         &verified    = {},
-            std::uint32_t                 depth       = 0) const;
+            std::uint32_t                 depth       = 0,
+            std::string_view              module_hash = {}) const;
 
     private:
         [[nodiscard]] std::expected<PreparedContractChange, ContractFailure> prepare_call_unlocked(

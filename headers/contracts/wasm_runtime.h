@@ -13,6 +13,7 @@
 #include <expected>
 #include <semaphore>
 #include <span>
+#include <string_view>
 
 #include "contracts/contract_types.h"
 #include "extrachain_global.h"
@@ -39,6 +40,11 @@ namespace ExtraChain::Contracts {
 
         [[nodiscard]] std::expected<ExecutionResult, ExecutionFailure> invoke(
             std::span<const std::uint8_t> module,
+            std::span<const std::uint8_t> input) const;
+
+        [[nodiscard]] std::expected<ExecutionResult, ExecutionFailure> invoke(
+            std::span<const std::uint8_t> module,
+            std::string_view              module_hash,
             std::span<const std::uint8_t> input) const;
 
     private:

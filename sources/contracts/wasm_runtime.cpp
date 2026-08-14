@@ -90,13 +90,16 @@ namespace ExtraChain::Contracts {
         class ThreadModuleCache final {
         public:
             void configure(std::size_t max_entries, std::size_t max_bytes) {
-                max_entries_ = std::max<std::size_t>(1, max_entries);
-                max_bytes_   = std::max<std::size_t>(1, max_bytes);
+                const auto entries = std::max<std::size_t>(1, max_entries);
+                const auto bytes   = std::max<std::size_t>(1, max_bytes);
+                if (entries == max_entries_ && bytes == max_bytes_)
+                    return;
+                max_entries_ = entries;
+                max_bytes_   = bytes;
                 trim();
             }
 
-            wasm_module_t find(std::span<const std::uint8_t> bytes) {
-                const auto hash = content_hash(bytes);
+            wasm_module_t find(std::span<const std::uint8_t> bytes, std::string_view hash) {
                 for (auto &entry : entries_) {
                     if (entry->hash == hash && entry->bytes.size() == bytes.size()
                         && std::equal(entry->bytes.begin(), entry->bytes.end(), bytes.begin())) {
@@ -107,9 +110,12 @@ namespace ExtraChain::Contracts {
                 return nullptr;
             }
 
-            wasm_module_t load(std::span<const std::uint8_t> bytes, char *error, std::size_t error_size) {
+            wasm_module_t load(std::span<const std::uint8_t> bytes,
+                               std::string                   hash,
+                               char                         *error,
+                               std::size_t                   error_size) {
                 auto entry  = std::make_unique<CachedModule>();
-                entry->hash = content_hash(bytes);
+                entry->hash = std::move(hash);
                 entry->bytes.assign(bytes.begin(), bytes.end());
                 entry->module = wasm_runtime_load(entry->bytes.data(),
                                                   static_cast<std::uint32_t>(entry->bytes.size()),
@@ -211,6 +217,13 @@ namespace ExtraChain::Contracts {
     std::expected<ExecutionResult, ExecutionFailure> WasmRuntime::invoke(
         std::span<const std::uint8_t> module_bytes,
         std::span<const std::uint8_t> input) const {
+        return invoke(module_bytes, {}, input);
+    }
+
+    std::expected<ExecutionResult, ExecutionFailure> WasmRuntime::invoke(
+        std::span<const std::uint8_t> module_bytes,
+        std::string_view              module_hash,
+        std::span<const std::uint8_t> input) const {
         if (!available_ || !runtime_host().ready()) {
             return std::unexpected(failure(ExecutionError::RuntimeUnavailable, "WAMR is not initialized"));
         }
@@ -236,8 +249,19 @@ namespace ExtraChain::Contracts {
         auto                              &module_cache = thread_module_cache();
         module_cache.configure(tuning_.module_cache_entries,
                                std::max(tuning_.module_cache_bytes, module_bytes.size()));
-        wasm_module_t module = module_cache.find(module_bytes);
+        std::string computed_hash;
+        if (module_hash.empty())
+            computed_hash = content_hash(module_bytes);
+        const auto    hash   = module_hash.empty() ? std::string_view(computed_hash) : module_hash;
+        wasm_module_t module = module_cache.find(module_bytes, hash);
         if (module == nullptr) {
+            if (!module_hash.empty()) {
+                computed_hash = content_hash(module_bytes);
+                if (computed_hash != module_hash) {
+                    return std::unexpected(
+                        failure(ExecutionError::InvalidModule, "Contract module hash does not match its bytes"));
+                }
+            }
             const auto policy_result = Internal::validate_wasm_policy(module_bytes);
             if (policy_result == Internal::WasmPolicyResult::FloatingPoint) {
                 return std::unexpected(
@@ -246,7 +270,10 @@ namespace ExtraChain::Contracts {
             if (policy_result == Internal::WasmPolicyResult::Invalid) {
                 return std::unexpected(failure(ExecutionError::InvalidModule, "Contract module is malformed"));
             }
-            module = module_cache.load(module_bytes, error_buffer.data(), error_buffer.size());
+            module = module_cache.load(module_bytes,
+                                       module_hash.empty() ? std::move(computed_hash) : std::string(module_hash),
+                                       error_buffer.data(),
+                                       error_buffer.size());
         }
         if (module == nullptr) {
             return std::unexpected(failure(ExecutionError::InvalidModule, error_buffer.data()));
