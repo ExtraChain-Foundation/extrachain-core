@@ -1187,24 +1187,29 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
     // own control, that claim is finally comparable — this is the point of having
     // remembered it in network_hash_interval.
     {
-        std::string peer_hash;
+        std::optional<PendingIntervalClaim> claim;
         {
             std::lock_guard lock(pending_intervals_mutex_);
             if (auto it = pending_intervals_.find(section_id); it != pending_intervals_.end()) {
-                peer_hash = it->second;
+                claim = it->second;
                 pending_intervals_.erase(it);
             }
         }
 
-        if (!peer_hash.empty()) {
-            if (peer_hash != hash) {
+        if (claim.has_value()) {
+            if (claim->hash != hash) {
                 // No responder here — this runs from write_control, not a network
-                // handler, so we cannot ask that peer directly. The next interval
-                // exchange for this boundary hits the live path and refetches.
+                // handler, so we cannot ask that peer directly. Queue the boundary;
+                // the next live interval exchange drains the queue and refetches.
                 eCritical("[Dag] Control mismatch at section {} (deferred): ours {}, peer {}",
                           section_id,
                           hash,
-                          peer_hash);
+                          claim->hash);
+                std::lock_guard lock(mismatched_intervals_mutex_);
+                mismatched_intervals_[section_id] = claim->from;
+                while (mismatched_intervals_.size() > 8) {
+                    mismatched_intervals_.erase(mismatched_intervals_.begin());
+                }
             } else {
                 eLog("[Dag] Deferred interval check at {}: match", section_id);
             }
@@ -1300,7 +1305,15 @@ bool Dag::save_transaction(const Transaction &transaction) {
     // Hold save_mutex_ across the whole read-insert-write cycle: without it two
     // concurrent transactions for the same section both read the old set and one
     // insert is lost, so sections diverge between nodes and ControlIndex fails.
-    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+    //
+    // unique_lock, not lock_guard: the cache update at the end must run AFTER the
+    // lock is released. check_and_update_cache_thread takes the cache mutex and can
+    // seal a control (write_control -> save_mutex_); another thread runs the same
+    // cache update from the sync path holding the cache mutex first. Calling it from
+    // under save_mutex_ is the ABBA half of a deadlock observed on the stand: four
+    // threads (admission, file-sections response, sync retry, WS read) parked
+    // forever, node silent for 20 minutes until SIGTERM.
+    std::unique_lock<std::recursive_mutex> save_lock(save_mutex_);
 
     auto section = this->read_section(transaction.section());
 
@@ -1309,9 +1322,6 @@ bool Dag::save_transaction(const Transaction &transaction) {
         Section section { .id = transaction.section(), .transactions = { transaction } };
 
         set_current_section(section.id);
-
-        // Check if cache needs updating
-        cache_.check_and_update_cache_thread(current_section_);
 
         if (mode_ == DagMode::Light && transaction.section() == SectionId(0)) {
             auto network_id = transaction.sender();
@@ -1333,6 +1343,10 @@ bool Dag::save_transaction(const Transaction &transaction) {
             cache_.apply_live_transaction(transaction);
             cache_.index_contract_transaction(transaction);
         }
+        save_lock.unlock();
+        if (written) {
+            cache_.check_and_update_cache_thread(current_section_);
+        }
         return written;
     }
 
@@ -1350,9 +1364,6 @@ bool Dag::save_transaction(const Transaction &transaction) {
             control_index_->erase(section->id);
     }
 
-    // Check if cache needs updating
-    cache_.check_and_update_cache_thread(current_section_);
-
     // Update first_saved_section_ if this is the first section or has a lower ID
     if (first_saved_section_ == SectionId(-1) && transaction.section() >= SectionId(0)) {
         if (mode_ == DagMode::Full || (mode_ == DagMode::Light && transaction.section() != SectionId(0))) {
@@ -1366,6 +1377,10 @@ bool Dag::save_transaction(const Transaction &transaction) {
     if (written) {
         cache_.apply_live_transaction(transaction);
         cache_.index_contract_transaction(transaction);
+    }
+    save_lock.unlock();
+    if (written) {
+        cache_.check_and_update_cache_thread(current_section_);
     }
     return written;
 }
@@ -1404,7 +1419,9 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
         return std::nullopt;
     }
     // Same section RMW race as save_transaction — serialize the batch too.
-    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+    // unique_lock for the same reason as save_transaction: the cache update below
+    // must not run under save_mutex_ (ABBA with the sync-path cache update).
+    std::unique_lock<std::recursive_mutex> save_lock(save_mutex_);
 
     bool      all_saved   = true;
     bool      has_changes = false;
@@ -1489,6 +1506,7 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
     if (!all_saved)
         return std::nullopt;
 
+    save_lock.unlock();
     if (has_changes)
         cache_.check_and_update_cache_thread(current_section_);
 
@@ -2502,9 +2520,15 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                    return section.section_id >= hot_gap_request_->first
                           && section.section_id <= hot_gap_request_->second;
                });
-        if (file_sync->to <= current_section_ && !valid_hot_gap_response) {
-            return;
-        }
+        // No height gate here. `if (to <= current_section_) return;` used to silently
+        // discard every answer that did not raise our height — which is exactly the
+        // shape of a divergence repair: same height, different section content.
+        // Measured: a server stuck in Sync re-requested [24970..25039] every 30
+        // seconds, five clients answered 19 times, and every answer died on that line
+        // without a log. The pending-response correlation above already rejects
+        // unsolicited or stale answers, so a response that reaches this point is one
+        // we asked for. (valid_hot_gap_response stays computed for the reset below.)
+        static_cast<void>(valid_hot_gap_response);
 
         std::map<SectionId, std::string> received_sections;
         for (const auto &section_data : file_sync->sections) {
@@ -2527,7 +2551,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
             {
                 WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
-                const auto        section = Json::deserialize<Section>(disk_bytes);
+                auto              section = Json::deserialize<Section>(disk_bytes);
                 const bool        wrong_section =
                     section.has_value() && std::ranges::any_of(section->transactions, [&](const auto &tx) {
                         return tx.section() != section_data.section_id;
@@ -2535,6 +2559,24 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 if (!section.has_value() || wrong_section) {
                     eWarning("[Dag] Reject invalid section {} in a sync batch", section_data.section_id);
                     return;
+                }
+
+                // Merge with what we already hold instead of replacing it. commit_batch
+                // overwrites the row wholesale, so applying a peer's copy of a section
+                // we also have would DROP every transaction only we know about — the
+                // sync path would trade one divergence for another. Union the two sets;
+                // if that changes the peer's set, its control no longer matches the
+                // content and must not be stored as if it did.
+                auto local = this->read_section(section_data.section_id);
+                if (local.has_value() && !local->transactions.empty()) {
+                    const auto peer_count = section->transactions.size();
+                    section->transactions.insert(local->transactions.begin(), local->transactions.end());
+                    if (section->transactions.size() != peer_count) {
+                        section->control = std::nullopt;
+                        if (control_index_)
+                            control_index_->erase(section_data.section_id);
+                    }
+                    disk_bytes = Json::serialize(section.value());
                 }
             }
 
@@ -2668,8 +2710,22 @@ void Dag::request_file_sections(const SectionId &from, const SectionId &to, cons
     auto range = SectionRange { .first = from == -1 ? std::string("0") : encode(from), .last = encode(to) };
     auto responder_new = responder.with_new_message_id();
     {
+        // One in-flight request at a time. The pending slot is single: overwriting an
+        // active request re-keys the expected message id, so the answer to the
+        // previous request — possibly megabytes already on the wire — is then thrown
+        // away as "stale or out-of-range". With a deep re-check, live mismatch
+        // refetches and periodic sync all issuing requests, last-writer-wins kept
+        // discarding almost every response (measured: 5 rejects on one node in one
+        // quiet phase, zero applied). Let the active request finish or time out.
         std::lock_guard lock(sync_response_request_mutex_);
-        pending_file_response_ = PendingSyncResponse { responder_new.message_id(), from, to };
+        const auto      now = Utils::current_date_ms();
+        if (pending_file_response_.has_value() && pending_file_started_ms_ != 0
+            && now - pending_file_started_ms_ < 30'000) {
+            eLog("[Dag] File sections request already in flight — skipping [{}..{}]", from, to);
+            return;
+        }
+        pending_file_started_ms_ = now;
+        pending_file_response_   = PendingSyncResponse { responder_new.message_id(), from, to };
     }
     responder_new.send_response(range, MessageType::DagFileSections, SendMode::Focused, MessageStatus::Request);
 
@@ -2832,13 +2888,49 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 }
 
 void Dag::network_hash_interval(const HashInterval &hash_interval, const Responder &responder) {
-    if (status_ != DagStatus::Ready) {
-        eLog("[Dag] Hash interval check: ignore", hash_interval);
+    if (responder.luminance() < 2) {
         return;
     }
 
-    if (responder.luminance() < 2) {
+    if (status_ != DagStatus::Ready) {
+        // Dropping the claim here silenced the whole verification whenever a node was
+        // syncing — which is exactly when its content is most likely to diverge.
+        // Measured on a four-node stand: 16 of 17 interval exchanges died on this
+        // gate, and a section that both sides sealed at the same height but with
+        // different content was never re-fetched. Remember the claim instead; it is
+        // compared when our own control for that boundary is sealed.
+        std::lock_guard lock(pending_intervals_mutex_);
+        pending_intervals_[hash_interval.to] =
+            PendingIntervalClaim { .from = hash_interval.from, .hash = hash_interval.hash };
+        while (pending_intervals_.size() > 8) {
+            pending_intervals_.erase(pending_intervals_.begin());
+        }
+        eLog("[Dag] Hash interval check: not ready — remembered claim at {}", hash_interval.to);
         return;
+    }
+
+    // A live exchange gives us what write_control lacks: a peer to ask. Drain the
+    // boundaries whose deferred comparison found a mismatch before handling the new
+    // claim (the refetched_intervals_ guard below still applies to each).
+    std::map<SectionId, SectionId> to_refetch;
+    {
+        std::lock_guard lock(mismatched_intervals_mutex_);
+        to_refetch.swap(mismatched_intervals_);
+    }
+    for (const auto &[to, from] : to_refetch) {
+        {
+            // Only the bookkeeping is under the lock — request_file_sections talks to
+            // the network and must not run while holding it.
+            std::lock_guard lock(refetched_intervals_mutex_);
+            const auto      now = Utils::current_date_ms();
+            if (auto it = refetched_intervals_.find(to);
+                it != refetched_intervals_.end() && now - it->second < 60'000) {
+                continue;
+            }
+            refetched_intervals_[to] = now;
+        }
+        eCritical("[Dag] Deferred control mismatch at {} — refetching interval {}..{}", to, from, to);
+        this->request_file_sections(from, to, responder);
     }
 
     if (hash_interval.to > current_section_) {
@@ -2864,7 +2956,8 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         // it — we are Ready and only slightly behind, so our control is minutes away
         // and the comparison becomes possible then. Bounded to the newest few.
         std::lock_guard lock(pending_intervals_mutex_);
-        pending_intervals_[hash_interval.to] = hash_interval.hash;
+        pending_intervals_[hash_interval.to] =
+            PendingIntervalClaim { .from = hash_interval.from, .hash = hash_interval.hash };
         while (pending_intervals_.size() > 8) {
             pending_intervals_.erase(pending_intervals_.begin());
         }
@@ -3053,6 +3146,26 @@ void Dag::handle_sync_request() {
         this->process_cached_transactions();
         this->try_pack_hot();
         // timer_sync->stop();
+
+        // Controls are per-interval, not chained: a section that closed with different
+        // content on two nodes only differs in ITS boundary's hash, and this decision
+        // path compares the latest boundary alone — once the network moves one interval
+        // on, the divergence becomes permanently invisible to every trigger we have.
+        // Measured on a six-node stand: section 25001 lost transactions on two joiners
+        // and 5 minutes of idle start_checks never looked back at boundary 25020.
+        // So, on a quiet network, occasionally re-verify the recent boundary window
+        // (request_control_section covers the last 16 = 300 sections; its response path
+        // Direct-requests any mismatching interval, and section merge is idempotent).
+        if (last_control.has_value() && !last_info_.empty()) {
+            const auto now = Utils::current_date_ms();
+            if (now - last_deep_control_check_ms_ >= 60'000) {
+                last_deep_control_check_ms_ = now;
+                Responder deep_responder(node->network());
+                deep_responder.add_identifier(last_info_.begin()->first);
+                eLog("[Dag] Deep control re-check at {}", last_control->section_id);
+                this->request_control_section(last_control->section_id, deep_responder);
+            }
+        }
 
         eLog("BC 4");
         return; // end sync
@@ -4891,9 +5004,19 @@ void Dag::clear_controls_async(const SectionId &from) {
 }
 
 void Dag::request_control_section(const SectionId &from_top, const Responder &responder) {
+    // The in-flight flag must expire: it is cleared only by a response, and a peer
+    // that cannot serve the range (or dies) never sends one. Measured on a six-node
+    // stand: the flag stuck for 9 minutes, every later need_recontrol logged
+    // "No need request control search", and the node sat in DagStatus::Sync forever —
+    // which also made every peer drop ITS sync responses ("last info not ready").
     if (search_control_) {
-        eTemp("[Dag] No need request control search");
-        return;
+        const auto now = Utils::current_date_ms();
+        if (search_control_started_ms_ != 0 && now - search_control_started_ms_ < 30'000) {
+            eTemp("[Dag] No need request control search");
+            return;
+        }
+        eWarning("[Dag] Control search response never arrived — resetting the in-flight flag");
+        search_control_ = false;
     }
 
     SectionId hi = align_down20(from_top < current_section_ ? from_top : current_section_);
@@ -4908,7 +5031,8 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
         lo = SectionId(0);
     }
 
-    search_control_ = true;
+    search_control_            = true;
+    search_control_started_ms_ = Utils::current_date_ms();
     control_search_started_event_.publish();
     sync_start_event_.publish(current_section_, current_section_);
 
@@ -4921,7 +5045,8 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
 }
 
 void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
-                                          const Responder              &responder) {
+                                          const Responder              &responder,
+                                          int                           regen_depth) {
     if (mode_ == DagMode::Light) {
         return;
     }
@@ -4954,9 +5079,26 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
     }
 
     if (from != -1) {
+        // One regeneration attempt only. A node that has no cache yet (fresh joiner)
+        // cannot build these controls no matter how many times it clears and retries —
+        // the unbounded recursion here overflowed the stack and killed the process
+        // the moment a peer asked it for a control range it did not have.
+        if (regen_depth >= 1) {
+            // Answer with whatever was collected rather than staying silent: the
+            // requester set its in-flight flag and entered Sync — silence leaves it
+            // waiting for a response that never comes.
+            eWarning("[Dag] Serving partial control range [{}..{}]: controls not rebuildable yet",
+                     control_request.from,
+                     control_request.to);
+            responder.send_response(control_response,
+                                    MessageType::DagControlRangeResponse,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
+            return;
+        }
         this->clear_controls(from);
         this->start_control(Force::Active);
-        this->network_request_control_section(control_request, responder);
+        this->network_request_control_section(control_request, responder, regen_depth + 1);
         return;
     }
 

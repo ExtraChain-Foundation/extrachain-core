@@ -830,6 +830,7 @@ private:
     std::unordered_map<std::string, DagLastInfo> last_info_; // Last chain info from peers
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
     bool                                         search_control_              = false;
+    std::uint64_t                                search_control_started_ms_   = 0; // age of the in-flight flag
     bool                                         light_requested_             = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
@@ -862,6 +863,7 @@ private:
     mutable std::mutex                 sync_response_request_mutex_;
     std::optional<PendingSyncResponse> pending_section_response_;
     std::optional<PendingSyncResponse> pending_file_response_;
+    std::uint64_t                      pending_file_started_ms_ = 0;
 
     // Periodic "am I behind?" trigger. The worker only schedules work; all DAG state
     // is read and changed on the node serial executor.
@@ -876,14 +878,30 @@ private:
 
     // Boundary -> when we last refetched it after a control mismatch. Several peers
     // reporting the same disagreement must not each trigger their own refetch.
+    // Last quiet-network deep control re-check (see handle_sync_request).
+    std::atomic<std::uint64_t>         last_deep_control_check_ms_ { 0 };
+
     mutable std::mutex                 refetched_intervals_mutex_;
     std::map<SectionId, std::uint64_t> refetched_intervals_;
 
     // Interval hashes from peers for boundaries we have not sealed yet: section -> hash.
     // Without this the claim is dropped and the verification never happens, because our
     // control appears a little later than the peer's. Bounded to the newest few.
-    mutable std::mutex               pending_intervals_mutex_;
-    std::map<SectionId, std::string> pending_intervals_;
+    // Peer control claims we could not compare on arrival (no own control yet, or we
+    // were not Ready). Keyed by boundary; keeps the claim's `from` so a later refetch
+    // can name the exact interval.
+    struct PendingIntervalClaim {
+        SectionId   from;
+        std::string hash;
+    };
+    mutable std::mutex                        pending_intervals_mutex_;
+    std::map<SectionId, PendingIntervalClaim> pending_intervals_;
+
+    // Boundaries whose deferred comparison (at our own control seal) found a mismatch.
+    // write_control has no responder to refetch from, so the next live interval
+    // exchange drains this set through request_file_sections.
+    mutable std::mutex            mismatched_intervals_mutex_;
+    std::map<SectionId, SectionId> mismatched_intervals_; // to -> from
 
     // Persistent tx index (by hash / sender / receiver / token / time).
     // Full mode: every tx. Light mode: only tx involving local wallets.
@@ -1174,7 +1192,8 @@ public:
      */
     // void network_request_control_section(const DagControl &dag_control, const Responder &responder);
     void network_request_control_section(const DagControlRangeRequest &control_request,
-                                         const Responder              &responder);
+                                         const Responder              &responder,
+                                         int                           regen_depth = 0);
 
     void network_control_range_response(const DagControlRangeResponse &control_response,
                                         const Responder               &responder);
