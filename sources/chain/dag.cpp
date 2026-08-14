@@ -3211,6 +3211,27 @@ void Dag::handle_sync_request() {
             const auto now = Utils::current_date_ms();
             if (now - last_deep_control_check_ms_ >= 60'000) {
                 last_deep_control_check_ms_ = now;
+
+                // Regenerate boundaries invalidated by late inserts BEFORE comparing:
+                // a missing control cannot mismatch, so a node that honestly dropped
+                // its stale boundary (invalidate_interval_control) would otherwise
+                // hide its own divergence and answer control-range requests with a
+                // hole at exactly the interesting boundary. Walk the same window the
+                // re-check covers and rebuild from the first hole.
+                {
+                    const auto tip = align_down20(last_control->section_id);
+                    auto       lo  = tip >= CONTROL_INTERVAL * 15 ? tip - CONTROL_INTERVAL * 15 : SectionId(0);
+                    for (auto b = lo == SectionId(0) ? SectionId(0) : align_down20(lo); b <= tip;
+                         b += CONTROL_INTERVAL_MOD) {
+                        if (b > SectionId(0) && !this->read_control(b).has_value()) {
+                            eLog("[Dag] Regenerating control chain from boundary {}", b);
+                            this->generate_hash_from_section(b - CONTROL_INTERVAL_DIFF, Force::Active, Force::None);
+                            last_control = this->find_last_control();
+                            break;
+                        }
+                    }
+                }
+
                 Responder deep_responder(node->network());
                 deep_responder.add_identifier(last_info_.begin()->first);
                 eLog("[Dag] Deep control re-check at {}", last_control->section_id);
