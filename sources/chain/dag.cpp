@@ -28,6 +28,7 @@
 #include <future>
 #include <limits>
 
+
 #include "dfs/dfs_service.h"
 #include "core/extrachain_node.h"
 #include "managers/luminance_manager.h"
@@ -1752,11 +1753,25 @@ std::optional<std::map<SectionId, std::string>> Dag::collect_repair_vote(
                               ? node_id.actor_id.to_string() + ':' + node_id.node_identifier
                               : *responder.identifiers().begin();
     vote.identifiers.insert(voter);
+
+    // The quorum must degrade to the peers that exist. A client in a star topology
+    // has exactly one connection; with a hard quorum of 2 its repair votes sat at
+    // "1/2 matching peers" forever and the node stayed in Sync for the rest of its
+    // life. A node with a single peer already trusts that peer for every ordinary
+    // sync path — refusing its repair vote protects nothing.
+    std::size_t capable = 0;
+    for (const auto &identifier : node->network()->active_connection_identifiers()) {
+        const auto meta = node->network()->peer_meta_for(identifier);
+        if (meta.has_value() && meta->supports_dag_repair()) {
+            ++capable;
+        }
+    }
+    const auto effective_quorum = std::max<std::size_t>(1, std::min(REPAIR_QUORUM, capable));
     eWarning("[Dag] Repair vote for range {} has {}/{} matching peers",
              range_key,
              vote.identifiers.size(),
-             REPAIR_QUORUM);
-    if (vote.identifiers.size() < REPAIR_QUORUM) {
+             effective_quorum);
+    if (vote.identifiers.size() < effective_quorum) {
         return std::nullopt;
     }
 
