@@ -442,6 +442,9 @@ void NetworkService::reconnection() {
     if (server_status() && is_own_address(first_node_)) {
         return;
     }
+    if (first_node_self_detected_.load()) {
+        return;
+    }
     if (this->node->account_controller()->empty()) {
         schedule_reconnection(30000);
         return;
@@ -1280,6 +1283,14 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         }
     }
 
+    if (send_mode == SendMode::Focused && sent_to == 0) {
+        // A focused message that matches no connection vanishes silently — the
+        // requester keeps waiting for a response that was never written to any
+        // socket. Seen with a 22 KB DagFileSections response: the sender logged the
+        // serialization, the peer never received a byte, and the sync stayed stuck.
+        eWarning("[Network] Focused {} reached nobody (target identifier not connected)", message_type);
+    }
+
     if (message_type == MessageType::DagTransaction && sent_to == 0) {
         // Distinguish the two cases, because only one of them is a loss.
         //
@@ -1811,7 +1822,15 @@ void NetworkService::message_received(const std::string &message,
     // timer.start();
 
     // TODO: not global
-    if (send_type == SendMode::Broadcast && type != MessageType::Custom) {
+    //
+    // Count every non-Custom message, not just broadcasts. Luminance gates sync
+    // responses, interval claims and control-range responses at < 2 — but a node
+    // that only ANSWERS requests (a passive client, a quiet server) never broadcasts,
+    // so its luminance never grew and its peers dropped exactly the messages needed
+    // to heal divergence. Measured: a REAL-profile stand (only the server sends
+    // transactions) never converged, with the server logging
+    // "Sync responce dropped: identifiers=1, luminance=1" for every client answer.
+    if (type != MessageType::Custom) {
         node->luminance_manager()->increment(node_id);
     }
 
@@ -2414,6 +2433,13 @@ void NetworkService::message_received(const std::string &message,
             eWarning("[NetworkService] DAG batch from a peer without negotiated support");
             break;
         }
+        // The batch path is negotiated between >= 0.26 peers only and is serialized
+        // in Canonical (see send_live_dag_batch) — unlike the legacy-interop wire,
+        // which is hex. Without this scope the dispatch-level Legacy scope applies
+        // and every decimal number is read as hex: a transaction stamped for section
+        // 25039 arrives as 151609 (0x25039), is rejected as TooSectionDiff forever,
+        // and the re-check loop grinds on it indefinitely.
+        WireFormat::Scope batch_scope(WireFormat::Mode::Canonical);
         auto batch_result = MessagePack::deserialize<DagTransactionBatch>(serialized);
         if (!batch_result.has_value() || batch_result.value().transactions.empty()
             || batch_result.value().transactions.size() > LIVE_DAG_BATCH_MAX_TRANSACTIONS) {
@@ -2740,6 +2766,19 @@ void NetworkService::socket_error(Network::SocketServiceError error,
                                   SocketDirection             direction) {
     eLog("[NetworkService] Error socket: {} {} {} {}", direction, error, ip, identifier);
 
+    // Our own identifier answering an outgoing dial to first_node means first_node is
+    // this very node. is_own_address() deliberately excludes loopback (a single-host
+    // mesh shares 127.0.0.x), so this is the only place the loop is detectable — and
+    // without remembering it, the node redialed itself every second, churning sockets
+    // hard enough to drop in-flight responses to real peers.
+    if (error == Network::SocketServiceError::IncompatibleIdentifier && direction == SocketDirection::Outgoing
+        && ip == first_node_ && identifier == node->node_identifier()) {
+        if (!first_node_self_detected_.exchange(true)) {
+            eWarning("[Network] first_node {} is this node itself — stopping first-node redials", ip);
+        }
+        return;
+    }
+
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
         || error == Network::SocketServiceError::VersionTooNew
@@ -2849,6 +2888,7 @@ bool NetworkService::save_first_node(const std::string_view first_node) {
     }
 
     first_node_ = first_node;
+    first_node_self_detected_.store(false);
 
     auto settings       = Utils::read_settings();
     settings.first_node = first_node_;
