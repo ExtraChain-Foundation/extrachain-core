@@ -285,6 +285,10 @@ ExtraChain::Core::Event<> &Dag::control_ended_event() noexcept {
 Dag::SectionEvent &Dag::control_progress_event() noexcept {
     return control_progress_event_;
 }
+
+Dag::SectionEvent &Dag::control_committed_event() noexcept {
+    return control_committed_event_;
+}
 ExtraChain::Core::Event<> &Dag::control_search_started_event() noexcept {
     return control_search_started_event_;
 }
@@ -5271,6 +5275,7 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
     if (!res.has_value()) {
         return std::nullopt;
     }
+    control_committed_event_.publish(interval_end);
 
     return last_hash;
 }

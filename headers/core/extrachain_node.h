@@ -80,6 +80,9 @@ namespace ExtraChain::Contracts {
     class ContractManager;
     class ToolchainRegistry;
 } // namespace ExtraChain::Contracts
+namespace ExtraChain::Consensus {
+    class ConsensusService;
+}
 namespace ExtraChain::Core {
     class DeadlineTask;
     class NetworkRuntime;
@@ -163,6 +166,7 @@ namespace ExtraChain::Core {
         std::unique_ptr<JanusManager>                                                  janus_manager_;
         std::unique_ptr<ExtraChain::Contracts::ContractManager>   contract_manager_;
         std::unique_ptr<ExtraChain::Contracts::ToolchainRegistry> toolchain_registry_;
+        std::unique_ptr<ExtraChain::Consensus::ConsensusService>  consensus_service_;
         std::mutex                                                pending_contracts_mutex_;
         std::unordered_map<std::string, ExtraChain::Contracts::PreparedContractChange> pending_contracts_;
         std::unique_ptr<ExtraChain::Core::NetworkRuntime>                              runtime_;
@@ -279,6 +283,7 @@ namespace ExtraChain::Core {
 
         Dag*                    dag() const;
         virtual NetworkService* network() const;
+        ExtraChain::Consensus::ConsensusService* consensus() const;
         LuminanceManager*       luminance_manager() const;
         AccountController*      account_controller() const;
         ActorIndex*             actor_index() const;

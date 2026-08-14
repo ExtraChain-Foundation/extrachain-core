@@ -19,6 +19,7 @@
 
 #include "chain/actor_index.h"
 #include "chain/dag.h"
+#include "consensus/consensus_service.h"
 #include "contracts/contract_transaction.h"
 #include "dfs/dfs_service.h"
 #include "managers/data_mining_manager.h"
@@ -1912,6 +1913,16 @@ void NetworkService::message_received(const std::string &message,
 
     // try {
     switch (type) {
+    case MessageType::ConsensusChallenge:
+    case MessageType::ConsensusAuthentication:
+    case MessageType::ConsensusProposal:
+    case MessageType::ConsensusVote:
+    case MessageType::ConsensusCertificate: {
+        if (node->consensus() != nullptr) {
+            node->consensus()->receive_network_message(type, status, serialized, responder, identifier);
+        }
+        break;
+    }
     case MessageType::Custom: {
         // eSuccess("Achieved Custom package. MessageID: {} | SenderId: {} | Status: {} | Identifier: {}",
         //          messageId,

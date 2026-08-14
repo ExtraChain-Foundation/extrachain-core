@@ -64,6 +64,7 @@
 #include "contracts/contract_transaction.h"
 #include "contracts/dfs_contract_storage.h"
 #include "contracts/toolchain_registry.h"
+#include "consensus/consensus_service.h"
 #include "utils/exc_utils.h"
 
 std::atomic<bool> node_enabled { true };
@@ -290,6 +291,7 @@ namespace ExtraChain::Core {
         luminance_manager_  = std::make_unique<LuminanceManager>(this);
         network_service_    = create_network_service();
         dag_                = std::make_unique<Dag>(this);
+        consensus_service_  = std::make_unique<ExtraChain::Consensus::ConsensusService>(*this);
 
         dag_sync_timer_          = DeadlineTask::create(runtime_executor(), [this] {
             dagTimerTick();
@@ -464,6 +466,7 @@ namespace ExtraChain::Core {
         dmm_.reset();
         toolchain_registry_.reset();
         contract_manager_.reset();
+        consensus_service_.reset();
         dfs_.reset();
         dag_.reset();
         network_service_.reset();
@@ -1058,6 +1061,13 @@ namespace ExtraChain::Core {
     }
 
     void ExtraChainNode::start() {
+        if (consensus_service_ && !actor_index_->network_id().is_zero()) {
+            const auto activated = consensus_service_->activate(actor_index_->network_id());
+            if (!activated.has_value()) {
+                eCritical("[Consensus] Cannot activate shadow certification: {}",
+                          std::to_underlying(activated.error()));
+            }
+        }
         if (!started_) {
             started_     = true;
             ready_timer_ = DeadlineTask::create(serial_executor(), [this] {
@@ -1342,6 +1352,10 @@ namespace ExtraChain::Core {
 
     NetworkService* ExtraChainNode::network() const {
         return network_service_.get();
+    }
+
+    ExtraChain::Consensus::ConsensusService* ExtraChainNode::consensus() const {
+        return consensus_service_.get();
     }
 
     LuminanceManager* ExtraChainNode::luminance_manager() const {

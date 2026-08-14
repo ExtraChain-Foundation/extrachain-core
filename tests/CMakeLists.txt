@@ -50,6 +50,7 @@ add_core_test_executable(extrachain-native-balance native_balance.cpp)
 add_core_test_executable(extrachain-token-registry token_registry.cpp)
 add_core_test_executable(extrachain-dag-recovery dag_recovery.cpp)
 add_core_test_executable(extrachain-runtime-tests runtime/runtime_test.cpp)
+add_core_test_executable(extrachain-consensus-tests consensus_test.cpp)
 
 if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)
     add_executable(extrachain-qt-compat-tests qt_compat_test.cpp)
@@ -68,10 +69,11 @@ add_test(NAME native-balance COMMAND extrachain-native-balance)
 add_test(NAME token-registry COMMAND extrachain-token-registry)
 add_test(NAME dag-recovery COMMAND extrachain-dag-recovery)
 add_test(NAME runtime COMMAND extrachain-runtime-tests)
+add_test(NAME consensus COMMAND extrachain-consensus-tests)
 if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)
     add_test(NAME qt-compat COMMAND extrachain-qt-compat-tests)
 endif()
-set(EXTRACHAIN_TEST_NAMES core-unit amount-roundtrip sync-roundtrip native-balance token-registry dag-recovery runtime)
+set(EXTRACHAIN_TEST_NAMES core-unit amount-roundtrip sync-roundtrip native-balance token-registry dag-recovery runtime consensus)
 if(EXTRACHAIN_BUILD_LEGACY_TESTS)
     list(APPEND EXTRACHAIN_TEST_NAMES legacy-monolith)
 endif()
@@ -100,6 +102,13 @@ set(EXTRACHAIN_HEADER_CHECKS
     chat/chat_manager.h
     contracts/contract_manager.h
     contracts/wasm_runtime.h
+    consensus/consensus_engine.h
+    consensus/consensus_service.h
+    consensus/consensus_types.h
+    consensus/peer_authenticator.h
+    consensus/safety_store.h
+    consensus/shadow_consensus.h
+    consensus/validator_set.h
     core/extrachain_node.h
     dfs/dfs_service.h
     network/message_body.h

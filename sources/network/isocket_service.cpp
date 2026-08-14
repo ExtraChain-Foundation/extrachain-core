@@ -229,7 +229,8 @@ SocketService::Data SocketService::generate_first_message() {
         .node_version = extrachain_node_version,
         .capabilities = std::set<std::string> { std::string(DAG_TX_BATCH_CAPABILITY),
                                                 std::string(TOKEN_MIGRATION_CAPABILITY),
-                                                std::string(DAG_REPAIR_CAPABILITY) },
+                                                std::string(DAG_REPAIR_CAPABILITY),
+                                                std::string(IDENTITY_BFT_SHADOW_CAPABILITY) },
     };
 
     message.connections = context_.shareable_peers(ip_);

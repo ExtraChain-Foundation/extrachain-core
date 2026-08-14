@@ -109,6 +109,12 @@ enum class MessageType {
 
     ShareConnections = 113,
 
+    ConsensusChallenge      = 120,
+    ConsensusAuthentication = 121,
+    ConsensusProposal       = 122,
+    ConsensusVote           = 123,
+    ConsensusCertificate    = 124,
+
     Unknown = 250
 };
 MSGPACK_ADD_ENUM(MessageType)

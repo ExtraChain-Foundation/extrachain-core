@@ -384,6 +384,7 @@ public:
     [[nodiscard]] ExtraChain::Core::Event<> &control_started_event() noexcept;
     [[nodiscard]] ExtraChain::Core::Event<> &control_ended_event() noexcept;
     [[nodiscard]] SectionEvent              &control_progress_event() noexcept;
+    [[nodiscard]] SectionEvent              &control_committed_event() noexcept;
     [[nodiscard]] ExtraChain::Core::Event<> &control_search_started_event() noexcept;
     [[nodiscard]] ExtraChain::Core::Event<> &control_search_ended_event() noexcept;
 
@@ -808,6 +809,7 @@ private:
     ExtraChain::Core::Event<>                             control_started_event_;
     ExtraChain::Core::Event<>                             control_ended_event_;
     SectionEvent                                          control_progress_event_;
+    SectionEvent                                          control_committed_event_;
     ExtraChain::Core::Event<>                             control_search_started_event_;
     ExtraChain::Core::Event<>                             control_search_ended_event_;
     ExtraChain::Core::ExtraChainNode                     *node;               // Parent node reference

@@ -162,6 +162,13 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/standard_token.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/wasm_runtime.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/toolchain_registry.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/consensus_engine.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/consensus_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/consensus_types.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/peer_authenticator.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/safety_store.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/shadow_consensus.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/validator_set.h
     ${EXTRACHAIN_EMBEDDED_CONTRACTS_HEADER}
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dirs_manager.cpp
@@ -228,6 +235,13 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_runtime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_engine.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_types.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/peer_authenticator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/safety_store.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/shadow_consensus.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/validator_set.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_policy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_codec.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_manager.cpp
