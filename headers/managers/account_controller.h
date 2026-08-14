@@ -80,6 +80,9 @@ public:
      */
     const PrivateProfile &current_profile() const;
 
+    // True once a profile is loaded and selected; current_profile() is fatal before that
+    bool has_current_profile() const;
+
     int  count() const;
     bool empty() const;
     void change_current_profile(const ActorId &actorId);
