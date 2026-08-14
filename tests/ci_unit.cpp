@@ -15,9 +15,11 @@ int main(int argc, char *argv[]) {
     (void)argv;
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     const auto process_path = std::filesystem::current_path();
-    std::filesystem::remove_all("/tmp/ci-unit");
-    std::filesystem::create_directories("/tmp/ci-unit");
-    std::filesystem::current_path("/tmp/ci-unit");
+    const auto test_path =
+        std::filesystem::temp_directory_path() / ("extrachain-ci-unit-" + Utils::generate_random_hex(8));
+    const auto clean_state_path = test_path / "clean-state";
+    std::filesystem::create_directories(test_path);
+    std::filesystem::current_path(test_path);
 
     auto ci = std::make_unique<ControlIndex>(nullptr);
     std::printf("initial rows=%llu\n", (unsigned long long)ci->row_count());
@@ -71,6 +73,12 @@ int main(int argc, char *argv[]) {
     check("file name invalid run replacement", Utils::fix_file_name("a+%b") == "a_b");
     check("file name quote replacement", Utils::fix_file_name("a«b»c") == "a_b_c");
 
+    ExtraChainSettings audit_settings;
+    audit_settings.dag_audit_cursor = "1240";
+    const auto restored_settings    = Json::deserialize<ExtraChainSettings>(Json::serialize(audit_settings));
+    check("DAG audit cursor settings round-trip",
+          restored_settings.has_value() && restored_settings.value().dag_audit_cursor == "1240");
+
     constexpr std::string_view legacy_payload = "ExtraChain legacy compression";
     const auto                 compressed     = LegacyCompression::compress(legacy_payload);
     const std::string          expected_compressed(
@@ -93,7 +101,7 @@ int main(int argc, char *argv[]) {
                                               std::unexpected(LegacyCompression::Error::CompressFailed));
     check("legacy empty compression round-trip", decompressed_empty.has_value() && decompressed_empty->empty());
 
-    const std::filesystem::path atomic_path = "/tmp/ci-unit/atomic-state";
+    const auto atomic_path = test_path / "atomic-state";
     check("atomic file write", FileIo::write_atomic(atomic_path, "first").has_value());
     check("atomic file replace", FileIo::write_atomic(atomic_path, "second").has_value());
     const auto atomic_data = FileIo::read_all(atomic_path);
@@ -118,9 +126,8 @@ int main(int argc, char *argv[]) {
 
     ci.reset();
     std::filesystem::current_path(process_path);
-    std::filesystem::remove_all("/tmp/ci-clean-state");
-    std::filesystem::create_directories("/tmp/ci-clean-state");
-    std::filesystem::current_path("/tmp/ci-clean-state");
+    std::filesystem::create_directories(clean_state_path);
+    std::filesystem::current_path(clean_state_path);
     {
         ControlIndex first_open(nullptr);
         check("new index requires rebuild", first_open.rebuild_required());
@@ -130,8 +137,7 @@ int main(int argc, char *argv[]) {
         check("cleanly closed index skips rebuild", !clean_reopen.rebuild_required());
     }
     std::filesystem::current_path(process_path);
-    std::filesystem::remove_all("/tmp/ci-unit");
-    std::filesystem::remove_all("/tmp/ci-clean-state");
+    std::filesystem::remove_all(test_path);
 
     std::printf("EDGE: %d pass, %d fail\n", pass, fail);
     return fail == 0 ? 0 : 1;

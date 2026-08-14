@@ -48,12 +48,19 @@ struct ExtraChainSettings {
     std::optional<int>            dag_version;
     std::optional<int>            dfs_version;
     std::optional<ChainIndexMode> chain_index_mode;
+    std::optional<std::string>    dag_audit_cursor;
 };
 
-BOOST_DESCRIBE_STRUCT(
-    ExtraChainSettings,
-    (),
-    (first_node, dag_mode, dfs_mode, node_identifier, dag_version, dfs_version, chain_index_mode))
+BOOST_DESCRIBE_STRUCT(ExtraChainSettings,
+                      (),
+                      (first_node,
+                       dag_mode,
+                       dfs_mode,
+                       node_identifier,
+                       dag_version,
+                       dfs_version,
+                       chain_index_mode,
+                       dag_audit_cursor))
 
 namespace Network {
 

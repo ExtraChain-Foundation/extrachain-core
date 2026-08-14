@@ -180,6 +180,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_admission.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_cache.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_quarantine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack_registry.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/hot_section_store.cpp

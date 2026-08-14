@@ -228,7 +228,8 @@ SocketService::Data SocketService::generate_first_message() {
         .dag_version  = CURRENT_DAG_VERSION,
         .node_version = extrachain_node_version,
         .capabilities = std::set<std::string> { std::string(DAG_TX_BATCH_CAPABILITY),
-                                                std::string(TOKEN_MIGRATION_CAPABILITY) },
+                                                std::string(TOKEN_MIGRATION_CAPABILITY),
+                                                std::string(DAG_REPAIR_CAPABILITY) },
     };
 
     message.connections = context_.shareable_peers(ip_);

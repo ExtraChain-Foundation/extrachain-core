@@ -47,6 +47,7 @@ namespace ExtraChain::Core {
     class ExtraChainNode;
 }
 class Responder;
+class DagQuarantine;
 
 // Control hashes live on every CONTROL_INTERVAL-th section (section_id % 20 == 0).
 // They anchor the chain so peers can verify long histories without replaying every tx.
@@ -333,8 +334,17 @@ struct DagControlRangeResponse {
     SectionId               from;
     SectionId               to;
     std::vector<DagControl> controls;
+    bool                    complete = true;
+    std::vector<SectionId>  missing_controls;
 };
-BOOST_DESCRIBE_STRUCT(DagControlRangeResponse, (), (from, to, controls))
+BOOST_DESCRIBE_STRUCT(DagControlRangeResponse, (), (from, to, controls, complete, missing_controls))
+
+struct LegacyDagControlRangeResponse {
+    SectionId               from;
+    SectionId               to;
+    std::vector<DagControl> controls;
+};
+BOOST_DESCRIBE_STRUCT(LegacyDagControlRangeResponse, (), (from, to, controls))
 
 /**
  * @brief Directed Acyclic Chain implementation
@@ -811,6 +821,7 @@ private:
     bool                                                  token_allocations_cache_loaded_ = false;
     std::map<std::pair<ActorId, TokenId>, BigNumberFloat> token_allocations_cache_;
     DagCache                                              cache_; // Balance cache for fast calculations
+    std::unique_ptr<DagQuarantine>                        quarantine_;
 
     mutable std::shared_mutex    section_mutex_; // Protects one storage operation.
     mutable std::recursive_mutex save_mutex_;    // Protects section read-modify-write cycles.
@@ -830,7 +841,12 @@ private:
     std::unordered_map<std::string, DagLastInfo> last_info_; // Last chain info from peers
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
     bool                                         search_control_              = false;
-    bool                                         light_requested_             = false;
+    std::uint64_t                                search_control_started_ms_   = 0;
+    std::string                                  search_control_message_id_;
+    SectionId                                    historical_control_cursor_    = SectionId(-1);
+    std::uint64_t                                historical_audit_started_ms_  = 0;
+    bool                                         historical_recent_audit_done_ = false;
+    bool                                         light_requested_              = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
     static constexpr std::size_t         MaxDeferredContractTransactions = 1024;
@@ -854,14 +870,32 @@ private:
 
     void continue_with_collected_peer_info();
 
-    struct PendingSyncResponse {
-        std::string message_id;
-        SectionId   from;
-        SectionId   to;
+    enum class SyncRequestPriority : std::uint8_t {
+        Audit,
+        Tip,
+        Repair
     };
-    mutable std::mutex                 sync_response_request_mutex_;
-    std::optional<PendingSyncResponse> pending_section_response_;
-    std::optional<PendingSyncResponse> pending_file_response_;
+
+    struct PendingSyncResponse {
+        std::string                     message_id;
+        SectionId                       from;
+        SectionId                       to;
+        std::unordered_set<std::string> identifiers;
+        std::uint64_t                   created_at_ms   = 0;
+        bool                            file_response   = false;
+        bool                            repair_response = false;
+        SyncRequestPriority             priority        = SyncRequestPriority::Tip;
+    };
+    mutable std::mutex                                   sync_response_request_mutex_;
+    std::unordered_map<std::string, PendingSyncResponse> pending_sync_responses_;
+
+    struct RepairVote {
+        std::map<SectionId, std::string> sections;
+        std::unordered_set<std::string>  identifiers;
+        std::uint64_t                    created_at_ms = 0;
+    };
+    mutable std::mutex                                       repair_votes_mutex_;
+    std::map<std::string, std::map<std::string, RepairVote>> repair_votes_;
 
     // Periodic "am I behind?" trigger. The worker only schedules work; all DAG state
     // is read and changed on the node serial executor.
@@ -918,10 +952,28 @@ private:
     void                                           schedule_sync_check();
     void                                           sync_check();
     void                                           clear_pending_sync_responses();
+    bool                                           track_pending_sync_response(const Responder    &responder,
+                                                                               const SectionId    &from,
+                                                                               const SectionId    &to,
+                                                                               bool                file_response,
+                                                                               bool                repair_response = false,
+                                                                               SyncRequestPriority priority = SyncRequestPriority::Tip);
     std::optional<std::pair<SectionId, SectionId>> pending_sync_range(const Responder &responder,
                                                                       const SectionId &to,
                                                                       bool             file_response) const;
-    void consume_pending_sync_response(const Responder &responder, bool file_response);
+    void                     consume_pending_sync_response(const Responder &responder, bool file_response);
+    bool                     pending_sync_is_repair(const Responder &responder) const;
+    void                     schedule_section_repair(const SectionId &section_id);
+    void                     schedule_progressive_audit();
+    void                     reset_progressive_audit();
+    std::optional<SectionId> invalid_control_in_window(const SectionId &from, const SectionId &to);
+    std::optional<std::map<SectionId, std::string>> collect_repair_vote(
+        const std::pair<SectionId, SectionId>  &range,
+        const std::map<SectionId, std::string> &sections,
+        const Responder                        &responder);
+    std::optional<std::map<SectionId, std::string>> validated_repair_candidate(
+        const std::map<SectionId, std::string> &peer_sections);
+    bool validate_repair_transaction(const Transaction &transaction, const std::set<Transaction> &pending);
 
     std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
 
@@ -965,7 +1017,10 @@ private:
      */
     void request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
 
-    void request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder);
+    void request_file_sections(const SectionId &from,
+                               const SectionId &to,
+                               const Responder &responder,
+                               bool             repair_response = false);
 
     /**
      * @brief Send a sync request to the network
@@ -1029,6 +1084,9 @@ public:
     bool save_transaction(const Transaction &transaction);
 
     bool local_remove_transaction(const SectionId &section_id, const std::string &hash);
+    void quarantine_transaction(const Transaction &transaction,
+                                const std::string &reason,
+                                const std::string &source);
 
     /**
      * @brief Save multiple transactions to storage in batch
@@ -1174,7 +1232,8 @@ public:
      */
     // void network_request_control_section(const DagControl &dag_control, const Responder &responder);
     void network_request_control_section(const DagControlRangeRequest &control_request,
-                                         const Responder              &responder);
+                                         const Responder              &responder,
+                                         int                           regeneration_attempt = 0);
 
     void network_control_range_response(const DagControlRangeResponse &control_response,
                                         const Responder               &responder);

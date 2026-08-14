@@ -18,6 +18,7 @@
  */
 
 #include "chain/dag.h"
+#include "chain/dag_quarantine.h"
 #include "contracts/contract_manager.h"
 #include "contracts/contract_transaction.h"
 
@@ -29,6 +30,7 @@
 
 #include "dfs/dfs_service.h"
 #include "core/extrachain_node.h"
+#include "managers/luminance_manager.h"
 #include "network/message_body.h"
 #include "network/network_service.h"
 #include "managers/token_manager.h"
@@ -55,6 +57,7 @@ Dag::Dag(ExtraChain::Core::ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node)
     , cache_(node, this)
+    , quarantine_(std::make_unique<DagQuarantine>(ChainConst::DAG_QUARANTINE_DATABASE))
     , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
     bool storage_reset = false;
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
@@ -84,6 +87,13 @@ Dag::Dag(ExtraChain::Core::ExtraChainNode *node)
         std::make_unique<HotSectionStore>(std::filesystem::path(ChainConst::DAG_HOT_FOLDER) / "HotSections.db");
 
     auto settings = Utils::read_settings();
+    if (settings.dag_audit_cursor.has_value()) {
+        const auto cursor = BigNumber::create(settings.dag_audit_cursor.value());
+        if (cursor.has_value() && cursor.value() >= SectionId(0)) {
+            historical_control_cursor_    = cursor.value();
+            historical_recent_audit_done_ = true;
+        }
+    }
     if (node->runtime_profile() != RuntimeProfile::FullNode) {
         mode_ = DagMode::Light;
         if (settings.dag_mode != DagMode::Light) {
@@ -391,6 +401,7 @@ void Dag::watchdog_tick() {
             last_watchdog_section_ = current_section_;
             return;
         }
+        schedule_progressive_audit();
         start_check();
         return;
     }
@@ -432,27 +443,91 @@ void Dag::sync_check() {
 
 void Dag::clear_pending_sync_responses() {
     std::lock_guard lock(sync_response_request_mutex_);
-    pending_section_response_.reset();
-    pending_file_response_.reset();
+    pending_sync_responses_.clear();
+}
+
+bool Dag::track_pending_sync_response(const Responder    &responder,
+                                      const SectionId    &from,
+                                      const SectionId    &to,
+                                      bool                file_response,
+                                      bool                repair_response,
+                                      SyncRequestPriority priority) {
+    static constexpr std::size_t   MAX_PENDING_SYNC_RESPONSES = 8;
+    static constexpr std::size_t   MAX_PENDING_FILE_RESPONSES = 3;
+    static constexpr std::uint64_t PENDING_RESPONSE_TTL_MS    = 30'000;
+
+    const auto      now = Utils::current_date_ms();
+    std::lock_guard lock(sync_response_request_mutex_);
+    std::erase_if(pending_sync_responses_, [&](const auto &entry) {
+        return now - entry.second.created_at_ms >= PENDING_RESPONSE_TTL_MS;
+    });
+
+    const auto pending_files   = std::ranges::count_if(pending_sync_responses_, [](const auto &entry) {
+        return entry.second.file_response;
+    });
+    const bool table_full      = pending_sync_responses_.size() >= MAX_PENDING_SYNC_RESPONSES;
+    const bool file_slots_full = file_response && pending_files >= MAX_PENDING_FILE_RESPONSES;
+    if (table_full || file_slots_full) {
+        auto candidate = pending_sync_responses_.end();
+        for (auto iterator = pending_sync_responses_.begin(); iterator != pending_sync_responses_.end();
+             ++iterator) {
+            if (file_slots_full && !iterator->second.file_response) {
+                continue;
+            }
+            if (candidate == pending_sync_responses_.end()
+                || iterator->second.priority < candidate->second.priority
+                || (iterator->second.priority == candidate->second.priority
+                    && iterator->second.created_at_ms < candidate->second.created_at_ms)) {
+                candidate = iterator;
+            }
+        }
+        if (candidate == pending_sync_responses_.end() || priority <= candidate->second.priority) {
+            return false;
+        }
+        pending_sync_responses_.erase(candidate);
+    }
+
+    pending_sync_responses_.insert_or_assign(responder.message_id(),
+                                             PendingSyncResponse { .message_id      = responder.message_id(),
+                                                                   .from            = from,
+                                                                   .to              = to,
+                                                                   .identifiers     = responder.identifiers(),
+                                                                   .created_at_ms   = now,
+                                                                   .file_response   = file_response,
+                                                                   .repair_response = repair_response,
+                                                                   .priority        = priority });
+    return true;
 }
 
 std::optional<std::pair<SectionId, SectionId>> Dag::pending_sync_range(const Responder &responder,
                                                                        const SectionId &to,
                                                                        bool             file_response) const {
     std::lock_guard lock(sync_response_request_mutex_);
-    const auto     &pending = file_response ? pending_file_response_ : pending_section_response_;
-    if (!pending.has_value() || responder.message_id() != pending->message_id || to != pending->to) {
+    const auto      pending = pending_sync_responses_.find(responder.message_id());
+    if (pending == pending_sync_responses_.end() || pending->second.file_response != file_response
+        || to != pending->second.to
+        || (!pending->second.identifiers.empty()
+            && !std::ranges::any_of(responder.identifiers(), [&](const auto &identifier) {
+                   return pending->second.identifiers.contains(identifier);
+               }))) {
         return std::nullopt;
     }
-    return std::pair { pending->from, pending->to };
+    return std::pair { pending->second.from, pending->second.to };
 }
 
 void Dag::consume_pending_sync_response(const Responder &responder, bool file_response) {
     std::lock_guard lock(sync_response_request_mutex_);
-    auto           &pending = file_response ? pending_file_response_ : pending_section_response_;
-    if (pending.has_value() && responder.message_id() == pending->message_id) {
-        pending.reset();
+    const auto      pending = pending_sync_responses_.find(responder.message_id());
+    if (pending != pending_sync_responses_.end() && pending->second.file_response == file_response) {
+        pending_sync_responses_.erase(pending);
     }
+}
+
+bool Dag::pending_sync_is_repair(const Responder &responder) const {
+    std::lock_guard lock(sync_response_request_mutex_);
+    const auto      pending = pending_sync_responses_.find(responder.message_id());
+    return pending != pending_sync_responses_.end() && pending->second.file_response
+           && pending->second.repair_response;
 }
 
 bool Dag::is_accepting_messages() const {
@@ -1309,7 +1384,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
     // Hold save_mutex_ across the whole read-insert-write cycle: without it two
     // concurrent transactions for the same section both read the old set and one
     // insert is lost, so sections diverge between nodes and ControlIndex fails.
-    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+    std::unique_lock<std::recursive_mutex> save_lock(save_mutex_);
 
     auto section = this->read_section(transaction.section());
 
@@ -1319,9 +1394,6 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
         set_current_section(section.id);
 
-        // Check if cache needs updating
-        cache_.check_and_update_cache_thread(current_section_);
-
         if (mode_ == DagMode::Light && transaction.section() == SectionId(0)) {
             auto network_id = transaction.sender();
             node->actor_index()->set_network_id(network_id);
@@ -1330,17 +1402,25 @@ bool Dag::save_transaction(const Transaction &transaction) {
         // Update first_saved_section_ if this is the first section or has a lower ID
         if (first_saved_section_ == SectionId(-1) && transaction.section() >= SectionId(0)) {
             if (mode_ == DagMode::Light && transaction.section() == SectionId(0)) {
-                return write_section(section).has_value();
+                const bool written       = write_section(section).has_value();
+                const auto cache_section = current_section_;
+                save_lock.unlock();
+                if (written)
+                    cache_.check_and_update_cache_thread(cache_section);
+                return written;
             }
 
             first_saved_section_ = transaction.section();
             eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
         }
 
-        const bool written = write_section(section).has_value();
+        const bool written       = write_section(section).has_value();
+        const auto cache_section = current_section_;
+        save_lock.unlock();
         if (written) {
             cache_.apply_live_transaction(transaction);
             cache_.index_contract_transaction(transaction);
+            cache_.check_and_update_cache_thread(cache_section);
         }
         return written;
     }
@@ -1359,9 +1439,6 @@ bool Dag::save_transaction(const Transaction &transaction) {
             control_index_->erase(section->id);
     }
 
-    // Check if cache needs updating
-    cache_.check_and_update_cache_thread(current_section_);
-
     // Update first_saved_section_ if this is the first section or has a lower ID
     if (first_saved_section_ == SectionId(-1) && transaction.section() >= SectionId(0)) {
         if (mode_ == DagMode::Full || (mode_ == DagMode::Light && transaction.section() != SectionId(0))) {
@@ -1371,10 +1448,13 @@ bool Dag::save_transaction(const Transaction &transaction) {
         eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
     }
 
-    const bool written = write_section(section.value()).has_value();
+    const bool written       = write_section(section.value()).has_value();
+    const auto cache_section = current_section_;
+    save_lock.unlock();
     if (written) {
         cache_.apply_live_transaction(transaction);
         cache_.index_contract_transaction(transaction);
+        cache_.check_and_update_cache_thread(cache_section);
     }
     return written;
 }
@@ -1407,13 +1487,292 @@ bool Dag::local_remove_transaction(const SectionId &section_id, const std::strin
     return true;
 }
 
+void Dag::quarantine_transaction(const Transaction &transaction,
+                                 const std::string &reason,
+                                 const std::string &source) {
+    if (!quarantine_ || !quarantine_->record(transaction, reason, source)) {
+        eWarning("[Dag] Failed to quarantine transaction {}", transaction.hash());
+    }
+    schedule_section_repair(transaction.section());
+}
+
+void Dag::schedule_section_repair(const SectionId &section_id) {
+    static constexpr std::uint64_t REPAIR_COOLDOWN_MS = 30'000;
+    const auto                     now                = Utils::current_date_ms();
+    {
+        std::lock_guard lock(refetched_intervals_mutex_);
+        const auto      recent = refetched_intervals_.find(section_id);
+        if (recent != refetched_intervals_.end() && now - recent->second < REPAIR_COOLDOWN_MS) {
+            return;
+        }
+        refetched_intervals_.insert_or_assign(section_id, now);
+    }
+
+    boost::asio::dispatch(node->runtime_executor(), [this, section_id] {
+        const auto  from        = section_id > CONTROL_INTERVAL ? section_id - CONTROL_INTERVAL : SectionId(0);
+        const auto  to          = std::min(current_section_, section_id + CONTROL_INTERVAL);
+        std::size_t requested   = 0;
+        const auto  identifiers = node->network()->active_connection_identifiers();
+        for (const auto &identifier : identifiers) {
+            const auto peer_meta = node->network()->peer_meta_for(identifier);
+            if (!peer_meta.has_value() || !peer_meta->supports_dag_repair()) {
+                continue;
+            }
+            Responder responder(node->network());
+            responder.add_identifier(identifier);
+            request_file_sections(from, to, responder, true);
+            if (++requested == 3) {
+                break;
+            }
+        }
+        if (requested != 0) {
+            eWarning("[Dag] Requested repair range {}..{} from {} peers", from, to, requested);
+        }
+        if (requested == 0) {
+            eWarning("[Dag] Section {} is quarantined, but no repair-capable peer is connected", section_id);
+        }
+    });
+}
+
+void Dag::schedule_progressive_audit() {
+    static constexpr std::uint64_t AUDIT_INTERVAL_MS = 60'000;
+    const auto                     now               = Utils::current_date_ms();
+    if (mode_ != DagMode::Full || current_section_ < SectionId(0) || search_control_
+        || (historical_audit_started_ms_ != 0 && now - historical_audit_started_ms_ < AUDIT_INTERVAL_MS)) {
+        return;
+    }
+
+    const auto closed_tip = std::min(current_section_, cache_.section());
+    if (closed_tip < SectionId(0)) {
+        return;
+    }
+    const auto current_control = align_down20(closed_tip);
+    auto       cursor          = historical_recent_audit_done_ ? historical_control_cursor_ : current_control;
+    if (cursor < SectionId(0) || cursor > current_control) {
+        cursor = current_control;
+    }
+    const auto window     = CONTROL_INTERVAL * 15;
+    const auto audit_from = cursor > window ? cursor - window : SectionId(0);
+    if (const auto invalid = invalid_control_in_window(audit_from, cursor); invalid.has_value()) {
+        eCritical("[Dag] Local control verification failed from section {}", invalid.value());
+        reset_progressive_audit();
+        schedule_section_repair(invalid.value());
+        return;
+    }
+
+    Responder responder(node->network());
+    for (const auto &identifier : node->network()->active_connection_identifiers()) {
+        const auto peer_meta = node->network()->peer_meta_for(identifier);
+        if (peer_meta.has_value() && peer_meta->supports_dag_repair()) {
+            responder.add_identifier(identifier);
+            break;
+        }
+    }
+    if (responder.identifiers().empty()) {
+        return;
+    }
+
+    historical_recent_audit_done_ = true;
+    historical_control_cursor_    = audit_from > SectionId(0) ? audit_from - CONTROL_INTERVAL : current_control;
+    historical_audit_started_ms_  = now;
+
+    auto settings             = Utils::read_settings();
+    settings.dag_audit_cursor = historical_control_cursor_.to_string();
+    static_cast<void>(Utils::write_settings(settings));
+    request_control_section(cursor, responder);
+}
+
+void Dag::reset_progressive_audit() {
+    historical_control_cursor_    = align_down20(current_section_);
+    historical_audit_started_ms_  = 0;
+    historical_recent_audit_done_ = false;
+    auto settings                 = Utils::read_settings();
+    settings.dag_audit_cursor     = historical_control_cursor_.to_string();
+    static_cast<void>(Utils::write_settings(settings));
+}
+
+std::optional<SectionId> Dag::invalid_control_in_window(const SectionId &from, const SectionId &to) {
+    for (SectionId control_id = align_down20(from); control_id <= to; control_id += CONTROL_INTERVAL) {
+        const auto stored = read_control(control_id);
+        if (!stored.has_value()) {
+            return control_id;
+        }
+
+        const auto  interval_from = control_id == SectionId(0) ? SectionId(0) : control_id - CONTROL_INTERVAL_DIFF;
+        std::string section_hashes;
+        for (SectionId section_id = interval_from; section_id <= control_id; ++section_id) {
+            const auto section = read_section(section_id);
+            if (!section.has_value()) {
+                return interval_from;
+            }
+            const auto input = section->transactions.empty() ? section_id.to_string()
+                                                             : section_id.to_string() + section->calculate_hash();
+            section_hashes += Utils::calculate_hash(input);
+        }
+
+        auto expected = Utils::calculate_hash(section_hashes);
+        if (control_id != SectionId(0)) {
+            const auto previous = read_control(control_id - CONTROL_INTERVAL);
+            if (!previous.has_value()) {
+                return interval_from;
+            }
+            expected = Utils::calculate_hash(previous->control + expected);
+        }
+        if (stored->control != expected) {
+            return interval_from;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::map<SectionId, std::string>> Dag::collect_repair_vote(
+    const std::pair<SectionId, SectionId>  &range,
+    const std::map<SectionId, std::string> &sections,
+    const Responder                        &responder) {
+    static constexpr std::uint64_t REPAIR_VOTE_TTL_MS = 30'000;
+    static constexpr std::size_t   REPAIR_QUORUM      = 2;
+
+    if (responder.identifiers().empty()) {
+        return std::nullopt;
+    }
+
+    auto expected_section = range.first;
+    for (const auto &[section_id, _] : sections) {
+        if (section_id != expected_section) {
+            return std::nullopt;
+        }
+        expected_section += SectionId(1);
+    }
+    if (sections.empty() || expected_section != range.second + SectionId(1)) {
+        return std::nullopt;
+    }
+
+    std::map<SectionId, std::string> normalized_sections;
+    std::string                      fingerprint_input;
+    WireFormat::Scope                canonical_scope(WireFormat::Mode::Canonical);
+    for (const auto &[section_id, bytes] : sections) {
+        auto section = Json::deserialize<Section>(bytes);
+        if (!section.has_value()) {
+            return std::nullopt;
+        }
+        section.value().id = section_id;
+        section.value().control.reset();
+        auto normalized = Json::serialize(section.value());
+        fingerprint_input += section_id.to_string();
+        fingerprint_input += ':';
+        fingerprint_input += std::to_string(normalized.size());
+        fingerprint_input += ':';
+        fingerprint_input += normalized;
+        normalized_sections.insert_or_assign(section_id, std::move(normalized));
+    }
+    const auto fingerprint = Utils::calculate_hash(fingerprint_input);
+    const auto range_key   = range.first.to_string() + ':' + range.second.to_string();
+    const auto now         = Utils::current_date_ms();
+
+    std::lock_guard lock(repair_votes_mutex_);
+    for (auto range = repair_votes_.begin(); range != repair_votes_.end();) {
+        std::erase_if(range->second, [&](const auto &vote) {
+            return now - vote.second.created_at_ms >= REPAIR_VOTE_TTL_MS;
+        });
+        range = range->second.empty() ? repair_votes_.erase(range) : std::next(range);
+    }
+
+    auto &vote = repair_votes_[range_key][fingerprint];
+    if (vote.sections.empty()) {
+        vote.sections      = std::move(normalized_sections);
+        vote.created_at_ms = now;
+    }
+    const auto &node_id = responder.node_id();
+    const auto  voter   = !node_id.node_identifier.empty()
+                              ? node_id.actor_id.to_string() + ':' + node_id.node_identifier
+                              : *responder.identifiers().begin();
+    vote.identifiers.insert(voter);
+    eWarning("[Dag] Repair vote for range {} has {}/{} matching peers",
+             range_key,
+             vote.identifiers.size(),
+             REPAIR_QUORUM);
+    if (vote.identifiers.size() < REPAIR_QUORUM) {
+        return std::nullopt;
+    }
+
+    auto result = std::move(vote.sections);
+    repair_votes_.erase(range_key);
+    return result;
+}
+
+bool Dag::validate_repair_transaction(const Transaction &transaction, const std::set<Transaction> &pending) {
+    if (transaction.hash() != transaction.calculate_hash()
+        && transaction.hash() != transaction.calculate_hash_hex()) {
+        return false;
+    }
+    if (transaction.type() == TransactionType::Genesis || transaction.type() == TransactionType::Balance) {
+        const std::set<Transaction> empty;
+        const auto                  frontier = transaction.section();
+        return prove_transaction(transaction, empty, &pending, &frontier) == TransactionProveError::NoError;
+    }
+    if (transaction.signature().empty()) {
+        return false;
+    }
+    const auto sender = node->actor_index()->read_actor_old(transaction.sender());
+    if (sender.empty()) {
+        return false;
+    }
+    const auto signature_valid = sender.key().verify(transaction.hash(), transaction.signature());
+    if (!signature_valid.has_value() || !signature_valid.value()) {
+        return false;
+    }
+
+    if (is_contract_transaction(transaction.type()) || is_token_migration_transaction(transaction.type())) {
+        return true;
+    }
+
+    const std::set<Transaction> empty;
+    const auto                  frontier = transaction.section();
+    return prove_transaction(transaction, empty, &pending, &frontier) == TransactionProveError::NoError;
+}
+
+std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
+    const std::map<SectionId, std::string> &peer_sections) {
+    std::map<SectionId, Section> candidate_sections;
+    std::set<Transaction>        accepted_transactions;
+
+    for (const auto &[section_id, bytes] : peer_sections) {
+        WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+        auto              candidate = Json::deserialize<Section>(bytes);
+        if (!candidate.has_value()) {
+            return std::nullopt;
+        }
+        candidate.value().id = section_id;
+
+        candidate->control.reset();
+        for (const auto &transaction : candidate->transactions) {
+            if (transaction.section() != section_id) {
+                return std::nullopt;
+            }
+            if (!validate_repair_transaction(transaction, accepted_transactions)) {
+                eWarning("[Dag] Reject repair candidate transaction {}", transaction.hash());
+                return std::nullopt;
+            }
+            accepted_transactions.insert(transaction);
+        }
+        candidate_sections.insert_or_assign(section_id, std::move(candidate.value()));
+    }
+
+    std::map<SectionId, std::string> result;
+    WireFormat::Scope                canonical_scope(WireFormat::Mode::Canonical);
+    for (const auto &[section_id, section] : candidate_sections) {
+        result.insert_or_assign(section_id, Json::serialize(section));
+    }
+    return result;
+}
+
 std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std::set<Transaction> &transactions) {
     cache_.invalidate_live_balances();
     if (transactions.empty()) {
         return std::nullopt;
     }
     // Same section RMW race as save_transaction — serialize the batch too.
-    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+    std::unique_lock<std::recursive_mutex> save_lock(save_mutex_);
 
     bool      all_saved   = true;
     bool      has_changes = false;
@@ -1495,11 +1854,14 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
         it = last;
     }
 
+    const auto cache_section = current_section_;
+    save_lock.unlock();
+
     if (!all_saved)
         return std::nullopt;
 
     if (has_changes)
-        cache_.check_and_update_cache_thread(current_section_);
+        cache_.check_and_update_cache_thread(cache_section);
 
     // if (has_changes)
     //     eTemp("[Dag] Saved sections from {} to {} with changes", min_section, max_section);
@@ -1592,16 +1954,16 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     // form — accept either the new canonical decimal hash or the legacy one.
     const auto  stored_hash      = facts == nullptr ? tx.hash() : std::string();
     const auto &transaction_hash = facts == nullptr ? stored_hash : facts->hash;
-    const auto  hash_valid       = facts != nullptr ? facts->hash_valid
-                                                    : transaction_hash == tx.calculate_hash()
-                                                          || transaction_hash == tx.calculate_hash_hex();
+    const auto  hash_valid =
+        facts != nullptr ? facts->hash_valid
+                          : transaction_hash == tx.calculate_hash() || transaction_hash == tx.calculate_hash_hex();
     if (!hash_valid) {
         return TransactionProveError::WrongHash;
     }
 
-    const bool  pending_duplicate =
+    const bool pending_duplicate =
         pending_hashes != nullptr ? pending_hashes->contains(transaction_hash)
-                                   : pending_transactions != nullptr
+                                  : pending_transactions != nullptr
                                         && std::ranges::any_of(*pending_transactions, [&](const auto &pending) {
                                                return pending.hash() == transaction_hash;
                                            });
@@ -2194,9 +2556,10 @@ void Dag::request_sections(const SectionId &from, const SectionId &to, const Res
 
     auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
     auto responder_new = responder.with_new_message_id();
-    {
-        std::lock_guard lock(sync_response_request_mutex_);
-        pending_section_response_ = PendingSyncResponse { responder_new.message_id(), from, to };
+    if (!track_pending_sync_response(responder_new, from, to, false)) {
+        eWarning("[Dag] Skip section request because the pending response table is full");
+        schedule_sync_check();
+        return;
     }
     responder_new.send_response(range, MessageType::DagSections, SendMode::Focused, MessageStatus::Request);
 
@@ -2317,6 +2680,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         }
 
         consume_pending_sync_response(responder, false);
+        node->luminance_manager()->increment(responder.node_id());
         timer_stop_event_.publish();
 
         if (section_sync->last_section > sync_last_index_) {
@@ -2436,7 +2800,7 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
         // The message envelope (section ids in SectionFileData/FileSectionsSync)
         // travels in the wire format, symmetric with the request and response
         // decode, independent of the peer's on-disk file_bytes format above.
-        WireFormat::Scope wire_scope(WireFormat::wire());
+        WireFormat::Scope wire_scope(peer_legacy ? WireFormat::Mode::Legacy : WireFormat::Mode::Canonical);
         const auto        serialized = MessagePack::serialize(file_sync);
         const auto        compressed = LegacyCompression::compress(serialized);
         if (!compressed.has_value()) {
@@ -2497,7 +2861,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         // Runs on a worker thread, so the dispatch-layer wire scope doesn't apply
         // here — set it explicitly so section ids decode in the wire format.
-        WireFormat::Scope wire_scope(WireFormat::wire());
+        WireFormat::Scope wire_scope(peer_legacy ? WireFormat::Mode::Legacy : WireFormat::Mode::Canonical);
 
         const auto uncompressed = LegacyCompression::decompress(compressed, FILE_SYNC_MAX_UNCOMPRESSED_BYTES);
         if (!uncompressed.has_value()) {
@@ -2519,6 +2883,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             eWarning("[Dag] Reject stale or out-of-range file section response {}", responder.message_id());
             return;
         }
+        const bool repair_response = pending_sync_is_repair(responder);
 
         const bool valid_hot_gap_response =
             hot_gap_request_.has_value() && file_sync->to == hot_gap_request_->second
@@ -2530,7 +2895,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                    return section.section_id >= hot_gap_request_->first
                           && section.section_id <= hot_gap_request_->second;
                });
-        if (file_sync->to <= current_section_ && !valid_hot_gap_response) {
+        if (file_sync->to <= current_section_ && !valid_hot_gap_response && !repair_response) {
             return;
         }
 
@@ -2569,6 +2934,27 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             received_sections.insert_or_assign(section_data.section_id, std::move(disk_bytes));
         }
 
+        if (repair_response) {
+            consume_pending_sync_response(responder, true);
+            node->luminance_manager()->increment(responder.node_id());
+            eWarning("[Dag] Received repair candidate {}..{} from {}",
+                     expected_range->first,
+                     expected_range->second,
+                     responder.identifiers().empty() ? std::string("unknown") : *responder.identifiers().begin());
+            const auto agreed_sections = collect_repair_vote(expected_range.value(), received_sections, responder);
+            if (!agreed_sections.has_value()) {
+                return;
+            }
+            auto validated_sections = validated_repair_candidate(agreed_sections.value());
+            if (!validated_sections.has_value()) {
+                eWarning("[Dag] Reject repair range {}..{} after transaction validation",
+                         expected_range->first,
+                         expected_range->second);
+                return;
+            }
+            received_sections = std::move(validated_sections.value());
+        }
+
         if (!received_sections.empty() && hot_section_store_ && hot_section_store_->is_open()) {
             const auto received_first  = received_sections.begin()->first;
             const auto received_last   = received_sections.rbegin()->first;
@@ -2584,8 +2970,11 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
         // The answer survived every check and is about to be applied — only now is it
         // safe to stop the retry clock. See the note at the top of this function.
-        consume_pending_sync_response(responder, true);
-        timer_stop_event_.publish();
+        if (!repair_response) {
+            consume_pending_sync_response(responder, true);
+            node->luminance_manager()->increment(responder.node_id());
+            timer_stop_event_.publish();
+        }
 
         if (!received_sections.empty() && (!hot_section_store_ || !hot_section_store_->is_open())) {
             for (const auto &[section_id, disk_bytes] : received_sections) {
@@ -2597,6 +2986,32 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
 
         if (mode_ == DagMode::Light) {
+            return;
+        }
+
+        if (repair_response) {
+            if (received_sections.empty()) {
+                return;
+            }
+            const auto invalid_from = received_sections.begin()->first;
+            clear_controls(invalid_from);
+            if (control_index_) {
+                control_index_->clear();
+                control_index_ready_.store(false);
+            }
+            if (invalid_from <= cache_.section()) {
+                cache_.reset_db();
+                cache_.init_db();
+                cache_.check_and_update_cache_thread(current_section_);
+            }
+            if (chain_index_enabled_ && chain_index_) {
+                chain_index_->rebuild_from_disk();
+            }
+            if (quarantine_) {
+                quarantine_->resolve_range(expected_range->first, expected_range->second);
+            }
+            start_control(Force::Active);
+            eLog("[Dag] Repaired section range {}..{}", expected_range->first, expected_range->second);
             return;
         }
 
@@ -2680,7 +3095,10 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
     });
 }
 
-void Dag::request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
+void Dag::request_file_sections(const SectionId &from,
+                                const SectionId &to,
+                                const Responder &responder,
+                                bool             repair_response) {
     if (mode_ == DagMode::Light) {
         eLog("[Dag] Skip file sections request: light mode");
         return;
@@ -2693,11 +3111,13 @@ void Dag::request_file_sections(const SectionId &from, const SectionId &to, cons
     auto encode   = [wire_hex](const SectionId &s) {
         return wire_hex ? s.to_hex_string() : s.to_string();
     };
-    auto range = SectionRange { .first = from == -1 ? std::string("0") : encode(from), .last = encode(to) };
-    auto responder_new = responder.with_new_message_id();
-    {
-        std::lock_guard lock(sync_response_request_mutex_);
-        pending_file_response_ = PendingSyncResponse { responder_new.message_id(), from, to };
+    auto       range = SectionRange { .first = from == -1 ? std::string("0") : encode(from), .last = encode(to) };
+    auto       responder_new = responder.with_new_message_id();
+    const auto priority      = repair_response ? SyncRequestPriority::Repair : SyncRequestPriority::Tip;
+    if (!track_pending_sync_response(responder_new, from, to, true, repair_response, priority)) {
+        eWarning("[Dag] Skip file section request because the pending response table is full");
+        schedule_sync_check();
+        return;
     }
     responder_new.send_response(range, MessageType::DagFileSections, SendMode::Focused, MessageStatus::Request);
 
@@ -2931,7 +3351,8 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
             }
         }
 
-        this->request_file_sections(hash_interval.from, hash_interval.to, responder);
+        reset_progressive_audit();
+        schedule_section_repair(hash_interval.from);
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
     }
@@ -3080,6 +3501,7 @@ void Dag::handle_sync_request() {
         check_status_ = DagSyncStatus::None;
         this->process_cached_transactions();
         this->try_pack_hot();
+        schedule_progressive_audit();
         // timer_sync->stop();
 
         eLog("BC 4");
@@ -4919,9 +5341,14 @@ void Dag::clear_controls_async(const SectionId &from) {
 }
 
 void Dag::request_control_section(const SectionId &from_top, const Responder &responder) {
+    const auto now = Utils::current_date_ms();
     if (search_control_) {
-        eTemp("[Dag] No need request control search");
-        return;
+        if (search_control_started_ms_ != 0 && now - search_control_started_ms_ < 30'000) {
+            eTemp("[Dag] No need request control search");
+            return;
+        }
+        search_control_ = false;
+        search_control_message_id_.clear();
     }
 
     SectionId hi = align_down20(from_top < current_section_ ? from_top : current_section_);
@@ -4936,20 +5363,24 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
         lo = SectionId(0);
     }
 
-    search_control_ = true;
+    search_control_            = true;
+    search_control_started_ms_ = now;
     control_search_started_event_.publish();
     sync_start_event_.publish(current_section_, current_section_);
 
     DagControlRangeRequest req { .from = lo, .to = hi };
+    auto                   responder_new = responder.with_new_message_id();
+    search_control_message_id_           = responder_new.message_id();
     node->network()->send_message(req,
                                   MessageType::DagControlRangeRequest,
                                   responder.empty() ? SendMode::Neighbours : SendMode::Focused,
                                   MessageStatus::Request,
-                                  responder.with_new_message_id());
+                                  responder_new);
 }
 
 void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
-                                          const Responder              &responder) {
+                                          const Responder              &responder,
+                                          int                           regeneration_attempt) {
     if (mode_ == DagMode::Light) {
         return;
     }
@@ -4964,7 +5395,25 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
     }
 
     DagControlRangeResponse control_response { .from = control_request.from, .to = control_request.to };
-    SectionId               from = SectionId(-1);
+    const auto peer_id   = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+    const auto peer_meta = node->network()->peer_meta_for(peer_id);
+    const bool supports_repair = peer_meta.has_value() && peer_meta->supports_dag_repair();
+    const auto send_response   = [&]() {
+        if (supports_repair) {
+            responder.send_response(control_response,
+                                    MessageType::DagControlRangeResponse,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
+            return;
+        }
+        responder.send_response(LegacyDagControlRangeResponse { .from     = control_response.from,
+                                                                  .to       = control_response.to,
+                                                                  .controls = control_response.controls },
+                                MessageType::DagControlRangeResponse,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    };
+    SectionId from = SectionId(-1);
 
     for (SectionId s = control_request.from; s <= control_request.to; s += CONTROL_INTERVAL_MOD) {
         auto dag_control = this->read_control(s);
@@ -4975,6 +5424,9 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
                 from = s;
             }
 
+            control_response.complete = false;
+            control_response.missing_controls.push_back(s);
+
             continue;
         }
 
@@ -4982,39 +5434,70 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
     }
 
     if (from != -1) {
+        if (regeneration_attempt >= 1) {
+            send_response();
+            return;
+        }
         this->clear_controls(from);
         this->start_control(Force::Active);
-        this->network_request_control_section(control_request, responder);
+        this->network_request_control_section(control_request, responder, regeneration_attempt + 1);
         return;
     }
 
     // eTemp("[Dag] Sended control response: {}, {}", control_response.from, control_response.to);
-    responder.send_response(control_response,
-                            MessageType::DagControlRangeResponse,
-                            SendMode::Focused,
-                            MessageStatus::Response);
+    send_response();
 }
 
 void Dag::network_control_range_response(const DagControlRangeResponse &control_response,
                                          const Responder               &responder) {
+    const bool correlated = search_control_ && !search_control_message_id_.empty()
+                            && responder.message_id() == search_control_message_id_;
+    if (!correlated) {
+        eWarning("[Dag] Ignore uncorrelated control response {}", responder.message_id());
+        return;
+    }
+
     if (!is_aligned20(control_response.from) || !is_aligned20(control_response.to)
         || control_response.to < control_response.from) {
         eLog("[Dag] network_request_control_section Can't read control from {} to {}",
              control_response.to,
              control_response.from);
-        search_control_ = false;
+        search_control_            = false;
+        search_control_started_ms_ = 0;
+        search_control_message_id_.clear();
         control_search_ended_event_.publish();
         return;
     }
 
-    if (responder.luminance() < 2) {
+    const auto expected_controls = ((control_response.to - control_response.from) / CONTROL_INTERVAL).to_int();
+    const bool complete_controls =
+        expected_controls.has_value()
+        && control_response.controls.size() == static_cast<std::size_t>(expected_controls.value() + 1) && [&]() {
+               for (std::size_t index = 0; index < control_response.controls.size(); ++index) {
+                   const auto &control = control_response.controls[index];
+                   if (control.section_id != control_response.from + CONTROL_INTERVAL * index
+                       || control.control.size() != 64
+                       || !std::ranges::all_of(control.control, [](unsigned char value) {
+                              return std::isxdigit(value) != 0;
+                          })) {
+                       return false;
+                   }
+               }
+               return true;
+           }();
+    if (!control_response.complete || !complete_controls) {
+        search_control_            = false;
+        search_control_started_ms_ = 0;
+        search_control_message_id_.clear();
+        control_search_ended_event_.publish();
+        schedule_sync_check();
         return;
     }
 
     SectionId sync_from  = SectionId(-1);
     bool      force_next = false;
 
-    for (int i = 0; i != control_response.controls.size(); i++) {
+    for (std::size_t i = 0; i != control_response.controls.size(); ++i) {
         auto section_id    = control_response.controls[i].section_id;
         auto control       = control_response.controls[i].control;
         auto local_control = this->read_control(section_id);
@@ -5031,7 +5514,6 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
         if (!local_control.has_value() && i != 0) {
             sync_from = section_id;
-            continue;
             break;
         }
 
@@ -5054,7 +5536,10 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         // eFatal("[Dag] Sync complete!");
 
         if (sync_last_index_ <= current_section_) {
-            search_control_ = false;
+            node->luminance_manager()->increment(responder.node_id());
+            search_control_            = false;
+            search_control_started_ms_ = 0;
+            search_control_message_id_.clear();
             control_search_ended_event_.publish();
             this->process_cached_transactions();
             return;
@@ -5076,31 +5561,34 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
             DagControlRangeRequest req { .from = next_lo, .to = next_hi };
             // eTemp("[Dag] Request controls: {}", req);
             control_progress_event_.publish(next_lo);
+            auto responder_new         = responder.with_new_message_id();
+            search_control_message_id_ = responder_new.message_id();
             node->network()->send_message(req,
                                           MessageType::DagControlRangeRequest,
                                           SendMode::Neighbours,
                                           MessageStatus::Request,
-                                          responder.with_new_message_id());
+                                          responder_new);
+        } else {
+            search_control_            = false;
+            search_control_started_ms_ = 0;
+            search_control_message_id_.clear();
+            control_search_ended_event_.publish();
+            reset_progressive_audit();
+            schedule_section_repair(SectionId(0));
         }
 
         return;
     }
 
     if (sync_from != SectionId(-1)) {
-        SectionId sync_end = control_response.to;
-
-        eLog("[Dag] Direct request: requesting sections [{}, {}]", sync_from, sync_end);
-        // sync_last_index_ = std::max(current_section_, sync_end);
-
-        auto correct_from = std::max(SectionId(0), sync_from - 50);
-        this->remove_sections(correct_from);
-        check_status_ = DagSyncStatus::None;
-        sync_start_event_.publish(correct_from, sync_last_index_);
-        search_control_ = false;
+        eLog("[Dag] Control mismatch starts at section {}", sync_from);
+        check_status_              = DagSyncStatus::None;
+        search_control_            = false;
+        search_control_started_ms_ = 0;
+        search_control_message_id_.clear();
         control_search_ended_event_.publish();
-        this->request_file_sections(correct_from,
-                                    std::min(sync_from + SYNC_SECTIONS_BATCH, sync_last_index_),
-                                    responder.with_new_message_id());
+        reset_progressive_audit();
+        schedule_section_repair(sync_from);
     }
 }
 

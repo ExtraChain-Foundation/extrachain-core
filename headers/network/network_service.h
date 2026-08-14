@@ -126,6 +126,7 @@ private:
 
     bool                                                       active_ = false;
     std::set<std::string>                                      failed_ips_;
+    std::atomic_bool                                           first_node_self_detected_ { false };
     std::unordered_map<std::string, std::pair<int, CacheTime>> msg_hash_list_;
 
     ExtraChain::Core::ExtraChainNode*                         node;

@@ -883,6 +883,7 @@ void DagCache::reset_db() {
     }
     cache_db_.reset();
     contract_catalog_scanned_ = false;
+    cached_section_           = BigNumber(-1);
 }
 
 bool DagCache::ensure_contract_catalog_schema() {
@@ -1169,7 +1170,7 @@ std::set<ActorId> DagCache::local_clear_less_balances(const SectionId& from, con
 #endif
 
                 reverse_transaction(tx, balances);
-                dag->local_remove_transaction(tx.section(), tx.hash());
+                dag->quarantine_transaction(tx, "negative-balance-replay", "balance-cache-rebuild");
                 actors.insert(tx.sender());
             }
         }

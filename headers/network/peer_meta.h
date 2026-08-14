@@ -24,8 +24,9 @@
 #include <string>
 #include <string_view>
 
-inline constexpr std::string_view DAG_TX_BATCH_CAPABILITY = "dag_tx_batch_v1";
+inline constexpr std::string_view DAG_TX_BATCH_CAPABILITY    = "dag_tx_batch_v1";
 inline constexpr std::string_view TOKEN_MIGRATION_CAPABILITY = "contract_token_migration_v1";
+inline constexpr std::string_view DAG_REPAIR_CAPABILITY      = "dag_repair_v1";
 
 #include "core/types.h"
 
@@ -72,5 +73,9 @@ struct PeerMeta {
 
     bool supports_token_migration() const {
         return capabilities.contains(std::string(TOKEN_MIGRATION_CAPABILITY));
+    }
+
+    bool supports_dag_repair() const {
+        return capabilities.contains(std::string(DAG_REPAIR_CAPABILITY));
     }
 };

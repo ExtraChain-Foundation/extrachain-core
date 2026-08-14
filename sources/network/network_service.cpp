@@ -470,6 +470,9 @@ void NetworkService::reconnection() {
     if (server_status() && is_own_address(first_node_)) {
         return;
     }
+    if (first_node_self_detected_.load()) {
+        return;
+    }
     if (this->node->account_controller()->empty()) {
         schedule_reconnection(30000);
         return;
@@ -1313,6 +1316,9 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         }
     }
 
+    if (send_mode == SendMode::Focused && sent_to == 0) {
+        eWarning("[Network] Focused {} reached no connected target", message_type);
+    }
     if (message_type == MessageType::DagTransaction && sent_to == 0) {
         // Distinguish the two cases, because only one of them is a loss.
         //
@@ -1792,7 +1798,6 @@ void NetworkService::message_received(const std::string &message,
       }
       */
 
-    const SendMode      send_type    = message_body.send_type;
     const MessageType   type         = message_body.message_type;
     const MessageStatus status       = message_body.status;
     const std::string  &serialized   = message_body.data;
@@ -1876,11 +1881,6 @@ void NetworkService::message_received(const std::string &message,
     calculate_traffic_->add_bytes_received(ip, message.size());
 
     // timer.start();
-
-    // TODO: not global
-    if (send_type == SendMode::Broadcast && type != MessageType::Custom) {
-        node->luminance_manager()->increment(node_id);
-    }
 
     // Inner payloads arrive in the wire format (hex during the legacy-interop
     // transition). Parse every per-type MessagePack::deserialize below under
@@ -2512,7 +2512,8 @@ void NetworkService::message_received(const std::string &message,
             eWarning("[NetworkService] DAG batch from a peer without negotiated support");
             break;
         }
-        auto batch_result = MessagePack::deserialize<DagTransactionBatch>(serialized);
+        WireFormat::Scope batch_scope(WireFormat::Mode::Canonical);
+        auto              batch_result = MessagePack::deserialize<DagTransactionBatch>(serialized);
         if (!batch_result.has_value() || batch_result.value().transactions.empty()
             || batch_result.value().transactions.size() > LIVE_DAG_BATCH_MAX_TRANSACTIONS) {
             eWarning("[NetworkService] Invalid DAG transaction batch");
@@ -2795,12 +2796,23 @@ void NetworkService::message_received(const std::string &message,
 #endif
 
         auto dag_control = MessagePack::deserialize<DagControlRangeResponse>(serialized);
-        if (!dag_control.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for dag control", type);
+        if (dag_control.has_value()) {
+            node->dag()->network_control_range_response(dag_control.value(), responder);
             break;
         }
 
-        node->dag()->network_control_range_response(dag_control.value(), responder);
+        auto legacy_control = MessagePack::deserialize<LegacyDagControlRangeResponse>(serialized);
+        if (!legacy_control.has_value()) {
+            eWarning("[NetworkService] {} deserialization failed for dag control", type);
+            break;
+        }
+        node->dag()->network_control_range_response(DagControlRangeResponse { .from     = legacy_control->from,
+                                                                              .to       = legacy_control->to,
+                                                                              .controls = std::move(
+                                                                                  legacy_control->controls),
+                                                                              .complete         = true,
+                                                                              .missing_controls = {} },
+                                                    responder);
         break;
     }
 
@@ -2838,6 +2850,12 @@ void NetworkService::socket_error(Network::SocketServiceError error,
                                   std::string                 identifier,
                                   SocketDirection             direction) {
     eLog("[NetworkService] Error socket: {} {} {} {}", direction, error, ip, identifier);
+
+    if (error == Network::SocketServiceError::IncompatibleIdentifier && direction == SocketDirection::Outgoing
+        && ip == first_node_ && identifier == node->node_identifier()) {
+        first_node_self_detected_.store(true);
+        return;
+    }
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
@@ -2948,6 +2966,7 @@ bool NetworkService::save_first_node(const std::string_view first_node) {
     }
 
     first_node_ = first_node;
+    first_node_self_detected_.store(false);
 
     auto settings       = Utils::read_settings();
     settings.first_node = first_node_;
