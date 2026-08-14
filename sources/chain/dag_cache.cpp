@@ -883,6 +883,16 @@ void DagCache::reset_db() {
     }
     cache_db_.reset();
     contract_catalog_scanned_ = false;
+
+    // The watermark must die with the data it describes. Keeping cached_section_
+    // after deleting the rows leaves the cache claiming "balances are summed up to
+    // section N" while holding nothing: every balance below N reads as zero, and the
+    // next update replays the tail from empty start balances — local_clear_less_balances
+    // then sees every Regular spend as unfunded and physically strips those
+    // transactions from our sections. Observed on a joining node: watermark 25000
+    // survived a sync-path reset, and 23 sections were rewritten empty ("Exorcised")
+    // while the network kept the full content.
+    cached_section_ = BigNumber(-1);
 }
 
 bool DagCache::ensure_contract_catalog_schema() {
