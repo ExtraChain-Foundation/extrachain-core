@@ -2531,6 +2531,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         static_cast<void>(valid_hot_gap_response);
 
         std::map<SectionId, std::string> received_sections;
+        bool                             cache_below_watermark_changed = false;
         for (const auto &section_data : file_sync->sections) {
             if (mode_ == DagMode::Light) {
                 eLog("[Dag] Skip file section write: light mode");
@@ -2567,7 +2568,8 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 // sync path would trade one divergence for another. Union the two sets;
                 // if that changes the peer's set, its control no longer matches the
                 // content and must not be stored as if it did.
-                auto local = this->read_section(section_data.section_id);
+                auto       local       = this->read_section(section_data.section_id);
+                const auto local_count = local.has_value() ? local->transactions.size() : 0;
                 if (local.has_value() && !local->transactions.empty()) {
                     const auto peer_count = section->transactions.size();
                     section->transactions.insert(local->transactions.begin(), local->transactions.end());
@@ -2577,6 +2579,17 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                             control_index_->erase(section_data.section_id);
                     }
                     disk_bytes = Json::serialize(section.value());
+                }
+                // A repair that changes a section at or below the cache watermark
+                // invalidates the cached balance prefix: the cache summed the OLD
+                // content of this section and no later delta will ever correct it.
+                // (Observed: a healed fund transaction present in every chain but
+                // absent from two nodes' balance caches forever.) Full rebuild —
+                // reset_db() now also drops the watermark, so the next cache update
+                // replays from the start of the chain.
+                if (section_data.section_id <= cache_.section()
+                    && section->transactions.size() != local_count) {
+                    cache_below_watermark_changed = true;
                 }
             }
 
@@ -2600,6 +2613,12 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         // safe to stop the retry clock. See the note at the top of this function.
         consume_pending_sync_response(responder, true);
         timer_stop_event_.publish();
+
+        if (cache_below_watermark_changed) {
+            eLog("[Dag] Sync repaired sections below the cache watermark — rebuilding the balance cache");
+            cache_.reset_db();
+            cache_.init_db();
+        }
 
         if (!received_sections.empty() && (!hot_section_store_ || !hot_section_store_->is_open())) {
             for (const auto &[section_id, disk_bytes] : received_sections) {
