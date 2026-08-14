@@ -787,7 +787,8 @@ private:
     void                                   set_admission_accepting(bool accepting);
 
     std::expected<void, TransactionProveError> network_transaction_immediate(const Transaction &transaction,
-                                                                             const Responder   &responder);
+                                                                             const Responder   &responder,
+                                                                             bool *committed = nullptr);
     TransactionProveError                      prove_transaction_with_facts(const Transaction                     &tx,
                                                                             const std::set<Transaction>           &transactions,
                                                                             const std::set<Transaction>           *pending_transactions,
@@ -849,9 +850,11 @@ private:
     bool                                         light_requested_              = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
-    static constexpr std::size_t         MaxDeferredContractTransactions = 1024;
-    std::mutex                           deferred_contracts_mutex_;
-    DeferredContractMap                  deferred_contracts_;
+    std::mutex                           cached_tx_responders_mutex_;
+    std::unordered_map<std::string, std::shared_ptr<Responder>> cached_tx_responders_;
+    static constexpr std::size_t                                MaxDeferredContractTransactions = 1024;
+    std::mutex                                                  deferred_contracts_mutex_;
+    DeferredContractMap                                         deferred_contracts_;
 
     // Immutable packed storage for cold sections (10k per pack)
     std::unique_ptr<Pack::Registry>                pack_registry_;
@@ -946,7 +949,7 @@ private:
     std::atomic<bool> accepting_messages_ { false };
 
     //
-    void                                           add_to_cached_tx(const Transaction &transaction);
+    void add_to_cached_tx(const Transaction &transaction, const Responder &responder);
     void                                           schedule_watchdog_tick();
     void                                           watchdog_tick();
     void                                           schedule_sync_check();
@@ -1058,6 +1061,8 @@ private:
      * @return
      */
     std::optional<WriteResult> remove_control(const SectionId &section_id);
+
+    void invalidate_control_chain_from(const SectionId &section_id);
 
     /**
      * @brief timer_tick

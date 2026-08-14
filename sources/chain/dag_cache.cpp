@@ -116,6 +116,7 @@ DagCache::DagCache(ExtraChain::Core::ExtraChainNode* node, Dag* dag)
 }
 
 DagCache::~DagCache() {
+    std::lock_guard lock(mutex_);
     // Ensure DB is closed
     if (cache_db_ && cache_db_->is_open()) {
         cache_db_->close();
@@ -123,10 +124,12 @@ DagCache::~DagCache() {
 }
 
 BigNumber DagCache::section() const {
+    std::lock_guard lock(mutex_);
     return cached_section_;
 }
 
 void DagCache::set_section(const SectionId& section_id, Force force) {
+    std::lock_guard lock(mutex_);
     if (force == Force::None && cached_section_ >= section_id) {
         return;
     }
@@ -135,6 +138,7 @@ void DagCache::set_section(const SectionId& section_id, Force force) {
 }
 
 std::pair<SectionId, Balances> DagCache::read_cached_balances() {
+    std::lock_guard lock(mutex_);
     Balances balances;
 
     if (!init_db()) {
@@ -167,6 +171,7 @@ std::pair<SectionId, Balances> DagCache::read_cached_balances() {
 
 std::optional<std::pair<SectionId, Balances>> DagCache::read_cached_balances(
     const std::vector<std::pair<ActorId, TokenId>>& actor_token_pairs) {
+    std::lock_guard lock(mutex_);
     Balances balances;
 
     if (!init_db()) {
@@ -214,6 +219,7 @@ std::optional<std::pair<SectionId, Balances>> DagCache::read_cached_balances(
 }
 
 std::optional<Balances> DagCache::get_cached_balances_for_actors(const std::vector<ActorId>& actor_ids) {
+    std::lock_guard lock(mutex_);
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for get_cached_balances_for_actors");
         return std::nullopt;
@@ -256,14 +262,12 @@ std::optional<Balances> DagCache::get_cached_balances_for_actors(const std::vect
 }
 
 void DagCache::write_cached_balances(const Balances& balances, const std::optional<SectionId>& section_id) {
+    std::lock_guard lock(mutex_);
     // Check if database is initialized
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for write_cached_balances");
         return;
     }
-
-    // Lock mutex to protect transaction block from concurrent access
-    std::unique_lock<std::mutex> lock(mutex_);
 
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
@@ -298,6 +302,7 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
 }
 
 BigNumberFloat DagCache::read_cached_balance(const ActorId& actor_id, const TokenId& token_id) {
+    std::lock_guard lock(mutex_);
     if (!init_db()) {
         return BigNumberFloat(0);
     }
@@ -323,6 +328,7 @@ BigNumberFloat DagCache::read_cached_balance(const ActorId& actor_id, const Toke
 void DagCache::write_cached_balance(const ActorId&        actor_id,
                                     const TokenId&        token_id,
                                     const BigNumberFloat& balance) {
+    std::lock_guard lock(mutex_);
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for write_cached_balance");
         return;
@@ -376,21 +382,22 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         }
     }
 
-    bool      use_cache = false;
     BigNumber balance_start_section;
 
-    // Check if we have a valid cache that we can use
-    if (cached_section_ != BigNumber(-1)) {
-        // We have some cache, which may be at an earlier point than the genesis_section
-        use_cache             = true;
-        balance_start_section = cached_section_ + 1;
+    {
+        std::lock_guard lock(mutex_);
+        // Check if we have a valid cache that we can use
+        if (cached_section_ != BigNumber(-1)) {
+            // We have some cache, which may be at an earlier point than the genesis_section
+            balance_start_section = cached_section_ + 1;
 
-        auto cached_balances_opt = get_cached_balances_for_actors(actor_ids);
-        if (cached_balances_opt.has_value()) {
-            balances = cached_balances_opt.value();
+            auto cached_balances_opt = get_cached_balances_for_actors(actor_ids);
+            if (cached_balances_opt.has_value()) {
+                balances = cached_balances_opt.value();
+            }
+        } else {
+            balance_start_section = first_saved_section;
         }
-    } else {
-        balance_start_section = first_saved_section;
     }
 
     // Process transactions after the balance_start_section up to current_section
@@ -493,6 +500,7 @@ void DagCache::invalidate_live_balances() {
 
 CacheResult DagCache::check_and_update_cache(const SectionId& current_section) {
     std::lock_guard update_lock(update_mutex_);
+    std::lock_guard cache_lock(mutex_);
 
     // Calculate safe section ID based on lag
     // We only want to cache sections that are at least CACHE_LAG_SECTIONS behind the current section
@@ -659,6 +667,8 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     const SectionId&                                        current_section,
     const SectionId&                                        first_saved_section,
     std::function<std::optional<Section>(const SectionId&)> read_section_callback) {
+    std::lock_guard cache_lock(mutex_);
+
     // If trying to update to same section, nothing to do
     if (cached_section_ == genesis_section) {
         return { true, BigNumber(-1) };
@@ -669,9 +679,6 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         eLog("[DagCache] Failed to initialize DB for update_to_genesis_section");
         return { false, BigNumber(-1) };
     }
-
-    // Lock mutex to protect transaction block from concurrent access
-    std::unique_lock<std::mutex> lock(mutex_);
 
     bool show = dag->status_ == DagStatus::Sync ? genesis_section % 500 == 0 : true;
     if (show) {
@@ -817,6 +824,7 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
 }
 
 bool DagCache::init_db() {
+    std::lock_guard lock(mutex_);
     if (db_initialized_) {
         return true;
     }
@@ -825,8 +833,6 @@ bool DagCache::init_db() {
         db_initialized_ = ensure_contract_catalog_schema();
         return db_initialized_;
     }
-
-    std::unique_lock<std::mutex> lock(mutex_);
 
     std::error_code directory_error;
     std::filesystem::create_directories(ChainConst::DAG_FOLDER, directory_error);
@@ -872,11 +878,10 @@ bool DagCache::init_db() {
 
 void DagCache::reset_db() {
     invalidate_live_balances();
-    std::unique_lock<std::mutex> catalog_lock(contract_catalog_mutex_);
-    std::unique_lock<std::mutex> lock(mutex_);
-    const bool                   was_initialized = db_initialized_;
-    db_initialized_                              = false;
-    if (was_initialized && cache_db_) {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    std::unique_lock<std::mutex>           catalog_lock(contract_catalog_mutex_);
+    db_initialized_ = false;
+    if (cache_db_) {
         cache_db_->close();
         std::error_code remove_error;
         std::filesystem::remove(ChainConst::BALANCE_CACHE, remove_error);
@@ -903,6 +908,7 @@ bool DagCache::ensure_contract_catalog_schema() {
 }
 
 void DagCache::index_contract_transaction(const Transaction& transaction) {
+    std::lock_guard lock(mutex_);
     if (!is_contract_transaction(transaction.type()) || !transaction.meta().has_value() || !init_db()) {
         return;
     }
@@ -993,6 +999,7 @@ void DagCache::index_contract_transaction(const Transaction& transaction) {
 
 ExtraChain::Contracts::ContractCatalogPage DagCache::list_contracts(
     const ExtraChain::Contracts::ContractCatalogFilter& filter) {
+    std::lock_guard                            cache_lock(mutex_);
     ExtraChain::Contracts::ContractCatalogPage page;
     if (!init_db()) {
         return page;
@@ -1048,6 +1055,7 @@ ExtraChain::Contracts::ContractCatalogPage DagCache::list_contracts(
 }
 
 bool DagCache::rebuild_contract_catalog() {
+    std::lock_guard lock(mutex_);
     if (!init_db() || dag == nullptr || !cache_db_->query("DELETE FROM contract_catalog")) {
         return false;
     }

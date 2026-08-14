@@ -1,5 +1,8 @@
+#include <atomic>
 #include <filesystem>
 #include <memory>
+#include <thread>
+#include <vector>
 
 #include "chain/actor.h"
 #include "chain/dag.h"
@@ -57,10 +60,115 @@ int main() {
     node->process();
     node->dag()->set_mode(DagMode::Full);
 
+    const auto make_reward = [&actor](const SectionId &section, std::uint64_t timestamp) {
+        Transaction reward;
+        reward.set_sender(actor.id());
+        reward.set_receiver(actor.id());
+        reward.set_token(actor.id());
+        reward.set_type(TransactionType::Reward);
+        reward.set_amount(BigNumberFloat("0.01"));
+        reward.set_section(section);
+        reward.set_timestamp(timestamp);
+        TEST_REQUIRE(reward.sign(actor));
+        return reward;
+    };
+
+    TEST_REQUIRE(node->dag()->save_transaction(make_reward(SectionId(1), 1)));
+    TEST_REQUIRE(node->dag()->save_transaction(make_reward(SectionId(45), 2)));
+    node->dag()->cache().write_cached_balances({}, SectionId(40));
+    TEST_REQUIRE(node->dag()->generate_hash_from_section(SectionId(0), Force::Active, Force::None).has_value());
+    TEST_REQUIRE(node->dag()->read_control(SectionId(20)).has_value());
+    TEST_REQUIRE(node->dag()->read_control(SectionId(40)).has_value());
+    const auto control_20_before = node->dag()->read_control(SectionId(20))->control;
+    const auto control_40_before = node->dag()->read_control(SectionId(40))->control;
+
+    const auto historical_reward = make_reward(SectionId(5), 3);
+    TEST_REQUIRE(node->dag()->save_transaction(historical_reward));
+    TEST_REQUIRE(node->dag()->read_control(SectionId(20)).has_value());
+    TEST_REQUIRE(node->dag()->read_control(SectionId(40)).has_value());
+    const auto control_20_after = node->dag()->read_control(SectionId(20))->control;
+    const auto control_40_after = node->dag()->read_control(SectionId(40))->control;
+    TEST_REQUIRE(control_20_after != control_20_before);
+    TEST_REQUIRE(control_40_after != control_40_before);
+
+    TEST_REQUIRE(node->dag()->save_transaction(historical_reward));
+    TEST_REQUIRE_EQ(node->dag()->read_control(SectionId(20))->control, control_20_after);
+    TEST_REQUIRE_EQ(node->dag()->read_control(SectionId(40))->control, control_40_after);
+
     node->dag()->cache().write_cached_balances({}, SectionId(123));
     TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(123));
     node->dag()->cache().reset_db();
     TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(-1));
+
+    std::atomic<bool>        cache_stress_ok = true;
+    std::vector<std::thread> cache_workers;
+    for (std::uint64_t worker = 0; worker < 3; ++worker) {
+        cache_workers.emplace_back([&, worker] {
+            for (std::uint64_t iteration = 0; iteration < 50; ++iteration) {
+                if (!node->dag()->cache().init_db()) {
+                    cache_stress_ok.store(false);
+                    return;
+                }
+                const BigNumberFloat balance(std::to_string(worker * 100 + iteration + 1));
+                node->dag()->cache().write_cached_balance(actor.id(), actor.id(), balance);
+                static_cast<void>(node->dag()->cache().read_cached_balance(actor.id(), actor.id()));
+            }
+        });
+    }
+    cache_workers.emplace_back([&] {
+        for (std::uint64_t iteration = 0; iteration < 25; ++iteration) {
+            node->dag()->cache().reset_db();
+            if (!node->dag()->cache().init_db()) {
+                cache_stress_ok.store(false);
+                return;
+            }
+        }
+    });
+    for (auto &worker : cache_workers) {
+        worker.join();
+    }
+    TEST_REQUIRE(cache_stress_ok.load());
+    node->dag()->cache().write_cached_balance(actor.id(), actor.id(), BigNumberFloat("321"));
+    TEST_REQUIRE_EQ(node->dag()->cache().read_cached_balance(actor.id(), actor.id()), BigNumberFloat("321"));
+
+    TEST_REQUIRE(node->actor_index()->store_new_actor(actor.to_public()).has_value());
+    node->dag()->set_status(DagStatus::Ready);
+    const auto future_reward = make_reward(node->dag()->current_section() + SectionId(CACHE_LAG_SECTIONS + 1), 4);
+    CapturingSender future_sender;
+    Responder       future_responder(&future_sender);
+    future_responder.add_identifier("future-transaction-peer");
+    bool future_completed = false;
+    bool future_forwarded = true;
+    TEST_REQUIRE(node->dag()->submit_network_transaction(future_reward,
+                                                         future_responder,
+                                                         [&](std::expected<void, TransactionProveError> result,
+                                                             bool should_forward) {
+                                                             future_completed = result.has_value();
+                                                             future_forwarded = should_forward;
+                                                         }));
+    node->dag()->flush_admission();
+    TEST_REQUIRE(future_completed);
+    TEST_REQUIRE(!future_forwarded);
+    TEST_REQUIRE_EQ(future_sender.responses, std::size_t(0));
+    TEST_REQUIRE_EQ(node->dag()->cached_txs_size(), std::size_t(1));
+
+    CapturingSender duplicate_future_sender;
+    Responder       duplicate_future_responder(&duplicate_future_sender);
+    duplicate_future_responder.add_identifier("duplicate-future-transaction-peer");
+    TEST_REQUIRE(node->dag()->submit_network_transaction(future_reward, duplicate_future_responder, {}));
+    node->dag()->flush_admission();
+    TEST_REQUIRE_EQ(node->dag()->cached_txs_size(), std::size_t(1));
+
+    TEST_REQUIRE(node->dag()->save_transaction(future_reward));
+    node->dag()->process_cached_transactions();
+    TEST_REQUIRE_EQ(node->dag()->cached_txs_size(), std::size_t(0));
+    TEST_REQUIRE_EQ(future_sender.responses, std::size_t(1));
+    TEST_REQUIRE_EQ(duplicate_future_sender.responses, std::size_t(0));
+    TEST_REQUIRE_EQ(future_sender.message_type, MessageType::DagTransactionResult);
+    const auto future_result = MessagePack::deserialize<TransactionResult>(future_sender.payload);
+    TEST_REQUIRE(future_result.has_value());
+    TEST_REQUIRE_EQ(future_result->hash, future_reward.hash());
+    TEST_REQUIRE_EQ(future_result->result, TransactionProveError::NoError);
 
     CapturingSender sender;
     Responder       responder(&sender);

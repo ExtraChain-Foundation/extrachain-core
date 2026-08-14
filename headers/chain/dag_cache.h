@@ -21,6 +21,7 @@
 
 #include <memory>
 #include <map>
+#include <mutex>
 #include <set>
 #include <vector>
 #include <optional>
@@ -235,7 +236,7 @@ private:
     std::unique_ptr<DbConnector> cache_db_;                         // Database connection
     bool                         db_initialized_           = false; // Whether DB is initialized
     bool                         contract_catalog_scanned_ = false;
-    std::mutex                   mutex_;
+    mutable std::recursive_mutex      mutex_;
     std::mutex                   update_mutex_;
     std::mutex                   contract_catalog_mutex_;
     std::mutex                   live_balance_mutex_;

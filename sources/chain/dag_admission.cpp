@@ -225,13 +225,55 @@ private:
                    : TransactionProveError::NoError;
     }
 
+    bool defer_future(const std::shared_ptr<Request>   &request,
+                      const TransactionValidationFacts &facts,
+                      TransactionProveError             result) {
+        const auto &transaction = request->transaction;
+        if (result != TransactionProveError::TooSectionDiff || transaction.section() <= owner->current_section_) {
+            return false;
+        }
+
+        const bool catching_up = owner->status_ != DagStatus::Ready || owner->current_section_ < SectionId(0)
+                                 || owner->sync_status_ != DagSyncStatus::None
+                                 || owner->check_status_ != DagSyncStatus::None;
+        const bool verified_source =
+            facts.hash_valid && facts.sender_exists.value_or(false) && facts.signature_valid.value_or(false);
+        if (!catching_up && !verified_source) {
+            return false;
+        }
+
+        const auto cache_limit = owner->node->runtime_limits().sync_transactions;
+        if (owner->cached_txs_size() >= cache_limit) {
+            eWarning("[Dag] Pending tx cache full ({}), cannot defer {} at section {}",
+                     cache_limit,
+                     transaction.hash(),
+                     transaction.section());
+            return false;
+        }
+
+        owner->add_to_cached_tx(transaction, request->responder);
+        owner->schedule_sync_check();
+        eWarning("[Dag] Admission deferred future transaction {}: section={}, current={}, status={}",
+                 transaction.hash(),
+                 transaction.section(),
+                 owner->current_section_,
+                 owner->status_);
+        complete(request->completion, {}, false);
+        return true;
+    }
+
     void reject(const std::shared_ptr<Request> &request, TransactionProveError result) {
         // Name the reason. Every rejection here used to be silent, so a node that
         // accepted nothing looked identical to a node with no traffic: on a six-node
         // stand 224 transactions were sent and 3 accepted, with not one line saying
         // why. The sender learns the verdict over the wire, but the log — where an
         // operator looks — said nothing at all.
-        eWarning("[Dag] Admission rejected {}: {}", request->transaction.hash(), result);
+        eWarning("[Dag] Admission rejected {}: {}, section={}, current={}, status={}",
+                 request->transaction.hash(),
+                 result,
+                 request->transaction.section(),
+                 owner->current_section_,
+                 owner->status_);
         if (result == TransactionProveError::TooSectionDiff
             && request->transaction.section() > owner->current_section_) {
             owner->schedule_sync_check();
@@ -385,6 +427,9 @@ private:
                                                              &validation_frontier,
                                                              &prevalidated[request_index]);
             if (result != TransactionProveError::NoError) {
+                if (defer_future(request, prevalidated[request_index], result)) {
+                    continue;
+                }
                 reject(request, result);
                 continue;
             }
@@ -568,9 +613,11 @@ private:
                 if (batch) {
                     process_batch(requests);
                 } else {
-                    auto result = owner->network_transaction_immediate(requests.front()->transaction,
-                                                                       requests.front()->responder);
-                    complete(requests.front()->completion, result, result.has_value());
+                    bool committed = false;
+                    auto result    = owner->network_transaction_immediate(requests.front()->transaction,
+                                                                       requests.front()->responder,
+                                                                       &committed);
+                    complete(requests.front()->completion, result, result.has_value() && committed);
                 }
             } catch (const std::exception &error) {
                 eWarning("[Dag] Admission processing failed: {}", error.what());
@@ -659,10 +706,11 @@ bool Dag::submit_network_transaction(const Transaction  &transaction,
     }
 
     if (!admission_state_) {
-        auto result = network_transaction_immediate(transaction, responder);
+        bool committed = false;
+        auto result    = network_transaction_immediate(transaction, responder, &committed);
         if (completion) {
             try {
-                completion(result, result.has_value());
+                completion(result, result.has_value() && committed);
             } catch (const std::exception &error) {
                 eWarning("[Dag] Admission callback failed: {}", error.what());
             } catch (...) {

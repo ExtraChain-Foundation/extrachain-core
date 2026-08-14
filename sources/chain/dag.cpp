@@ -700,7 +700,11 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 }
 
 std::expected<void, TransactionProveError> Dag::network_transaction_immediate(const Transaction &transaction,
-                                                                              const Responder   &responder) {
+                                                                              const Responder   &responder,
+                                                                              bool              *committed) {
+    if (committed != nullptr) {
+        *committed = false;
+    }
     if (status_ != DagStatus::Final) {
         /*
         bool sync_timeout = false;
@@ -718,7 +722,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
             // memory without bound (the per-sender rate limit above also helps).
             const auto cache_limit = node->runtime_limits().sync_transactions;
             if (cached_txs_size() < cache_limit) {
-                this->add_to_cached_tx(transaction);
+                this->add_to_cached_tx(transaction, responder);
             } else {
                 eWarning("[Dag] Pending tx cache full ({}), dropping {} during sync",
                          cache_limit,
@@ -806,7 +810,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
 
             if (tx.section() > this->current_section()) {
                 if (cached_txs_size() < node->runtime_limits().sync_transactions) {
-                    add_to_cached_tx(transaction);
+                    add_to_cached_tx(transaction, responder);
                 }
                 schedule_sync_check();
             }
@@ -827,6 +831,9 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
         }
 
         this->set_current_section(transaction.section());
+        if (committed != nullptr) {
+            *committed = true;
+        }
         if (is_contract_transaction(transaction.type())) {
             node->finalize_contract_change(transaction.hash(), true);
         }
@@ -895,6 +902,12 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
         node->finalize_contract_change(transaction.hash(), true);
     }
 
+    // The first broadcast is a proposal. A peer can approve it after another peer
+    // starts joining, so announce the stored transaction again. This lets a hub pass
+    // the committed value to peers that missed the proposal. Their live-DAG hash cache
+    // and section duplicate check stop further rebroadcast loops.
+    node->network()->send_message(transaction, MessageType::DagTransaction, SendMode::Broadcast);
+
     this->check_self(transaction);
 }
 
@@ -955,7 +968,8 @@ void Dag::process_cached_transactions(bool not_ready) {
 
     const auto batch_limit = std::min<std::size_t>(64, node->runtime_limits().derived_sections);
     while (true) {
-        std::vector<Transaction> txs_to_process;
+        using CachedTransaction = std::pair<Transaction, std::shared_ptr<Responder>>;
+        std::vector<CachedTransaction> txs_to_process;
         txs_to_process.reserve(batch_limit);
         {
             try {
@@ -965,7 +979,17 @@ void Dag::process_cached_transactions(bool not_ready) {
                 }
                 while (!guard_mut->empty() && txs_to_process.size() < batch_limit) {
                     auto transaction = guard_mut->extract(guard_mut->begin());
-                    txs_to_process.push_back(std::move(transaction.value()));
+                    auto                       value       = std::move(transaction.value());
+                    std::shared_ptr<Responder> cached_responder;
+                    {
+                        std::lock_guard responder_lock(cached_tx_responders_mutex_);
+                        auto            entry = cached_tx_responders_.find(value.hash());
+                        if (entry != cached_tx_responders_.end()) {
+                            cached_responder = std::move(entry->second);
+                            cached_tx_responders_.erase(entry);
+                        }
+                    }
+                    txs_to_process.emplace_back(std::move(value), std::move(cached_responder));
                 }
             } catch (const std::system_error &e) {
                 std::cerr << "[Dag] Caught system_error in process cached 2: " << e.what() << std::endl;
@@ -973,7 +997,7 @@ void Dag::process_cached_transactions(bool not_ready) {
         }
 
         std::map<SectionId, std::optional<Section>> sections;
-        for (const auto &tx : txs_to_process) {
+        for (const auto &[tx, cached_responder] : txs_to_process) {
             auto section = sections.find(tx.section());
             if (section == sections.end())
                 section = sections.emplace(tx.section(), read_section(tx.section())).first;
@@ -982,11 +1006,40 @@ void Dag::process_cached_transactions(bool not_ready) {
                     std::ranges::any_of(section->second.value().transactions, [&](const auto &stored) {
                         return stored.hash() == tx.hash();
                     });
-                if (exists)
+                if (exists) {
+                    if (cached_responder && !cached_responder->empty()) {
+                        cached_responder->send_response(TransactionResult { .section_id = tx.section(),
+                                                                            .hash       = tx.hash(),
+                                                                            .result =
+                                                                                TransactionProveError::NoError },
+                                                        MessageType::DagTransactionResult,
+                                                        SendMode::Focused,
+                                                        MessageStatus::Response);
+                    }
+                    node->network()->send_message(tx, MessageType::DagTransaction, SendMode::Broadcast);
                     continue;
+                }
             }
-            Responder responder(node->network());
-            (void)network_transaction(tx, responder);
+            Responder responder      = cached_responder ? *cached_responder : Responder(node->network());
+            bool      should_forward = false;
+            if (is_admission_worker() || !admission_state_) {
+                bool       committed = false;
+                const auto result    = network_transaction_immediate(tx, responder, &committed);
+                should_forward       = result.has_value() && committed;
+            } else {
+                auto promise = std::make_shared<std::promise<bool>>();
+                auto future  = promise->get_future();
+                submit_network_transaction(tx,
+                                           responder,
+                                           [promise](std::expected<void, TransactionProveError> result,
+                                                     bool                                       forward) {
+                                               promise->set_value(result.has_value() && forward);
+                                           });
+                should_forward = future.get();
+            }
+            if (should_forward) {
+                node->network()->send_message(tx, MessageType::DagTransaction, SendMode::Broadcast);
+            }
         }
     }
 
@@ -1002,26 +1055,16 @@ void Dag::process_cached_transactions(bool not_ready) {
     }
 }
 
-void Dag::add_to_cached_tx(const Transaction &transaction) {
-    bool exists = false;
-    {
-        try {
-            auto guard = cached_txs_.lock();
-            exists     = guard->find(transaction) != guard->end();
-        } catch (const std::system_error &e) {
-            std::cerr << "[Dag] Caught system_error in add_to_cached_tx: " << e.what() << std::endl;
+void Dag::add_to_cached_tx(const Transaction &transaction, const Responder &responder) {
+    try {
+        auto guard_mut = cached_txs_.lock_mut();
+        guard_mut->insert(transaction);
+        if (!responder.empty()) {
+            std::lock_guard responder_lock(cached_tx_responders_mutex_);
+            cached_tx_responders_.try_emplace(transaction.hash(), std::make_shared<Responder>(responder));
         }
-    }
-
-    if (!exists) {
-        try {
-            auto guard_mut = cached_txs_.lock_mut();
-            guard_mut->insert(transaction);
-        } catch (const std::system_error &e) {
-            std::cerr << "[Dag] Caught system_error in add_to_cached_tx 2: " << e.what() << std::endl;
-        }
-
-        // eLog("[Dag] Add to cached transaction: {} / {}", transaction.section(), transaction.hash());
+    } catch (const std::system_error &error) {
+        eWarning("[Dag] Cannot cache transaction {}: {}", transaction.hash(), error.what());
     }
 }
 
@@ -1229,9 +1272,14 @@ std::optional<std::pair<WriteResult, std::optional<SectionDiff>>> Dag::write_sec
         section_diff = std::move(diff);
     }
 
-    auto write_result = write_section(section);
+    const bool changes_existing_history = existing_section.has_value() || section.id <= current_section_;
+    auto       write_result             = write_section(section);
     if (!write_result.has_value()) {
         return std::nullopt;
+    }
+
+    if (changes_existing_history) {
+        invalidate_control_chain_from(section.id);
     }
 
     return std::pair { WriteResult::Write, section_diff };
@@ -1324,6 +1372,13 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
     return WriteResult::Write;
 }
 
+void Dag::invalidate_control_chain_from(const SectionId &section_id) {
+    if (section_id < SectionId(0) || section_id > current_section_) {
+        return;
+    }
+    clear_controls(section_id);
+}
+
 void Dag::timer_tick() {
     eLog("[Dag] Timer tick");
     timer_stop_event_.publish();
@@ -1389,6 +1444,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
     auto section = this->read_section(transaction.section());
 
     if (!section.has_value()) {
+        const bool changes_existing_history = transaction.section() <= current_section_;
         // Create new section
         Section section { .id = transaction.section(), .transactions = { transaction } };
 
@@ -1415,6 +1471,9 @@ bool Dag::save_transaction(const Transaction &transaction) {
         }
 
         const bool written       = write_section(section).has_value();
+        if (written && changes_existing_history) {
+            invalidate_control_chain_from(section.id);
+        }
         const auto cache_section = current_section_;
         save_lock.unlock();
         if (written) {
@@ -1430,7 +1489,10 @@ bool Dag::save_transaction(const Transaction &transaction) {
     // }
 
     // Add transaction to existing section
-    section->transactions.insert(transaction);
+    const auto [_, inserted] = section->transactions.insert(transaction);
+    if (!inserted) {
+        return true;
+    }
 
     // Invalidate control if section had one - transactions changed
     if (section->control.has_value()) {
@@ -1438,6 +1500,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
         if (control_index_)
             control_index_->erase(section->id);
     }
+    invalidate_control_chain_from(section->id);
 
     // Update first_saved_section_ if this is the first section or has a lower ID
     if (first_saved_section_ == SectionId(-1) && transaction.section() >= SectionId(0)) {
@@ -1461,7 +1524,8 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
 bool Dag::local_remove_transaction(const SectionId &section_id, const std::string &hash) {
     cache_.invalidate_live_balances();
-    auto section = this->read_section(section_id);
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+    auto                                  section = this->read_section(section_id);
     if (!section.has_value()) {
         return false;
     }
@@ -1482,6 +1546,7 @@ bool Dag::local_remove_transaction(const SectionId &section_id, const std::strin
         if (control_index_)
             control_index_->erase(section_id);
     }
+    invalidate_control_chain_from(section_id);
     this->write_section(section.value());
 
     return true;
@@ -1778,6 +1843,7 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
     bool      has_changes = false;
     SectionId min_section = SectionId(-1);
     SectionId max_section;
+    std::optional<SectionId> invalid_controls_from;
 
     auto it = transactions.begin();
     while (it != transactions.end()) {
@@ -1809,8 +1875,13 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
         const size_t new_size = section.transactions.size();
 
         const bool changed = (new_size != old_size);
-        if (changed)
+        if (changed) {
             has_changes = true;
+            if (section_id <= current_section_
+                && (!invalid_controls_from.has_value() || section_id < invalid_controls_from.value())) {
+                invalid_controls_from = section_id;
+            }
+        }
 
         // Invalidate control if section changed (new transactions added)
         if (changed && section.control.has_value()) {
@@ -1852,6 +1923,10 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
             }
         }
         it = last;
+    }
+
+    if (invalid_controls_from.has_value()) {
+        invalidate_control_chain_from(invalid_controls_from.value());
     }
 
     const auto cache_section = current_section_;
@@ -2493,21 +2568,29 @@ void Dag::network_status_sync_request(const Responder &responder) {
 
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
     std::lock_guard sync_lock(sync_last_info_mutex_);
-    if (responder.identifiers().empty() || responder.luminance() < 2) {
-        eLog("[Dag] Sync responce dropped: identifiers={}, luminance={}",
-             responder.identifiers().size(),
-             responder.luminance());
+    if (responder.identifiers().empty()) {
+        eWarning("[Dag] Sync response dropped because the peer identifier is missing");
         return;
     }
 
     if (sync_status_ != DagSyncStatus::LastInfo && check_status_ != DagSyncStatus::LastInfo) {
-        eWarning("[Dag] Sync responce: not last info status");
+        eWarning("[Dag] Sync response arrived outside the LastInfo phase");
         return;
+    }
+
+    // LastInfo is a response to an active, bounded synchronization phase. Its data is
+    // only a fetch hint; sections, packs, and controls still pass their own checks.
+    // Requiring prior luminance here blocks a new or passive peer from answering the
+    // very request that would establish useful history with it.
+    if (responder.luminance() < 2) {
+        eTemp("[Dag] Accept LastInfo from a new peer {} with luminance {}",
+              responder.identifiers().begin()->substr(0, 8),
+              responder.luminance());
     }
     // min(connections size, 5)
 
     if (last_info.status != DagStatus::Ready) {
-        eWarning("[Dag] Sync responce: last info not ready");
+        eWarning("[Dag] Sync response reports a peer that is not ready");
         return;
     }
 
@@ -2900,6 +2983,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
 
         std::map<SectionId, std::string> received_sections;
+        std::optional<SectionId>         invalid_controls_from;
         for (const auto &section_data : file_sync->sections) {
             if (mode_ == DagMode::Light) {
                 eLog("[Dag] Skip file section write: light mode");
@@ -2920,7 +3004,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
             {
                 WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
-                const auto        section = Json::deserialize<Section>(disk_bytes);
+                auto              section = Json::deserialize<Section>(disk_bytes);
                 const bool        wrong_section =
                     section.has_value() && std::ranges::any_of(section->transactions, [&](const auto &tx) {
                         return tx.section() != section_data.section_id;
@@ -2929,6 +3013,21 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                     eWarning("[Dag] Reject invalid section {} in a sync batch", section_data.section_id);
                     return;
                 }
+
+                if (!repair_response && section_data.section_id <= current_section_) {
+                    const auto local = read_section(section_data.section_id);
+                    if (!local.has_value() || local->transactions != section->transactions) {
+                        if (!invalid_controls_from.has_value()
+                            || section_data.section_id < invalid_controls_from.value()) {
+                            invalid_controls_from = section_data.section_id;
+                        }
+                    }
+                }
+
+                // Full nodes derive controls from their verified local chain. A peer's
+                // control is valid only for the peer's exact preceding control chain.
+                section->control.reset();
+                disk_bytes = Json::serialize(section.value());
             }
 
             received_sections.insert_or_assign(section_data.section_id, std::move(disk_bytes));
@@ -2985,8 +3084,20 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             }
         }
 
+        if (control_index_) {
+            for (const auto &[section_id, _] : received_sections) {
+                if (is_aligned20(section_id)) {
+                    control_index_->erase(section_id);
+                }
+            }
+        }
+
         if (mode_ == DagMode::Light) {
             return;
+        }
+
+        if (!repair_response && invalid_controls_from.has_value()) {
+            invalidate_control_chain_from(invalid_controls_from.value());
         }
 
         if (repair_response) {
@@ -3740,6 +3851,10 @@ void Dag::clear_dag() {
 
     auto guard = cached_txs_.lock_mut();
     guard->clear();
+    {
+        std::lock_guard responder_lock(cached_tx_responders_mutex_);
+        cached_tx_responders_.clear();
+    }
     // sended_transactions.clear();
     current_section_     = SectionId(-1);
     first_saved_section_ = SectionId(-1);
@@ -5330,6 +5445,8 @@ void Dag::clear_controls(const SectionId &from) {
 
         if (section->control.has_value()) {
             this->remove_control(section_id);
+        } else if (control_index_) {
+            control_index_->erase(section_id);
         }
     }
 }

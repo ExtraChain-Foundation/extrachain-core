@@ -2742,6 +2742,8 @@ void NetworkService::message_received(const std::string &message,
         }
 #endif
 
+        eTemp("[NetworkService] DagSyncLastInfo {} arrived from {}", status, identifier.substr(0, 8));
+
         if (status == MessageStatus::Request) {
             auto last_info_result = MessagePack::deserialize<bool>(serialized);
             if (!last_info_result.has_value()) {
