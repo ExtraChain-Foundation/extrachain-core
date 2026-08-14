@@ -1743,6 +1743,12 @@ void NetworkService::message_received(const std::string &message,
     const std::string  &message_id   = message_body.message_id;
     const bool          is_luminance = node_id.actor_id == node->network_id();
 
+    // Sync heartbeats have been lost silently at three different layers already;
+    // log their arrival unconditionally so the next silent drop is attributable.
+    if (type == MessageType::DagSyncLastInfo) {
+        eLog("[NetworkService] DagSyncLastInfo {} arrived from {}", status, identifier.substr(0, 8));
+    }
+
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         bool should_ignore = (type == MessageType::DagTransaction || type == MessageType::NewActor
                               || type == MessageType::CoinReward);

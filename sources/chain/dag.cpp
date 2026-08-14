@@ -1219,6 +1219,24 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
     return WriteResult::Write;
 }
 
+void Dag::invalidate_interval_control(const SectionId &changed_section) {
+    if (changed_section <= SectionId(0)) {
+        return;
+    }
+    // Intervals are [1..20], [21..40], ...: the covering boundary is the next
+    // multiple of 20 at or above the changed section.
+    const auto boundary = ((changed_section + SectionId(19)) / SectionId(20)) * SectionId(20);
+    if (boundary == changed_section || boundary > current_section_) {
+        // The boundary section itself is invalidated by the caller's own
+        // section->control reset; an unsealed boundary has nothing to drop.
+        return;
+    }
+    if (this->read_control(boundary).has_value()) {
+        eLog("[Dag] Invalidate interval control {} (section {} changed)", boundary, changed_section);
+        this->remove_control(boundary);
+    }
+}
+
 std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
     std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
     auto                                  section = this->read_section(section_id);
@@ -1363,6 +1381,8 @@ bool Dag::save_transaction(const Transaction &transaction) {
         if (control_index_)
             control_index_->erase(section->id);
     }
+    // The control at this interval's BOUNDARY summed the old content too.
+    this->invalidate_interval_control(section->id);
 
     // Update first_saved_section_ if this is the first section or has a lower ID
     if (first_saved_section_ == SectionId(-1) && transaction.section() >= SectionId(0)) {
@@ -1466,6 +1486,9 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
             section.control = std::nullopt;
             if (control_index_)
                 control_index_->erase(section.id);
+        }
+        if (changed) {
+            this->invalidate_interval_control(section.id);
         }
 
         set_current_section(section_id);
@@ -2565,15 +2588,21 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 auto       local       = this->read_section(section_data.section_id);
                 const auto local_count = local.has_value() ? local->transactions.size() : 0;
                 if (local.has_value() && !local->transactions.empty()) {
-                    const auto peer_count = section->transactions.size();
                     section->transactions.insert(local->transactions.begin(), local->transactions.end());
-                    if (section->transactions.size() != peer_count) {
-                        section->control = std::nullopt;
-                        if (control_index_)
-                            control_index_->erase(section_data.section_id);
-                    }
-                    disk_bytes = Json::serialize(section.value());
                 }
+                // Never adopt the peer's control hash: it describes the PEER's interval
+                // content. Storing it makes this node advertise a control identical to
+                // everyone else's while its own sections differ — the divergence then
+                // has no detector left (observed: a node missing one transaction in
+                // 25001 carried the network's control for boundary 25020 and every
+                // verifier said MATCH). Controls are derived state; write_control
+                // regenerates ours from our own sections after the sync completes.
+                if (section->control.has_value() || control_index_) {
+                    section->control = std::nullopt;
+                    if (control_index_)
+                        control_index_->erase(section_data.section_id);
+                }
+                disk_bytes = Json::serialize(section.value());
                 // A repair that changes a section at or below the cache watermark
                 // invalidates the cached balance prefix: the cache summed the OLD
                 // content of this section and no later delta will ever correct it.
@@ -2584,6 +2613,9 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 if (section_data.section_id <= cache_.section()
                     && section->transactions.size() != local_count) {
                     cache_below_watermark_changed = true;
+                }
+                if (section->transactions.size() != local_count) {
+                    this->invalidate_interval_control(section_data.section_id);
                 }
             }
 

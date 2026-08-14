@@ -821,12 +821,20 @@ bool DagCache::init_db() {
         return true;
     }
 
+    // Everything below runs under the same mutex reset_db() takes. The fast path
+    // used to touch the connector BEFORE locking: an admission thread passed the
+    // is_open() check, reset_db() closed and deleted the database under it, and the
+    // schema query aborted the whole process through eFatal (observed as a SIGABRT
+    // with init_db in the admission thread's stack).
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (db_initialized_) {
+        return true;
+    }
+
     if (cache_db_ && cache_db_->is_open()) {
         db_initialized_ = ensure_contract_catalog_schema();
         return db_initialized_;
     }
-
-    std::unique_lock<std::mutex> lock(mutex_);
 
     std::error_code directory_error;
     std::filesystem::create_directories(ChainConst::DAG_FOLDER, directory_error);

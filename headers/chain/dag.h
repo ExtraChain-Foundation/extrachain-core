@@ -1021,6 +1021,14 @@ private:
     std::optional<WriteResult> remove_control(const SectionId &section_id);
 
     /**
+     * @brief Invalidate the control at the boundary of the interval containing a
+     * changed section. Inserting a transaction into a closed interval used to leave
+     * that boundary's control describing the OLD content, so two nodes with different
+     * section content advertised identical controls and no verifier ever noticed.
+     */
+    void invalidate_interval_control(const SectionId &changed_section);
+
+    /**
      * @brief timer_tick
      */
     void timer_tick();
