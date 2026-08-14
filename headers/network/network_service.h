@@ -126,6 +126,9 @@ private:
 
     bool                                                       active_ = false;
     std::set<std::string>                                      failed_ips_;
+    // first_node_ turned out to be this very node (own identifier came back on an
+    // outgoing dial). Stops the dial-self-every-second loop; reset on save_first_node.
+    std::atomic_bool                                           first_node_self_detected_ { false };
     std::unordered_map<std::string, std::pair<int, CacheTime>> msg_hash_list_;
 
     ExtraChain::Core::ExtraChainNode*                         node;
