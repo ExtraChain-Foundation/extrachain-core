@@ -49,6 +49,11 @@ namespace ExtraChain::Contracts {
     }
 
     bool is_standard_token_module(std::string_view kind, std::string_view module_hash) {
+        if (kind == FungibleTokenKind
+            && (module_hash == "c23f13167d23eb39f0d6def51cb80f56f3ef1dc1af8fd74669277bee48669103"
+                || module_hash == "afe321f3e5ff054243bbafd2215fadabb6a0668aef0b7899ea7cd0c11561a46b")) {
+            return true;
+        }
         for (const auto language : std::array { ToolchainLanguage::Rust, ToolchainLanguage::AssemblyScript }) {
             const auto module = standard_token_module(kind, language);
             if (module.has_value() && content_hash(*module) == module_hash) {

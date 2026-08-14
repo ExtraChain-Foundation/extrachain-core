@@ -227,7 +227,8 @@ SocketService::Data SocketService::generate_first_message() {
         .dfs_mode     = context_.local_dfs_mode(),
         .dag_version  = CURRENT_DAG_VERSION,
         .node_version = extrachain_node_version,
-        .capabilities = std::set<std::string> { std::string(DAG_TX_BATCH_CAPABILITY) },
+        .capabilities = std::set<std::string> { std::string(DAG_TX_BATCH_CAPABILITY),
+                                                std::string(TOKEN_MIGRATION_CAPABILITY) },
     };
 
     message.connections = context_.shareable_peers(ip_);

@@ -33,12 +33,16 @@ class TokenState {
   freezeLastEnabled: bool = false;
   freezeLastUnit: Amount = Amount.one();
   locked: Array<BalanceEntry> = new Array<BalanceEntry>();
+  migrationReady: bool = false;
+  legacySource: string = "";
 
   static decode(source: Uint8Array): TokenState | null {
     const state = new TokenState();
     if (source.length == 0) return state;
     const decoder = new Decoder(source);
-    if (decoder.array() != 8 || decoder.u64() != 2) return null;
+    const fields = decoder.array();
+    const version = decoder.u64();
+    if ((fields != 8 || version != 2) && (fields != 9 || version != 3)) return null;
     state.owner = decoder.string();
     state.name = decoder.string();
     state.symbol = decoder.string();
@@ -85,13 +89,18 @@ class TokenState {
     if (freezeLastUnit === null) return null;
     state.freezeLastUnit = freezeLastUnit;
     state.freezeLastEnabled = decoder.boolean();
+    if (version == 3) {
+      if (decoder.array() != 2) return null;
+      state.migrationReady = decoder.boolean();
+      state.legacySource = decoder.string();
+    }
     return decoder.empty() ? state : null;
   }
 
   encode(): Uint8Array {
     const encoder = new Encoder();
-    encoder.array(8);
-    encoder.u64(2);
+    encoder.array(9);
+    encoder.u64(3);
     encoder.string(this.owner);
     encoder.string(this.name);
     encoder.string(this.symbol);
@@ -122,6 +131,9 @@ class TokenState {
     encoder.array(2);
     encoder.amount(this.freezeLastUnit);
     encoder.boolean(this.freezeLastEnabled);
+    encoder.array(2);
+    encoder.boolean(this.migrationReady);
+    encoder.string(this.legacySource);
     return encoder.finish();
   }
 
@@ -244,6 +256,18 @@ function unitData(): Uint8Array {
   return encoder.finish();
 }
 
+function boolData(value: bool): Uint8Array {
+  const encoder = new Encoder();
+  encoder.boolean(value);
+  return encoder.finish();
+}
+
+function stringData(value: string): Uint8Array {
+  const encoder = new Encoder();
+  encoder.string(value);
+  return encoder.finish();
+}
+
 function event(topic: string, actors: Array<string>, amounts: Array<Amount>): ContractEvent {
   const encoder = new Encoder();
   encoder.array(actors.length);
@@ -306,6 +330,39 @@ export class StandardFungibleContract implements Contract {
 
   private handle(request: InvokeRequest, state: TokenState): InvokeResponse {
     if (request.method == "init") return this.init(request, state);
+    if (request.method == "import_legacy") return this.importLegacy(request, state);
+    if (request.method == "migration_ready") {
+      const response = InvokeResponse.success(request.state);
+      response.data = boolData(state.migrationReady);
+      return response;
+    }
+    if (request.method == "legacy_source") {
+      const response = InvokeResponse.success(request.state);
+      response.data = stringData(state.legacySource);
+      return response;
+    }
+    if (request.method == "token_name") {
+      const response = InvokeResponse.success(request.state);
+      response.data = stringData(state.name);
+      return response;
+    }
+    if (request.method == "token_symbol") {
+      const response = InvokeResponse.success(request.state);
+      response.data = stringData(state.symbol);
+      return response;
+    }
+    if (request.method == "token_decimals") {
+      const response = InvokeResponse.success(request.state);
+      const encoder = new Encoder();
+      encoder.u64(state.decimals);
+      response.data = encoder.finish();
+      return response;
+    }
+    if (state.migrationReady && (request.method == "transfer" || request.method == "approve"
+        || request.method == "transfer_from" || request.method == "mint"
+        || request.method == "revoke_mint" || request.method == "burn")) {
+      return InvokeResponse.failure(request.state, "Migration target is not active");
+    }
     if (request.method == "transfer") return this.transferCall(request, state);
     if (request.method == "approve") return this.approve(request, state);
     if (request.method == "transfer_from") return this.transferFrom(request, state);
@@ -365,6 +422,14 @@ export class StandardFungibleContract implements Contract {
     const response = InvokeResponse.success(request.state);
     const count = decoder.array();
     if (count < 0 || count > MAX_STATE_ENTRIES) return InvokeResponse.failure(request.state, "Invalid migration balances");
+    if (supply.isZero()) {
+      if (count != 0 || !decoder.empty()) return InvokeResponse.failure(request.state, "Migration target must be empty");
+      state.mintEnabled = false;
+      state.migrationReady = true;
+      response.data = receiptData("migration_ready", request.contractId, supply);
+      response.events.push(new ContractEvent("migration_ready", unitData()));
+      return response;
+    }
     response.data = receiptData(count > 0 ? "migrated" : "mint", request.caller, supply);
     if (count > 0) {
       let migrated = Amount.zero();
@@ -389,6 +454,46 @@ export class StandardFungibleContract implements Contract {
     const minted = event("mint", [request.caller], [supply]);
     response.events.push(minted);
     response.effects.push(tokenEffect(request.contractId, minted));
+    return response;
+  }
+
+  private importLegacy(request: InvokeRequest, state: TokenState): InvokeResponse {
+    if (request.caller != state.owner || !state.migrationReady || !state.totalSupply.isZero()
+        || state.balances.length != 0 || state.legacySource.length != 0) {
+      return InvokeResponse.failure(request.state, "Legacy import is not allowed");
+    }
+    const decoder = new Decoder(request.argumentsData);
+    if (decoder.array() != 3) return InvokeResponse.failure(request.state, "Invalid legacy import arguments");
+    const legacySource = decoder.string();
+    const supply = decoder.amount();
+    const count = decoder.array();
+    if (!decoder.valid || legacySource.length == 0 || supply === null || supply.isZero()
+        || count <= 0 || count > MAX_STATE_ENTRIES) {
+      return InvokeResponse.failure(request.state, "Invalid legacy import arguments");
+    }
+    let restored = Amount.zero();
+    for (let index = 0; index < count; ++index) {
+      if (decoder.array() != 2) return InvokeResponse.failure(request.state, "Invalid legacy balance");
+      const actor = decoder.string();
+      const amount = decoder.amount();
+      if (actor.length == 0 || amount === null || amount.isZero() || !state.balance(actor).isZero()) {
+        return InvokeResponse.failure(request.state, "Invalid legacy balance");
+      }
+      const next = restored.checkedAdd(amount);
+      if (next === null) return InvokeResponse.failure(request.state, "Legacy supply overflow");
+      restored = next;
+      state.setBalance(actor, amount);
+    }
+    if (!decoder.empty() || !restored.equals(supply)) {
+      return InvokeResponse.failure(request.state, "Legacy supply does not match balances");
+    }
+    state.totalSupply = supply;
+    state.migrationReady = false;
+    state.legacySource = legacySource;
+    state.mintEnabled = false;
+    const response = InvokeResponse.success(request.state);
+    response.data = receiptData("migrated", legacySource, supply);
+    response.events.push(new ContractEvent("migrated", stringData(legacySource)));
     return response;
   }
 

@@ -7,12 +7,33 @@
 #include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "managers/token_manager.h"
+#include "contracts/toolchain_registry.h"
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
 
 #include <unordered_map>
 
 using namespace exc_ffi;
+
+namespace {
+    ExcError token_error(CreateTokenError error) {
+        switch (error) {
+        case CreateTokenError::NoConnections:
+            return EXC_ERR_TOKEN_NO_CONNECTIONS;
+        case CreateTokenError::InvalidAmount:
+            return EXC_ERR_TOKEN_INVALID_AMOUNT;
+        case CreateTokenError::InvalidName:
+            return EXC_ERR_TOKEN_INVALID_NAME;
+        case CreateTokenError::ExistToken:
+            return EXC_ERR_TOKEN_EXISTS;
+        case CreateTokenError::InvalidTx:
+            return EXC_ERR_TOKEN_INVALID_TX;
+        case CreateTokenError::InvalidOwnerId:
+            return EXC_ERR_TOKEN_INVALID_OWNER;
+        }
+        return EXC_ERR_UNKNOWN;
+    }
+} // namespace
 
 extern "C" {
 
@@ -43,29 +64,7 @@ EXC_API ExcError exc_token_create(const char* name,
         auto res =
             tm->create_token(owner, std::string(name), std::string(ticker), amt, std::string(color), "", decimals);
         if (!res.has_value()) {
-            switch (res.error()) {
-            case CreateTokenError::NoConnections:
-                result = EXC_ERR_TOKEN_NO_CONNECTIONS;
-                break;
-            case CreateTokenError::InvalidAmount:
-                result = EXC_ERR_TOKEN_INVALID_AMOUNT;
-                break;
-            case CreateTokenError::InvalidName:
-                result = EXC_ERR_TOKEN_INVALID_NAME;
-                break;
-            case CreateTokenError::ExistToken:
-                result = EXC_ERR_TOKEN_EXISTS;
-                break;
-            case CreateTokenError::InvalidTx:
-                result = EXC_ERR_TOKEN_INVALID_TX;
-                break;
-            case CreateTokenError::InvalidOwnerId:
-                result = EXC_ERR_TOKEN_INVALID_OWNER;
-                break;
-            default:
-                result = EXC_ERR_UNKNOWN;
-                break;
-            }
+            result = token_error(res.error());
             return;
         }
         *out_token_json = exc_strdup(Json::serialize(res.value()));
@@ -121,37 +120,71 @@ EXC_API ExcError exc_token_legacy_list(char** out_json) {
     return ok ? EXC_OK : EXC_ERR_DISPATCH_FAILED;
 }
 
-EXC_API ExcError exc_token_migrate(const char* token_id, char** out_token_json) {
+EXC_API ExcError exc_token_migration_publish_target(const char* token_id,
+                                                    const char* language,
+                                                    char**      out_transaction_json) {
     EXC_CHECK_NODE();
     EXC_CHECK_NULL(token_id);
-    EXC_CHECK_NULL(out_token_json);
+    EXC_CHECK_NULL(language);
+    EXC_CHECK_NULL(out_transaction_json);
 
     ExcError result = EXC_OK;
-    *out_token_json = nullptr;
-    bool ok         = dispatch_sync([&]() {
+    *out_transaction_json = nullptr;
+    bool ok               = dispatch_sync([&]() {
         auto parsed = TokenId::create(std::string(token_id));
-        if (!parsed.has_value() || parsed.value().is_zero()) {
+        auto parsed_language = ExtraChain::Contracts::toolchain_language(language);
+        if (!parsed.has_value() || parsed->is_zero() || !parsed_language.has_value()) {
             result = EXC_ERR_TOKEN_INVALID_TX;
             return;
         }
-        auto migrated = GlobalState::instance().node->token_manager()->migrate_legacy_token(parsed.value());
-        if (!migrated.has_value()) {
-            switch (migrated.error()) {
-            case CreateTokenError::InvalidAmount:
-                result = EXC_ERR_TOKEN_INVALID_AMOUNT;
-                break;
-            case CreateTokenError::InvalidOwnerId:
-                result = EXC_ERR_TOKEN_INVALID_OWNER;
-                break;
-            default:
-                result = EXC_ERR_TOKEN_INVALID_TX;
-                break;
-            }
+        auto published =
+            GlobalState::instance().node->token_manager()->publish_legacy_token_target(*parsed, *parsed_language);
+        if (!published.has_value()) {
+            result = token_error(published.error());
             return;
         }
-        *out_token_json = exc_strdup(Json::serialize(migrated.value()));
+        *out_transaction_json = exc_strdup(Json::serialize(*published));
     });
     return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_token_migration_link(const char* token_id,
+                                          const char* target_contract_id,
+                                          char**      out_transaction_json) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(token_id);
+    EXC_CHECK_NULL(target_contract_id);
+    EXC_CHECK_NULL(out_transaction_json);
+
+    ExcError result       = EXC_OK;
+    *out_transaction_json = nullptr;
+    bool ok               = dispatch_sync([&]() {
+        const auto token  = TokenId::create(std::string(token_id));
+        const auto target = ActorId::create(std::string(target_contract_id));
+        if (!token.has_value() || token->is_zero() || !target.has_value() || target->is_zero()) {
+            result = EXC_ERR_TOKEN_INVALID_TX;
+            return;
+        }
+        const auto linked = GlobalState::instance().node->token_manager()->link_legacy_token(*token, *target);
+        if (!linked.has_value()) {
+            result = token_error(linked.error());
+            return;
+        }
+        *out_transaction_json = exc_strdup(Json::serialize(*linked));
+    });
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_token_migration_status(char** out_json) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(out_json);
+
+    *out_json = nullptr;
+    bool ok   = dispatch_sync([&]() {
+        *out_json =
+            exc_strdup(Json::serialize(GlobalState::instance().node->token_manager()->migration_statuses()));
+    });
+    return ok ? EXC_OK : EXC_ERR_DISPATCH_FAILED;
 }
 
 } // extern "C"

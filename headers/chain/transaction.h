@@ -38,6 +38,7 @@ enum class TransactionType {
     ContractDeploy  = 8,  ///< Deploy a WebAssembly contract
     ContractCall    = 9,  ///< Execute a WebAssembly contract method
     ContractUpgrade = 10, ///< Activate a new immutable contract version
+    TokenMigration  = 11, ///< Schedule deterministic legacy-token migration
     Balance         = 99, ///< Balance query transaction
     Unknown         = 100 ///< Unrecognized transaction type
 };
@@ -46,6 +47,10 @@ MSGPACK_ADD_ENUM(TransactionType)
 constexpr bool is_contract_transaction(TransactionType type) {
     return type == TransactionType::ContractDeploy || type == TransactionType::ContractCall
            || type == TransactionType::ContractUpgrade;
+}
+
+constexpr bool is_token_migration_transaction(TransactionType type) {
+    return type == TransactionType::TokenMigration;
 }
 
 /**
@@ -107,6 +112,8 @@ enum class TransactionProveError {
     TooOften,
     InvalidContractPayload,
     ContractDependencyMissing,
+    TokenMigrationInvalid,
+    TokenMigrationFrozen,
     AdmissionBusy
 };
 

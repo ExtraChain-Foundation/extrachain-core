@@ -19,6 +19,7 @@
 
 #include "chain/dag.h"
 #include "contracts/contract_manager.h"
+#include "contracts/contract_transaction.h"
 
 #include <boost/asio/post.hpp>
 #include <chrono>
@@ -30,6 +31,7 @@
 #include "core/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_service.h"
+#include "managers/token_manager.h"
 #include "utils/file_io.h"
 #include "utils/legacy_compression.h"
 
@@ -837,6 +839,13 @@ void Dag::check_self(const Transaction &transaction) {
         node->selfTxInitContractAdded(transaction);
     }
 
+    if (transaction.type() == TransactionType::ContractCall && transaction.meta().has_value()) {
+        const auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
+        if (metadata.has_value() && metadata->legacy_migration.has_value()) {
+            node->selfTxInitContractAdded(transaction);
+        }
+    }
+
     if (transaction.type() == TransactionType::Repeatable) {
         node->selfTxRepeatableAdded(transaction);
     }
@@ -1554,7 +1563,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     }
 
     // Validate transaction amount
-    if (tx.amount() == BigNumberFloat(0) && !is_contract_transaction(tx.type())) {
+    if (tx.amount() == BigNumberFloat(0) && !is_contract_transaction(tx.type())
+        && !is_token_migration_transaction(tx.type())) {
         return TransactionProveError::AmountZero;
     }
 
@@ -1630,6 +1640,21 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
         return result.has_value() && *result;
     };
 
+    if (tx.type() == TransactionType::TokenMigration) {
+        if (targetReceiver.is_zero() || targetSender == targetReceiver || tx.token().is_zero()
+            || !tx.meta().has_value() || tx.meta()->size() > 64 * 1024 || tx.signature().empty()) {
+            return TransactionProveError::TokenMigrationInvalid;
+        }
+        const auto receiver_actor = node->actor_index()->read_actor_old(targetReceiver);
+        if (receiver_actor.empty()) {
+            return TransactionProveError::ContractDependencyMissing;
+        }
+        if (!verify_stored_hash()) {
+            return TransactionProveError::InvalidSignature;
+        }
+        return node->token_manager()->validate_migration_plan(tx);
+    }
+
     if (is_contract_transaction(tx.type())) {
         if (tx.amount() != 0 || tx.meta().value_or("").empty() || tx.meta()->size() > 1024 * 1024
             || targetReceiver.is_zero() || targetSender == targetReceiver || !tx.token().is_zero()) {
@@ -1651,10 +1676,13 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     }
 
     if (tx.type() == TransactionType::Regular && !tx.token().is_zero()) {
-        auto token_contract = node->contract_manager()->inspect(tx.token().to_string());
-        if (token_contract.has_value() && token_contract->kind == "fungible-token") {
+        if (node->token_manager()->is_contract_token(tx.token())) {
             return TransactionProveError::InvalidContractPayload;
         }
+    }
+
+    if (!node->token_manager()->legacy_transaction_allowed(tx)) {
+        return TransactionProveError::TokenMigrationFrozen;
     }
 
     // Special handling for Burn transactions

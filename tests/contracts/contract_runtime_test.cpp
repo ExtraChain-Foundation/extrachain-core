@@ -13,6 +13,7 @@
 #include "contracts/contract_codec.h"
 #include "contracts/contract_hash.h"
 #include "contracts/contract_module.h"
+#include "contracts/standard_token.h"
 
 #include <algorithm>
 #include <array>
@@ -177,6 +178,32 @@ namespace {
         append_string(result, "Legacy Token");
         append_string(result, "LEG");
         append_unsigned(result, 0);
+        append_string(result, "1000");
+        append_array(result, 2);
+        append_array(result, 2);
+        append_string(result, Alice);
+        append_string(result, "700");
+        append_array(result, 2);
+        append_string(result, Bob);
+        append_string(result, "300");
+        return result;
+    }
+
+    Bytes migration_target_argument() {
+        Bytes result;
+        append_array(result, 5);
+        append_string(result, "Legacy Token");
+        append_string(result, "LEG");
+        append_unsigned(result, 0);
+        append_string(result, "0");
+        append_array(result, 0);
+        return result;
+    }
+
+    Bytes legacy_import_argument() {
+        Bytes result;
+        append_array(result, 3);
+        append_string(result, "5555555555555555555555555555555555555555");
         append_string(result, "1000");
         append_array(result, 2);
         append_array(result, 2);
@@ -933,6 +960,46 @@ namespace {
         require(!cycle.has_value(), "ContractManager accepted a contract call cycle");
     }
 
+    Bytes test_legacy_import(const Bytes &module, std::string_view contract_id) {
+        ExtraChain::Contracts::ContractManager manager;
+        auto                                   target = manager.deploy(std::string(contract_id),
+                                     Alice,
+                                     "fungible-token",
+                                     module,
+                                     migration_target_argument(),
+                                     1);
+        require(target.has_value(), "Migration target deployment failed");
+        const auto ready = manager.query(std::string(contract_id), Alice, "migration_ready", empty_arguments(), 1);
+        require(ready.has_value() && Reader(ready->data).boolean(), "Migration target is not inactive and ready");
+        const auto name   = manager.query(std::string(contract_id), Alice, "token_name", empty_arguments(), 1);
+        const auto symbol = manager.query(std::string(contract_id), Alice, "token_symbol", empty_arguments(), 1);
+        const auto decimals =
+            manager.query(std::string(contract_id), Alice, "token_decimals", empty_arguments(), 1);
+        require(name.has_value() && Reader(name->data).string() == "Legacy Token" && symbol.has_value()
+                    && Reader(symbol->data).string() == "LEG" && decimals.has_value()
+                    && Reader(decimals->data).unsigned_value() == 0,
+                "Migration target metadata queries changed");
+        require(!manager.call(std::string(contract_id), Alice, "transfer", pair_argument(Bob, 1), 2).has_value(),
+                "Inactive migration target accepted a transfer");
+        auto imported =
+            manager.call(std::string(contract_id), Alice, "import_legacy", legacy_import_argument(), 2);
+        require(imported.has_value(), "Legacy balance import failed");
+        const auto source = manager.query(std::string(contract_id), Alice, "legacy_source", empty_arguments(), 2);
+        require(source.has_value() && Reader(source->data).string() == "5555555555555555555555555555555555555555",
+                "Imported contract did not retain the legacy token ID");
+        const auto alice = manager.query(std::string(contract_id), Alice, "balance_of", string_argument(Alice), 2);
+        const auto bob   = manager.query(std::string(contract_id), Alice, "balance_of", string_argument(Bob), 2);
+        require(alice.has_value() && bob.has_value() && Reader(alice->data).string() == "700"
+                    && Reader(bob->data).string() == "300",
+                "Imported balances changed");
+        require(!manager.call(std::string(contract_id), Alice, "import_legacy", legacy_import_argument(), 3)
+                     .has_value(),
+                "Legacy state was imported twice");
+        const auto record = manager.inspect(std::string(contract_id));
+        require(record.has_value(), "Imported contract record is missing");
+        return record->versions.back().revisions.back().state;
+    }
+
     void test_language_lock(const Bytes &rust_module, const Bytes &assemblyscript_module) {
         ExtraChain::Contracts::ContractManager rust_manager;
         require(rust_manager.deploy("rust-token", Alice, "fungible-token", rust_module, token_init_argument(), 1)
@@ -1174,6 +1241,13 @@ namespace {
         require(ExtraChain::Contracts::content_hash(value)
                     == "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85",
                 "Contract content hash is not BLAKE3");
+        require(ExtraChain::Contracts::is_standard_token_module(ExtraChain::Contracts::FungibleTokenKind,
+                                                                "c23f13167d23eb39f0d6def51cb80f56f3ef1dc1af8fd7466"
+                                                                "9277bee48669103")
+                    && ExtraChain::Contracts::is_standard_token_module(ExtraChain::Contracts::FungibleTokenKind,
+                                                                       "afe321f3e5ff054243bbafd2215fadabb6a0668aef"
+                                                                       "0b7899ea7cd0c11561a46b"),
+                "Previous standard fungible modules are no longer recognized");
     }
 
     void test_effect_codec() {
@@ -1252,6 +1326,10 @@ int main(int argc, char **argv) {
         test_message_claim(runtime, message_module);
         test_contract_manager(rust_fungible_module, message_module);
         test_contract_manager(as_fungible_module, message_module);
+        const auto rust_migration_state = test_legacy_import(rust_fungible_module, "rust-migration-target");
+        const auto as_migration_state   = test_legacy_import(as_fungible_module, "as-migration-target");
+        require(rust_migration_state == as_migration_state,
+                "Rust and AssemblyScript migration target states differ");
         test_language_lock(rust_fungible_module, as_fungible_module);
         benchmark_token_x(runtime, rust_fungible_module, "rust");
         benchmark_token_x(runtime, as_fungible_module, "assemblyscript");

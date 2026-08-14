@@ -13,10 +13,38 @@
 #include <boost/describe/class.hpp>
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "contracts/contract_types.h"
+
+struct LegacyTokenMigrationData {
+    std::uint32_t schema = 1;
+    std::string   plan_transaction_hash;
+    std::string   legacy_token_id;
+    std::string   target_contract_id;
+    std::string   source_transaction_hash;
+    std::uint64_t source_section = 0;
+    std::uint64_t cutoff_section = 0;
+    std::string   cutoff_section_hash;
+    std::string   cutoff_control_hash;
+    std::string   balances_hash;
+    std::string   supply;
+};
+BOOST_DESCRIBE_STRUCT(LegacyTokenMigrationData,
+                      (),
+                      (schema,
+                       plan_transaction_hash,
+                       legacy_token_id,
+                       target_contract_id,
+                       source_transaction_hash,
+                       source_section,
+                       cutoff_section,
+                       cutoff_section_hash,
+                       cutoff_control_hash,
+                       balances_hash,
+                       supply))
 
 struct ContractTransitionData {
     std::string   contract_id;
@@ -70,6 +98,7 @@ struct ContractTransactionData {
     std::uint64_t                         checkpoint_revision = 0;
     std::vector<ContractTransitionData>   transitions;
     ExtraChain::Contracts::VerifiedInputs verified_inputs;
+    std::optional<LegacyTokenMigrationData> legacy_migration;
 };
 BOOST_DESCRIBE_STRUCT(ContractTransactionData,
                       (),
@@ -88,4 +117,5 @@ BOOST_DESCRIBE_STRUCT(ContractTransactionData,
                        checkpoint,
                        checkpoint_revision,
                        transitions,
-                       verified_inputs))
+                       verified_inputs,
+                       legacy_migration))

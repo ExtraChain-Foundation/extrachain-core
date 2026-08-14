@@ -19,8 +19,10 @@
 
 #include "chain/actor_index.h"
 #include "chain/dag.h"
+#include "contracts/contract_transaction.h"
 #include "dfs/dfs_service.h"
 #include "managers/data_mining_manager.h"
+#include "managers/token_manager.h"
 #include "core/extrachain_node.h"
 #include "managers/luminance_manager.h"
 #include "network/network_service.h"
@@ -44,6 +46,32 @@ namespace {
     constexpr std::size_t  LIVE_DAG_BATCH_MAX_TRANSACTIONS = 64;
     constexpr std::size_t  LIVE_DAG_BATCH_MAX_BYTES        = 128 * 1024;
     constexpr int          LIVE_DAG_BATCH_DELAY_MS         = 5;
+
+    bool is_migration_protocol_transaction(std::string_view payload) {
+        const auto decode = [&](WireFormat::Mode mode) -> std::optional<Transaction> {
+            WireFormat::Scope scope(mode);
+            auto              transaction = MessagePack::deserialize<Transaction>(std::string(payload));
+            if (!transaction.has_value()) {
+                return std::nullopt;
+            }
+            return transaction.value();
+        };
+        auto transaction = decode(WireFormat::Mode::Canonical);
+        if (!transaction.has_value()) {
+            transaction = decode(WireFormat::Mode::Legacy);
+        }
+        if (!transaction.has_value()) {
+            return false;
+        }
+        if (is_token_migration_transaction(transaction.value().type())) {
+            return true;
+        }
+        if (!is_contract_transaction(transaction.value().type()) || !transaction.value().meta().has_value()) {
+            return false;
+        }
+        auto metadata = Json::deserialize<ContractTransactionData>(transaction.value().meta().value());
+        return metadata.has_value() && metadata.value().legacy_migration.has_value();
+    }
 
     bool is_public_address(std::string_view value) {
         boost::system::error_code error;
@@ -1182,7 +1210,7 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         || message_type == MessageType::DagSyncLastInfo || message_type == MessageType::DagControlRangeRequest
         || message_type == MessageType::DagControlRangeResponse || message_type == MessageType::DagPackList
         || message_type == MessageType::DagPackRequest || message_type == MessageType::DagCacheSnapshotRequest
-        || high_priority_dag_sync) {
+        || message_type == MessageType::TokenMigrationReadiness || high_priority_dag_sync) {
         priority = SocketService::Priority::High;
     }
 
@@ -1230,6 +1258,8 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
     const bool apply_live_dag_backpressure =
         (message_type == MessageType::DagTransaction || message_type == MessageType::DagTransactionBatch)
         && send_mode != SendMode::Focused;
+    const bool migration_protocol = message_type == MessageType::DagTransaction
+                                    && is_migration_protocol_transaction(non_serialized_message.data);
 
     int skipped_inactive = 0;
     int skipped_light    = 0;
@@ -1247,6 +1277,9 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         }
 
         if (peer_selection == PeerSelection::LegacyDag && !service->peer_meta().is_legacy_dag()) {
+            continue;
+        }
+        if (migration_protocol && !service->peer_meta().supports_token_migration()) {
             continue;
         }
 
@@ -1634,6 +1667,40 @@ std::vector<std::string> NetworkService::active_connection_identifiers() const {
     return identifiers;
 }
 
+std::vector<std::string> NetworkService::active_full_peer_identifiers() const {
+    std::vector<std::string> identifiers;
+    auto                     connections_locked = *connections();
+    identifiers.reserve(connections_locked->size());
+    for (const auto &service : *connections_locked) {
+        if (service == nullptr || !service->is_active() || service->mode() != SocketMode::Full
+            || service->identifier().empty()) {
+            continue;
+        }
+        identifiers.push_back(service->identifier());
+    }
+    std::ranges::sort(identifiers);
+    identifiers.erase(std::unique(identifiers.begin(), identifiers.end()), identifiers.end());
+    return identifiers;
+}
+
+std::vector<std::string> NetworkService::active_full_peers_with_capability(std::string_view capability) const {
+    std::vector<std::string> identifiers;
+    auto                     connections_locked = *connections();
+    identifiers.reserve(connections_locked->size());
+    for (const auto &service : *connections_locked) {
+        if (service == nullptr || !service->is_active() || service->mode() != SocketMode::Full
+            || !service->peer_meta().capabilities.contains(std::string(capability))) {
+            continue;
+        }
+        if (!service->identifier().empty()) {
+            identifiers.push_back(service->identifier());
+        }
+    }
+    std::ranges::sort(identifiers);
+    identifiers.erase(std::unique(identifiers.begin(), identifiers.end()), identifiers.end());
+    return identifiers;
+}
+
 std::int64_t NetworkService::connection_pending_bytes(const std::string &identifier) const {
     auto connections_locked = *connections();
     for (const auto &service : *connections_locked) {
@@ -1822,13 +1889,20 @@ void NetworkService::message_received(const std::string &message,
     // forces its own scope, so leaving this active across the switch is safe.
     WireFormat::Scope wire_scope(WireFormat::wire());
 
-    // Lifecycle gate: drop Dag network traffic (types 30..48) while the Dag is
-    // stopped, so handlers don't race against shutdown/migration. Enforced once
+    if (type == MessageType::DagTransaction && is_migration_protocol_transaction(serialized)) {
+        const auto meta = peer_meta_for(identifier);
+        if (!meta.has_value() || !meta->supports_token_migration()) {
+            eWarning("[NetworkService] Migration transaction from a peer without negotiated support");
+            return;
+        }
+    }
+
+    // Lifecycle gate: drop DAG traffic while the DAG is stopped. Enforced once
     // here at the dispatch layer instead of per-handler.
     {
         auto type_val = std::to_underlying(type);
         if (type_val >= std::to_underlying(MessageType::DagTransaction)
-            && type_val <= std::to_underlying(MessageType::DagTransactionBatch)) {
+            && type_val <= std::to_underlying(MessageType::TokenMigrationReadiness)) {
             auto *dag = node->dag();
             if (dag && !dag->is_accepting_messages()) {
                 return;
@@ -1858,6 +1932,30 @@ void NetworkService::message_received(const std::string &message,
             send_broadcast_message_further(package_data);
         }
 
+        break;
+    }
+
+    case MessageType::TokenMigrationReadiness: {
+        const auto meta = peer_meta_for(identifier);
+        if (!meta.has_value() || !meta.value().supports_token_migration()) {
+            eWarning("[NetworkService] Token migration message from a peer without negotiated support");
+            break;
+        }
+        if (status == MessageStatus::Request) {
+            auto request = MessagePack::deserialize<TokenMigrationReadinessRequest>(serialized);
+            if (!request.has_value()) {
+                eWarning("[NetworkService] Invalid token migration readiness request");
+                break;
+            }
+            node->token_manager()->handle_migration_readiness_request(request.value(), responder);
+        } else if (status == MessageStatus::Response) {
+            auto response = MessagePack::deserialize<TokenMigrationReadinessResponse>(serialized);
+            if (!response.has_value()) {
+                eWarning("[NetworkService] Invalid token migration readiness response");
+                break;
+            }
+            node->token_manager()->handle_migration_readiness_response(response.value(), responder);
+        }
         break;
     }
 
@@ -2426,7 +2524,8 @@ void NetworkService::message_received(const std::string &message,
                                    package_data.msg_body.nodes_identifiers_to_ignore_later.end());
         ignored_identifiers.insert(package_data.prev_identifier);
         for (const auto &transaction : batch_result.value().transactions) {
-            if (is_contract_transaction(transaction.type()) || transaction.type() == TransactionType::Genesis
+            if (is_contract_transaction(transaction.type()) || is_token_migration_transaction(transaction.type())
+                || transaction.type() == TransactionType::Genesis
                 || transaction.type() == TransactionType::Balance) {
                 continue;
             }

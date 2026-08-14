@@ -326,6 +326,8 @@ public:
     int                      active_connections_count();
     int                      max_connections() const;
     std::vector<std::string> active_connection_identifiers() const;
+    std::vector<std::string> active_full_peer_identifiers() const;
+    std::vector<std::string> active_full_peers_with_capability(std::string_view capability) const;
     std::int64_t             connection_pending_bytes(const std::string& identifier) const;
 
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);

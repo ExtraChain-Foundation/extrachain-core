@@ -192,6 +192,7 @@ private:
     bool can_batch(const Request &request) const {
         return owner->status_ == DagStatus::Ready && owner->mode_ == DagMode::Full
                && !is_contract_transaction(request.transaction.type())
+               && !is_token_migration_transaction(request.transaction.type())
                && request.transaction.type() != TransactionType::Genesis
                && request.transaction.type() != TransactionType::Balance
                && request.transaction.section() > owner->current_section_;

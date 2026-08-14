@@ -18,7 +18,7 @@
 
 #include "extrachain_c_types.h"
 
-#define EXC_C_API_VERSION 2u
+#define EXC_C_API_VERSION 3u
 
 #ifdef _WIN32
 #ifdef EXTRACHAIN_C_BUILDING
@@ -455,8 +455,18 @@ EXC_API ExcError exc_token_list(char** out_json);
 /* Read legacy tokens that can be converted to standard contracts. Full nodes only. */
 EXC_API ExcError exc_token_legacy_list(char** out_json);
 
-/* Convert one legacy token in place. The current profile must contain the owner key. */
-EXC_API ExcError exc_token_migrate(const char* token_id, char** out_token_json);
+/* Publish an empty standard contract that can receive one legacy token state. */
+EXC_API ExcError exc_token_migration_publish_target(const char* token_id,
+                                                    const char* language,
+                                                    char**      out_transaction_json);
+
+/* Link a legacy token to an existing migration target through a DAG transaction. */
+EXC_API ExcError exc_token_migration_link(const char* token_id,
+                                          const char* target_contract_id,
+                                          char**      out_transaction_json);
+
+/* Read current migration states. Returns a JSON array. */
+EXC_API ExcError exc_token_migration_status(char** out_json);
 
 /* ════════════════════════════════════════════════════════════════════
  *  WebAssembly contracts

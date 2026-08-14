@@ -51,6 +51,7 @@
 #include "extrachain_global.h"
 #include "chain/dag.h"
 #include "contracts/contract_types.h"
+#include "contracts/contract_transaction.h"
 #include "runtime/event.h"
 
 class DfsService;
@@ -358,6 +359,11 @@ namespace ExtraChain::Core {
             std::string_view                             method,
             std::span<const std::uint8_t>                arguments,
             const ExtraChain::Contracts::VerifiedInputs& verified_inputs = {});
+        std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_legacy_token_import(
+            const Actor<KeyPrivate>&        signer,
+            const ActorId&                  contract_id,
+            std::span<const std::uint8_t>   arguments,
+            const LegacyTokenMigrationData& migration);
         std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_contract_upgrade(
             const ActorId&                contract_id,
             std::span<const std::uint8_t> module,

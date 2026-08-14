@@ -52,6 +52,7 @@
 #include "dfs/collection_template.h"
 #include "network/network_service.h"
 #include "network/network_runtime.h"
+#include "network/wire_format.h"
 #include "runtime/deadline_task.h"
 #include "runtime/periodic_task.h"
 #include "chat/chat_manager.h"
@@ -604,7 +605,16 @@ namespace ExtraChain::Core {
     }
 
     bool ExtraChainNode::create_token_template() {
-        auto network_id      = actor_index_->network_id();
+        auto network_id = actor_index_->network_id();
+        auto existing   = Dfs::Tables::DirsFile::ActorSpace::
+            search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                           network_id,
+                                           Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                           "TokensRegistry");
+        if (existing.has_value()) {
+            return existing->state == Dfs::FileState::Ready;
+        }
+
         auto tokens_template = Dfs::CollectionTemplate::create("TokensRegistry")
                                    .value()
                                    .add_fields({ Dfs::Field::String("name").not_null().unique().length(3, 20),
@@ -642,14 +652,31 @@ namespace ExtraChain::Core {
             return false;
         }
 
-        auto store_res = dfs_->store_vector(network_id,
-                                            network_id,
-                                            "TokensRegistry",
-                                            network_id,
-                                            search_result.value().file_id);
-        if (!store_res.has_value()) {
-            eCritical("Can't create token cache database, because {}", store_res.error());
+        auto registry =
+            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                              network_id,
+                                                                              Dfs::Basic::TEMPLATE_VECTOR,
+                                                                              "TokensRegistry");
+        if (!registry.has_value()) {
+            registry = dfs_->store_vector(network_id,
+                                          network_id,
+                                          "TokensRegistry",
+                                          network_id,
+                                          search_result.value().file_id);
+            if (!registry.has_value()) {
+                eCritical("Can't create token cache database, because {}", registry.error());
+                return false;
+            }
+        } else if (registry->state != Dfs::FileState::Ready) {
             return false;
+        }
+
+        auto existing_native = dfs_->read_vector_row(network_id, registry->file_id, TokenId().to_string());
+        if (existing_native.has_value()) {
+            const auto& row = existing_native.value();
+            return row.contains("owner_id") && row.at("owner_id") == network_id.to_string() && row.contains("name")
+                   && row.at("name") == "ExtraCoin" && row.contains("ticker") && row.at("ticker") == "EXC"
+                   && row.contains("status") && row.at("status") == "1";
         }
 
         auto tokens_row = TokenData { .token_id   = TokenId(),
@@ -663,8 +690,16 @@ namespace ExtraChain::Core {
                                       .section_id = BigNumber(0),
                                       .tx_hash    = "" };
 
-        auto res =
-            dfs_->add_vector_row(store_res.value().actor_id, store_res.value().file_id, tokens_row, network_id);
+        WireFormat::Scope storage_format(WireFormat::Mode::Canonical);
+        auto              registry_row = Utils::to_dbrow(tokens_row);
+        // The registry derives these fields from the linked contract transaction.
+        // Keep the stored row compatible with the established TokensRegistry schema.
+        registry_row.erase("kind");
+        registry_row.erase("language");
+        auto res = dfs_->add_vector_row(registry.value().actor_id,
+                                        registry.value().file_id,
+                                        std::move(registry_row),
+                                        network_id);
         if (!res) {
             return false;
         }
@@ -1331,7 +1366,15 @@ namespace ExtraChain::Core {
             if (!arguments.has_value()) {
                 return std::unexpected(TransactionError::Unknown);
             }
-            auto contract_transaction = submit_contract_call(tx.token(), "transfer", arguments.value());
+            const auto token = token_manager_->token(tx.token());
+            if (!token.has_value()) {
+                return std::unexpected(TransactionError::Unknown);
+            }
+            const auto contract_id = ActorId::create(token->smart);
+            if (!contract_id.has_value()) {
+                return std::unexpected(TransactionError::Unknown);
+            }
+            auto contract_transaction = submit_contract_call(*contract_id, "transfer", arguments.value());
             if (!contract_transaction.has_value()) {
                 eWarning("[TokenManager] Contract token transfer failed: {}", contract_transaction.error().detail);
                 return std::unexpected(TransactionError::Unknown);
@@ -1539,6 +1582,9 @@ namespace ExtraChain::Core {
 
         const auto block = static_cast<std::uint64_t>(transaction.section().to_int().value_or(0));
         if (transaction.type() == TransactionType::ContractDeploy) {
+            if (metadata->legacy_migration.has_value()) {
+                return TransactionProveError::InvalidContractPayload;
+            }
             if (metadata->method != "init" || metadata->version != 1 || metadata->revision != 1
                 || !metadata->previous_state_hash.empty() || !metadata->checkpoint
                 || metadata->checkpoint_revision != 1 || !metadata->transitions.empty()) {
@@ -1595,6 +1641,17 @@ namespace ExtraChain::Core {
         const auto& previous = current.revisions.back();
 
         if (transaction.type() == TransactionType::ContractCall) {
+            const bool is_legacy_import = metadata->method == "import_legacy";
+            if (is_legacy_import != metadata->legacy_migration.has_value()) {
+                return TransactionProveError::InvalidContractPayload;
+            }
+            if (is_legacy_import) {
+                const auto migration_validation =
+                    token_manager_->validate_legacy_import(transaction, *metadata, *arguments);
+                if (migration_validation != TransactionProveError::NoError) {
+                    return migration_validation;
+                }
+            }
             const bool checkpoint_due = previous.revision + 1 - previous.checkpoint_revision
                                         >= ExtraChain::Contracts::ContractCheckpointInterval;
             if (metadata->method == "init" || metadata->method == "migrate"
@@ -1626,12 +1683,12 @@ namespace ExtraChain::Core {
             return verified;
         }
 
-        if (transaction.type() != TransactionType::ContractUpgrade || metadata->method != "migrate"
-            || transaction.sender().to_string() != record->owner_id || metadata->version != current.version + 1
-            || metadata->revision != previous.revision + 1 || metadata->previous_state_hash != previous.state_hash
-            || !metadata->checkpoint || metadata->checkpoint_revision != metadata->revision
-            || !metadata->transitions.empty() || !metadata->verified_inputs.dag.empty()
-            || !metadata->verified_inputs.dfs.empty()) {
+        if (metadata->legacy_migration.has_value() || transaction.type() != TransactionType::ContractUpgrade
+            || metadata->method != "migrate" || transaction.sender().to_string() != record->owner_id
+            || metadata->version != current.version + 1 || metadata->revision != previous.revision + 1
+            || metadata->previous_state_hash != previous.state_hash || !metadata->checkpoint
+            || metadata->checkpoint_revision != metadata->revision || !metadata->transitions.empty()
+            || !metadata->verified_inputs.dag.empty() || !metadata->verified_inputs.dfs.empty()) {
             return TransactionProveError::InvalidContractPayload;
         }
         auto module_name = fmt::format("contract-module-v{:06}-{}.wasm",
@@ -1807,6 +1864,72 @@ namespace ExtraChain::Core {
             .checkpoint_revision = revision.checkpoint_revision,
             .transitions         = contract_transitions(*change),
             .verified_inputs     = *verified,
+        };
+        Transaction transaction;
+        transaction.set_sender(signer.id());
+        transaction.set_receiver(contract_id);
+        transaction.set_amount(BigNumberFloat(0));
+        transaction.set_token(TokenId());
+        transaction.set_type(TransactionType::ContractCall);
+        transaction.set_meta(Json::serialize(metadata));
+        auto sent = send_contract_transaction(transaction, signer, std::move(*change));
+        if (!sent.has_value()) {
+            return std::unexpected(ExtraChain::Contracts::ContractFailure {
+                .error  = ExtraChain::Contracts::ContractError::StorageError,
+                .detail = transaction_error_description(sent.error()),
+            });
+        }
+        return *sent;
+    }
+
+    std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNode::submit_legacy_token_import(
+        const Actor<KeyPrivate>&        signer,
+        const ActorId&                  contract_id,
+        std::span<const std::uint8_t>   arguments,
+        const LegacyTokenMigrationData& migration) {
+        if (signer.empty() || migration.target_contract_id != contract_id.to_string()) {
+            return std::unexpected(ExtraChain::Contracts::ContractFailure {
+                .error  = ExtraChain::Contracts::ContractError::InvalidOwner,
+                .detail = "The migration signer or target contract is invalid",
+            });
+        }
+        const auto block  = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
+        auto       change = contract_manager_->prepare_call(contract_id.to_string(),
+                                                      signer.id().to_string(),
+                                                      "import_legacy",
+                                                      arguments,
+                                                      block,
+                                                            {});
+        if (!change.has_value()) {
+            return std::unexpected(change.error());
+        }
+        if (!verify_dfs_effect_authors(dfs_.get(), *change, signer.id())
+            || change->kind == ExtraChain::Contracts::ContractChangeKind::ReadOnly) {
+            return std::unexpected(ExtraChain::Contracts::ContractFailure {
+                .error  = ExtraChain::Contracts::ContractError::InvalidProof,
+                .detail = "The legacy import produced invalid effects",
+            });
+        }
+
+        const auto&             version  = change->record.versions.at(change->record.active_version - 1);
+        const auto&             revision = version.revisions.back();
+        ContractTransactionData metadata {
+            .kind                = change->record.kind,
+            .language            = change->record.language,
+            .method              = "import_legacy",
+            .arguments_base64    = Utils::to_base64(arguments),
+            .module_hash         = version.module_hash,
+            .previous_state_hash = revision.previous_hash,
+            .state_hash          = revision.state_hash,
+            .effects_hash        = ExtraChain::Contracts::Codec::effect_hash(change->output.effects),
+            .effects_base64 =
+                Utils::to_base64(ExtraChain::Contracts::Codec::encode_effects(change->output.effects)),
+            .version             = version.version,
+            .revision            = revision.revision,
+            .checkpoint          = change->checkpoint,
+            .checkpoint_revision = revision.checkpoint_revision,
+            .transitions         = contract_transitions(*change),
+            .legacy_migration    = migration,
         };
         Transaction transaction;
         transaction.set_sender(signer.id());
@@ -2197,7 +2320,15 @@ namespace ExtraChain::Core {
             if (!arguments.has_value()) {
                 return std::unexpected(TransactionError::Unknown);
             }
-            auto result = submit_contract_call(signer, transaction.token(), "transfer", arguments.value());
+            const auto token = token_manager_->token(transaction.token());
+            if (!token.has_value()) {
+                return std::unexpected(TransactionError::Unknown);
+            }
+            const auto contract_id = ActorId::create(token->smart);
+            if (!contract_id.has_value()) {
+                return std::unexpected(TransactionError::Unknown);
+            }
+            auto result = submit_contract_call(signer, *contract_id, "transfer", arguments.value());
             if (!result.has_value()) {
                 return std::unexpected(TransactionError::Unknown);
             }
@@ -2273,6 +2404,7 @@ namespace ExtraChain::Core {
         // when it does fire it is the cheapest place to check.
         if (dag_->status() == DagStatus::Ready) {
             dag_->start_check();
+            token_manager_->process_legacy_migrations();
         }
 #endif
 
