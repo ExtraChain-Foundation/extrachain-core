@@ -759,6 +759,7 @@ public:
 private:
     struct AdmissionState;
     struct TransactionValidationFacts {
+        std::string         hash;
         bool                hash_valid = false;
         std::optional<bool> sender_exists;
         std::optional<bool> receiver_exists;
@@ -777,11 +778,12 @@ private:
 
     std::expected<void, TransactionProveError> network_transaction_immediate(const Transaction &transaction,
                                                                              const Responder   &responder);
-    TransactionProveError                      prove_transaction_with_facts(const Transaction                &tx,
-                                                                            const std::set<Transaction>      &transactions,
-                                                                            const std::set<Transaction>      *pending_transactions,
-                                                                            const SectionId                  *validation_frontier,
-                                                                            const TransactionValidationFacts *facts);
+    TransactionProveError                      prove_transaction_with_facts(const Transaction                     &tx,
+                                                                            const std::set<Transaction>           &transactions,
+                                                                            const std::set<Transaction>           *pending_transactions,
+                                                                            const std::unordered_set<std::string> *pending_hashes,
+                                                                            const SectionId                       *validation_frontier,
+                                                                            const TransactionValidationFacts      *facts);
 
     StatusEvent                                           status_event_;
     SyncStartEvent                                        sync_start_event_;

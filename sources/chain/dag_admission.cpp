@@ -209,18 +209,19 @@ private:
     }
 
     TransactionProveError rate_limit(const Transaction                               &transaction,
-                                     const std::unordered_map<NodeId, std::uint64_t> &reservations) const {
+                                     const std::unordered_map<NodeId, std::uint64_t> &reservations,
+                                     std::uint64_t                                    admission_time) const {
         if (transaction.type() != TransactionType::Regular)
             return TransactionProveError::NoError;
         const NodeId sender { .actor_id = transaction.sender(), .node_identifier = "" };
-        const auto   now      = Utils::current_date_ms();
         auto         reserved = reservations.find(sender);
-        if (reserved != reservations.end() && now - reserved->second < 4500)
+        if (reserved != reservations.end() && admission_time - reserved->second < 4500)
             return TransactionProveError::TooOften;
         std::lock_guard lock(owner->last_txs_mutex_);
         auto            stored = owner->last_txs_.find(sender);
-        return stored != owner->last_txs_.end() && now - stored->second < 4500 ? TransactionProveError::TooOften
-                                                                               : TransactionProveError::NoError;
+        return stored != owner->last_txs_.end() && admission_time - stored->second < 4500
+                   ? TransactionProveError::TooOften
+                   : TransactionProveError::NoError;
     }
 
     void reject(const std::shared_ptr<Request> &request, TransactionProveError result) {
@@ -299,14 +300,14 @@ private:
             for (auto index = first; index < last; ++index) {
                 const auto &transaction = requests[index]->transaction;
                 auto       &result      = facts[index];
-                const auto  stored_hash = transaction.hash();
+                result.hash             = transaction.hash();
                 result.hash_valid =
-                    stored_hash == transaction.calculate_hash_hex() || stored_hash == transaction.calculate_hash();
+                    result.hash == transaction.calculate_hash() || result.hash == transaction.calculate_hash_hex();
 
                 const auto sender = actors.find(transaction.sender());
                 result.sender_exists = sender != actors.end() && !sender->second.empty();
                 if (result.sender_exists.value() && !transaction.signature().empty()) {
-                    const auto signature = sender->second.key().verify(stored_hash, transaction.signature());
+                    const auto signature = sender->second.key().verify(result.hash, transaction.signature());
                     result.signature_valid = signature.has_value() && signature.value();
                 } else {
                     result.signature_valid = false;
@@ -353,10 +354,14 @@ private:
     void process_batch(const std::vector<std::shared_ptr<Request>> &requests) {
         const auto                                prevalidated = prevalidate(requests);
         std::map<SectionId, Section>              sections;
-        std::set<Transaction>                     pending;
+        std::unordered_set<std::string>           pending_hashes;
         std::unordered_map<NodeId, std::uint64_t> reservations;
         std::vector<std::shared_ptr<Request>>     accepted;
         auto                                      validation_frontier = owner->current_section_;
+        pending_hashes.reserve(requests.size());
+        reservations.reserve(requests.size());
+        accepted.reserve(requests.size());
+        const auto admission_time = Utils::current_date_ms();
 
         for (std::size_t request_index = 0; request_index < requests.size(); ++request_index) {
             const auto &request     = requests[request_index];
@@ -370,11 +375,12 @@ private:
                               .first;
             }
 
-            auto result = rate_limit(transaction, reservations);
+            auto result = rate_limit(transaction, reservations, admission_time);
             if (result == TransactionProveError::NoError)
                 result = owner->prove_transaction_with_facts(transaction,
                                                              section->second.transactions,
-                                                             &pending,
+                                                             nullptr,
+                                                             &pending_hashes,
                                                              &validation_frontier,
                                                              &prevalidated[request_index]);
             if (result != TransactionProveError::NoError) {
@@ -386,12 +392,12 @@ private:
                 continue;
             }
 
-            pending.insert(transaction);
+            pending_hashes.insert(prevalidated[request_index].hash);
             accepted.push_back(request);
             validation_frontier = std::max(validation_frontier, transaction.section());
             if (transaction.type() == TransactionType::Regular) {
                 reservations.insert_or_assign(NodeId { .actor_id = transaction.sender(), .node_identifier = "" },
-                                              Utils::current_date_ms());
+                                              admission_time);
             }
         }
 
@@ -402,10 +408,7 @@ private:
         {
             WireFormat::Scope scope(WireFormat::Mode::Canonical);
             for (const auto &[id, section] : sections) {
-                const bool changed = std::ranges::any_of(accepted, [&](const auto &request) {
-                    return request->transaction.section() == id;
-                });
-                if (changed)
+                if (!section.transactions.empty())
                     payloads.emplace(id, Json::serialize(section));
             }
         }

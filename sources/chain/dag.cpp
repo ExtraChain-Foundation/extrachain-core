@@ -1504,14 +1504,20 @@ TransactionProveError Dag::prove_transaction(const Transaction           &tx,
                                              const std::set<Transaction> &transactions,
                                              const std::set<Transaction> *pending_transactions,
                                              const SectionId             *validation_frontier) {
-    return prove_transaction_with_facts(tx, transactions, pending_transactions, validation_frontier, nullptr);
+    return prove_transaction_with_facts(tx,
+                                        transactions,
+                                        pending_transactions,
+                                        nullptr,
+                                        validation_frontier,
+                                        nullptr);
 }
 
-TransactionProveError Dag::prove_transaction_with_facts(const Transaction                &tx,
-                                                        const std::set<Transaction>      &transactions,
-                                                        const std::set<Transaction>      *pending_transactions,
-                                                        const SectionId                  *validation_frontier,
-                                                        const TransactionValidationFacts *facts) {
+TransactionProveError Dag::prove_transaction_with_facts(const Transaction           &tx,
+                                                        const std::set<Transaction> &transactions,
+                                                        const std::set<Transaction> *pending_transactions,
+                                                        const std::unordered_set<std::string> *pending_hashes,
+                                                        const SectionId                       *validation_frontier,
+                                                        const TransactionValidationFacts      *facts) {
     // Check Genesis transactions
     if (tx.type() == TransactionType::Genesis) {
         if (tx.section() != SectionId(0)) {
@@ -1574,23 +1580,23 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     // Verify transaction hash integrity.
     // A transaction from a legacy peer will carry a hash computed in the old hex
     // form — accept either the new canonical decimal hash or the legacy one.
-    const auto hash_valid = [&]() {
-        if (facts != nullptr)
-            return facts->hash_valid;
-        const auto stored_hash = tx.hash();
-        const auto legacy_hash = tx.calculate_hash_hex();
-        return stored_hash == legacy_hash || stored_hash == tx.calculate_hash();
-    }();
+    const auto  stored_hash      = facts == nullptr ? tx.hash() : std::string();
+    const auto &transaction_hash = facts == nullptr ? stored_hash : facts->hash;
+    const auto  hash_valid       = facts != nullptr ? facts->hash_valid
+                                                    : transaction_hash == tx.calculate_hash()
+                                                          || transaction_hash == tx.calculate_hash_hex();
     if (!hash_valid) {
         return TransactionProveError::WrongHash;
     }
 
-    const bool pending_duplicate =
-        pending_transactions != nullptr && std::ranges::any_of(*pending_transactions, [&](const auto &pending) {
-            return pending.hash() == tx.hash();
-        });
+    const bool  pending_duplicate =
+        pending_hashes != nullptr ? pending_hashes->contains(transaction_hash)
+                                   : pending_transactions != nullptr
+                                        && std::ranges::any_of(*pending_transactions, [&](const auto &pending) {
+                                               return pending.hash() == transaction_hash;
+                                           });
     const bool stored_duplicate = std::ranges::any_of(transactions, [&](const auto &existing) {
-        return existing.hash() == tx.hash();
+        return existing.hash() == transaction_hash;
     });
     if (pending_duplicate || stored_duplicate) {
         return TransactionProveError::Duplicate;
@@ -1620,7 +1626,7 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     const auto verify_stored_hash = [&]() {
         if (facts != nullptr && facts->signature_valid.has_value())
             return facts->signature_valid.value();
-        const auto result = senderActor.key().verify(tx.hash(), tx.signature());
+        const auto result = senderActor.key().verify(transaction_hash, tx.signature());
         return result.has_value() && *result;
     };
 

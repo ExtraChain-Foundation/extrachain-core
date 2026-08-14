@@ -156,11 +156,12 @@ bool HotSectionStore::put(const SectionId &section, const std::string &payload) 
     sqlite3_reset(impl_->put_stmt);
     sqlite3_clear_bindings(impl_->put_stmt);
     sqlite3_bind_int64(impl_->put_stmt, 1, *id);
-    sqlite3_bind_blob(impl_->put_stmt, 2, payload.data(), static_cast<int>(payload.size()), SQLITE_TRANSIENT);
+    sqlite3_bind_blob(impl_->put_stmt, 2, payload.data(), static_cast<int>(payload.size()), SQLITE_STATIC);
     const bool stored = sqlite3_step(impl_->put_stmt) == SQLITE_DONE;
     if (!stored)
         eWarning("[HotSectionStore] write failed: {}", sqlite3_errmsg(impl_->db));
     sqlite3_reset(impl_->put_stmt);
+    sqlite3_clear_bindings(impl_->put_stmt);
     return stored;
 }
 
@@ -185,15 +186,17 @@ bool HotSectionStore::commit_batch(const std::map<SectionId, std::string>       
         sqlite3_reset(impl_->put_stmt);
         sqlite3_clear_bindings(impl_->put_stmt);
         sqlite3_bind_int64(impl_->put_stmt, 1, *id);
-        sqlite3_bind_blob(impl_->put_stmt, 2, payload.data(), static_cast<int>(payload.size()), SQLITE_TRANSIENT);
+        sqlite3_bind_blob(impl_->put_stmt, 2, payload.data(), static_cast<int>(payload.size()), SQLITE_STATIC);
         if (sqlite3_step(impl_->put_stmt) != SQLITE_DONE) {
             eWarning("[HotSectionStore] batch write failed: {}", sqlite3_errmsg(impl_->db));
             sqlite3_reset(impl_->put_stmt);
+            sqlite3_clear_bindings(impl_->put_stmt);
             impl_->exec("ROLLBACK");
             return false;
         }
     }
     sqlite3_reset(impl_->put_stmt);
+    sqlite3_clear_bindings(impl_->put_stmt);
 
     if (committed_range.has_value()) {
         const auto first = section_to_i64(committed_range->first);
