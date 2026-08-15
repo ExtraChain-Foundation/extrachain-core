@@ -17,12 +17,26 @@
 #include <vector>
 
 #include "consensus/consensus_types.h"
+#include "consensus/consensus_protocol.h"
 
 namespace ExtraChain::Consensus {
 
     class EXTRACHAIN_EXPORT ValidatorSetView {
     public:
         static std::expected<ValidatorSetView, ConsensusError> create(ValidatorSet validators);
+        static std::expected<ValidatorSetView, ConsensusError> create_governed(
+            ValidatorSet                            validators,
+            std::string                             registry_document_hash,
+            const std::vector<OperatorAttestation>& operators,
+            const MultisigPolicy&                   policy,
+            const GovernanceAuthorization&          authorization,
+            std::uint64_t                           minimum_sequence);
+        static std::expected<ValidatorSetView, ConsensusError> create_epoch_transition(
+            ValidatorSet          validators,
+            const EpochChangeV1&  change,
+            const MultisigPolicy& policy,
+            std::uint64_t         current_height,
+            std::uint64_t         minimum_sequence);
 
         [[nodiscard]] const ValidatorSet&                 document() const noexcept;
         [[nodiscard]] const std::vector<ValidatorRecord>& active() const noexcept;
@@ -55,5 +69,13 @@ namespace ExtraChain::Consensus {
         std::uint64_t                epoch,
         std::vector<ValidatorRecord> validators,
         const Actor<KeyPrivate>&     governance_actor);
+
+    EXTRACHAIN_EXPORT std::string governed_validator_set_action_hash(
+        const ValidatorSet&                     validators,
+        std::string_view                        registry_document_hash,
+        const std::vector<OperatorAttestation>& operators);
+    EXTRACHAIN_EXPORT QuorumCertificate make_genesis_certificate(const ValidatorSetView& validators);
+    EXTRACHAIN_EXPORT QuorumCertificate make_epoch_genesis_certificate(const ValidatorSetView& validators,
+                                                                       const EpochBootstrapV1& bootstrap);
 
 } // namespace ExtraChain::Consensus

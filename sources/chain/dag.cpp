@@ -20,10 +20,12 @@
 #include "chain/dag.h"
 #include "chain/dag_recovery.h"
 #include "consensus/consensus_service.h"
+#include "consensus/consensus_protocol.h"
 #include "contracts/contract_manager.h"
 #include "contracts/contract_transaction.h"
 
 #include <boost/asio/post.hpp>
+#include <charconv>
 #include <chrono>
 #include <cctype>
 #include <future>
@@ -724,6 +726,9 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
                  current_section_.to_string());
         return std::unexpected(TransactionError::NotReady);
     }
+    if (node->consensus() != nullptr && node->consensus()->requires_intent_v2()) {
+        return std::unexpected(TransactionError::IntentRequired);
+    }
 
     auto tx = this->prepare_transaction(transaction, signer);
     if (!tx.has_value()) {
@@ -747,6 +752,9 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
     }
     if (!state_projection_ready()) {
         return std::unexpected(TransactionProveError::StateUnavailable);
+    }
+    if (node->consensus() != nullptr && node->consensus()->requires_intent_v2()) {
+        return std::unexpected(TransactionProveError::IntentRequired);
     }
     if (status_ != DagStatus::Final) {
         /*
@@ -1996,18 +2004,13 @@ bool Dag::validate_repair_transaction(const Transaction &transaction, const std:
     if (sender.empty()) {
         return false;
     }
-    const auto signature_valid = sender.key().verify(transaction.hash(), transaction.signature());
-    if (!signature_valid.has_value() || !signature_valid.value()) {
+    if (!transaction.verify(sender)) {
         return false;
-    }
-
-    if (is_contract_transaction(transaction.type()) || is_token_migration_transaction(transaction.type())) {
-        return true;
     }
 
     const std::set<Transaction> empty;
     const auto                  frontier = transaction.section();
-    return prove_transaction(transaction, empty, &pending, &frontier) == TransactionProveError::NoError;
+    return prove_transaction(transaction, empty, &pending, &frontier, false) == TransactionProveError::NoError;
 }
 
 std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
@@ -2069,7 +2072,7 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
         }
         payload_bytes += bytes.size();
         for (const auto &transaction : section.value().transactions) {
-            batch.manifest.transaction_hashes.push_back(transaction.hash());
+            batch.manifest.transaction_hashes.push_back(consensus_transaction_hash(transaction));
         }
         const auto    section_text  = section_id.to_string();
         std::uint64_t section_value = 0;
@@ -2102,6 +2105,138 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
     }
     batch.manifest.payload_bytes = payload_bytes;
     return batch;
+}
+
+std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError> Dag::
+    build_shadow_intent_batch(const SectionId                                          &first_section,
+                              const SectionId                                          &last_section,
+                              std::uint64_t                                             logical_time,
+                              const std::vector<ExtraChain::Consensus::IntentEnvelope> &intents,
+                              std::string                                               header_hash,
+                              std::optional<std::string>                                previous_section_bytes,
+                              std::string                                               previous_section_root) {
+    using namespace ExtraChain::Consensus;
+    constexpr std::size_t MaximumTransactionsPerSection = 256;
+    if (first_section < SectionId(0) || last_section < first_section
+        || last_section - first_section >= CONTROL_INTERVAL
+        || intents.size() > MaximumTransactionsPerSection
+                                * static_cast<std::size_t>(
+                                    (last_section - first_section + SectionId(1)).to_int().value_or(0))) {
+        return std::unexpected(ConsensusError::DataTooLarge);
+    }
+
+    std::set<std::string> previous_hashes;
+    if (first_section != SectionId(0)) {
+        std::optional<Section> previous;
+        if (previous_section_bytes.has_value()) {
+            auto decoded = Json::deserialize<Section>(previous_section_bytes.value());
+            if (decoded.has_value()) {
+                previous = std::move(decoded.value());
+            }
+        } else {
+            previous = read_section(first_section - SectionId(1));
+        }
+        if (!previous.has_value()) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
+        previous.value().id = first_section - SectionId(1);
+        previous_hashes     = previous.value().hashs();
+    }
+
+    std::vector<Section> sections;
+    const auto           section_count =
+        static_cast<std::size_t>((last_section - first_section + SectionId(1)).to_int().value_or(0));
+    sections.reserve(section_count);
+    for (std::size_t index = 0; index < section_count; ++index) {
+        const auto section_id = first_section + SectionId(index);
+        if (read_section(section_id).has_value()) {
+            return std::unexpected(ConsensusError::UnsafeProposal);
+        }
+        sections.push_back(Section { .id = section_id, .transactions = {}, .control = std::nullopt });
+    }
+
+    for (std::size_t index = 0; index < intents.size(); ++index) {
+        const auto section_index = index / MaximumTransactionsPerSection;
+        const auto materialized =
+            materialize_intent(intents[index],
+                               static_cast<std::uint64_t>(sections[section_index].id.to_int().value_or(0)),
+                               logical_time,
+                               previous_hashes);
+        if (!materialized.has_value()) {
+            return std::unexpected(materialized.error());
+        }
+        sections[section_index].transactions.insert(materialized.value());
+        if ((index + 1) % MaximumTransactionsPerSection == 0 && section_index + 1 < sections.size()) {
+            previous_hashes = sections[section_index].hashs();
+        }
+    }
+
+    SectionBatchData  batch { .header_hash = std::move(header_hash) };
+    std::uint64_t     payload_bytes = 0;
+    WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+    for (const auto &section : sections) {
+        const auto bytes = Json::serialize(section);
+        if (bytes.size() > std::numeric_limits<std::uint64_t>::max() - payload_bytes) {
+            return std::unexpected(ConsensusError::DataTooLarge);
+        }
+        payload_bytes += bytes.size();
+        for (const auto &transaction : section.transactions) {
+            batch.manifest.transaction_hashes.push_back(consensus_transaction_hash(transaction));
+        }
+        const auto section_value = section.id.to_int();
+        if (!section_value.has_value() || section_value.value() < 0) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        batch.sections.emplace_back(static_cast<std::uint64_t>(section_value.value()), bytes);
+    }
+
+    const auto first_value = first_section.to_int();
+    const auto last_value  = last_section.to_int();
+    if (!first_value.has_value() || !last_value.has_value() || first_value.value() < 0 || last_value.value() < 0) {
+        return std::unexpected(ConsensusError::InvalidRoot);
+    }
+    batch.manifest.first_section    = static_cast<std::uint64_t>(first_value.value());
+    batch.manifest.last_section     = static_cast<std::uint64_t>(last_value.value());
+    batch.manifest.transaction_root = calculate_transaction_root(batch.manifest.transaction_hashes);
+    batch.manifest.data_root        = calculate_data_root(batch.sections);
+    if (first_section != SectionId(0)) {
+        if (previous_section_root.empty()) {
+            const auto previous = read_control(first_section - SectionId(1));
+            if (!previous.has_value()) {
+                return std::unexpected(ConsensusError::DataUnavailable);
+            }
+            previous_section_root = previous.value().control;
+        }
+        batch.manifest.previous_section_root = std::move(previous_section_root);
+    }
+    batch.manifest.payload_bytes = payload_bytes;
+    return batch;
+}
+
+std::expected<std::string, ExtraChain::Consensus::ConsensusError> Dag::shadow_batch_section_root(
+    const ExtraChain::Consensus::SectionBatchData &batch) const {
+    using ExtraChain::Consensus::ConsensusError;
+    std::string       section_hashes;
+    WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+    for (const auto &[section_value, bytes] : batch.sections) {
+        auto section = Json::deserialize<Section>(bytes);
+        if (!section.has_value()) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        section.value().id = SectionId(section_value);
+        const auto input   = section.value().transactions.empty()
+                                 ? section.value().id.to_string()
+                                 : section.value().id.to_string() + section.value().calculate_hash();
+        section_hashes += Utils::calculate_hash(input);
+    }
+    auto root = Utils::calculate_hash(section_hashes);
+    if (batch.manifest.first_section != 0) {
+        if (batch.manifest.previous_section_root.empty()) {
+            return std::unexpected(ConsensusError::InvalidParent);
+        }
+        root = Utils::calculate_hash(batch.manifest.previous_section_root + root);
+    }
+    return root;
 }
 
 std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_batch(
@@ -2144,7 +2279,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
             return std::unexpected(ConsensusError::InvalidRoot);
         }
         for (const auto &transaction : section.value().transactions) {
-            transaction_hashes.push_back(transaction.hash());
+            transaction_hashes.push_back(consensus_transaction_hash(transaction));
         }
         sections.insert_or_assign(section_id, bytes);
         ++expected_section;
@@ -2158,26 +2293,8 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
         return std::unexpected(ConsensusError::InvalidRoot);
     }
 
-    std::string section_hashes;
-    for (const auto &[section_id, bytes] : sections) {
-        const auto section = Json::deserialize<Section>(bytes);
-        if (!section.has_value()) {
-            return std::unexpected(ConsensusError::InvalidRoot);
-        }
-        const auto input = section.value().transactions.empty()
-                               ? section_id.to_string()
-                               : section_id.to_string() + section.value().calculate_hash();
-        section_hashes += Utils::calculate_hash(input);
-    }
-    auto       expected_root = Utils::calculate_hash(section_hashes);
-    const auto first_section = SectionId(batch.manifest.first_section);
-    if (first_section != SectionId(0)) {
-        if (batch.manifest.previous_section_root.empty()) {
-            return std::unexpected(ConsensusError::InvalidParent);
-        }
-        expected_root = Utils::calculate_hash(batch.manifest.previous_section_root + expected_root);
-    }
-    if (expected_root != proposal.header.section_root) {
+    const auto expected_root = shadow_batch_section_root(batch);
+    if (!expected_root.has_value() || expected_root.value() != proposal.header.section_root) {
         return std::unexpected(ConsensusError::InvalidRoot);
     }
     return {};
@@ -2189,6 +2306,71 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     std::uint64_t                                  maximum_batch_bytes,
     const std::string                             &proof_hash) {
     using ExtraChain::Consensus::ConsensusError;
+    const auto contract_committed = [this](const Transaction &transaction) {
+        const auto record = node->contract_manager()->inspect(transaction.receiver().to_string());
+        return record.has_value() && std::ranges::any_of(record.value().versions, [&](const auto &version) {
+                   return std::ranges::any_of(version.revisions, [&](const auto &revision) {
+                       return revision.transaction_hash == transaction.hash();
+                   });
+               });
+    };
+    const auto commit_contract_intents =
+        [&](const std::map<SectionId, std::string> &sections) -> std::expected<void, ConsensusError> {
+        for (const auto &[_, bytes] : sections) {
+            const auto section = Json::deserialize<Section>(bytes);
+            if (!section.has_value()) {
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+            for (const auto &transaction : section.value().transactions) {
+                if (!transaction.consensus_intent().has_value() || !is_contract_transaction(transaction.type())
+                    || contract_committed(transaction)) {
+                    continue;
+                }
+                if (node->validate_contract_transaction(transaction) != TransactionProveError::NoError) {
+                    return std::unexpected(ConsensusError::InvalidIntent);
+                }
+                node->finalize_contract_change(transaction.hash(), true);
+                if (!contract_committed(transaction)) {
+                    return std::unexpected(ConsensusError::StorageFailure);
+                }
+            }
+        }
+        return {};
+    };
+
+    std::map<SectionId, std::string> canonical_sections;
+    for (const auto &[section, bytes] : batch.sections) {
+        canonical_sections.insert_or_assign(SectionId(section), bytes);
+    }
+    const auto last_control = read_control(SectionId(batch.manifest.last_section));
+    bool       already_installed =
+        last_control.has_value() && last_control.value().control == proposal.header.section_root;
+    if (already_installed) {
+        WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+        for (const auto &[section_id, expected] : canonical_sections) {
+            auto stored = read_section(section_id);
+            if (!stored.has_value()) {
+                already_installed = false;
+                break;
+            }
+            stored.value().control.reset();
+            if (Json::serialize(stored.value()) != expected) {
+                already_installed = false;
+                break;
+            }
+        }
+    }
+    if (already_installed) {
+        const auto contracts_committed = commit_contract_intents(canonical_sections);
+        if (!contracts_committed.has_value()) {
+            return std::unexpected(contracts_committed.error());
+        }
+        if (cache_.section() < SectionId(batch.manifest.last_section)) {
+            cache_.check_and_update_cache_thread(current_section_);
+        }
+        return {};
+    }
+
     const auto validated = validate_shadow_batch(proposal, batch, maximum_batch_bytes);
     if (!validated.has_value()) {
         return std::unexpected(validated.error());
@@ -2198,10 +2380,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     }
     std::unique_lock<std::recursive_mutex> save_lock(save_mutex_);
 
-    std::map<SectionId, std::string> sections;
-    for (const auto &[section, bytes] : batch.sections) {
-        sections.insert_or_assign(SectionId(section), bytes);
-    }
+    auto       sections           = std::move(canonical_sections);
     const auto first              = sections.begin()->first;
     const auto last               = sections.rbegin()->first;
     auto       recovery_incidents = recovery_journal_ == nullptr ? std::vector<DagRecoveryIncident> {}
@@ -2264,9 +2443,16 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
         }
         chain_index_->flush();
     }
+    const auto contracts_committed = commit_contract_intents(sections);
+    if (!contracts_committed.has_value()) {
+        return std::unexpected(contracts_committed.error());
+    }
     if (!recovery_incidents.empty()
         && !replay_repaired_state(first, last, proposal.header.section_root, proof_hash)) {
         return std::unexpected(ConsensusError::StorageFailure);
+    }
+    if (recovery_incidents.empty() && first > cache_.section()) {
+        cache_.check_and_update_cache_thread(current_section_);
     }
     update_range(true);
     return {};
@@ -2390,13 +2576,15 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
 TransactionProveError Dag::prove_transaction(const Transaction           &tx,
                                              const std::set<Transaction> &transactions,
                                              const std::set<Transaction> *pending_transactions,
-                                             const SectionId             *validation_frontier) {
+                                             const SectionId             *validation_frontier,
+                                             bool                         stage_contract_change) {
     return prove_transaction_with_facts(tx,
                                         transactions,
                                         pending_transactions,
                                         nullptr,
                                         validation_frontier,
-                                        nullptr);
+                                        nullptr,
+                                        stage_contract_change);
 }
 
 TransactionProveError Dag::prove_transaction_with_facts(const Transaction           &tx,
@@ -2404,7 +2592,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
                                                         const std::set<Transaction> *pending_transactions,
                                                         const std::unordered_set<std::string> *pending_hashes,
                                                         const SectionId                       *validation_frontier,
-                                                        const TransactionValidationFacts      *facts) {
+                                                        const TransactionValidationFacts      *facts,
+                                                        bool stage_contract_change) {
     // Check Genesis transactions
     if (tx.type() == TransactionType::Genesis) {
         if (tx.section() != SectionId(0)) {
@@ -2442,7 +2631,7 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
 
     // Validate transaction amount
     if (tx.amount() == BigNumberFloat(0) && !is_contract_transaction(tx.type())
-        && !is_token_migration_transaction(tx.type())) {
+        && !is_token_migration_transaction(tx.type()) && !is_epoch_change_transaction(tx.type())) {
         return TransactionProveError::AmountZero;
     }
 
@@ -2514,9 +2703,20 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     const auto verify_stored_hash = [&]() {
         if (facts != nullptr && facts->signature_valid.has_value())
             return facts->signature_valid.value();
+        if (tx.consensus_intent().has_value()) {
+            return tx.verify(senderActor);
+        }
         const auto result = senderActor.key().verify(transaction_hash, tx.signature());
         return result.has_value() && *result;
     };
+
+    if (tx.type() == TransactionType::EpochChange) {
+        if (tx.amount() != 0 || !tx.token().is_zero() || !tx.meta().has_value() || tx.meta()->empty()
+            || tx.meta()->size() > 256 * 1024 || tx.signature().empty() || !tx.consensus_intent().has_value()) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        return verify_stored_hash() ? TransactionProveError::NoError : TransactionProveError::InvalidSignature;
+    }
 
     if (tx.type() == TransactionType::TokenMigration) {
         if (targetReceiver.is_zero() || targetSender == targetReceiver || tx.token().is_zero()
@@ -2550,7 +2750,7 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
         if (!verify_stored_hash()) {
             return TransactionProveError::InvalidSignature;
         }
-        return node->validate_contract_transaction(tx);
+        return node->validate_contract_transaction(tx, stage_contract_change);
     }
 
     if (tx.type() == TransactionType::Regular && !tx.token().is_zero()) {
@@ -4830,8 +5030,7 @@ bool Dag::validate_received_pack(Pack::PackId id, const Pack::Reader &reader) co
             // The content hash was checked above. Verify the signature against
             // that exact stored hash, instead of recalculating and checking both
             // canonical and legacy preimages for every transaction.
-            const auto signature_valid = sender->second.key().verify(tx.hash(), tx.signature());
-            if (!signature_valid.has_value() || !signature_valid.value())
+            if (!tx.verify(sender->second))
                 return reject("invalid transaction signature");
         }
         sections.emplace(section_id, std::move(*section));

@@ -120,6 +120,7 @@ enum class MessageType {
     ConsensusBatchData          = 128,
     ConsensusSyncRequest        = 129,
     ConsensusSyncResponse       = 130,
+    ConsensusIntent             = 131,
 
     Unknown = 250
 };

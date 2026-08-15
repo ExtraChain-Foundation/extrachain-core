@@ -1,0 +1,25 @@
+name: Shadow model
+
+on:
+  pull_request:
+    paths:
+      - "spec/consensus/**"
+      - "headers/consensus/**"
+      - "sources/consensus/**"
+      - "scripts/check_shadow_model.sh"
+      - ".github/workflows/shadow-model.yml"
+  push:
+    branches:
+      - dev
+      - boost/core-dev-1.0
+
+jobs:
+  model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bash scripts/check_shadow_model.sh

@@ -11,6 +11,7 @@
 #pragma once
 
 #include <expected>
+#include <atomic>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -18,6 +19,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "consensus/consensus_protocol.h"
 #include "consensus/safety_store.h"
 #include "consensus/validator_set.h"
 
@@ -40,7 +42,8 @@ namespace ExtraChain::Consensus {
         ConsensusEngine(ValidatorSetView                 validators,
                         std::optional<ValidatorIdentity> identity,
                         std::unique_ptr<SafetyStore>     store,
-                        ProposalValidator                proposal_validator = {});
+                        ProposalValidator                proposal_validator = {},
+                        std::optional<EpochBootstrapV1>  epoch_bootstrap    = std::nullopt);
 
         std::expected<void, ConsensusError>           initialize();
         std::expected<Proposal, ConsensusError>       make_proposal(SectionBatchManifest batch,
@@ -64,13 +67,18 @@ namespace ExtraChain::Consensus {
             std::size_t   limit) const;
         [[nodiscard]] std::expected<std::optional<FinalityProof>, ConsensusError> finality_proof_for_section(
             std::uint64_t section) const;
+        [[nodiscard]] std::expected<std::optional<TransactionInclusionProofV1>, ConsensusError>
+                           transaction_inclusion_proof(std::string_view transaction_hash) const;
+        [[nodiscard]] bool verify_transaction_inclusion_proof(const TransactionInclusionProofV1& proof) const;
         [[nodiscard]] QuorumCertificate                       genesis_certificate() const;
         [[nodiscard]] const ValidatorSetView&                 validators() const noexcept;
         [[nodiscard]] const SafetyState&                      safety_state() const noexcept;
         [[nodiscard]] const std::optional<ValidatorIdentity>& identity() const noexcept;
+        [[nodiscard]] const std::optional<EpochBootstrapV1>&  epoch_bootstrap() const noexcept;
         [[nodiscard]] bool                    is_local_leader(std::uint64_t height, std::uint64_t round) const;
         [[nodiscard]] std::optional<Proposal> proposal_for(std::string_view header_hash) const;
         [[nodiscard]] std::optional<SectionBatchData> batch_for(std::string_view header_hash) const;
+        [[nodiscard]] ConsensusMetricsSnapshot        metrics() const noexcept;
 
     private:
         [[nodiscard]] bool        verify_proposal(const Proposal& proposal) const;
@@ -90,6 +98,7 @@ namespace ExtraChain::Consensus {
         std::optional<ValidatorIdentity>                          identity_;
         std::unique_ptr<SafetyStore>                              store_;
         ProposalValidator                                         proposal_validator_;
+        std::optional<EpochBootstrapV1>                           epoch_bootstrap_;
         SafetyState                                               safety_state_;
         std::map<std::string, Proposal>                           proposals_;
         std::map<std::string, SectionBatchData>                   batches_;
@@ -103,6 +112,13 @@ namespace ExtraChain::Consensus {
         std::unordered_set<std::string>                           certified_headers_;
         mutable std::recursive_mutex                              mutex_;
         bool                                                      initialized_ = false;
+        std::atomic<std::uint64_t>                                proposals_created_ { 0 };
+        std::atomic<std::uint64_t>                                batches_staged_ { 0 };
+        std::atomic<std::uint64_t>                                votes_created_ { 0 };
+        std::atomic<std::uint64_t>                                timeout_votes_created_ { 0 };
+        std::atomic<std::uint64_t>                                certificates_accepted_ { 0 };
+        std::atomic<std::uint64_t>                                checkpoints_finalized_ { 0 };
+        std::atomic<std::uint64_t>                                stage_nanoseconds_ { 0 };
     };
 
 } // namespace ExtraChain::Consensus

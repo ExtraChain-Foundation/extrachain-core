@@ -349,7 +349,8 @@ namespace ExtraChain::Core {
             Transaction                                   transaction,
             const Actor<KeyPrivate>&                      signer,
             ExtraChain::Contracts::PreparedContractChange change);
-        TransactionProveError validate_contract_transaction(const Transaction& transaction);
+        TransactionProveError validate_contract_transaction(const Transaction& transaction,
+                                                            bool               stage_change = true);
         std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_contract_deploy(
             std::string                   kind,
             std::span<const std::uint8_t> module,

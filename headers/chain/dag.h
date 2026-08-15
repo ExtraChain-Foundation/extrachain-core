@@ -48,6 +48,9 @@
 namespace ExtraChain::Core {
     class ExtraChainNode;
 }
+namespace ExtraChain::Consensus {
+    struct IntentEnvelope;
+}
 class Responder;
 
 // Control hashes live on every CONTROL_INTERVAL-th section (section_id % 20 == 0).
@@ -607,6 +610,16 @@ public:
     std::optional<Section> read_section(const SectionId &section_id) const;
     std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError>
     build_shadow_batch(const SectionId &first_section, const SectionId &last_section, std::string header_hash);
+    std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError>
+    build_shadow_intent_batch(const SectionId                                          &first_section,
+                              const SectionId                                          &last_section,
+                              std::uint64_t                                             logical_time,
+                              const std::vector<ExtraChain::Consensus::IntentEnvelope> &intents,
+                              std::string                                               header_hash,
+                              std::optional<std::string> previous_section_bytes = std::nullopt,
+                              std::string                previous_section_root  = {});
+    std::expected<std::string, ExtraChain::Consensus::ConsensusError> shadow_batch_section_root(
+        const ExtraChain::Consensus::SectionBatchData &batch) const;
     std::expected<void, ExtraChain::Consensus::ConsensusError> validate_shadow_batch(
         const ExtraChain::Consensus::Proposal         &proposal,
         const ExtraChain::Consensus::SectionBatchData &batch,
@@ -810,7 +823,8 @@ private:
                                                                             const std::set<Transaction>           *pending_transactions,
                                                                             const std::unordered_set<std::string> *pending_hashes,
                                                                             const SectionId                       *validation_frontier,
-                                                                            const TransactionValidationFacts      *facts);
+                                                                            const TransactionValidationFacts      *facts,
+                                                                            bool stage_contract_change);
 
     StatusEvent                                           status_event_;
     SyncStartEvent                                        sync_start_event_;
@@ -1153,8 +1167,9 @@ public:
      */
     TransactionProveError prove_transaction(const Transaction           &tx,
                                             const std::set<Transaction> &transactions,
-                                            const std::set<Transaction> *pending_transactions = nullptr,
-                                            const SectionId             *validation_frontier  = nullptr);
+                                            const std::set<Transaction> *pending_transactions  = nullptr,
+                                            const SectionId             *validation_frontier   = nullptr,
+                                            bool                         stage_contract_change = true);
 
     void clear_dag();
     void clear_dag_folder();

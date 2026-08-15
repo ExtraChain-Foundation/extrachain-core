@@ -11,6 +11,7 @@
 #include "consensus/consensus_engine.h"
 
 #include <algorithm>
+#include <chrono>
 #include <bit>
 #include <limits>
 #include <tuple>
@@ -21,8 +22,6 @@
 
 namespace ExtraChain::Consensus {
     namespace {
-        constexpr std::string_view GenesisDomain = "EXC_CONSENSUS_GENESIS_V1";
-        constexpr std::string_view StateDomain   = "EXC_CONSENSUS_STATE_V1";
 
         std::string vote_slot(const Vote& vote) {
             return fmt::format("{}:{}:{}:{}:{}",
@@ -72,11 +71,13 @@ namespace ExtraChain::Consensus {
     ConsensusEngine::ConsensusEngine(ValidatorSetView                 validators,
                                      std::optional<ValidatorIdentity> identity,
                                      std::unique_ptr<SafetyStore>     store,
-                                     ProposalValidator                proposal_validator)
+                                     ProposalValidator                proposal_validator,
+                                     std::optional<EpochBootstrapV1>  epoch_bootstrap)
         : validators_(std::move(validators))
         , identity_(std::move(identity))
         , store_(std::move(store))
-        , proposal_validator_(std::move(proposal_validator)) {
+        , proposal_validator_(std::move(proposal_validator))
+        , epoch_bootstrap_(std::move(epoch_bootstrap)) {
     }
 
     std::expected<void, ConsensusError> ConsensusEngine::initialize() {
@@ -93,6 +94,10 @@ namespace ExtraChain::Consensus {
                 || validator_id_for(identity_.value().key.public_key()) != record->validator_id) {
                 return std::unexpected(ConsensusError::NotValidator);
             }
+        }
+        if (epoch_bootstrap_.has_value()
+            && !verify_epoch_bootstrap(epoch_bootstrap_.value(), validators_.document())) {
+            return std::unexpected(ConsensusError::InvalidEpoch);
         }
         const auto opened = store_->open();
         if (!opened.has_value()) {
@@ -116,15 +121,16 @@ namespace ExtraChain::Consensus {
                      .protocol_version    = ProtocolVersion,
                      .network_id          = validators_.document().network_id,
                      .epoch               = validators_.document().epoch,
-                     .last_voted_height   = 0,
+                     .last_voted_height   = genesis.height,
                      .last_voted_round    = 0,
                      .last_voted_phase    = Phase::Genesis,
                      .last_voted_hash     = genesis.header_hash,
                      .highest_certificate = genesis,
                      .locked_certificate  = genesis,
-                     .finalized_height    = 0,
-                     .current_round       = 0,
-                     .validator_set_hash  = validators_.hash(),
+                     .finalized_height =
+                    epoch_bootstrap_.has_value() ? epoch_bootstrap_.value().previous_finalized_height : 0,
+                     .current_round      = 0,
+                     .validator_set_hash = validators_.hash(),
             };
             const auto persisted = store_->persist_state(safety_state_);
             if (!persisted.has_value()) {
@@ -210,7 +216,12 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidRoot);
         }
         if (parent.phase == Phase::Genesis) {
-            if (batch.first_section != 0 && batch.previous_section_root.empty()) {
+            if (epoch_bootstrap_.has_value()
+                && (batch.first_section != epoch_bootstrap_.value().first_dag_section
+                    || batch.previous_section_root != epoch_bootstrap_.value().previous_section_root)) {
+                return std::unexpected(ConsensusError::InvalidParent);
+            }
+            if (!epoch_bootstrap_.has_value() && batch.first_section != 0 && batch.previous_section_root.empty()) {
                 return std::unexpected(ConsensusError::InvalidParent);
             }
         } else {
@@ -263,6 +274,7 @@ namespace ExtraChain::Consensus {
         }
         proposal.signature = signature.value();
         proposals_.insert_or_assign(hash_header(proposal.header), proposal);
+        proposals_created_.fetch_add(1, std::memory_order_relaxed);
         return proposal;
     }
 
@@ -301,6 +313,7 @@ namespace ExtraChain::Consensus {
             return std::unexpected(persisted.error());
         }
         safety_state_ = std::move(next_state);
+        timeout_votes_created_.fetch_add(1, std::memory_order_relaxed);
         return vote;
     }
 
@@ -356,6 +369,7 @@ namespace ExtraChain::Consensus {
         }
         safety_state_ = std::move(next_state);
         proposals_.insert_or_assign(vote.header_hash, proposal);
+        votes_created_.fetch_add(1, std::memory_order_relaxed);
         return vote;
     }
 
@@ -379,6 +393,7 @@ namespace ExtraChain::Consensus {
 
     std::expected<void, ConsensusError> ConsensusEngine::stage_batch(SectionBatchData batch) {
         std::lock_guard lock(mutex_);
+        const auto      started = std::chrono::steady_clock::now();
         if (!initialized_) {
             return std::unexpected(ConsensusError::NotReady);
         }
@@ -413,6 +428,12 @@ namespace ExtraChain::Consensus {
             }
         }
         batches_.insert_or_assign(batch.header_hash, std::move(batch));
+        batches_staged_.fetch_add(1, std::memory_order_relaxed);
+        stage_nanoseconds_.fetch_add(static_cast<std::uint64_t>(
+                                         std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                             std::chrono::steady_clock::now() - started)
+                                             .count()),
+                                     std::memory_order_relaxed);
         return {};
     }
 
@@ -602,8 +623,10 @@ namespace ExtraChain::Consensus {
         certified_headers_.insert(certificate.header_hash);
         votes_.erase(certificate.header_hash);
         safety_state_ = std::move(next_state);
+        certificates_accepted_.fetch_add(1, std::memory_order_relaxed);
         if (finalized.has_value()) {
             finality_proofs_.insert_or_assign(finalized.value().height, finality_proof.value());
+            checkpoints_finalized_.fetch_add(1, std::memory_order_relaxed);
         }
         prune_memory(safety_state_.finalized_height);
         return finalized;
@@ -617,10 +640,12 @@ namespace ExtraChain::Consensus {
             return false;
         }
         if (certificate.phase == Phase::Genesis) {
-            return certificate.height == 0 && certificate.round == 0 && certificate.signatures.empty()
+            const auto expected = genesis_certificate();
+            return certificate.height == expected.height && certificate.round == 0
+                   && certificate.signatures.empty()
                    && certificate.signer_bitmap
                           == std::vector<std::uint8_t>((validators_.active().size() + 7) / 8, 0)
-                   && certificate.header_hash == genesis_certificate().header_hash;
+                   && certificate.header_hash == expected.header_hash;
         }
         if (certificate.phase != Phase::Prepare
             || certificate.signer_bitmap.size() != (validators_.active().size() + 7) / 8
@@ -754,20 +779,65 @@ namespace ExtraChain::Consensus {
         return stored.value();
     }
 
+    std::expected<std::optional<TransactionInclusionProofV1>, ConsensusError> ConsensusEngine::
+        transaction_inclusion_proof(std::string_view transaction_hash) const {
+        std::lock_guard lock(mutex_);
+        if (transaction_hash.empty()) {
+            return std::unexpected(ConsensusError::InvalidProof);
+        }
+        std::uint64_t cursor = 0;
+        while (true) {
+            const auto stored = store_->load_finality_proofs_after(cursor, MaximumShadowSyncProofs);
+            if (!stored.has_value()) {
+                return std::unexpected(stored.error());
+            }
+            for (const auto& finality_proof : stored.value()) {
+                if (!verify_finality_proof(finality_proof)) {
+                    return std::unexpected(ConsensusError::StorageFailure);
+                }
+                const auto& hashes = finality_proof.finalized_proposal.batch.transaction_hashes;
+                const auto  found  = std::ranges::find(hashes, transaction_hash);
+                if (found != hashes.end()) {
+                    const auto index = static_cast<std::size_t>(std::distance(hashes.begin(), found));
+                    const auto proof = make_merkle_proof(hashes, index);
+                    if (!proof.has_value()) {
+                        return std::unexpected(proof.error());
+                    }
+                    return TransactionInclusionProofV1 {
+                        .protocol_version = ProtocolVersion,
+                        .network_id       = validators_.document().network_id,
+                        .epoch            = validators_.document().epoch,
+                        .height           = finality_proof.finalized_proposal.header.height,
+                        .transaction_hash = std::string(transaction_hash),
+                        .merkle_proof     = proof.value(),
+                        .finality_proof   = finality_proof,
+                    };
+                }
+                cursor = finality_proof.finalized_proposal.header.height;
+            }
+            if (stored.value().size() < MaximumShadowSyncProofs) {
+                break;
+            }
+        }
+        return std::optional<TransactionInclusionProofV1> {};
+    }
+
+    bool ConsensusEngine::verify_transaction_inclusion_proof(const TransactionInclusionProofV1& proof) const {
+        std::lock_guard lock(mutex_);
+        const auto&     proposal = proof.finality_proof.finalized_proposal;
+        if (proof.protocol_version != ProtocolVersion || proof.network_id != validators_.document().network_id
+            || proof.epoch != validators_.document().epoch || proof.height != proposal.header.height
+            || proof.transaction_hash.empty()) {
+            return false;
+        }
+        return verify_finality_proof(proof.finality_proof)
+               && proposal.header.transaction_root == proposal.batch.transaction_root
+               && verify_merkle_proof(proof.transaction_hash, proof.merkle_proof, proposal.batch.transaction_root);
+    }
+
     QuorumCertificate ConsensusEngine::genesis_certificate() const {
-        const auto payload =
-            std::string(GenesisDomain) + validators_.document().network_id.to_string() + validators_.hash();
-        return QuorumCertificate {
-            .protocol_version = ProtocolVersion,
-            .network_id       = validators_.document().network_id,
-            .epoch            = validators_.document().epoch,
-            .height           = 0,
-            .round            = 0,
-            .phase            = Phase::Genesis,
-            .header_hash      = Utils::calculate_hash(payload, Utils::HashAlgorithm::Blake3),
-            .signer_bitmap    = std::vector<std::uint8_t>((validators_.active().size() + 7) / 8, 0),
-            .signatures       = {},
-        };
+        return epoch_bootstrap_.has_value() ? make_epoch_genesis_certificate(validators_, epoch_bootstrap_.value())
+                                            : make_genesis_certificate(validators_);
     }
 
     const ValidatorSetView& ConsensusEngine::validators() const noexcept {
@@ -780,6 +850,10 @@ namespace ExtraChain::Consensus {
 
     const std::optional<ValidatorIdentity>& ConsensusEngine::identity() const noexcept {
         return identity_;
+    }
+
+    const std::optional<EpochBootstrapV1>& ConsensusEngine::epoch_bootstrap() const noexcept {
+        return epoch_bootstrap_;
     }
 
     bool ConsensusEngine::is_local_leader(std::uint64_t height, std::uint64_t round) const {
@@ -801,6 +875,18 @@ namespace ExtraChain::Consensus {
         }
         const auto stored = store_->load_batch(header_hash);
         return stored.has_value() ? stored.value() : std::nullopt;
+    }
+
+    ConsensusMetricsSnapshot ConsensusEngine::metrics() const noexcept {
+        return ConsensusMetricsSnapshot {
+            .proposals_created = proposals_created_.load(std::memory_order_relaxed),
+            .batches_staged    = batches_staged_.load(std::memory_order_relaxed),
+            .votes_created     = votes_created_.load(std::memory_order_relaxed),
+            .timeout_votes     = timeout_votes_created_.load(std::memory_order_relaxed),
+            .certificates      = certificates_accepted_.load(std::memory_order_relaxed),
+            .finalized         = checkpoints_finalized_.load(std::memory_order_relaxed),
+            .stage_nanoseconds = stage_nanoseconds_.load(std::memory_order_relaxed),
+        };
     }
 
     bool ConsensusEngine::verify_proposal(const Proposal& proposal) const {
@@ -835,7 +921,13 @@ namespace ExtraChain::Consensus {
             return false;
         }
         if (proposal.parent_certificate.phase == Phase::Genesis) {
-            if (proposal.batch.first_section == 0 && !proposal.batch.previous_section_root.empty()) {
+            if (epoch_bootstrap_.has_value()
+                && (proposal.batch.first_section != epoch_bootstrap_.value().first_dag_section
+                    || proposal.batch.previous_section_root != epoch_bootstrap_.value().previous_section_root)) {
+                return false;
+            }
+            if (!epoch_bootstrap_.has_value() && proposal.batch.first_section == 0
+                && !proposal.batch.previous_section_root.empty()) {
                 return false;
             }
         } else {
@@ -959,10 +1051,7 @@ namespace ExtraChain::Consensus {
     std::string ConsensusEngine::state_commitment(const QuorumCertificate& parent,
                                                   std::string_view         section_root,
                                                   std::string_view         batch_root) const {
-        return Utils::calculate_hash(std::string(StateDomain) + hash_certificate(parent)
-                                         + std::string(section_root) + std::string(batch_root)
-                                         + validators_.hash(),
-                                     Utils::HashAlgorithm::Blake3);
+        return calculate_consensus_state_commitment(parent, section_root, batch_root, validators_.hash());
     }
 
     void ConsensusEngine::prune_memory(std::uint64_t finalized_height) {
