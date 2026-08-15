@@ -30,7 +30,15 @@ namespace ExtraChain::Consensus {
 
     struct ShadowCheckpoint {
         SectionBatchManifest batch;
-        std::string          section_root;
+        StateCommitmentV2    state;
+    };
+
+    struct PendingRecoveryV1 {
+        RecoveryDocumentV2 document;
+        ValidatorSet       next_validators;
+        std::uint64_t      first_seen_ms = 0;
+
+        MSGPACK_DEFINE(document, next_validators, first_seen_ms)
     };
 
     class EXTRACHAIN_EXPORT ShadowConsensus {
@@ -48,6 +56,10 @@ namespace ExtraChain::Consensus {
                                                                        const ShadowConfiguration&   configuration);
         static std::expected<void, ConsensusError> write_governance_policy(const std::filesystem::path& directory,
                                                                            const MultisigPolicy&        policy);
+        static std::expected<void, ConsensusError> write_recovery_policy(const std::filesystem::path& directory,
+                                                                         const MultisigPolicy&        policy);
+        static std::expected<void, ConsensusError> write_trust_anchor(const std::filesystem::path& directory,
+                                                                      const TrustAnchorV1&         anchor);
         static std::expected<void, ConsensusError> write_activation_manifest(
             const std::filesystem::path& directory,
             const ActivationManifestV1&  manifest,
@@ -76,21 +88,29 @@ namespace ExtraChain::Consensus {
             const EpochChangeRequestV1& request,
             std::uint64_t               proposal_height) const;
         std::expected<bool, ConsensusError> activate_scheduled_epoch();
+        std::expected<void, ConsensusError> schedule_recovery(const RecoveryDocumentV2& recovery,
+                                                              ValidatorSet              next_validators,
+                                                              std::uint64_t             now_ms);
+        std::expected<bool, ConsensusError> activate_scheduled_recovery(std::uint64_t now_ms);
 
         [[nodiscard]] const ConsensusEngine&                  engine() const noexcept;
         [[nodiscard]] ConsensusEngine&                        engine() noexcept;
         [[nodiscard]] const ShadowConfiguration&              configuration() const noexcept;
         [[nodiscard]] const std::optional<EpochTransitionV1>& pending_epoch() const noexcept;
+        [[nodiscard]] const std::optional<PendingRecoveryV1>& pending_recovery() const noexcept;
+        [[nodiscard]] std::vector<EpochStartV1>               epoch_starts() const;
+        [[nodiscard]] const std::optional<TrustAnchorV1>&     trust_anchor() const noexcept;
 
     private:
         explicit ShadowConsensus(std::filesystem::path              directory,
                                  std::unique_ptr<ConsensusEngine>   engine,
                                  ShadowConfiguration                configuration,
                                  std::optional<MultisigPolicy>      governance_policy,
-                                 std::vector<EpochTransitionV1>     epoch_history,
+                                 std::vector<EpochStartV1>          epoch_history,
                                  std::optional<EpochTransitionV1>   pending_epoch,
                                  std::optional<EpochBootstrapV1>    active_bootstrap,
                                  std::uint64_t                      minimum_governance_sequence,
+                                 std::uint64_t                      minimum_recovery_sequence,
                                  ConsensusEngine::ProposalValidator proposal_validator);
         [[nodiscard]] bool peer_matches_validator(std::string_view validator_id,
                                                   std::string_view peer_identifier) const;
@@ -99,10 +119,14 @@ namespace ExtraChain::Consensus {
         ShadowConfiguration                configuration_;
         std::filesystem::path              directory_;
         std::optional<MultisigPolicy>      governance_policy_;
-        std::vector<EpochTransitionV1>     epoch_history_;
+        std::optional<MultisigPolicy>      recovery_policy_;
+        std::optional<TrustAnchorV1>       trust_anchor_;
+        std::vector<EpochStartV1>          epoch_history_;
         std::optional<EpochTransitionV1>   pending_epoch_;
         std::optional<EpochBootstrapV1>    active_bootstrap_;
+        std::optional<PendingRecoveryV1>   pending_recovery_;
         std::uint64_t                      minimum_governance_sequence_ = 1;
+        std::uint64_t                      minimum_recovery_sequence_   = 1;
         ConsensusEngine::ProposalValidator proposal_validator_;
     };
 

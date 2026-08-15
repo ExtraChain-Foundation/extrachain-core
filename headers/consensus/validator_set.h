@@ -37,6 +37,9 @@ namespace ExtraChain::Consensus {
             const MultisigPolicy& policy,
             std::uint64_t         current_height,
             std::uint64_t         minimum_sequence);
+        static std::expected<ValidatorSetView, ConsensusError> create_recovery_transition(
+            ValidatorSet                            validators,
+            const std::vector<OperatorAttestation>& operators);
 
         [[nodiscard]] const ValidatorSet&                 document() const noexcept;
         [[nodiscard]] const std::vector<ValidatorRecord>& active() const noexcept;

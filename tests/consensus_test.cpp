@@ -101,6 +101,28 @@ namespace {
             .sections    = batch_sections(height),
         };
     }
+
+    StateCommitmentV2 state_commitment(ConsensusEngine& engine, std::uint64_t height, std::string section_root) {
+        std::string previous;
+        const auto& parent = engine.safety_state().highest_certificate;
+        if (parent.has_value() && parent.value().phase != Phase::Genesis) {
+            const auto proposal = engine.proposal_for(parent.value().header_hash);
+            previous            = proposal.value().header.state_commitment;
+        } else if (engine.epoch_bootstrap().has_value()) {
+            previous = engine.epoch_bootstrap().value().previous_state_commitment;
+        }
+        return StateCommitmentV2 {
+            .network_id                = engine.validators().document().network_id,
+            .epoch                     = engine.validators().document().epoch,
+            .height                    = height,
+            .previous_state_commitment = std::move(previous),
+            .section_root              = std::move(section_root),
+            .account_state_root        = "account-root-" + std::to_string(height),
+            .contract_state_root       = "contract-root-" + std::to_string(height),
+            .token_registry_root       = "token-root-" + std::to_string(height),
+            .validator_set_hash        = engine.validators().hash(),
+        };
+    }
 } // namespace
 
 int main() {
@@ -214,10 +236,35 @@ int main() {
         }
         const auto governance_policy =
             make_multisig_policy(finality_fixture.governance.id(), GovernanceThreshold, governance_public_keys);
+        std::vector<KeyPrivate>  recovery_keys(5);
+        std::vector<std::string> recovery_public_keys;
+        for (auto& key : recovery_keys) {
+            key.generate_random();
+            recovery_public_keys.push_back(Utils::to_base64(key.public_key()));
+        }
+        const auto recovery_policy =
+            make_multisig_policy(finality_fixture.governance.id(), RecoveryThreshold, recovery_public_keys);
         check("governance policy is written atomically",
               governance_policy.has_value()
                   && ShadowConsensus::write_governance_policy(finality_directory, governance_policy.value())
                          .has_value());
+        check("recovery policy is written atomically",
+              recovery_policy.has_value()
+                  && ShadowConsensus::write_recovery_policy(finality_directory, recovery_policy.value())
+                         .has_value());
+        TrustAnchorV1 anchor {
+            .network_id         = finality_fixture.governance.id(),
+            .initial_validators = finality_fixture.validator_set,
+            .governance_policy  = governance_policy.value(),
+            .recovery_policy    = recovery_policy.value(),
+        };
+        anchor.authorization = authorize_action(governance_policy.value(),
+                                                1,
+                                                trust_anchor_action_hash(anchor),
+                                                { governance_keys[0], governance_keys[1], governance_keys[2] })
+                                   .value();
+        check("trust anchor is written atomically",
+              ShadowConsensus::write_trust_anchor(finality_directory, anchor).has_value());
         ActivationManifestV1 manifest {
             .network_id             = finality_fixture.governance.id(),
             .activation_height      = 10,
@@ -289,9 +336,12 @@ int main() {
         const auto  round         = height == 1 ? std::uint64_t(1) : std::uint64_t(0);
         const auto& leader_record = fixture.view.leader(height, round);
         const auto  leader_index  = identity_index(fixture, leader_record.validator_id);
-        auto        proposal      = engines[leader_index]->make_proposal(batch_manifest(height),
-                                                             "section-root-" + std::to_string(height),
-                                                             round);
+        auto        proposal =
+            engines[leader_index]->make_proposal(batch_manifest(height),
+                                                 state_commitment(*engines[leader_index],
+                                                                  height,
+                                                                  "section-root-" + std::to_string(height)),
+                                                 round);
         check("scheduled leader creates proposal", proposal.has_value());
         if (!proposal.has_value()) {
             break;

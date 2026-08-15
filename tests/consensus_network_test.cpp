@@ -145,6 +145,27 @@ namespace {
             .payload_bytes         = payload_bytes,
         };
     }
+
+    StateCommitmentV2 state_commitment(ConsensusEngine& engine, std::uint64_t height, std::string section_root) {
+        std::string previous;
+        const auto& parent = engine.safety_state().highest_certificate;
+        if (parent.has_value() && parent.value().phase != Phase::Genesis) {
+            previous = engine.proposal_for(parent.value().header_hash).value().header.state_commitment;
+        } else if (engine.epoch_bootstrap().has_value()) {
+            previous = engine.epoch_bootstrap().value().previous_state_commitment;
+        }
+        return StateCommitmentV2 {
+            .network_id                = engine.validators().document().network_id,
+            .epoch                     = engine.validators().document().epoch,
+            .height                    = height,
+            .previous_state_commitment = std::move(previous),
+            .section_root              = std::move(section_root),
+            .account_state_root        = "account-root-" + std::to_string(height),
+            .contract_state_root       = "contract-root-" + std::to_string(height),
+            .token_registry_root       = "token-root-" + std::to_string(height),
+            .validator_set_hash        = engine.validators().hash(),
+        };
+    }
 } // namespace
 
 int main() {
@@ -246,7 +267,9 @@ int main() {
         const auto  proposal =
             engines[leader_index]->make_proposal(batch_manifest(height,
                                                                 height == 10 ? epoch_action_hash : std::string {}),
-                                                 "network-root-" + std::to_string(height));
+                                                 state_commitment(*engines[leader_index],
+                                                                  height,
+                                                                  "network-root-" + std::to_string(height)));
         check("scheduled leader proposes a canonical network batch", proposal.has_value());
         if (!proposal.has_value()) {
             break;
@@ -394,7 +417,9 @@ int main() {
                                                                            previous_root,
                                                                            height == 13 ? third_epoch_action_hash
                                                                                         : std::string {}),
-                                                      "epoch-root-" + std::to_string(height));
+                                                      state_commitment(*next_engines[leader_index],
+                                                                       height,
+                                                                       "epoch-root-" + std::to_string(height)));
         check("new epoch proposes on the global chain", proposal.has_value());
         const auto                       data = batch_data(proposal.value());
         std::optional<QuorumCertificate> certificate;
@@ -487,10 +512,13 @@ int main() {
     for (std::uint64_t height = 16; height <= 18; ++height) {
         const auto& leader       = third_view.value().leader(height, 0);
         const auto  leader_index = third_committee.index_for(leader.validator_id);
-        const auto  proposal     = third_engines[leader_index]->make_proposal(epoch_batch_manifest(height,
-                                                                                              third_first,
-                                                                                              third_previous_root),
-                                                                         "epoch-5-root-" + std::to_string(height));
+        const auto  proposal =
+            third_engines[leader_index]->make_proposal(epoch_batch_manifest(height,
+                                                                            third_first,
+                                                                            third_previous_root),
+                                                       state_commitment(*third_engines[leader_index],
+                                                                        height,
+                                                                        "epoch-5-root-" + std::to_string(height)));
         check("second handover proposes on the global chain", proposal.has_value());
         const auto                       data = batch_data(proposal.value());
         std::optional<QuorumCertificate> certificate;

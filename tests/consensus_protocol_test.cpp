@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <string>
@@ -6,6 +7,7 @@
 #include "chain/transaction.h"
 #include "consensus/consensus_protocol.h"
 #include "consensus/intent_store.h"
+#include "consensus/light_client.h"
 #include "consensus/validator_set.h"
 #include "utils/exc_utils.h"
 #include "utils/exc_utils_base64.h"
@@ -395,26 +397,183 @@ int main() {
     check("finalized epoch data creates the next seven-validator view",
           transitioned_view.has_value() && transitioned_view.value().document().epoch == 6);
 
-    auto               recovery_keys   = make_keys(5);
-    const auto         recovery_policy = make_multisig_policy(network.id(), 4, public_keys(recovery_keys));
-    RecoveryDocumentV1 recovery {
-        .network_id                = network.id(),
-        .recovery_sequence         = 3,
-        .finalized_height          = 700,
-        .finalized_checkpoint_hash = "checkpoint-700",
-        .next_validator_set_hash   = "recovery-set",
-        .registry_document_hash    = "recovery-registry",
+    auto       recovery_keys   = make_keys(5);
+    const auto recovery_policy = make_multisig_policy(network.id(), 4, public_keys(recovery_keys));
+    const auto make_epoch_set  = [&](std::uint64_t epoch) {
+        std::vector<ValidatorRecord> records;
+        for (std::size_t index = 0; index < operators.size(); ++index) {
+            records.push_back(make_validator_record(network.id(),
+                                                    epoch,
+                                                    operators[index],
+                                                    consensus_keys[index],
+                                                    "node-" + std::to_string(index),
+                                                    0)
+                                  .value());
+        }
+        return make_validator_set(network.id(), epoch, std::move(records), network).value();
     };
-    const auto recovery_authorization =
+    const auto current_set  = make_epoch_set(4);
+    auto       recovery_set = make_epoch_set(5);
+    recovery_set.governance_public_key.clear();
+    recovery_set.governance_signature.clear();
+    TrustAnchorV1 anchor {
+        .network_id         = network.id(),
+        .initial_validators = current_set,
+        .governance_policy  = governance_policy.value(),
+        .recovery_policy    = recovery_policy.value(),
+    };
+    anchor.authorization = authorize_action(governance_policy.value(),
+                                            1,
+                                            trust_anchor_action_hash(anchor),
+                                            { governance_keys[0], governance_keys[1], governance_keys[2] })
+                               .value();
+    check("signed trust anchor verifies", verify_trust_anchor(anchor));
+
+    RecoveryDocumentV2 recovery_v2 {
+        .network_id                 = network.id(),
+        .recovery_sequence          = 1,
+        .current_epoch              = 4,
+        .activation_epoch           = 5,
+        .finalized_height           = 700,
+        .finalized_header_hash      = "header-700",
+        .finalized_state_commitment = "state-700",
+        .current_validator_set_hash = hash_validator_set(current_set),
+        .next_validator_set_hash    = hash_validator_set(recovery_set),
+        .registry_document_hash     = "recovery-registry-v2",
+        .operators                  = change.operators,
+        .signed_at_ms               = 1'000,
+        .activate_after_ms          = 1'000 + MinimumRecoveryDelayMillis,
+    };
+    recovery_v2.authorization =
         authorize_action(recovery_policy.value(),
-                         3,
-                         recovery_action_hash(recovery),
-                         { recovery_keys[0], recovery_keys[1], recovery_keys[2], recovery_keys[3] });
-    recovery.authorization = recovery_authorization.value();
-    check("four of five recovery document verifies",
-          verify_recovery_document(recovery, recovery_policy.value(), 3, 700, "checkpoint-700"));
-    check("recovery cannot move from another checkpoint",
-          !verify_recovery_document(recovery, recovery_policy.value(), 3, 700, "checkpoint-699"));
+                         1,
+                         recovery_action_hash(recovery_v2),
+                         { recovery_keys[0], recovery_keys[1], recovery_keys[2], recovery_keys[3] })
+            .value();
+    check("recovery v2 binds the exact finalized state and both validator sets",
+          verify_recovery_document(recovery_v2,
+                                   recovery_policy.value(),
+                                   current_set,
+                                   recovery_set,
+                                   1,
+                                   700,
+                                   "header-700",
+                                   "state-700"));
+    check("recovery v2 rejects another state commitment",
+          !verify_recovery_document(recovery_v2,
+                                    recovery_policy.value(),
+                                    current_set,
+                                    recovery_set,
+                                    1,
+                                    700,
+                                    "header-700",
+                                    "state-699"));
+    check("three of five keys cannot authorize recovery",
+          !authorize_action(recovery_policy.value(),
+                            2,
+                            recovery_action_hash(recovery_v2),
+                            { recovery_keys[0], recovery_keys[1], recovery_keys[2] })
+               .has_value());
+    auto short_recovery_delay              = recovery_v2;
+    short_recovery_delay.recovery_sequence = 2;
+    short_recovery_delay.activate_after_ms = short_recovery_delay.signed_at_ms + MinimumRecoveryDelayMillis - 1;
+    short_recovery_delay.authorization =
+        authorize_action(recovery_policy.value(),
+                         2,
+                         recovery_action_hash(short_recovery_delay),
+                         { recovery_keys[0], recovery_keys[1], recovery_keys[2], recovery_keys[3] })
+            .value();
+    check("recovery v2 rejects a delay shorter than 24 hours",
+          !verify_recovery_document(short_recovery_delay,
+                                    recovery_policy.value(),
+                                    current_set,
+                                    recovery_set,
+                                    2,
+                                    700,
+                                    "header-700",
+                                    "state-700"));
+    auto duplicate_recovery_operator              = recovery_v2;
+    duplicate_recovery_operator.recovery_sequence = 2;
+    duplicate_recovery_operator.operators[1].operator_id_hash =
+        duplicate_recovery_operator.operators[0].operator_id_hash;
+    duplicate_recovery_operator.authorization =
+        authorize_action(recovery_policy.value(),
+                         2,
+                         recovery_action_hash(duplicate_recovery_operator),
+                         { recovery_keys[0], recovery_keys[1], recovery_keys[2], recovery_keys[3] })
+            .value();
+    check("recovery v2 rejects a repeated operator identity",
+          !verify_recovery_document(duplicate_recovery_operator,
+                                    recovery_policy.value(),
+                                    current_set,
+                                    recovery_set,
+                                    2,
+                                    700,
+                                    "header-700",
+                                    "state-700"));
+
+    EpochBootstrapV1 recovery_bootstrap {
+        .network_id                         = network.id(),
+        .previous_epoch                     = 4,
+        .epoch                              = 5,
+        .activation_height                  = 701,
+        .previous_finalized_height          = 700,
+        .first_dag_section                  = 14'001,
+        .previous_section_root              = "section-700",
+        .previous_state_commitment          = "state-700",
+        .previous_decision_certificate_hash = "certificate-700",
+        .epoch_change_hash                  = recovery_action_hash(recovery_v2),
+        .validator_set_hash                 = hash_validator_set(recovery_set),
+    };
+    EpochStartV1 recovery_start {
+        .kind       = EpochStartKind::Recovery,
+        .validators = recovery_set,
+        .bootstrap  = recovery_bootstrap,
+        .recovery   = recovery_v2,
+    };
+    auto light = LightClientVerifier::bootstrap(anchor);
+    check("light client starts from the governed trust anchor", light.has_value());
+    BootstrapHistoryPageV1 recovery_page {
+        .network_id        = network.id(),
+        .trust_anchor_hash = hash_trust_anchor(anchor),
+        .after_epoch       = 4,
+        .entries           = { recovery_start },
+    };
+    auto partial_light                     = LightClientVerifier::bootstrap(anchor);
+    auto invalid_start                     = recovery_start;
+    invalid_start.bootstrap.previous_epoch = 4;
+    auto invalid_page                      = recovery_page;
+    invalid_page.entries                   = { recovery_start, invalid_start };
+    check("invalid history page does not apply a valid prefix",
+          partial_light.has_value() && !partial_light.value().apply_history_page(invalid_page).has_value()
+              && partial_light.value().active_validators().document().epoch == 4
+              && partial_light.value().snapshot().epoch_history.empty());
+    check("light client applies the signed recovery history",
+          light.has_value() && light.value().apply_history_page(recovery_page).has_value());
+    check("one peer cannot declare the bootstrap current",
+          light.has_value()
+              && !light.value().confirm_freshness({ { "peer-a", 5, 700, "header-700" } }).has_value());
+    check("two matching results from three distinct peers confirm freshness",
+          light.has_value()
+              && light.value()
+                     .confirm_freshness({ { "peer-a", 5, 700, "header-700" },
+                                          { "peer-b", 5, 700, "header-700" },
+                                          { "peer-c", 5, 699, "header-699" } })
+                     .has_value()
+              && light.value().freshness() == BootstrapFreshness::Confirmed);
+    const auto light_state_path = std::filesystem::temp_directory_path()
+                                  / ("shadow-light-bootstrap-" + Utils::generate_random_hex(8) + ".msgpack");
+    const auto light_saved  = light.value().save(light_state_path);
+    const auto light_loaded = LightClientVerifier::load(light_state_path);
+    check("saved light state replays its history from the trust anchor",
+          light_saved.has_value() && light_loaded.has_value()
+              && light_loaded.value().active_validators().document().epoch == 5
+              && light_loaded.value().freshness() == BootstrapFreshness::Unknown);
+    auto incomplete_light_state = light.value().snapshot();
+    incomplete_light_state.epoch_history.clear();
+    check("light state cannot skip the signed epoch history",
+          !LightClientVerifier::restore(std::move(incomplete_light_state)).has_value());
+    std::filesystem::remove(light_state_path);
 
     StateCommitmentV2 commitment {
         .network_id                = network.id(),
@@ -430,6 +589,22 @@ int main() {
     const auto commitment_hash    = hash_state_commitment(commitment);
     commitment.account_state_root = "changed";
     check("state commitment binds all state roots", commitment_hash != hash_state_commitment(commitment));
+    const std::vector<std::pair<std::string, std::string>> state_entries {
+        { "alice", "10" },
+        { "bob", "20" },
+        { "carol", "30" },
+    };
+    auto reordered_entries = state_entries;
+    std::ranges::reverse(reordered_entries);
+    check("segmented state roots do not depend on input order",
+          segmented_state_root("accounts", state_entries) == segmented_state_root("accounts", reordered_entries));
+    reordered_entries.front().second = "31";
+    check("segmented state roots detect a changed value",
+          segmented_state_root("accounts", state_entries) != segmented_state_root("accounts", reordered_entries));
+    auto duplicate_entries = state_entries;
+    duplicate_entries.push_back({ "alice", "11" });
+    check("segmented state roots reject duplicate keys",
+          segmented_state_root("accounts", duplicate_entries).empty());
 
     std::printf("CONSENSUS PROTOCOL: %d pass, %d fail\n", passed, failed);
     return failed == 0 ? 0 : 1;

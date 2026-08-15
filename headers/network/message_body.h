@@ -121,6 +121,9 @@ enum class MessageType {
     ConsensusSyncRequest        = 129,
     ConsensusSyncResponse       = 130,
     ConsensusIntent             = 131,
+    ConsensusBootstrapRequest   = 132,
+    ConsensusBootstrapResponse  = 133,
+    ConsensusRecovery           = 134,
 
     Unknown = 250
 };

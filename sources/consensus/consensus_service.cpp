@@ -14,7 +14,10 @@
 
 #include "chain/actor_index.h"
 #include "chain/dag.h"
+#include "contracts/contract_transaction.h"
+#include "contracts/standard_token.h"
 #include "core/extrachain_node.h"
+#include "managers/token_manager.h"
 #include "network/network_service.h"
 #include "network/peer_meta.h"
 #include "network/responder.h"
@@ -24,6 +27,85 @@
 #include "utils/serialization.h"
 
 namespace ExtraChain::Consensus {
+    namespace {
+        template <typename Map>
+        std::vector<std::pair<std::string, std::string>> state_entries(const Map& values) {
+            return { values.begin(), values.end() };
+        }
+
+        std::string contract_state_value(const ExtraChain::Contracts::ContractSummary& summary) {
+            return MessagePack::serialize(std::tuple { summary.owner_id,
+                                                       summary.kind,
+                                                       summary.language,
+                                                       summary.version,
+                                                       summary.revision,
+                                                       summary.module_hash,
+                                                       summary.state_hash,
+                                                       summary.transaction_hash,
+                                                       summary.section });
+        }
+
+        std::string contract_state_value(std::string_view               owner_id,
+                                         const ContractTransactionData& metadata,
+                                         std::string_view               transaction_hash,
+                                         std::uint64_t                  section) {
+            return MessagePack::serialize(std::tuple { std::string(owner_id),
+                                                       metadata.kind,
+                                                       metadata.language,
+                                                       metadata.version,
+                                                       metadata.revision,
+                                                       metadata.module_hash,
+                                                       metadata.state_hash,
+                                                       std::string(transaction_hash),
+                                                       section });
+        }
+
+        std::string contract_state_value(std::string_view              owner_id,
+                                         const ContractTransitionData& transition,
+                                         std::string_view              transaction_hash,
+                                         std::uint64_t                 section) {
+            return MessagePack::serialize(std::tuple { std::string(owner_id),
+                                                       transition.kind,
+                                                       transition.language,
+                                                       transition.version,
+                                                       transition.revision,
+                                                       transition.module_hash,
+                                                       transition.state_hash,
+                                                       std::string(transaction_hash),
+                                                       section });
+        }
+
+        std::string token_registry_state_value(std::string_view owner_id,
+                                               std::string_view contract_id,
+                                               std::string_view kind,
+                                               std::string_view language,
+                                               std::string_view transaction_hash,
+                                               std::uint64_t    section) {
+            return MessagePack::serialize(std::tuple { std::string(owner_id),
+                                                       std::string(contract_id),
+                                                       std::string(kind),
+                                                       std::string(language),
+                                                       std::string(transaction_hash),
+                                                       section });
+        }
+
+        std::string token_registry_state_value(const TokenData& token) {
+            return token_registry_state_value(token.owner_id.to_string(),
+                                              token.smart,
+                                              token.kind,
+                                              token.language,
+                                              token.tx_hash.value_or(std::string {}),
+                                              static_cast<std::uint64_t>(
+                                                  token.section_id.value_or(SectionId(0)).to_int().value_or(0)));
+        }
+
+        std::uint64_t wall_clock_millis() {
+            return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                  std::chrono::system_clock::now().time_since_epoch())
+                                                  .count());
+        }
+    } // namespace
+
     ConsensusService::ConsensusService(Core::ExtraChainNode& node, std::filesystem::path directory)
         : node_(node)
         , directory_(std::move(directory)) {
@@ -121,11 +203,19 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::StorageFailure);
             }
         }
-        authenticator_  = std::make_unique<PeerAuthenticator>(consensus_->engine().validators(),
+        authenticator_ = std::make_unique<PeerAuthenticator>(consensus_->engine().validators(),
                                                              consensus_->engine().identity());
-        voting_enabled_ = consensus_->engine().identity().has_value();
-        timeout_task_   = Core::DeadlineTask::create(node_.runtime_executor(), [this] {
+        voting_enabled_ =
+            consensus_->engine().identity().has_value() && !consensus_->pending_recovery().has_value();
+        timeout_task_  = Core::DeadlineTask::create(node_.runtime_executor(), [this] {
             timeout_elapsed();
+        });
+        recovery_task_ = Core::DeadlineTask::create(node_.runtime_executor(), [this] {
+            std::lock_guard lock(mutex_);
+            const auto      activated = activate_pending_recovery(wall_clock_millis());
+            if (!activated.has_value()) {
+                eCritical("[Shadow] Scheduled recovery could not be activated");
+            }
         });
         connections_.emplace_back(node_.network()->socket_activated_event().subscribe(
             [this](const std::string&, const std::string& identifier) {
@@ -145,6 +235,7 @@ namespace ExtraChain::Consensus {
               consensus_->engine().validators().document().epoch,
               consensus_->engine().validators().active().size());
         reset_timeout();
+        schedule_recovery_activation();
         queue_next_checkpoint();
         return true;
     }
@@ -160,6 +251,10 @@ namespace ExtraChain::Consensus {
             timeout_task_->cancel();
         }
         timeout_task_.reset();
+        if (recovery_task_) {
+            recovery_task_->cancel();
+        }
+        recovery_task_.reset();
         consensus_.reset();
         latest_proposal_.reset();
         latest_certificate_.reset();
@@ -261,6 +356,36 @@ namespace ExtraChain::Consensus {
             const auto value = MessagePack::deserialize<IntentEnvelope>(serialized);
             if (status == MessageStatus::NoStatus && value.has_value()) {
                 receive_intent(value.value());
+            }
+            break;
+        }
+        case MessageType::ConsensusBootstrapRequest: {
+            if (serialized.size() > 64ULL * 1024ULL) {
+                break;
+            }
+            const auto value = MessagePack::deserialize<ShadowBootstrapRequest>(serialized);
+            if (status == MessageStatus::Request && value.has_value()) {
+                receive_bootstrap_request(value.value(), responder, peer_identifier);
+            }
+            break;
+        }
+        case MessageType::ConsensusBootstrapResponse: {
+            if (serialized.size() > MaximumBootstrapBytes) {
+                break;
+            }
+            const auto value = MessagePack::deserialize<ShadowBootstrapResponse>(serialized);
+            if (status == MessageStatus::Response && value.has_value()) {
+                bootstrap_event_.publish(value.value(), peer_identifier);
+            }
+            break;
+        }
+        case MessageType::ConsensusRecovery: {
+            if (serialized.size() > 1ULL * 1024ULL * 1024ULL) {
+                break;
+            }
+            const auto value = MessagePack::deserialize<RecoveryRequestV1>(serialized);
+            if (status == MessageStatus::NoStatus && value.has_value()) {
+                receive_recovery(value.value(), peer_identifier);
             }
             break;
         }
@@ -596,6 +721,89 @@ namespace ExtraChain::Consensus {
         }
     }
 
+    void ConsensusService::receive_bootstrap_request(const ShadowBootstrapRequest& request,
+                                                     const Responder&              responder,
+                                                     std::string_view              peer_identifier) {
+        (void)peer_identifier;
+        std::lock_guard lock(mutex_);
+        if (!consensus_ || !consensus_->trust_anchor().has_value() || request.protocol_version != ProtocolVersion
+            || request.network_id != consensus_->engine().validators().document().network_id
+            || request.trust_anchor_hash != hash_trust_anchor(consensus_->trust_anchor().value())
+            || request.maximum_entries == 0 || request.maximum_entries > MaximumBootstrapEntries) {
+            return;
+        }
+        const auto             starts = consensus_->epoch_starts();
+        BootstrapHistoryPageV1 page {
+            .network_id        = request.network_id,
+            .trust_anchor_hash = request.trust_anchor_hash,
+            .after_epoch       = request.after_epoch,
+        };
+        const auto begin = std::ranges::find_if(starts, [&](const EpochStartV1& start) {
+            return start.validators.epoch > request.after_epoch;
+        });
+        for (auto iterator = begin; iterator != starts.end() && page.entries.size() < request.maximum_entries;
+             ++iterator) {
+            page.entries.push_back(*iterator);
+        }
+        if (begin != starts.end()) {
+            const auto remaining = static_cast<std::size_t>(std::distance(begin, starts.end()));
+            if (remaining > page.entries.size() && !page.entries.empty()) {
+                page.next_after_epoch = page.entries.back().validators.epoch;
+            }
+        }
+
+        const auto  finalized_height = consensus_->engine().safety_state().finalized_height;
+        std::string latest_header_hash;
+        if (finalized_height != 0) {
+            const auto proof = consensus_->engine().finality_proofs_after(finalized_height - 1, 1);
+            if (proof.has_value() && proof.value().size() == 1) {
+                latest_header_hash = hash_header(proof.value().front().finalized_proposal.header);
+            }
+        }
+        ShadowBootstrapResponse response {
+            .network_id                   = request.network_id,
+            .page                         = std::move(page),
+            .latest_epoch                 = consensus_->engine().validators().document().epoch,
+            .latest_finalized_height      = finalized_height,
+            .latest_finalized_header_hash = std::move(latest_header_hash),
+        };
+        while (!response.page.entries.empty() && MessagePack::serialize(response).size() > MaximumBootstrapBytes) {
+            if (response.page.entries.size() == 1) {
+                eWarning("[Shadow] Epoch {} exceeds the bootstrap response limit",
+                         response.page.entries.front().validators.epoch);
+                return;
+            }
+            response.page.entries.pop_back();
+            response.page.next_after_epoch = response.page.entries.back().validators.epoch;
+        }
+        if (MessagePack::serialize(response).size() > MaximumBootstrapBytes) {
+            return;
+        }
+        responder.send_response(response,
+                                MessageType::ConsensusBootstrapResponse,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    }
+
+    void ConsensusService::receive_recovery(const RecoveryRequestV1& request, std::string_view peer_identifier) {
+        (void)peer_identifier;
+        std::lock_guard lock(mutex_);
+        if (!consensus_ || request.protocol_version != ProtocolVersion) {
+            return;
+        }
+        const auto scheduled =
+            consensus_->schedule_recovery(request.recovery, request.next_validators, wall_clock_millis());
+        if (!scheduled.has_value()) {
+            if (scheduled.error() == ConsensusError::RecoveryConflict) {
+                halt_voting();
+                eCritical("[Shadow] Conflicting emergency decisions use the same recovery sequence");
+            }
+            return;
+        }
+        halt_voting();
+        schedule_recovery_activation();
+    }
+
     void ConsensusService::receive_intent(const IntentEnvelope& envelope) {
         std::lock_guard lock(mutex_);
         const auto      accepted = accept_intent(envelope, false);
@@ -654,6 +862,91 @@ namespace ExtraChain::Consensus {
         committed_nonces_ = std::move(next_nonces);
         intent_pool_.erase(hashes);
         return {};
+    }
+
+    std::expected<void, ConsensusError> ConsensusService::submit_recovery(const RecoveryDocumentV2& recovery,
+                                                                          ValidatorSet  next_validators,
+                                                                          std::uint64_t now_ms) {
+        std::lock_guard lock(mutex_);
+        if (!consensus_) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        const auto request = RecoveryRequestV1 {
+            .recovery        = recovery,
+            .next_validators = next_validators,
+        };
+        const auto scheduled = consensus_->schedule_recovery(recovery, std::move(next_validators), now_ms);
+        if (!scheduled.has_value()) {
+            if (scheduled.error() == ConsensusError::RecoveryConflict) {
+                halt_voting();
+            }
+            return std::unexpected(scheduled.error());
+        }
+        halt_voting();
+        send_to_validators(request, MessageType::ConsensusRecovery);
+        schedule_recovery_activation();
+        return {};
+    }
+
+    std::expected<std::size_t, ConsensusError> ConsensusService::request_bootstrap_history(
+        const TrustAnchorV1& anchor,
+        std::uint64_t        after_epoch) {
+        std::lock_guard lock(mutex_);
+        if (!verify_trust_anchor(anchor) || after_epoch < anchor.initial_validators.epoch) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        const auto peers = node_.network()->active_full_peers_with_capability(SHADOW_CONSENSUS_CAPABILITY);
+        constexpr std::size_t RequiredBootstrapPeers = 3;
+        if (peers.size() < RequiredBootstrapPeers) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
+        const ShadowBootstrapRequest request {
+            .network_id        = anchor.network_id,
+            .trust_anchor_hash = hash_trust_anchor(anchor),
+            .after_epoch       = after_epoch,
+            .maximum_entries   = static_cast<std::uint16_t>(MaximumBootstrapEntries),
+        };
+        for (std::size_t index = 0; index < RequiredBootstrapPeers; ++index) {
+            send_to_peer(request, MessageType::ConsensusBootstrapRequest, peers[index], MessageStatus::Request);
+        }
+        return RequiredBootstrapPeers;
+    }
+
+    std::expected<bool, ConsensusError> ConsensusService::activate_pending_recovery(std::uint64_t now_ms) {
+        if (!consensus_) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        const auto activated = consensus_->activate_scheduled_recovery(now_ms);
+        if (!activated.has_value() || !activated.value()) {
+            if (activated.has_value()) {
+                schedule_recovery_activation();
+            }
+            return activated;
+        }
+        authenticator_ = std::make_unique<PeerAuthenticator>(consensus_->engine().validators(),
+                                                             consensus_->engine().identity());
+        latest_proposal_.reset();
+        latest_certificate_.reset();
+        latest_timeout_certificate_.reset();
+        pending_checkpoints_.clear();
+        pending_batches_.clear();
+        pending_proposals_.clear();
+        voting_enabled_ = consensus_->engine().identity().has_value();
+        reset_timeout();
+        queue_next_checkpoint();
+        return true;
+    }
+
+    void ConsensusService::schedule_recovery_activation() {
+        if (!consensus_ || !recovery_task_ || !consensus_->pending_recovery().has_value()) {
+            return;
+        }
+        const auto& pending = consensus_->pending_recovery().value();
+        const auto  target =
+            std::max(pending.document.activate_after_ms, pending.first_seen_ms + MinimumRecoveryDelayMillis);
+        const auto now   = wall_clock_millis();
+        const auto delay = target > now ? target - now : 0;
+        recovery_task_->schedule_earlier(std::chrono::milliseconds(delay));
     }
 
     std::expected<std::string, ConsensusError> ConsensusService::accept_intent(const IntentEnvelope& envelope,
@@ -910,6 +1203,10 @@ namespace ExtraChain::Consensus {
         return finalized_event_;
     }
 
+    Core::Event<const ShadowBootstrapResponse&, std::string_view>& ConsensusService::bootstrap_event() noexcept {
+        return bootstrap_event_;
+    }
+
     void ConsensusService::peer_connected(const std::string& identifier) {
         std::lock_guard lock(mutex_);
         if (!authenticator_) {
@@ -956,10 +1253,22 @@ namespace ExtraChain::Consensus {
             || batch.value().manifest.payload_bytes > consensus_->configuration().maximum_batch_bytes) {
             return;
         }
+        const auto& highest = consensus_->engine().safety_state().highest_certificate;
+        if (!highest.has_value()) {
+            return;
+        }
+        const auto state = build_state_commitment(batch.value(),
+                                                  control.value().control,
+                                                  highest.value().height + 1,
+                                                  highest.value());
+        if (!state.has_value()) {
+            eWarning("[Shadow] Cannot build state commitment for section {}", section);
+            return;
+        }
         pending_checkpoints_.insert_or_assign(section,
                                               ShadowCheckpoint {
-                                                  .batch        = batch.value().manifest,
-                                                  .section_root = control.value().control,
+                                                  .batch = batch.value().manifest,
+                                                  .state = state.value(),
                                               });
         pending_batches_.insert_or_assign(section, batch.value());
         propose_checkpoint(consensus_->engine().safety_state().current_round);
@@ -1036,10 +1345,16 @@ namespace ExtraChain::Consensus {
                 eWarning("[Shadow] Leader could not calculate the intent batch root");
                 return;
             }
+            const auto state =
+                build_state_commitment(batch.value(), section_root.value(), highest.height + 1, highest);
+            if (!state.has_value()) {
+                eWarning("[Shadow] Leader could not calculate the state commitment");
+                return;
+            }
             pending_checkpoints_.insert_or_assign(target,
                                                   ShadowCheckpoint {
-                                                      .batch        = batch.value().manifest,
-                                                      .section_root = section_root.value(),
+                                                      .batch = batch.value().manifest,
+                                                      .state = state.value(),
                                                   });
             pending_batches_.insert_or_assign(target, std::move(batch.value()));
             propose_checkpoint(consensus_->engine().safety_state().current_round);
@@ -1221,6 +1536,160 @@ namespace ExtraChain::Consensus {
         }
     }
 
+    std::expected<StateCommitmentV2, ConsensusError> ConsensusService::build_state_commitment(
+        const SectionBatchData&  batch,
+        std::string_view         section_root,
+        std::uint64_t            height,
+        const QuorumCertificate& parent) const {
+        if (!consensus_ || batch.sections.empty() || section_root.empty()
+            || batch.manifest.first_section > batch.manifest.last_section) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+
+        std::vector<Transaction> transactions;
+        std::vector<ActorId>     actors = node_.actor_index()->read_all_actors_ids();
+        for (const auto& [section, bytes] : batch.sections) {
+            const auto decoded = Json::deserialize<Section>(bytes);
+            if (!decoded.has_value()) {
+                return std::unexpected(ConsensusError::InvalidRoot);
+            }
+            for (const auto& transaction : decoded.value().transactions) {
+                transactions.push_back(transaction);
+                if (!transaction.sender().is_zero()) {
+                    actors.push_back(transaction.sender());
+                }
+                if (!transaction.receiver().is_zero()) {
+                    actors.push_back(transaction.receiver());
+                }
+            }
+            if (section < batch.manifest.first_section || section > batch.manifest.last_section) {
+                return std::unexpected(ConsensusError::InvalidRoot);
+            }
+        }
+        std::ranges::sort(actors, {}, [](const ActorId& actor) {
+            return actor.to_string();
+        });
+        actors.erase(std::unique(actors.begin(), actors.end()), actors.end());
+
+        Balances balances;
+        if (batch.manifest.first_section != 0) {
+            balances = node_.dag()->calculate_actors_balance(actors, SectionId(batch.manifest.first_section - 1));
+        }
+        for (const auto& transaction : transactions) {
+            node_.dag()->cache().process_transaction(transaction, balances);
+        }
+        std::map<std::string, std::string> account_state;
+        for (const auto& [key, balance] : balances) {
+            if (balance == 0) {
+                continue;
+            }
+            account_state.emplace(key.first.to_string() + ':' + key.second.to_string(), balance.to_string());
+        }
+
+        std::map<std::string, std::string>           contract_state;
+        std::map<std::string, std::string>           contract_owners;
+        ExtraChain::Contracts::ContractCatalogFilter filter { .limit = 100 };
+        do {
+            const auto page = node_.dag()->cache().list_contracts(filter);
+            for (const auto& summary : page.items) {
+                if (summary.section < batch.manifest.first_section) {
+                    contract_state.insert_or_assign(summary.contract_id, contract_state_value(summary));
+                    contract_owners.insert_or_assign(summary.contract_id, summary.owner_id);
+                }
+            }
+            filter.cursor = page.next_cursor;
+        } while (filter.cursor.has_value());
+
+        std::map<std::string, std::string> token_state;
+        for (const auto& token : node_.token_manager()->read_registry()) {
+            const auto section = token.section_id.has_value() ? token.section_id.value().to_int().value_or(0) : 0;
+            if (section < batch.manifest.first_section) {
+                token_state.insert_or_assign(token.token_id.to_string(), token_registry_state_value(token));
+            }
+        }
+
+        for (const auto& transaction : transactions) {
+            if (!is_contract_transaction(transaction.type()) || !transaction.meta().has_value()) {
+                continue;
+            }
+            const auto metadata = Json::deserialize<ContractTransactionData>(transaction.meta().value());
+            const auto section  = transaction.section().to_int();
+            if (!metadata.has_value() || !section.has_value() || metadata.value().schema != 4) {
+                return std::unexpected(ConsensusError::InvalidRoot);
+            }
+            const auto contract_id = transaction.receiver().to_string();
+            auto       owner_id    = transaction.sender().to_string();
+            if (transaction.type() != TransactionType::ContractDeploy) {
+                const auto owner = contract_owners.find(contract_id);
+                if (owner == contract_owners.end()) {
+                    return std::unexpected(ConsensusError::InvalidRoot);
+                }
+                owner_id = owner->second;
+            }
+            contract_state.insert_or_assign(contract_id,
+                                            contract_state_value(owner_id,
+                                                                 metadata.value(),
+                                                                 transaction.hash(),
+                                                                 static_cast<std::uint64_t>(section.value())));
+            contract_owners.insert_or_assign(contract_id, owner_id);
+            if (ExtraChain::Contracts::is_system_token_kind(metadata.value().kind)
+                && (transaction.type() == TransactionType::ContractDeploy
+                    || (transaction.type() == TransactionType::ContractCall
+                        && metadata.value().method == "import_legacy"
+                        && metadata.value().legacy_migration.has_value()))) {
+                const auto token_id = metadata.value().legacy_migration.has_value()
+                                          ? metadata.value().legacy_migration.value().legacy_token_id
+                                          : contract_id;
+                token_state.insert_or_assign(token_id,
+                                             token_registry_state_value(transaction.sender().to_string(),
+                                                                        contract_id,
+                                                                        metadata.value().kind,
+                                                                        metadata.value().language,
+                                                                        transaction.hash(),
+                                                                        static_cast<std::uint64_t>(
+                                                                            section.value())));
+            }
+            for (const auto& transition : metadata.value().transitions) {
+                const auto owner = contract_owners.find(transition.contract_id);
+                if (owner == contract_owners.end()) {
+                    return std::unexpected(ConsensusError::InvalidRoot);
+                }
+                contract_state.insert_or_assign(transition.contract_id,
+                                                contract_state_value(owner->second,
+                                                                     transition,
+                                                                     transaction.hash(),
+                                                                     static_cast<std::uint64_t>(section.value())));
+            }
+        }
+
+        std::string previous_state_commitment;
+        if (parent.phase == Phase::Genesis) {
+            if (consensus_->engine().epoch_bootstrap().has_value()) {
+                previous_state_commitment =
+                    consensus_->engine().epoch_bootstrap().value().previous_state_commitment;
+            }
+        } else {
+            const auto parent_proposal = consensus_->engine().proposal_for(parent.header_hash);
+            if (!parent_proposal.has_value()) {
+                return std::unexpected(ConsensusError::InvalidParent);
+            }
+            previous_state_commitment = parent_proposal.value().header.state_commitment;
+        }
+
+        return StateCommitmentV2 {
+            .protocol_version          = ProtocolVersion,
+            .network_id                = consensus_->engine().validators().document().network_id,
+            .epoch                     = consensus_->engine().validators().document().epoch,
+            .height                    = height,
+            .previous_state_commitment = std::move(previous_state_commitment),
+            .section_root              = std::string(section_root),
+            .account_state_root        = segmented_state_root("accounts", state_entries(account_state)),
+            .contract_state_root       = segmented_state_root("contracts", state_entries(contract_state)),
+            .token_registry_root       = segmented_state_root("tokens", state_entries(token_state)),
+            .validator_set_hash        = consensus_->engine().validators().hash(),
+        };
+    }
+
     std::expected<void, ConsensusError> ConsensusService::validate_proposal(const Proposal& proposal) {
         if (!consensus_ || proposal.batch.payload_bytes > consensus_->configuration().maximum_batch_bytes) {
             return std::unexpected(ConsensusError::DataTooLarge);
@@ -1230,7 +1699,17 @@ namespace ExtraChain::Consensus {
             const auto valid = node_.dag()->validate_shadow_batch(proposal,
                                                                   stored.value(),
                                                                   consensus_->configuration().maximum_batch_bytes);
-            return !valid.has_value() ? valid : admit_batch_intents(proposal, stored.value());
+            if (!valid.has_value()) {
+                return valid;
+            }
+            const auto state = build_state_commitment(stored.value(),
+                                                      proposal.header.section_root,
+                                                      proposal.header.height,
+                                                      proposal.parent_certificate);
+            if (!state.has_value() || hash_state_commitment(state.value()) != proposal.header.state_commitment) {
+                return std::unexpected(ConsensusError::InvalidRoot);
+            }
+            return admit_batch_intents(proposal, stored.value());
         }
 
         auto local = node_.dag()->build_shadow_batch(SectionId(proposal.batch.first_section),
@@ -1247,6 +1726,13 @@ namespace ExtraChain::Consensus {
                                                               consensus_->configuration().maximum_batch_bytes);
         if (!valid.has_value()) {
             return std::unexpected(valid.error());
+        }
+        const auto state = build_state_commitment(local.value(),
+                                                  proposal.header.section_root,
+                                                  proposal.header.height,
+                                                  proposal.parent_certificate);
+        if (!state.has_value() || hash_state_commitment(state.value()) != proposal.header.state_commitment) {
+            return std::unexpected(ConsensusError::InvalidRoot);
         }
         const auto admitted = admit_batch_intents(proposal, local.value());
         if (!admitted.has_value()) {

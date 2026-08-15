@@ -27,7 +27,7 @@
 inline constexpr std::string_view DAG_TX_BATCH_CAPABILITY     = "dag_tx_batch_v1";
 inline constexpr std::string_view TOKEN_MIGRATION_CAPABILITY  = "contract_token_migration_v1";
 inline constexpr std::string_view DAG_REPAIR_CAPABILITY       = "dag_repair_v1";
-inline constexpr std::string_view SHADOW_CONSENSUS_CAPABILITY = "shadow_consensus_v3";
+inline constexpr std::string_view SHADOW_CONSENSUS_CAPABILITY = "shadow_consensus_v4";
 
 #include "core/types.h"
 

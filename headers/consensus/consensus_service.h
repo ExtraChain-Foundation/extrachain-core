@@ -68,6 +68,10 @@ namespace ExtraChain::Consensus {
                                   const Responder&         responder,
                                   std::string_view         peer_identifier);
         void receive_sync_response(const ShadowSyncResponse& response, std::string_view peer_identifier);
+        void receive_bootstrap_request(const ShadowBootstrapRequest& request,
+                                       const Responder&              responder,
+                                       std::string_view              peer_identifier);
+        void receive_recovery(const RecoveryRequestV1& request, std::string_view peer_identifier);
         void receive_intent(const IntentEnvelope& envelope);
 
         std::expected<std::string, ConsensusError> submit_intent(const IntentEnvelope& envelope);
@@ -77,6 +81,11 @@ namespace ExtraChain::Consensus {
             std::string_view intent_hash);
         std::expected<void, ConsensusError> finalize_intents(
             const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized);
+        std::expected<void, ConsensusError>        submit_recovery(const RecoveryDocumentV2& recovery,
+                                                                   ValidatorSet              next_validators,
+                                                                   std::uint64_t             now_ms);
+        std::expected<std::size_t, ConsensusError> request_bootstrap_history(const TrustAnchorV1& anchor,
+                                                                             std::uint64_t        after_epoch);
 
         [[nodiscard]] bool active() const noexcept;
         [[nodiscard]] bool voting() const noexcept;
@@ -86,8 +95,9 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] std::expected<std::optional<TransactionInclusionProofV1>, ConsensusError>
                            transaction_inclusion_proof(std::string_view transaction_hash) const;
         [[nodiscard]] bool verify_transaction_inclusion_proof(const TransactionInclusionProofV1& proof) const;
-        [[nodiscard]] ConsensusMetricsSnapshot                 metrics() const noexcept;
-        [[nodiscard]] Core::Event<const FinalizedCheckpoint&>& finalized_event() noexcept;
+        [[nodiscard]] ConsensusMetricsSnapshot                                       metrics() const noexcept;
+        [[nodiscard]] Core::Event<const FinalizedCheckpoint&>&                       finalized_event() noexcept;
+        [[nodiscard]] Core::Event<const ShadowBootstrapResponse&, std::string_view>& bootstrap_event() noexcept;
 
     private:
         void                                peer_connected(const std::string& identifier);
@@ -108,8 +118,13 @@ namespace ExtraChain::Consensus {
                           MessageStatus      status);
         void send_to_validators(const auto& payload, MessageType message_type);
         void send_to_validators(const auto& payload, MessageType message_type, MessageStatus status);
-        [[nodiscard]] std::expected<void, ConsensusError> validate_proposal(const Proposal& proposal);
-        [[nodiscard]] bool                                has_unfinalized_intents() const;
+        [[nodiscard]] std::expected<void, ConsensusError>              validate_proposal(const Proposal& proposal);
+        [[nodiscard]] std::expected<StateCommitmentV2, ConsensusError> build_state_commitment(
+            const SectionBatchData&  batch,
+            std::string_view         section_root,
+            std::uint64_t            height,
+            const QuorumCertificate& parent) const;
+        [[nodiscard]] bool                         has_unfinalized_intents() const;
         std::expected<std::string, ConsensusError> accept_intent(const IntentEnvelope& envelope, bool broadcast);
         [[nodiscard]] std::expected<std::vector<std::pair<IntentEnvelope, IntentReceipt>>, ConsensusError>
         finalized_intents(const Proposal& proposal, const SectionBatchData& batch) const;
@@ -118,26 +133,30 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError>               process_epoch_changes(
                           const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized);
         std::expected<bool, ConsensusError> activate_pending_epoch();
+        std::expected<bool, ConsensusError> activate_pending_recovery(std::uint64_t now_ms);
+        void                                schedule_recovery_activation();
         [[nodiscard]] std::uint64_t         intent_height() const noexcept;
 
-        Core::ExtraChainNode&                           node_;
-        std::filesystem::path                           directory_;
-        std::unique_ptr<ShadowConsensus>                consensus_;
-        std::unique_ptr<IntentStore>                    intent_store_;
-        IntentPool                                      intent_pool_;
-        std::map<ActorId, std::uint64_t>                committed_nonces_;
-        std::unique_ptr<PeerAuthenticator>              authenticator_;
-        std::optional<Proposal>                         latest_proposal_;
-        std::optional<QuorumCertificate>                latest_certificate_;
-        std::optional<TimeoutCertificate>               latest_timeout_certificate_;
-        std::map<std::uint64_t, ShadowCheckpoint>       pending_checkpoints_;
-        std::map<std::uint64_t, SectionBatchData>       pending_batches_;
-        std::map<std::string, Proposal>                 pending_proposals_;
-        std::shared_ptr<Core::DeadlineTask>             timeout_task_;
-        std::vector<boost::signals2::scoped_connection> connections_;
-        Core::Event<const FinalizedCheckpoint&>         finalized_event_;
-        bool                                            voting_enabled_ = false;
-        mutable std::recursive_mutex                    mutex_;
+        Core::ExtraChainNode&                                         node_;
+        std::filesystem::path                                         directory_;
+        std::unique_ptr<ShadowConsensus>                              consensus_;
+        std::unique_ptr<IntentStore>                                  intent_store_;
+        IntentPool                                                    intent_pool_;
+        std::map<ActorId, std::uint64_t>                              committed_nonces_;
+        std::unique_ptr<PeerAuthenticator>                            authenticator_;
+        std::optional<Proposal>                                       latest_proposal_;
+        std::optional<QuorumCertificate>                              latest_certificate_;
+        std::optional<TimeoutCertificate>                             latest_timeout_certificate_;
+        std::map<std::uint64_t, ShadowCheckpoint>                     pending_checkpoints_;
+        std::map<std::uint64_t, SectionBatchData>                     pending_batches_;
+        std::map<std::string, Proposal>                               pending_proposals_;
+        std::shared_ptr<Core::DeadlineTask>                           timeout_task_;
+        std::shared_ptr<Core::DeadlineTask>                           recovery_task_;
+        std::vector<boost::signals2::scoped_connection>               connections_;
+        Core::Event<const FinalizedCheckpoint&>                       finalized_event_;
+        Core::Event<const ShadowBootstrapResponse&, std::string_view> bootstrap_event_;
+        bool                                                          voting_enabled_ = false;
+        mutable std::recursive_mutex                                  mutex_;
     };
 
 } // namespace ExtraChain::Consensus

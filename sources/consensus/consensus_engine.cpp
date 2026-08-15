@@ -199,7 +199,7 @@ namespace ExtraChain::Consensus {
     }
 
     std::expected<Proposal, ConsensusError> ConsensusEngine::make_proposal(SectionBatchManifest batch,
-                                                                           std::string          section_root,
+                                                                           StateCommitmentV2    state,
                                                                            std::uint64_t        round) {
         std::lock_guard lock(mutex_);
         if (!initialized_ || !identity_.has_value() || !safety_state_.highest_certificate.has_value()) {
@@ -210,7 +210,11 @@ namespace ExtraChain::Consensus {
         if (!is_local_leader(height, round)) {
             return std::unexpected(ConsensusError::NotLeader);
         }
-        if (section_root.empty() || batch.first_section > batch.last_section || batch.last_section == 0
+        if (state.protocol_version != ProtocolVersion || state.network_id != validators_.document().network_id
+            || state.epoch != validators_.document().epoch || state.height != height || state.section_root.empty()
+            || state.account_state_root.empty() || state.contract_state_root.empty()
+            || state.token_registry_root.empty() || state.validator_set_hash != validators_.hash()
+            || batch.first_section > batch.last_section || batch.last_section == 0
             || batch.transaction_root.empty() || batch.data_root.empty() || batch.payload_bytes == 0
             || batch.transaction_root != calculate_transaction_root(batch.transaction_hashes)) {
             return std::unexpected(ConsensusError::InvalidRoot);
@@ -224,17 +228,23 @@ namespace ExtraChain::Consensus {
             if (!epoch_bootstrap_.has_value() && batch.first_section != 0 && batch.previous_section_root.empty()) {
                 return std::unexpected(ConsensusError::InvalidParent);
             }
+            const auto expected_previous =
+                epoch_bootstrap_.has_value() ? epoch_bootstrap_.value().previous_state_commitment : std::string {};
+            if (state.previous_state_commitment != expected_previous) {
+                return std::unexpected(ConsensusError::InvalidRoot);
+            }
         } else {
             const auto parent_proposal = proposals_.find(parent.header_hash);
             if (parent_proposal == proposals_.end()
                 || parent_proposal->second.batch.last_section == std::numeric_limits<std::uint64_t>::max()
                 || parent_proposal->second.batch.last_section + 1 != batch.first_section
-                || parent_proposal->second.header.section_root != batch.previous_section_root) {
+                || parent_proposal->second.header.section_root != batch.previous_section_root
+                || state.previous_state_commitment != parent_proposal->second.header.state_commitment) {
                 return std::unexpected(ConsensusError::InvalidParent);
             }
         }
         const auto                        batch_root = hash_batch_manifest(batch);
-        const auto                        commitment = state_commitment(parent, section_root, batch_root);
+        const auto                        commitment = hash_state_commitment(state);
         std::optional<TimeoutCertificate> timeout_certificate;
         if (round != 0) {
             if (!safety_state_.highest_timeout_certificate.has_value()
@@ -256,13 +266,14 @@ namespace ExtraChain::Consensus {
                     .round                   = round,
                     .dag_section             = batch.last_section,
                     .parent_certificate_hash = hash_certificate(parent),
-                    .section_root            = std::move(section_root),
+                    .section_root            = state.section_root,
                     .transaction_root        = batch.transaction_root,
                     .batch_root              = batch_root,
                     .validator_set_hash      = validators_.hash(),
                     .state_commitment        = commitment,
                     .logical_time            = height,
                 },
+            .state               = std::move(state),
             .batch               = std::move(batch),
             .parent_certificate  = parent,
             .timeout_certificate = std::move(timeout_certificate),
@@ -739,6 +750,8 @@ namespace ExtraChain::Consensus {
                && second.parent_certificate.header_hash == hash_header(first.header)
                && third.parent_certificate.header_hash == hash_header(second.header)
                && proof.decision_certificate.header_hash == hash_header(third.header)
+               && second.state.previous_state_commitment == first.header.state_commitment
+               && third.state.previous_state_commitment == second.header.state_commitment
                && extends_batch(first, second) && extends_batch(second, third)
                && verify_certificate(second.parent_certificate) && verify_certificate(third.parent_certificate)
                && verify_certificate(proof.decision_certificate);
@@ -903,10 +916,14 @@ namespace ExtraChain::Consensus {
             || proposal.batch.transaction_root != calculate_transaction_root(proposal.batch.transaction_hashes)
             || proposal.header.batch_root != hash_batch_manifest(proposal.batch)
             || proposal.batch.data_root.empty() || proposal.batch.payload_bytes == 0
-            || proposal.header.state_commitment
-                   != state_commitment(proposal.parent_certificate,
-                                       proposal.header.section_root,
-                                       proposal.header.batch_root)
+            || proposal.state.protocol_version != ProtocolVersion
+            || proposal.state.network_id != proposal.header.network_id
+            || proposal.state.epoch != proposal.header.epoch || proposal.state.height != proposal.header.height
+            || proposal.state.section_root != proposal.header.section_root
+            || proposal.state.validator_set_hash != proposal.header.validator_set_hash
+            || proposal.state.account_state_root.empty() || proposal.state.contract_state_root.empty()
+            || proposal.state.token_registry_root.empty()
+            || proposal.header.state_commitment != hash_state_commitment(proposal.state)
             || !verify_certificate(proposal.parent_certificate)) {
             return false;
         }
@@ -930,12 +947,21 @@ namespace ExtraChain::Consensus {
                 && !proposal.batch.previous_section_root.empty()) {
                 return false;
             }
+            const auto expected_previous =
+                epoch_bootstrap_.has_value() ? epoch_bootstrap_.value().previous_state_commitment : std::string {};
+            if (proposal.state.previous_state_commitment != expected_previous) {
+                return false;
+            }
         } else {
             const auto parent = proposals_.find(proposal.parent_certificate.header_hash);
             if (parent != proposals_.end()
                 && (parent->second.batch.last_section == std::numeric_limits<std::uint64_t>::max()
                     || parent->second.batch.last_section + 1 != proposal.batch.first_section
                     || parent->second.header.section_root != proposal.batch.previous_section_root)) {
+                return false;
+            }
+            if (parent != proposals_.end()
+                && proposal.state.previous_state_commitment != parent->second.header.state_commitment) {
                 return false;
             }
         }
@@ -1046,12 +1072,6 @@ namespace ExtraChain::Consensus {
             .grandchild_proposal  = child->second,
             .decision_certificate = certificate,
         };
-    }
-
-    std::string ConsensusEngine::state_commitment(const QuorumCertificate& parent,
-                                                  std::string_view         section_root,
-                                                  std::string_view         batch_root) const {
-        return calculate_consensus_state_commitment(parent, section_root, batch_root, validators_.hash());
     }
 
     void ConsensusEngine::prune_memory(std::uint64_t finalized_height) {

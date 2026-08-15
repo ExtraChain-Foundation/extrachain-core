@@ -25,10 +25,13 @@ class Transaction;
 
 namespace ExtraChain::Consensus {
 
-    inline constexpr std::size_t   ShadowCommitteeSize   = 7;
-    inline constexpr std::size_t   GovernanceSignerCount = 5;
-    inline constexpr std::uint16_t GovernanceThreshold   = 3;
-    inline constexpr std::uint16_t RecoveryThreshold     = 4;
+    inline constexpr std::size_t   ShadowCommitteeSize        = 7;
+    inline constexpr std::size_t   GovernanceSignerCount      = 5;
+    inline constexpr std::uint16_t GovernanceThreshold        = 3;
+    inline constexpr std::uint16_t RecoveryThreshold          = 4;
+    inline constexpr std::uint64_t MinimumRecoveryDelayMillis = 24ULL * 60ULL * 60ULL * 1'000ULL;
+    inline constexpr std::size_t   MaximumBootstrapEntries    = 64;
+    inline constexpr std::size_t   MaximumBootstrapBytes      = 4ULL * 1024ULL * 1024ULL;
 
     enum class IntentOperation : std::uint8_t {
         Transfer,
@@ -205,23 +208,55 @@ namespace ExtraChain::Consensus {
         MSGPACK_DEFINE(protocol_version, change, next_validators)
     };
 
-    struct RecoveryDocumentV1 {
+    struct TrustAnchorV1 {
         std::uint16_t           protocol_version = ProtocolVersion;
         ActorId                 network_id;
-        std::uint64_t           recovery_sequence = 0;
-        std::uint64_t           finalized_height  = 0;
-        std::string             finalized_checkpoint_hash;
-        std::string             next_validator_set_hash;
-        std::string             registry_document_hash;
+        ValidatorSet            initial_validators;
+        MultisigPolicy          governance_policy;
+        MultisigPolicy          recovery_policy;
+        std::uint64_t           minimum_recovery_delay_ms = MinimumRecoveryDelayMillis;
         GovernanceAuthorization authorization;
 
         MSGPACK_DEFINE(protocol_version,
                        network_id,
+                       initial_validators,
+                       governance_policy,
+                       recovery_policy,
+                       minimum_recovery_delay_ms,
+                       authorization)
+    };
+
+    struct RecoveryDocumentV2 {
+        std::uint16_t                    protocol_version = ProtocolVersion;
+        ActorId                          network_id;
+        std::uint64_t                    recovery_sequence = 0;
+        std::uint64_t                    current_epoch     = 0;
+        std::uint64_t                    activation_epoch  = 0;
+        std::uint64_t                    finalized_height  = 0;
+        std::string                      finalized_header_hash;
+        std::string                      finalized_state_commitment;
+        std::string                      current_validator_set_hash;
+        std::string                      next_validator_set_hash;
+        std::string                      registry_document_hash;
+        std::vector<OperatorAttestation> operators;
+        std::uint64_t                    signed_at_ms      = 0;
+        std::uint64_t                    activate_after_ms = 0;
+        GovernanceAuthorization          authorization;
+
+        MSGPACK_DEFINE(protocol_version,
+                       network_id,
                        recovery_sequence,
+                       current_epoch,
+                       activation_epoch,
                        finalized_height,
-                       finalized_checkpoint_hash,
+                       finalized_header_hash,
+                       finalized_state_commitment,
+                       current_validator_set_hash,
                        next_validator_set_hash,
                        registry_document_hash,
+                       operators,
+                       signed_at_ms,
+                       activate_after_ms,
                        authorization)
     };
 
@@ -241,30 +276,6 @@ namespace ExtraChain::Consensus {
                        validator_set_hash,
                        require_intent_v2,
                        authorization)
-    };
-
-    struct StateCommitmentV2 {
-        std::uint16_t protocol_version = ProtocolVersion;
-        ActorId       network_id;
-        std::uint64_t epoch  = 0;
-        std::uint64_t height = 0;
-        std::string   previous_state_commitment;
-        std::string   section_root;
-        std::string   account_state_root;
-        std::string   contract_state_root;
-        std::string   token_registry_root;
-        std::string   validator_set_hash;
-
-        MSGPACK_DEFINE(protocol_version,
-                       network_id,
-                       epoch,
-                       height,
-                       previous_state_commitment,
-                       section_root,
-                       account_state_root,
-                       contract_state_root,
-                       token_registry_root,
-                       validator_set_hash)
     };
 
     struct TransactionInclusionProofV1 {
@@ -287,6 +298,57 @@ namespace ExtraChain::Consensus {
         EpochBootstrapV1            bootstrap;
 
         MSGPACK_DEFINE(protocol_version, change, next_validators, proof, bootstrap)
+    };
+
+    enum class EpochStartKind : std::uint8_t {
+        Normal,
+        Recovery
+    };
+
+    struct EpochStartV1 {
+        std::uint16_t                     protocol_version = ProtocolVersion;
+        EpochStartKind                    kind             = EpochStartKind::Normal;
+        ValidatorSet                      validators;
+        EpochBootstrapV1                  bootstrap;
+        std::optional<EpochTransitionV1>  normal_transition;
+        std::optional<RecoveryDocumentV2> recovery;
+
+        MSGPACK_DEFINE(protocol_version, kind, validators, bootstrap, normal_transition, recovery)
+    };
+
+    struct BootstrapHistoryPageV1 {
+        std::uint16_t                protocol_version = ProtocolVersion;
+        ActorId                      network_id;
+        std::string                  trust_anchor_hash;
+        std::uint64_t                after_epoch = 0;
+        std::vector<EpochStartV1>    entries;
+        std::optional<std::uint64_t> next_after_epoch;
+
+        MSGPACK_DEFINE(protocol_version, network_id, trust_anchor_hash, after_epoch, entries, next_after_epoch)
+    };
+
+    struct ShadowBootstrapResponse {
+        std::uint16_t          protocol_version = ProtocolVersion;
+        ActorId                network_id;
+        BootstrapHistoryPageV1 page;
+        std::uint64_t          latest_epoch            = 0;
+        std::uint64_t          latest_finalized_height = 0;
+        std::string            latest_finalized_header_hash;
+
+        MSGPACK_DEFINE(protocol_version,
+                       network_id,
+                       page,
+                       latest_epoch,
+                       latest_finalized_height,
+                       latest_finalized_header_hash)
+    };
+
+    struct RecoveryRequestV1 {
+        std::uint16_t      protocol_version = ProtocolVersion;
+        RecoveryDocumentV2 recovery;
+        ValidatorSet       next_validators;
+
+        MSGPACK_DEFINE(protocol_version, recovery, next_validators)
     };
 
     struct IntentPoolLimits {
@@ -379,20 +441,30 @@ namespace ExtraChain::Consensus {
     EXTRACHAIN_EXPORT std::string hash_epoch_bootstrap(const EpochBootstrapV1& bootstrap);
     EXTRACHAIN_EXPORT bool        verify_epoch_bootstrap(const EpochBootstrapV1& bootstrap,
                                                          const ValidatorSet&     next_validators);
-    EXTRACHAIN_EXPORT std::string recovery_action_hash(const RecoveryDocumentV1& recovery);
-    EXTRACHAIN_EXPORT bool        verify_recovery_document(const RecoveryDocumentV1& recovery,
+    EXTRACHAIN_EXPORT std::string trust_anchor_action_hash(const TrustAnchorV1& anchor);
+    EXTRACHAIN_EXPORT std::string hash_trust_anchor(const TrustAnchorV1& anchor);
+    EXTRACHAIN_EXPORT bool        verify_trust_anchor(const TrustAnchorV1& anchor);
+    EXTRACHAIN_EXPORT std::string recovery_action_hash(const RecoveryDocumentV2& recovery);
+    EXTRACHAIN_EXPORT bool        verify_recovery_document(const RecoveryDocumentV2& recovery,
                                                            const MultisigPolicy&     recovery_policy,
-                                                           std::uint64_t             expected_sequence,
+                                                           const ValidatorSet&       current_validators,
+                                                           const ValidatorSet&       next_validators,
+                                                           std::uint64_t             minimum_sequence,
                                                            std::uint64_t             expected_finalized_height,
-                                                           std::string_view          expected_checkpoint_hash);
+                                                           std::string_view          expected_header_hash,
+                                                           std::string_view          expected_state_commitment);
     EXTRACHAIN_EXPORT std::string activation_action_hash(const ActivationManifestV1& activation);
     EXTRACHAIN_EXPORT bool        verify_activation_manifest(const ActivationManifestV1& activation,
                                                              const MultisigPolicy&       policy,
                                                              std::uint64_t               current_height,
                                                              std::uint64_t               minimum_sequence);
     EXTRACHAIN_EXPORT std::string hash_state_commitment(const StateCommitmentV2& commitment);
+    EXTRACHAIN_EXPORT std::string segmented_state_root(
+        std::string_view                                        domain,
+        const std::vector<std::pair<std::string, std::string>>& entries);
 
 } // namespace ExtraChain::Consensus
 
 MSGPACK_ADD_ENUM(ExtraChain::Consensus::IntentOperation)
 MSGPACK_ADD_ENUM(ExtraChain::Consensus::IntentStatus)
+MSGPACK_ADD_ENUM(ExtraChain::Consensus::EpochStartKind)

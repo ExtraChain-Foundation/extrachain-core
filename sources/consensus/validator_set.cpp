@@ -183,6 +183,23 @@ namespace ExtraChain::Consensus {
                                 std::move(records.value().second));
     }
 
+    std::expected<ValidatorSetView, ConsensusError> ValidatorSetView::create_recovery_transition(
+        ValidatorSet                            validators,
+        const std::vector<OperatorAttestation>& operators) {
+        if (validators.protocol_version != ProtocolVersion || validators.network_id.is_zero()
+            || validators.epoch == 0) {
+            return std::unexpected(ConsensusError::InvalidValidatorSet);
+        }
+        auto records = validate_records(validators);
+        if (!records.has_value() || records.value().first.size() != ShadowCommitteeSize
+            || !operators_match(operators, records.value().first)) {
+            return std::unexpected(ConsensusError::InvalidValidatorSet);
+        }
+        return ValidatorSetView(std::move(validators),
+                                std::move(records.value().first),
+                                std::move(records.value().second));
+    }
+
     const ValidatorSet& ValidatorSetView::document() const noexcept {
         return validators_;
     }
