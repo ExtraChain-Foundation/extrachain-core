@@ -6,7 +6,7 @@
 
 #include "chain/actor.h"
 #include "chain/dag.h"
-#include "chain/dag_quarantine.h"
+#include "chain/dag_recovery.h"
 #include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "network/responder.h"
@@ -50,12 +50,38 @@ int main() {
     transaction.set_section(SectionId(42));
     TEST_REQUIRE(transaction.sign(actor));
 
-    DagQuarantine quarantine(test_path / "quarantine" / "Quarantine.db");
-    TEST_REQUIRE(quarantine.record(transaction, "test-reason", "test-source"));
-    TEST_REQUIRE(quarantine.contains(transaction.hash()));
-    TEST_REQUIRE_EQ(quarantine.count(), std::uint64_t(1));
-    quarantine.resolve_range(SectionId(40), SectionId(50));
-    TEST_REQUIRE(!quarantine.contains(transaction.hash()));
+    const auto recovery_path = test_path / "recovery" / "Recovery.db";
+    {
+        DagRecoveryJournal recovery(recovery_path);
+        TEST_REQUIRE(recovery.available());
+        const auto incident =
+            recovery.record(SectionId(40), SectionId(50), "test-reason", "test-source", "observed-root");
+        TEST_REQUIRE(incident.has_value());
+        TEST_REQUIRE_EQ(recovery.pending_count(), std::uint64_t(1));
+        TEST_REQUIRE(
+            recovery.advance(incident.value(), DagRecoveryStage::Repairing, "expected-root", "proof-hash"));
+        const auto repairing = recovery.pending_in_range(SectionId(45), SectionId(45));
+        TEST_REQUIRE_EQ(repairing.size(), std::size_t(1));
+        TEST_REQUIRE_EQ(repairing.front().stage, DagRecoveryStage::Repairing);
+        TEST_REQUIRE_EQ(repairing.front().expected_root, std::string("expected-root"));
+        TEST_REQUIRE(recovery.advance(incident.value(), DagRecoveryStage::Resolved));
+        TEST_REQUIRE_EQ(recovery.pending_count(), std::uint64_t(0));
+
+        const auto repeated =
+            recovery.record(SectionId(40), SectionId(50), "test-reason", "test-source", "second-root");
+        TEST_REQUIRE(repeated.has_value());
+        TEST_REQUIRE(recovery.advance(repeated.value(), DagRecoveryStage::Failed));
+        TEST_REQUIRE(recovery.record(SectionId(40), SectionId(50), "test-reason", "test-source").has_value());
+        const auto failed = recovery.pending();
+        TEST_REQUIRE_EQ(failed.size(), std::size_t(1));
+        TEST_REQUIRE_EQ(failed.front().stage, DagRecoveryStage::Failed);
+    }
+    {
+        DagRecoveryJournal recovered(recovery_path);
+        const auto         failed = recovered.pending();
+        TEST_REQUIRE_EQ(failed.size(), std::size_t(1));
+        TEST_REQUIRE_EQ(failed.front().stage, DagRecoveryStage::Failed);
+    }
 
     auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 0);
     node->process();
@@ -85,6 +111,11 @@ int main() {
     TEST_REQUIRE(initial_control_40.has_value());
     const auto control_20_before = initial_control_20.value().control;
     const auto control_40_before = initial_control_40.value().control;
+
+    node->dag()->report_state_inconsistency(SectionId(5), "negative-balance-transition", "dag-recovery-test");
+    TEST_REQUIRE_EQ(node->dag()->state_projection().status, StateProjectionStatus::RepairPending);
+    TEST_REQUIRE_EQ(node->dag()->status(), DagStatus::Ready);
+    TEST_REQUIRE(!node->dag()->prepare_transaction(transaction, actor).has_value());
 
     auto shadow_batch = node->dag()->build_shadow_batch(SectionId(1), SectionId(20), {});
     TEST_REQUIRE(shadow_batch.has_value());
@@ -132,6 +163,7 @@ int main() {
     TEST_REQUIRE(node->dag()
                      ->install_shadow_batch(shadow_proposal, shadow_batch.value(), 16ULL * 1024ULL * 1024ULL)
                      .has_value());
+    TEST_REQUIRE_EQ(node->dag()->state_projection().status, StateProjectionStatus::Ready);
     const auto installed_control_20   = node->dag()->read_control(SectionId(20));
     const auto invalidated_control_40 = node->dag()->read_control(SectionId(40));
     TEST_REQUIRE(installed_control_20.has_value());

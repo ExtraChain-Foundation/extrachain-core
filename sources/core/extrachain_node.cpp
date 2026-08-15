@@ -1350,6 +1350,15 @@ namespace ExtraChain::Core {
         return dag_.get();
     }
 
+    StateProjectionSnapshot ExtraChainNode::state_projection() const {
+        return dag_ == nullptr ? StateProjectionSnapshot {
+                                     .status           = StateProjectionStatus::Failed,
+                                     .verified_section = SectionId(-1),
+                                     .reason           = "dag-unavailable",
+                                 }
+                               : dag_->state_projection();
+    }
+
     NetworkService* ExtraChainNode::network() const {
         return network_service_.get();
     }
@@ -1363,6 +1372,9 @@ namespace ExtraChain::Core {
     }
 
     std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(Transaction tx) {
+        if (dag_ == nullptr || !dag_->state_projection_ready()) {
+            return std::unexpected(TransactionError::NotReady);
+        }
         if (tx.amount() <= 0) {
             eWarning("Can not create tx without amount {}", tx);
             return std::unexpected(TransactionError::ZeroAmount);
@@ -2370,6 +2382,8 @@ namespace ExtraChain::Core {
             return "Can not create transaction. There is not enough coins/tokens in wallet.";
         case TransactionError::NoCurrentUser:
             return "Can not create transaction. There no current user.";
+        case TransactionError::NotReady:
+            return "The chain state is not ready.";
         default:
             return "";
         }

@@ -37,6 +37,7 @@
 #include "chain/dag_cache.h"
 #include "chain/chain_index.h"
 #include "chain/control_index.h"
+#include "chain/dag_recovery.h"
 #include "consensus/consensus_types.h"
 #include "chain/pack_registry.h"
 #include "chain/hot_section_store.h"
@@ -48,7 +49,6 @@ namespace ExtraChain::Core {
     class ExtraChainNode;
 }
 class Responder;
-class DagQuarantine;
 
 // Control hashes live on every CONTROL_INTERVAL-th section (section_id % 20 == 0).
 // They anchor the chain so peers can verify long histories without replaying every tx.
@@ -461,6 +461,9 @@ public:
     const ChainIndex *chain_index() const;
     bool              chain_index_enabled() const;
 
+    StateProjectionSnapshot state_projection() const;
+    bool                    state_projection_ready() const;
+
     /**
      * @brief Get the ID of the first saved section
      *
@@ -611,7 +614,8 @@ public:
     std::expected<void, ExtraChain::Consensus::ConsensusError> install_shadow_batch(
         const ExtraChain::Consensus::Proposal         &proposal,
         const ExtraChain::Consensus::SectionBatchData &batch,
-        std::uint64_t                                  maximum_batch_bytes);
+        std::uint64_t                                  maximum_batch_bytes,
+        const std::string                             &proof_hash = {});
 
     /**
      * @brief exists_section_file
@@ -835,7 +839,10 @@ private:
     bool                                                  token_allocations_cache_loaded_ = false;
     std::map<std::pair<ActorId, TokenId>, BigNumberFloat> token_allocations_cache_;
     DagCache                                              cache_; // Balance cache for fast calculations
-    std::unique_ptr<DagQuarantine>                        quarantine_;
+    std::unique_ptr<DagRecoveryJournal>                   recovery_journal_;
+    mutable std::mutex                                    state_projection_mutex_;
+    StateProjectionSnapshot                               state_projection_;
+    std::atomic<StateProjectionStatus> state_projection_status_ { StateProjectionStatus::Ready };
 
     mutable std::shared_mutex    section_mutex_; // Protects one storage operation.
     mutable std::recursive_mutex save_mutex_;    // Protects section read-modify-write cycles.
@@ -983,6 +990,14 @@ private:
                                                                       bool             file_response) const;
     void                     consume_pending_sync_response(const Responder &responder, bool file_response);
     bool                     pending_sync_is_repair(const Responder &responder) const;
+    void                     set_state_projection(StateProjectionStatus status,
+                                                  const SectionId      &verified_section,
+                                                  std::string           reason = {});
+    bool                     replay_repaired_state(const SectionId   &first,
+                                                   const SectionId   &last,
+                                                   const std::string &expected_root = {},
+                                                   const std::string &proof_hash    = {});
+    void                     resume_state_recovery();
     void                     schedule_section_repair(const SectionId &section_id);
     void                     schedule_progressive_audit();
     void                     commit_progressive_audit();
@@ -1108,9 +1123,10 @@ public:
     bool save_transaction(const Transaction &transaction);
 
     bool local_remove_transaction(const SectionId &section_id, const std::string &hash);
-    void quarantine_transaction(const Transaction &transaction,
-                                const std::string &reason,
-                                const std::string &source);
+    void report_state_inconsistency(const SectionId   &section,
+                                    const std::string &reason,
+                                    const std::string &source,
+                                    const std::string &observed_root = {});
 
     /**
      * @brief Save multiple transactions to storage in batch

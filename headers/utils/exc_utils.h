@@ -500,11 +500,11 @@ namespace ChainConst {
     static const std::string DAG_PACKS_FOLDER = DAG_FOLDER + "/packs";
 
     // Cache
-    static const std::string DAG_CACHE_FOLDER        = DAG_FOLDER + "/cache";
-    static const std::string DAG_QUARANTINE_FOLDER   = DAG_FOLDER + "/quarantine";
-    static const std::string DAG_QUARANTINE_DATABASE = DAG_QUARANTINE_FOLDER + "/Quarantine.db";
-    static const std::string TRANSACTION_CACHE       = DAG_CACHE_FOLDER + "/SelfTransactions.db";
-    static const std::string BALANCE_CACHE           = DAG_CACHE_FOLDER + "/BalanceCache.db";
+    static const std::string DAG_CACHE_FOLDER      = DAG_FOLDER + "/cache";
+    static const std::string DAG_RECOVERY_FOLDER   = DAG_FOLDER + "/recovery";
+    static const std::string DAG_RECOVERY_DATABASE = DAG_RECOVERY_FOLDER + "/Recovery.db";
+    static const std::string TRANSACTION_CACHE     = DAG_CACHE_FOLDER + "/SelfTransactions.db";
+    static const std::string BALANCE_CACHE         = DAG_CACHE_FOLDER + "/BalanceCache.db";
 
     // Dfs
     static const int DATA_OFFSET = 512;

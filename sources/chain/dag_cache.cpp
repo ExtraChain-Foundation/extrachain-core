@@ -139,7 +139,7 @@ void DagCache::set_section(const SectionId& section_id, Force force) {
 
 std::pair<SectionId, Balances> DagCache::read_cached_balances() {
     std::lock_guard lock(mutex_);
-    Balances balances;
+    Balances        balances;
 
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for read_cached_balances");
@@ -172,7 +172,7 @@ std::pair<SectionId, Balances> DagCache::read_cached_balances() {
 std::optional<std::pair<SectionId, Balances>> DagCache::read_cached_balances(
     const std::vector<std::pair<ActorId, TokenId>>& actor_token_pairs) {
     std::lock_guard lock(mutex_);
-    Balances balances;
+    Balances        balances;
 
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for read_cached_balance");
@@ -702,13 +702,8 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
 
-    // The old path read every section once to collect keys and then read the
-    // same sections again to apply changes. The complete cache was loaded as a
-    // third input for the negative-balance check. Reuse that complete snapshot
-    // and collect touched keys while applying each section once.
-    auto cache_res = read_cached_balances();
-    local_clear_less_balances(cache_res.first, cache_res.second);
-    Balances balances = std::move(cache_res.second);
+    auto     cache_res = read_cached_balances();
+    Balances balances  = std::move(cache_res.second);
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
@@ -735,6 +730,19 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
             }
             process_transaction(tx, balances);
 
+            if (tx.section() > SectionId(1) && tx.type() != TransactionType::Reward
+                && tx.type() != TransactionType::Conversion && !is_contract_transaction(tx.type())
+                && balances[{ tx.sender(), tx.token() }] < 0) {
+                static_cast<void>(cache_db_->query("ROLLBACK"));
+                eCritical("[DagCache] State transition {} creates a negative balance at section {}",
+                          tx.hash(),
+                          tx.section());
+                dag->report_state_inconsistency(tx.section(),
+                                                "negative-balance-transition",
+                                                "balance-cache-replay");
+                return { false, start_section };
+            }
+
             if (dag->mode() == DagMode::Full) {
                 // write_index(tx.sender(), tx.receiver(), tx.section(), tx.timestamp());
             }
@@ -757,6 +765,41 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     // eLog("[DagCache] Cache updated to section {}", cached_section_);
     dag->update_range();
     return { true, start_section };
+}
+
+std::optional<StateTransitionViolation> DagCache::validate_state_to(const SectionId& current_section) {
+    std::lock_guard cache_lock(mutex_);
+    auto            cache_res = read_cached_balances();
+    auto            balances  = std::move(cache_res.second);
+    auto            from = cache_res.first == SectionId(-1) ? dag->first_saved_section() : cache_res.first + 1;
+    if (from < SectionId(0) || current_section < from) {
+        return std::nullopt;
+    }
+
+    auto hot_sections = dag->read_hot_sections(from, current_section);
+    for (auto section_id = from; section_id <= current_section; ++section_id) {
+        const auto hot = hot_sections.find(section_id);
+        auto       section =
+            hot != hot_sections.end() ? std::optional<Section>(hot->second) : dag->read_section(section_id);
+        if (!section.has_value()) {
+            continue;
+        }
+        for (const auto& transaction : section->transactions) {
+            process_transaction(transaction, balances);
+            if (transaction.section() <= SectionId(1) || transaction.type() == TransactionType::Reward
+                || transaction.type() == TransactionType::Conversion
+                || is_contract_transaction(transaction.type())) {
+                continue;
+            }
+            if (balances[{ transaction.sender(), transaction.token() }] < 0) {
+                return StateTransitionViolation {
+                    .section          = transaction.section(),
+                    .transaction_hash = transaction.hash(),
+                };
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
@@ -1074,118 +1117,4 @@ bool DagCache::rebuild_contract_catalog() {
         }
     }
     return true;
-}
-
-void reverse_transaction(const Transaction& tx, Balances& balances) {
-    // Skip if transaction doesn't affect balances
-    if (tx.type() == TransactionType::Unknown) {
-        return;
-    }
-    if (is_contract_transaction(tx.type())) {
-        apply_contract_deltas(tx, balances, true);
-        return;
-    }
-
-    // Reward transactions - reverse: subtract amount from sender
-    if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
-        auto key = std::make_pair(tx.sender(), tx.token());
-        balances[key] -= tx.amount();
-    }
-    // Contract initialization - reverse: subtract amount from sender
-    else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
-        auto key = std::make_pair(tx.sender(), tx.token());
-        balances[key] -= tx.amount();
-    }
-    // Token conversion - reverse: add back to source, subtract from destination
-    else if (tx.type() == TransactionType::Conversion && !tx.sender().is_zero()) {
-        if (tx.meta().has_value()) {
-            auto from_token = TokenId::create(tx.meta().value());
-            if (from_token.has_value()) {
-                // Add back to source token (reverse of deduction)
-                auto from_key = std::make_pair(tx.sender(), from_token.value());
-                balances[from_key] += tx.amount();
-
-                // Subtract from destination token (reverse of addition)
-                auto to_key = std::make_pair(tx.sender(), tx.token());
-                balances[to_key] -= tx.amount();
-            }
-        }
-    }
-    // Regular transactions - reverse: subtract from receiver, add to sender
-    else {
-        // If receiver is valid, subtract funds (reverse of addition)
-        if (!tx.receiver().is_zero()) {
-            auto key = std::make_pair(tx.receiver(), tx.token());
-            balances[key] -= tx.amount();
-        }
-
-        // If sender is valid, add funds back (reverse of deduction)
-        if (!tx.sender().is_zero()) {
-            auto key = std::make_pair(tx.sender(), tx.token());
-            balances[key] += tx.amount();
-        }
-    }
-}
-
-std::set<ActorId> DagCache::local_clear_less_balances(const SectionId& from, const Balances& start_balances) {
-    auto              balances = start_balances;
-    std::set<ActorId> actors;
-
-    // eLog("[Dag] Clear txs...");
-
-    for (auto i = from; i <= dag->current_section(); i++) {
-        auto section = dag->read_section(i);
-        if (!section.has_value()) {
-            continue;
-        }
-        if (section->transactions.empty() || section->id < 0) {
-            continue;
-        }
-
-        // Process each transaction in the section
-        for (const auto& tx : section->transactions) {
-            process_transaction(tx, balances);
-
-            if (tx.section() <= 1) {
-                continue;
-            }
-
-            // if (tx.sender() == ActorId("1a902514053b9f2c814621799acbbef21e2ff6a5")
-            //     || tx.receiver() == ActorId("1a902514053b9f2c814621799acbbef21e2ff6a5")) {
-            //     auto tx1 = tx;
-            //     tx1.set_prev_hashs({ "hashs: " + std::to_string(tx1.prev_hashs().size()) });
-            //     eLog("{}\n", tx1);
-            // }
-
-            if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::Conversion
-                || is_contract_transaction(tx.type())) {
-                continue;
-            }
-
-            if (balances[{ tx.sender(), tx.token() }] < 0) {
-#ifndef IS_APP_UI_CLIENT
-                eInfo(
-                    "[Dag] Exorcised. Section: {}, sender: {}, receiver: {}, type: {}, token: {}, amount: {}, "
-                    "balance: {}, timestamp: {}",
-                    tx.section(),
-                    tx.sender(),
-                    tx.receiver(),
-                    tx.type(),
-                    tx.token(),
-                    tx.amount(),
-                    balances[{ tx.sender(), tx.token() }],
-                    tx.timestamp());
-#endif
-
-                reverse_transaction(tx, balances);
-                dag->quarantine_transaction(tx, "negative-balance-replay", "balance-cache-rebuild");
-                actors.insert(tx.sender());
-            }
-        }
-    }
-
-    if (actors.size() != 0) {
-        eLog("[Dag] Removed for actors: {}", actors);
-    }
-    return actors;
 }

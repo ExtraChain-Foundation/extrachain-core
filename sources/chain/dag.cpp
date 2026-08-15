@@ -18,7 +18,7 @@
  */
 
 #include "chain/dag.h"
-#include "chain/dag_quarantine.h"
+#include "chain/dag_recovery.h"
 #include "consensus/consensus_service.h"
 #include "contracts/contract_manager.h"
 #include "contracts/contract_transaction.h"
@@ -58,7 +58,7 @@ Dag::Dag(ExtraChain::Core::ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node)
     , cache_(node, this)
-    , quarantine_(std::make_unique<DagQuarantine>(ChainConst::DAG_QUARANTINE_DATABASE))
+    , recovery_journal_(std::make_unique<DagRecoveryJournal>(ChainConst::DAG_RECOVERY_DATABASE))
     , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
     bool storage_reset = false;
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
@@ -211,6 +211,28 @@ Dag::Dag(ExtraChain::Core::ExtraChainNode *node)
 
     transaction_cache_.make_files();
     cache_.init_db();
+
+    const auto incidents = recovery_journal_->pending();
+    if (!recovery_journal_->available()) {
+        set_state_projection(StateProjectionStatus::Failed, cache_.section(), "recovery-journal-unavailable");
+    } else if (!incidents.empty()) {
+        auto verified_section = cache_.section();
+        for (const auto &incident : incidents) {
+            if (verified_section >= incident.first_section) {
+                verified_section =
+                    incident.first_section == SectionId(0) ? SectionId(-1) : incident.first_section - 1;
+            }
+        }
+        const auto failed = std::ranges::find_if(incidents, [](const auto &incident) {
+            return incident.stage == DagRecoveryStage::Failed;
+        });
+        set_state_projection(failed == incidents.end() ? StateProjectionStatus::RepairPending
+                                                       : StateProjectionStatus::Failed,
+                             verified_section,
+                             failed == incidents.end() ? incidents.front().reason : failed->reason);
+    } else {
+        set_state_projection(StateProjectionStatus::Ready, cache_.section());
+    }
 
     timestamp_bigger_sync_start_ = 0;
 
@@ -400,6 +422,7 @@ void Dag::watchdog_tick() {
     if (mode_ != DagMode::Full) {
         return;
     }
+    resume_state_recovery();
     if (status_ == DagStatus::Ready) {
         stalled_sync_rounds_ = 0;
         if (current_section_ != last_watchdog_section_) {
@@ -624,6 +647,15 @@ bool Dag::chain_index_enabled() const {
     return chain_index_enabled_;
 }
 
+StateProjectionSnapshot Dag::state_projection() const {
+    std::lock_guard lock(state_projection_mutex_);
+    return state_projection_;
+}
+
+bool Dag::state_projection_ready() const {
+    return state_projection_status_.load(std::memory_order_acquire) == StateProjectionStatus::Ready;
+}
+
 SectionId Dag::first_saved_section() {
     return first_saved_section_;
 }
@@ -644,6 +676,9 @@ std::string Dag::file_path(const SectionId &section) const {
 std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Transaction       &transaction,
                                                                       const Actor<KeyPrivate> &signer,
                                                                       bool                     ignore_zero) {
+    if (!state_projection_ready()) {
+        return std::unexpected(TransactionError::NotReady);
+    }
     auto tx = transaction;
     tx.set_section(current_section_ + 1);
 
@@ -709,6 +744,9 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
                                                                               bool              *committed) {
     if (committed != nullptr) {
         *committed = false;
+    }
+    if (!state_projection_ready()) {
+        return std::unexpected(TransactionProveError::StateUnavailable);
     }
     if (status_ != DagStatus::Final) {
         /*
@@ -950,7 +988,10 @@ void Dag::network_section(const Section &section) {
 
 Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
                                        std::optional<SectionId>    to_section) {
-    // Use DagCache to calculate balances
+    if (!state_projection_ready()) {
+        eWarning("[Dag] Balance request rejected: state projection is not ready");
+        return {};
+    }
     return cache_.calculate_balances(actor_ids, current_section_, first_saved_section_, to_section);
 }
 
@@ -1557,13 +1598,112 @@ bool Dag::local_remove_transaction(const SectionId &section_id, const std::strin
     return true;
 }
 
-void Dag::quarantine_transaction(const Transaction &transaction,
-                                 const std::string &reason,
-                                 const std::string &source) {
-    if (!quarantine_ || !quarantine_->record(transaction, reason, source)) {
-        eWarning("[Dag] Failed to quarantine transaction {}", transaction.hash());
+void Dag::set_state_projection(StateProjectionStatus status,
+                               const SectionId      &verified_section,
+                               std::string           reason) {
+    std::lock_guard lock(state_projection_mutex_);
+    state_projection_ = StateProjectionSnapshot {
+        .status           = status,
+        .verified_section = verified_section,
+        .reason           = std::move(reason),
+    };
+    state_projection_status_.store(status, std::memory_order_release);
+}
+
+void Dag::report_state_inconsistency(const SectionId   &section,
+                                     const std::string &reason,
+                                     const std::string &source,
+                                     const std::string &observed_root) {
+    if (!recovery_journal_) {
+        set_state_projection(StateProjectionStatus::Failed, cache_.section(), reason);
+        return;
     }
-    schedule_section_repair(transaction.section());
+    const auto incident = recovery_journal_->record(section, section, reason, source, observed_root);
+    if (!incident.has_value()) {
+        eCritical("[Dag] Cannot persist state incident at section {}", section);
+        set_state_projection(StateProjectionStatus::Failed, cache_.section(), reason);
+        return;
+    }
+    const auto snapshot = state_projection();
+    const auto verified_section =
+        cache_.section() >= section ? (section == SectionId(0) ? SectionId(-1) : section - 1) : cache_.section();
+    if (snapshot.status == StateProjectionStatus::Replaying || snapshot.status == StateProjectionStatus::Failed) {
+        static_cast<void>(recovery_journal_->advance(incident.value(), DagRecoveryStage::Failed));
+        set_state_projection(StateProjectionStatus::Failed, verified_section, reason);
+        eCritical("[Dag] Finalized state replay failed at section {}", section);
+        return;
+    }
+    set_state_projection(StateProjectionStatus::RepairPending, verified_section, reason);
+    schedule_section_repair(section);
+}
+
+bool Dag::replay_repaired_state(const SectionId   &first,
+                                const SectionId   &last,
+                                const std::string &expected_root,
+                                const std::string &proof_hash) {
+    if (!recovery_journal_) {
+        return true;
+    }
+    auto incidents = recovery_journal_->pending_in_range(first, last);
+    std::erase_if(incidents, [](const auto &incident) {
+        return incident.stage == DagRecoveryStage::Failed;
+    });
+    if (incidents.empty()) {
+        return true;
+    }
+    for (const auto &incident : incidents) {
+        static_cast<void>(
+            recovery_journal_->advance(incident.id, DagRecoveryStage::Replaying, expected_root, proof_hash));
+    }
+    set_state_projection(StateProjectionStatus::Replaying, cache_.section(), incidents.front().reason);
+    cache_.reset_db();
+    if (!cache_.init_db()) {
+        for (const auto &incident : incidents) {
+            static_cast<void>(recovery_journal_->advance(incident.id, DagRecoveryStage::Failed));
+        }
+        set_state_projection(StateProjectionStatus::Failed, SectionId(-1), "balance-cache-open-failed");
+        return false;
+    }
+    cache_.check_and_update_cache_thread(current_section_);
+    if (state_projection().status == StateProjectionStatus::Failed) {
+        for (const auto &incident : incidents) {
+            static_cast<void>(recovery_journal_->advance(incident.id, DagRecoveryStage::Failed));
+        }
+        return false;
+    }
+    const auto violation = cache_.validate_state_to(current_section_);
+    if (violation.has_value()) {
+        for (const auto &incident : incidents) {
+            static_cast<void>(recovery_journal_->advance(incident.id, DagRecoveryStage::Failed));
+        }
+        set_state_projection(StateProjectionStatus::Failed,
+                             cache_.section(),
+                             "deterministic-state-violation:" + violation.value().transaction_hash);
+        eCritical("[Dag] Repaired state violates balances at section {}, transaction {}",
+                  violation.value().section,
+                  violation.value().transaction_hash);
+        return false;
+    }
+    for (const auto &incident : incidents) {
+        static_cast<void>(
+            recovery_journal_->advance(incident.id, DagRecoveryStage::Resolved, expected_root, proof_hash));
+    }
+    set_state_projection(StateProjectionStatus::Ready, current_section_);
+    eInfo("[Dag] State projection recovered through section {}", current_section_);
+    return true;
+}
+
+void Dag::resume_state_recovery() {
+    if (!recovery_journal_ || state_projection().status == StateProjectionStatus::Failed) {
+        return;
+    }
+    const auto incidents = recovery_journal_->pending();
+    const auto incident  = std::ranges::find_if(incidents, [](const auto &item) {
+        return item.stage != DagRecoveryStage::Failed;
+    });
+    if (incident != incidents.end()) {
+        schedule_section_repair(incident->first_section);
+    }
 }
 
 void Dag::schedule_section_repair(const SectionId &section_id) {
@@ -1576,6 +1716,14 @@ void Dag::schedule_section_repair(const SectionId &section_id) {
             return;
         }
         refetched_intervals_.insert_or_assign(section_id, now);
+    }
+
+    if (recovery_journal_) {
+        for (const auto &incident : recovery_journal_->pending_in_range(section_id, section_id)) {
+            if (incident.stage != DagRecoveryStage::Failed) {
+                static_cast<void>(recovery_journal_->advance(incident.id, DagRecoveryStage::ProofRequested));
+            }
+        }
     }
 
     const auto    section_text  = section_id.to_string();
@@ -1611,7 +1759,7 @@ void Dag::schedule_section_repair(const SectionId &section_id) {
             eWarning("[Dag] Requested repair range {}..{} from {} peers", from, to, requested);
         }
         if (requested == 0) {
-            eWarning("[Dag] Section {} is quarantined, but no repair-capable peer is connected", section_id);
+            eWarning("[Dag] Section {} needs recovery, but no repair-capable peer is connected", section_id);
         }
     });
 }
@@ -2038,7 +2186,8 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
 std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_batch(
     const ExtraChain::Consensus::Proposal         &proposal,
     const ExtraChain::Consensus::SectionBatchData &batch,
-    std::uint64_t                                  maximum_batch_bytes) {
+    std::uint64_t                                  maximum_batch_bytes,
+    const std::string                             &proof_hash) {
     using ExtraChain::Consensus::ConsensusError;
     const auto validated = validate_shadow_batch(proposal, batch, maximum_batch_bytes);
     if (!validated.has_value()) {
@@ -2053,8 +2202,23 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     for (const auto &[section, bytes] : batch.sections) {
         sections.insert_or_assign(SectionId(section), bytes);
     }
-    const auto first             = sections.begin()->first;
-    const auto last              = sections.rbegin()->first;
+    const auto first              = sections.begin()->first;
+    const auto last               = sections.rbegin()->first;
+    auto       recovery_incidents = recovery_journal_ == nullptr ? std::vector<DagRecoveryIncident> {}
+                                                                 : recovery_journal_->pending_in_range(first, last);
+    std::erase_if(recovery_incidents, [](const auto &incident) {
+        return incident.stage == DagRecoveryStage::Failed;
+    });
+    if (recovery_journal_) {
+        for (const auto &incident : recovery_incidents) {
+            if (incident.stage != DagRecoveryStage::Failed) {
+                static_cast<void>(recovery_journal_->advance(incident.id,
+                                                             DagRecoveryStage::Repairing,
+                                                             proposal.header.section_root,
+                                                             proof_hash));
+            }
+        }
+    }
     const auto previous_control  = read_control(last);
     auto       finalized_section = Json::deserialize<Section>(sections.at(last));
     if (!finalized_section.has_value()) {
@@ -2085,7 +2249,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     if (control_index_) {
         control_index_->put(last, proposal.header.section_root);
     }
-    if (first <= cache_.section()) {
+    if (recovery_incidents.empty() && first <= cache_.section()) {
         cache_.reset_db();
         cache_.init_db();
         cache_.check_and_update_cache_thread(current_section_);
@@ -2100,8 +2264,9 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
         }
         chain_index_->flush();
     }
-    if (quarantine_) {
-        quarantine_->resolve_range(first, last);
+    if (!recovery_incidents.empty()
+        && !replay_repaired_state(first, last, proposal.header.section_root, proof_hash)) {
+        return std::unexpected(ConsensusError::StorageFailure);
     }
     update_range(true);
     return {};
@@ -3309,6 +3474,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             received_sections.insert_or_assign(section_data.section_id, std::move(disk_bytes));
         }
 
+        std::vector<DagRecoveryIncident> recovery_incidents;
         if (repair_response) {
             consume_pending_sync_response(responder, true);
             node->luminance_manager()->increment(responder.node_id());
@@ -3328,6 +3494,18 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 return;
             }
             received_sections = std::move(validated_sections.value());
+            if (recovery_journal_) {
+                recovery_incidents =
+                    recovery_journal_->pending_in_range(expected_range->first, expected_range->second);
+                std::erase_if(recovery_incidents, [](const auto &incident) {
+                    return incident.stage == DagRecoveryStage::Failed;
+                });
+                for (const auto &incident : recovery_incidents) {
+                    if (incident.stage != DagRecoveryStage::Failed) {
+                        static_cast<void>(recovery_journal_->advance(incident.id, DagRecoveryStage::Repairing));
+                    }
+                }
+            }
         }
 
         if (!received_sections.empty() && hot_section_store_ && hot_section_store_->is_open()) {
@@ -3386,7 +3564,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 control_index_->clear();
                 control_index_ready_.store(false);
             }
-            if (invalid_from <= cache_.section()) {
+            if (recovery_incidents.empty() && invalid_from <= cache_.section()) {
                 cache_.reset_db();
                 cache_.init_db();
                 cache_.check_and_update_cache_thread(current_section_);
@@ -3394,8 +3572,12 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             if (chain_index_enabled_ && chain_index_) {
                 chain_index_->rebuild_from_disk();
             }
-            if (quarantine_) {
-                quarantine_->resolve_range(expected_range->first, expected_range->second);
+            if (!recovery_incidents.empty()
+                && !replay_repaired_state(expected_range->first, expected_range->second)) {
+                eCritical("[Dag] State replay failed after repairing range {}..{}",
+                          expected_range->first,
+                          expected_range->second);
+                return;
             }
             start_control(Force::Active);
             eLog("[Dag] Repaired section range {}..{}", expected_range->first, expected_range->second);

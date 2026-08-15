@@ -96,7 +96,7 @@ endif()
 set(EXTRACHAIN_HEADER_CHECKS
     chain/actor.h
     chain/dag.h
-    chain/dag_quarantine.h
+    chain/dag_recovery.h
     chain/pack.h
     chain/pack_registry.h
     chain/transaction_status.h

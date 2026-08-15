@@ -282,6 +282,7 @@ namespace ExtraChain::Core {
         void set_public_ip_and_country(std::string ip, std::string country);
 
         Dag*                    dag() const;
+        StateProjectionSnapshot state_projection() const;
         virtual NetworkService* network() const;
         ExtraChain::Consensus::ConsensusService* consensus() const;
         LuminanceManager*       luminance_manager() const;

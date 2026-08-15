@@ -114,7 +114,8 @@ enum class TransactionProveError {
     ContractDependencyMissing,
     TokenMigrationInvalid,
     TokenMigrationFrozen,
-    AdmissionBusy
+    AdmissionBusy,
+    StateUnavailable
 };
 
 /**

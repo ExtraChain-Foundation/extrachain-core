@@ -50,6 +50,11 @@ struct CacheResult {
 };
 BOOST_DESCRIBE_STRUCT(CacheResult, (), (result, from, to))
 
+struct StateTransitionViolation {
+    SectionId   section;
+    std::string transaction_hash;
+};
+
 /**
  * @brief DagCache - Manages caching of actor balances for chain
  *
@@ -188,6 +193,8 @@ public:
 
     void check_and_update_cache_thread(const SectionId& current_section);
 
+    std::optional<StateTransitionViolation> validate_state_to(const SectionId& current_section);
+
     /**
      * @brief Update cache to a specific genesis section
      *
@@ -216,9 +223,6 @@ public:
      * @brief Reset the database connection
      */
     void reset_db();
-
-    std::set<ActorId> local_clear_less_balances(const SectionId& from           = SectionId(2),
-                                                const Balances&  start_balances = Balances());
 
     // NOTE: per-actor transaction index (write_index/read_index/has_section/...) used
     // to live here on top of its own Index.db. It was slow on first pass and is being

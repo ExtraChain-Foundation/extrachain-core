@@ -589,7 +589,8 @@ namespace ExtraChain::Consensus {
         }
         return node_.dag()->install_shadow_batch(proposal,
                                                  batch.value(),
-                                                 consensus_->configuration().maximum_batch_bytes);
+                                                 consensus_->configuration().maximum_batch_bytes,
+                                                 hash_certificate(proofs.value().front().decision_certificate));
     }
 
     bool ConsensusService::apply_timeout_certificate(const TimeoutCertificate& certificate) {
@@ -638,7 +639,8 @@ namespace ExtraChain::Consensus {
                 const auto installed =
                     node_.dag()->install_shadow_batch(proof_value.finalized_proposal,
                                                       batch.value(),
-                                                      consensus_->configuration().maximum_batch_bytes);
+                                                      consensus_->configuration().maximum_batch_bytes,
+                                                      hash_certificate(proof_value.decision_certificate));
                 if (installed.has_value()) {
                     eInfo("[Shadow] Repaired DAG section {} from finality proof {}", section, header_hash);
                     return true;
