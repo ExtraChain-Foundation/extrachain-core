@@ -39,6 +39,7 @@ public:
 
     template <typename T>
     bool createTableStrict(const std::string& tableName, bool ifNotExists = true) {
+        std::unique_lock lock(m_database_mutex);
         if (!is_open()) {
             eFatal("[DbConnector] Database not open");
         }
@@ -88,10 +89,8 @@ public:
 
         query += ")";
 
-        // dbmutex.lock();
-        std::unique_lock lock(dbmutex);
-        char*            errMsg = nullptr;
-        int              rc     = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &errMsg);
+        char* errMsg = nullptr;
+        int   rc     = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &errMsg);
 
         if (rc != SQLITE_OK) {
             eLog("[DbConnector] CreateTableStrict failed: {}", (errMsg ? errMsg : "unknown error"));
@@ -99,7 +98,6 @@ public:
             if (errMsg) {
                 sqlite3_free(errMsg);
             }
-            // dbmutex.unlock();
             return false;
         }
 
@@ -107,7 +105,6 @@ public:
         eLog("{} (true): {}", file().c_str(), query.c_str());
 #endif
 
-        // dbmutex.unlock();
         return true;
     }
 
@@ -196,7 +193,6 @@ private:
         });
 
         if (!success) {
-            sqlite3_finalize(stmt);
             return false;
         }
 
@@ -205,6 +201,7 @@ private:
 
     template <typename T>
     bool implementationInsertStrict(const std::string& tableName, const T& data, bool isReplace = false) {
+        std::unique_lock lock(m_database_mutex);
         if (!is_open()) {
             eFatal("[DbConnector] Database not open");
         }
@@ -248,14 +245,12 @@ private:
 
         eLog("[DbConnector] Generated query: {}", query);
 
-        std::unique_lock lock(dbmutex);
-        // dbmutex.lock();
-        sqlite3_stmt* stmt = NULL;
-        int           rc   = sqlite3_prepare_v2(db, query, -1, &stmt, NULL);
-        // dbmutex.unlock();
+        sqlite3_stmt* stmt = nullptr;
+        int           rc   = sqlite3_prepare_v2(db, query, -1, &stmt, nullptr);
 
         if (rc != SQLITE_OK) {
             eLog("[DbConnector] Prepare error: {}", sqlite3_errmsg(db));
+            return false;
         }
 
         if (!implementationPrepareStrict(tableName, data, stmt)) {
@@ -265,21 +260,11 @@ private:
             return false;
         }
 
-        // dbmutex.lock();
-        if (rc != SQLITE_OK) {
-            eLog().nospace() << file() << "(false):" << query;
-            eLog("[DbConnector] ImplementationInsertStrict: prepare failed: {}", sqlite3_errmsg(db));
-            sqlite3_finalize(stmt);
-            // dbmutex.unlock();
-            return false;
-        }
-
         rc = sqlite3_step(stmt);
         if (rc != SQLITE_DONE) {
             eLog("[DbConnector] ImplementationInsertStrict: Execution failed: {}", sqlite3_errmsg(db));
             eLog("{} (false): {}", file(), query);
             sqlite3_finalize(stmt);
-            // dbmutex.unlock();
             return false;
         }
 
@@ -288,7 +273,6 @@ private:
 #endif
 
         sqlite3_finalize(stmt);
-        // dbmutex.unlock();
         return true;
     }
 };

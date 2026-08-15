@@ -20,6 +20,7 @@
 #pragma once
 
 #include <algorithm>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -36,8 +37,6 @@
 
 struct sqlite3;
 struct sqlite3_stmt;
-
-static std::recursive_mutex dbmutex;
 
 using DbRow      = std::unordered_map<std::string, std::string>;
 using DbRowBytes = std::unordered_map<std::string, std::vector<std::uint8_t>>;
@@ -152,10 +151,11 @@ enum class DbConnectorType {
 
 class EXTRACHAIN_EXPORT DbConnector {
 protected:
-    std::string     m_file;
-    bool            m_open = false;
-    sqlite3        *db     = nullptr;
-    DbConnectorType m_type = DbConnectorType::Regular;
+    std::string                  m_file;
+    bool                         m_open = false;
+    sqlite3                     *db     = nullptr;
+    DbConnectorType              m_type = DbConnectorType::Regular;
+    mutable std::recursive_mutex m_database_mutex;
 
 public:
     explicit DbConnector(const std::string &filePath, DbConnectorType type = DbConnectorType::Regular);
@@ -192,7 +192,7 @@ public:
     std::pair<std::string, uint64_t> hash_size(const std::string &order_by = "rowid");
 
 public:
-    bool          query(std::string query);
+    bool                query(std::string query);
     boost::json::object to_json_object();
     std::string         to_json();
 

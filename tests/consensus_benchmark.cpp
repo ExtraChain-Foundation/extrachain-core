@@ -3,11 +3,16 @@
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <latch>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <vector>
+
+#include <boost/asio/post.hpp>
+#include <boost/asio/thread_pool.hpp>
 
 #include "consensus/consensus_engine.h"
 #include "consensus/light_client.h"
@@ -141,11 +146,13 @@ namespace {
     struct BenchmarkOptions {
         std::uint64_t heights         = 100;
         std::size_t   validator_count = 4;
+        bool          parallel        = false;
     };
 
     BenchmarkOptions read_options(int argc, char** argv) {
-        if (argc < 1 || argc > 3) {
-            throw std::invalid_argument("usage: extrachain-consensus-benchmark [height-count] [validator-count]");
+        if (argc < 1 || argc > 4) {
+            throw std::invalid_argument(
+                "usage: extrachain-consensus-benchmark [height-count] [validator-count] [serial|parallel]");
         }
         BenchmarkOptions result;
         if (argc == 1) {
@@ -159,7 +166,7 @@ namespace {
             throw std::invalid_argument("height-count must be an integer from 3 to 10000000");
         }
         result.heights = value;
-        if (argc == 3) {
+        if (argc >= 3) {
             const std::string_view count_input(argv[2]);
             std::size_t            count = 0;
             const auto             count_parsed =
@@ -170,7 +177,38 @@ namespace {
             }
             result.validator_count = count;
         }
+        if (argc == 4) {
+            const std::string_view mode(argv[3]);
+            if (mode != "serial" && mode != "parallel") {
+                throw std::invalid_argument("execution mode must be serial or parallel");
+            }
+            result.parallel = mode == "parallel";
+        }
         return result;
+    }
+
+    template <typename Function>
+    void parallel_for(boost::asio::thread_pool& pool, std::size_t count, Function&& function) {
+        std::latch         completion(static_cast<std::ptrdiff_t>(count));
+        std::mutex         error_mutex;
+        std::exception_ptr first_error;
+        for (std::size_t index = 0; index < count; ++index) {
+            boost::asio::post(pool, [&, index] {
+                try {
+                    function(index);
+                } catch (...) {
+                    const std::scoped_lock lock(error_mutex);
+                    if (first_error == nullptr) {
+                        first_error = std::current_exception();
+                    }
+                }
+                completion.count_down();
+            });
+        }
+        completion.wait();
+        if (first_error != nullptr) {
+            std::rethrow_exception(first_error);
+        }
     }
 } // namespace
 
@@ -197,6 +235,7 @@ int main(int argc, char** argv) {
             require(engine->initialize(), "initialize");
             engines.push_back(std::move(engine));
         }
+        boost::asio::thread_pool workers(options.parallel ? engines.size() : 1);
 
         std::chrono::nanoseconds proposal_time {};
         std::chrono::nanoseconds stage_time {};
@@ -220,31 +259,59 @@ int main(int argc, char** argv) {
             proposal_time += Clock::now() - before;
             const auto proposal_hash = hash_header(proposal.header);
 
-            std::optional<QuorumCertificate> certificate;
-            for (std::size_t index = 0; index < engines.size(); ++index) {
+            std::vector<std::optional<Vote>> votes(engines.size());
+            before               = Clock::now();
+            auto stage_validator = [&](std::size_t index) {
                 auto& engine = engines[index];
                 if (index != leader_index) {
                     require(engine->observe_proposal(proposal), "observe proposal");
                 }
-                before = Clock::now();
                 require(engine->stage_batch(batch_data(height, proposal_hash)), "stage batch");
-                stage_time += Clock::now() - before;
-                before    = Clock::now();
-                auto vote = require(engine->accept_proposal(proposal), "accept proposal");
-                vote_time += Clock::now() - before;
-                before        = Clock::now();
-                auto accepted = require(engines[leader_index]->accept_vote(vote), "accept vote");
-                aggregate_time += Clock::now() - before;
+            };
+            if (options.parallel) {
+                parallel_for(workers, engines.size(), stage_validator);
+            } else {
+                for (std::size_t index = 0; index < engines.size(); ++index) {
+                    stage_validator(index);
+                }
+            }
+            stage_time += Clock::now() - before;
+
+            before              = Clock::now();
+            auto vote_validator = [&](std::size_t index) {
+                votes[index] = require(engines[index]->accept_proposal(proposal), "accept proposal");
+            };
+            if (options.parallel) {
+                parallel_for(workers, engines.size(), vote_validator);
+            } else {
+                for (std::size_t index = 0; index < engines.size(); ++index) {
+                    vote_validator(index);
+                }
+            }
+            vote_time += Clock::now() - before;
+
+            std::optional<QuorumCertificate> certificate;
+            before = Clock::now();
+            for (auto& vote : votes) {
+                auto accepted = require(engines[leader_index]->accept_vote(vote.value()), "accept vote");
                 if (accepted.certificate.has_value()) {
                     certificate = std::move(accepted.certificate);
                 }
             }
+            aggregate_time += Clock::now() - before;
             if (!certificate.has_value()) {
                 throw std::runtime_error("cannot form a certificate at height " + std::to_string(height));
             }
-            before = Clock::now();
-            for (auto& engine : engines) {
-                require(engine->accept_certificate(certificate.value()), "accept certificate");
+            before                  = Clock::now();
+            auto accept_certificate = [&](std::size_t index) {
+                require(engines[index]->accept_certificate(certificate.value()), "accept certificate");
+            };
+            if (options.parallel) {
+                parallel_for(workers, engines.size(), accept_certificate);
+            } else {
+                for (std::size_t index = 0; index < engines.size(); ++index) {
+                    accept_certificate(index);
+                }
             }
             certificate_time += Clock::now() - before;
             if (height >= 3) {
@@ -271,9 +338,10 @@ int main(int argc, char** argv) {
                            && light_client.trusted_height() == heights - 2;
 
         std::printf(
-            "validators=%zu heights=%llu elapsed_ms=%.3f heights_s=%.3f finalized=%llu proofs=%zu "
+            "validators=%zu mode=%s heights=%llu elapsed_ms=%.3f heights_s=%.3f finalized=%llu proofs=%zu "
             "mobile_light=%llu valid=%s\n",
             options.validator_count,
+            options.parallel ? "parallel" : "serial",
             static_cast<unsigned long long>(heights),
             milliseconds(elapsed),
             heights / seconds,

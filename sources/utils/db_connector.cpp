@@ -75,9 +75,12 @@ DbConnector::DbConnector(DbConnector &&rhs) {
     if (this == &rhs)
         return;
 
+    const std::scoped_lock lock(rhs.m_database_mutex);
     this->m_file = std::move(rhs.m_file);
     this->m_open = rhs.m_open;
     this->db     = rhs.db;
+    this->m_type = rhs.m_type;
+    rhs.m_open   = false;
     rhs.db       = nullptr;
 }
 
@@ -95,6 +98,7 @@ std::string DbConnector::sqlite_version() {
 }
 
 bool DbConnector::open(bool create_if_missing) {
+    const std::unique_lock lock(m_database_mutex);
     if (is_open()) {
         eFatal("[DbConnector] Double open");
         return false;
@@ -134,6 +138,7 @@ bool DbConnector::open(bool create_if_missing) {
 }
 
 bool DbConnector::close() {
+    const std::unique_lock lock(m_database_mutex);
     if (!m_open)
         return true;
 
@@ -169,32 +174,30 @@ bool DbConnector::close() {
 
 std::vector<DbRow> DbConnector::select(std::string query, std::string tableName, DbRow binds) {
     // std::pair with status?
+    std::unique_lock lock(m_database_mutex);
     if (!is_open()) {
         eFatal("[DbConnector] Database '{}' not open", m_file);
     }
 
-    // dbmutex.lock();
-    std::unique_lock   lock(dbmutex);
-    sqlite3_stmt      *stmt;
+    sqlite3_stmt      *stmt = nullptr;
     std::vector<DbRow> res;
-    sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+    const auto         prepare_result = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+    if (prepare_result != SQLITE_OK) {
+        eWarning("[DbConnector] Select prepare error: {}", sqlite3_errmsg(db));
+        return {};
+    }
 
     if (!binds.empty()) {
-        // dbmutex.unlock();
         if (!implementation_prepare(tableName, binds, stmt)) {
             eWarning("[DbConnector] Select bind error");
+            sqlite3_finalize(stmt);
             return {};
         }
-        // dbmutex.lock();
     }
 
     int rs = sqlite3_step(stmt);
 
-    while (rs != SQLITE_DONE) {
-        if (stmt == nullptr) {
-            break;
-        }
-
+    while (rs == SQLITE_ROW) {
         DbRow row;
         int   colNum = sqlite3_column_count(stmt);
 
@@ -231,8 +234,6 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
         rs = sqlite3_step(stmt);
     }
 
-    // dbmutex.unlock();
-
     if (rs != SQLITE_DONE) {
         eWarning("[DbConnector] {} ({}) {} {} error: {}", m_file, m_type, query, tableName, sqlite3_errmsg(db));
         sqlite3_finalize(stmt);
@@ -250,27 +251,26 @@ std::vector<DbRow> DbConnector::select_all(std::string table, int limit) {
 }
 
 std::unique_ptr<DbIterator> DbConnector::select_while(std::string query, std::string table_name, DbRow binds) {
+    std::unique_lock lock(m_database_mutex);
     if (!is_open()) {
         eFatal("[DBConnector] Database {} not open", m_file);
     }
 
-    // dbmutex.lock();
-    std::unique_lock   lock(dbmutex);
-    sqlite3_stmt      *stmt;
+    sqlite3_stmt      *stmt = nullptr;
     std::vector<DbRow> res;
-    sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
-
-    if (!binds.empty()) {
-        // dbmutex.unlock();
-        if (!implementation_prepare(table_name, binds, stmt)) {
-            eWarning("[DbConnector] Select bind error");
-            return {};
-        }
-        // dbmutex.lock();
+    const auto         prepare_result = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+    if (prepare_result != SQLITE_OK) {
+        eWarning("[DbConnector] Select iterator prepare error: {}", sqlite3_errmsg(db));
+        return {};
     }
 
-    // TODO
-    // dbmutex.unlock();
+    if (!binds.empty()) {
+        if (!implementation_prepare(table_name, binds, stmt)) {
+            eWarning("[DbConnector] Select bind error");
+            sqlite3_finalize(stmt);
+            return {};
+        }
+    }
 
     return std::make_unique<DbIterator>(stmt);
 }
@@ -288,6 +288,7 @@ bool DbConnector::update(const std::string &query) {
 }
 
 bool DbConnector::update(const std::string &table_name, const DbRow &set_data, const DbRow &where_data) {
+    std::unique_lock lock(m_database_mutex);
     if (!is_open()) {
         eFatal("[DbConnector] Database not open: {}", m_file);
     }
@@ -316,32 +317,28 @@ bool DbConnector::update(const std::string &table_name, const DbRow &set_data, c
     where_clause.erase(where_clause.size() - 5, 5);
     query += where_clause;
 
-    // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
-    sqlite3_stmt    *stmt = NULL;
-    int              rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
-    // dbmutex.unlock();
-
-    int bind_index = 1;
-    for (auto &el : set_data) {
-        // dbmutex.lock();
-        sqlite3_bind_text(stmt, bind_index++, el.second.c_str(), -1, SQLITE_TRANSIENT);
-        // dbmutex.unlock();
-    }
-
-    for (auto &el : where_data) {
-        // dbmutex.lock();
-        sqlite3_bind_text(stmt, bind_index++, el.second.c_str(), -1, SQLITE_TRANSIENT);
-        // dbmutex.unlock();
-    }
-
-    // dbmutex.lock();
+    sqlite3_stmt *stmt = nullptr;
+    int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
         eWarning("[DbConnector] {}(false): {}", file(), query);
         eWarning("[DbConnector] ImplementationUpdate: prepare failed: {}", sqlite3_errmsg(db));
-        sqlite3_finalize(stmt);
-        // dbmutex.unlock();
         return false;
+    }
+    int bind_index = 1;
+    for (auto &el : set_data) {
+        rc = sqlite3_bind_text(stmt, bind_index++, el.second.c_str(), -1, SQLITE_TRANSIENT);
+        if (rc != SQLITE_OK) {
+            sqlite3_finalize(stmt);
+            return false;
+        }
+    }
+
+    for (auto &el : where_data) {
+        rc = sqlite3_bind_text(stmt, bind_index++, el.second.c_str(), -1, SQLITE_TRANSIENT);
+        if (rc != SQLITE_OK) {
+            sqlite3_finalize(stmt);
+            return false;
+        }
     }
 
     rc = sqlite3_step(stmt);
@@ -349,7 +346,6 @@ bool DbConnector::update(const std::string &table_name, const DbRow &set_data, c
         eWarning("[DbConnector] ImplementationUpdate: Execution failed: {}", sqlite3_errmsg(db));
         eWarning("[DbConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
-        // dbmutex.unlock();
         return false;
     }
 
@@ -358,7 +354,6 @@ bool DbConnector::update(const std::string &table_name, const DbRow &set_data, c
         eWarning("[DbConnector] ImplementationUpdate: No rows affected: {}", sqlite3_errmsg(db));
         eWarning("[DbConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
-        // dbmutex.unlock();
         return false;
     }
 
@@ -367,7 +362,6 @@ bool DbConnector::update(const std::string &table_name, const DbRow &set_data, c
 #endif
 
     sqlite3_finalize(stmt);
-    // dbmutex.unlock();
     return true;
 }
 
@@ -422,6 +416,7 @@ bool DbConnector::create_table(const std::string &table_name, const std::vector<
 }
 
 bool DbConnector::delete_row(const std::string &tableName, const DbRow &data) {
+    std::unique_lock lock(m_database_mutex);
     if (!is_open()) {
         eFatal("[DbConnector] Database not open");
     }
@@ -441,25 +436,18 @@ bool DbConnector::delete_row(const std::string &tableName, const DbRow &data) {
     where.erase(where.size() - 5, 5);
     query += where;
 
-    // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
-    sqlite3_stmt    *stmt = NULL;
-    int              rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+    sqlite3_stmt *stmt = nullptr;
+    int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        eWarning("[DbConnector] {}(false): {}", file(), query);
+        eWarning("[DbConnector] Prepare failed: {}", sqlite3_errmsg(db));
+        return false;
+    }
 
-    // dbmutex.unlock();
     if (!implementation_prepare(tableName, data, stmt)) {
         eWarning("[DbConnector] Delete row. Bind failed: {}", sqlite3_errmsg(db));
         eWarning("{}(false): {}", file(), query);
         sqlite3_finalize(stmt);
-        return false;
-    }
-
-    // dbmutex.lock();
-    if (rc != SQLITE_OK) {
-        eWarning("[DbConnector] {}(false): {}", file(), query);
-        eWarning("[DbConnector] Prepare failed: {}", sqlite3_errmsg(db));
-        sqlite3_finalize(stmt);
-        // dbmutex.unlock();
         return false;
     }
 
@@ -468,7 +456,6 @@ bool DbConnector::delete_row(const std::string &tableName, const DbRow &data) {
         eWarning("[DbConnector] DeleteRow.Execution failed: {}", sqlite3_errmsg(db));
         eWarning("[DbConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
-        // dbmutex.unlock();
         return false;
     }
 
@@ -476,7 +463,6 @@ bool DbConnector::delete_row(const std::string &tableName, const DbRow &data) {
     eLog("[DbConnector] {}(true): {}", file(), query);
 #endif
     sqlite3_finalize(stmt);
-    // dbmutex.unlock();
     return true;
 }
 
@@ -502,10 +488,12 @@ std::uint64_t DbConnector::count(const std::string &table, const std::string &wh
 }
 
 std::string DbConnector::file() const {
+    const std::unique_lock lock(m_database_mutex);
     return m_file;
 }
 
 bool DbConnector::is_open() const {
+    const std::unique_lock lock(m_database_mutex);
     return m_open;
 }
 
@@ -537,14 +525,17 @@ std::vector<DBColumn> DbConnector::table_columns(const std::string &table) {
 }
 
 bool DbConnector::query(std::string query) {
+    std::unique_lock lock(m_database_mutex);
     if (!is_open()) {
         eFatal("[DbConnector] Database not open");
     }
 
-    // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
-    sqlite3_stmt    *stmt;
-    sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+    sqlite3_stmt *stmt           = nullptr;
+    const auto    prepare_result = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+    if (prepare_result != SQLITE_OK) {
+        eWarning("[DbConnector] Query prepare error: {}", sqlite3_errmsg(db));
+        return false;
+    }
     int res = sqlite3_step(stmt);
 
 #ifndef ENABLE_SQLITE_TRUE_LOGS
@@ -555,11 +546,11 @@ bool DbConnector::query(std::string query) {
         eWarning("[DbConnector] Query error: {}", sqlite3_errmsg(db));
 
     sqlite3_finalize(stmt);
-    // dbmutex.unlock();
     return res == SQLITE_DONE;
 }
 
 boost::json::object DbConnector::to_json_object() {
+    const std::unique_lock lock(m_database_mutex);
     if (!is_open()) {
         eFatal("[DbConnector] Database not open");
     }
@@ -590,6 +581,7 @@ std::string DbConnector::to_json() {
 }
 
 sqlite3 *DbConnector::getDb() const {
+    const std::unique_lock lock(m_database_mutex);
     return db;
 }
 
@@ -605,7 +597,6 @@ bool DbConnector::implementation_prepare(const std::string &tableName, const DbR
         });
         if (it == columns.end()) {
             eWarning("[DbConnector] ImplementationPrepare: Column find error");
-            sqlite3_finalize(stmt);
             return false;
         }
 
@@ -624,13 +615,11 @@ bool DbConnector::implementation_prepare(const std::string &tableName, const DbR
             rc = sqlite3_bind_double(stmt, fieldNum, std::stod(el.second.data()));
         else {
             eWarning("[DbConnector] ImplementationPrepare: Column type not supported");
-            sqlite3_finalize(stmt);
             return false;
         }
         fieldNum++;
 
         if (rc != SQLITE_OK) {
-            sqlite3_finalize(stmt);
             return false;
         }
     }
@@ -639,6 +628,7 @@ bool DbConnector::implementation_prepare(const std::string &tableName, const DbR
 }
 
 bool DbConnector::implementation_insert(const std::string &tableName, const DbRow &data, bool isReplace) {
+    std::unique_lock lock(m_database_mutex);
     if (!is_open()) {
         eFatal("[DbConnector] Database not open");
     }
@@ -662,17 +652,18 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
     values.erase(values.size() - 2, 2);
     query += fmt::format("({}) VALUES ({})", fields, values);
 
-    // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
-    sqlite3_stmt    *stmt = NULL;
-    int              rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+    sqlite3_stmt *stmt = nullptr;
+    int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        eWarning("[DbConnector] {}(false): {}", file(), query);
+        eWarning("[DbConnector] ImplementationInsert: prepare failed: {}", sqlite3_errmsg(db));
+        return false;
+    }
 
-    // dbmutex.unlock();
     if (!implementation_prepare(tableName, data, stmt)) {
         eWarning("[DbConnector] ImplementationInsert: Bind failed: {}", sqlite3_errmsg(db));
         eWarning("[DbConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
-        // dbmutex.unlock();
         return false;
     }
 
@@ -682,21 +673,11 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
     //     sqlite3_free(expanded);
     // }
 
-    // dbmutex.lock();
-    if (rc != SQLITE_OK) {
-        eWarning("[DbConnector] {}(false): {}", file(), query);
-        eWarning("[DbConnector] ImplementationInsert: prepare failed: {}", sqlite3_errmsg(db));
-        sqlite3_finalize(stmt);
-        // dbmutex.unlock();
-        return false;
-    }
-
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
         eWarning("[DbConnector] ImplementationInsert: Execution failed: {}", sqlite3_errmsg(db));
         eWarning("[DbConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
-        // dbmutex.unlock();
         return false;
     }
 
@@ -705,7 +686,6 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
         // eWarning("[DbConnector] ImplementationInsert: No rows affected: {}", sqlite3_errmsg(db));
         // eWarning("[DbConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
-        // dbmutex.unlock();
         return false;
     }
 
@@ -713,12 +693,12 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
     eLog("[DbConnector] {}(true): {}", file(), query);
 #endif
     sqlite3_finalize(stmt);
-    // dbmutex.unlock();
     return true;
 }
 
 std::pair<std::string, uint64_t> DbConnector::DbConnector::hash_size(const std::string &order_by) {
-    blake3_hasher hasher;
+    const std::unique_lock lock(m_database_mutex);
+    blake3_hasher          hasher;
     blake3_hasher_init(&hasher);
     uint64_t total = 0;
 
@@ -732,12 +712,17 @@ std::pair<std::string, uint64_t> DbConnector::DbConnector::hash_size(const std::
             total += col.name.size(); // + col.type.size();
         }
 
-        sqlite3_stmt *stmt;
-        sqlite3_prepare_v2(db,
-                           fmt::format("SELECT * FROM {} ORDER BY {}", table, order_by).c_str(),
-                           -1,
-                           &stmt,
-                           nullptr);
+        sqlite3_stmt *stmt = nullptr;
+        const auto    prepared =
+            sqlite3_prepare_v2(db,
+                               fmt::format("SELECT * FROM {} ORDER BY {}", table, order_by).c_str(),
+                               -1,
+                               &stmt,
+                               nullptr);
+        if (prepared != SQLITE_OK) {
+            eWarning("[DbConnector] Hash prepare error: {}", sqlite3_errmsg(db));
+            return { {}, 0 };
+        }
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             for (int i = 0; i < sqlite3_column_count(stmt); i++) {
                 auto bytes = sqlite3_column_bytes(stmt, i);

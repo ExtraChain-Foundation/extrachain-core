@@ -3,8 +3,11 @@
 #include <filesystem>
 #include <memory>
 #include <string_view>
+#include <thread>
+#include <vector>
 
 #include "chain/control_index.h"
+#include "utils/db_connector.h"
 #include "utils/exc_utils.h"
 #include "utils/exc_utils_base64.h"
 #include "utils/file_io.h"
@@ -106,6 +109,28 @@ int main(int argc, char *argv[]) {
     check("atomic file replace", FileIo::write_atomic(atomic_path, "second").has_value());
     const auto atomic_data = FileIo::read_all(atomic_path);
     check("atomic file read", atomic_data.has_value() && atomic_data.value() == "second");
+
+    const auto  database_path = test_path / "concurrent.sqlite";
+    DbConnector first_database(database_path);
+    DbConnector second_database(database_path);
+    check("open first concurrent database", first_database.open());
+    check("create concurrent table",
+          first_database.query("CREATE TABLE concurrent_rows (row_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"));
+    check("open second concurrent database", second_database.open());
+    std::vector<std::jthread> database_workers;
+    for (std::size_t worker = 0; worker < 4; ++worker) {
+        database_workers.emplace_back([&, worker] {
+            auto &database = worker % 2 == 0 ? first_database : second_database;
+            for (std::size_t row = 0; row < 100; ++row) {
+                const auto key = std::to_string(worker) + '-' + std::to_string(row);
+                database.insert("concurrent_rows", { { "row_id", key }, { "payload", "stored" } });
+            }
+        });
+    }
+    database_workers.clear();
+    check("concurrent SQLite connections retain all rows", first_database.count("concurrent_rows") == 400);
+    check("close second concurrent database", second_database.close());
+    check("close first concurrent database", first_database.close());
 
     // state now: {20:hash20b, 60:hash60} (40 erased)
     check("get missing -> nullopt", !ci->get(SectionId(99)).has_value());
