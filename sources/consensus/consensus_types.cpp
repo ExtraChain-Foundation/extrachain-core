@@ -33,7 +33,6 @@ namespace ExtraChain::Consensus {
         constexpr std::string_view VoteDomain               = "EXC_CONSENSUS_VOTE_V1";
         constexpr std::string_view TimeoutVoteDomain        = "EXC_SHADOW_TIMEOUT_VOTE_V1";
         constexpr std::string_view CertificateDomain        = "EXC_CONSENSUS_CERTIFICATE_V1";
-        constexpr std::string_view StateDomain              = "EXC_CONSENSUS_STATE_V1";
         constexpr std::string_view TimeoutCertificateDomain = "EXC_SHADOW_TIMEOUT_CERTIFICATE_V1";
         constexpr std::string_view ChallengeDomain          = "EXC_CONSENSUS_AUTH_CHALLENGE_V1";
         constexpr std::string_view AuthResponseDomain       = "EXC_CONSENSUS_AUTH_RESPONSE_V1";
@@ -130,16 +129,6 @@ namespace ExtraChain::Consensus {
 
     std::string hash_certificate(const QuorumCertificate& certificate) {
         return domain_hash(CertificateDomain, certificate);
-    }
-
-    std::string calculate_consensus_state_commitment(const QuorumCertificate& parent,
-                                                     std::string_view         section_root,
-                                                     std::string_view         batch_root,
-                                                     std::string_view         validator_set_hash) {
-        return Utils::calculate_hash(std::string(StateDomain) + hash_certificate(parent)
-                                         + std::string(section_root) + std::string(batch_root)
-                                         + std::string(validator_set_hash),
-                                     Utils::HashAlgorithm::Blake3);
     }
 
     std::string hash_timeout_certificate(const TimeoutCertificate& certificate) {

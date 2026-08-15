@@ -1215,13 +1215,15 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         || message_type == MessageType::ConsensusCertificate || message_type == MessageType::ConsensusTimeoutVote
         || message_type == MessageType::ConsensusTimeoutCertificate
         || message_type == MessageType::ConsensusBatchRequest || message_type == MessageType::ConsensusSyncRequest;
+    const bool high_priority_shadow_control =
+        message_type == MessageType::ConsensusBootstrapRequest || message_type == MessageType::ConsensusRecovery;
     if (message_type == MessageType::Custom || message_type == MessageType::NewActor
         || message_type == MessageType::DagTransactionResult || message_type == MessageType::DagIntervalHash
         || message_type == MessageType::DagSyncLastInfo || message_type == MessageType::DagControlRangeRequest
         || message_type == MessageType::DagControlRangeResponse || message_type == MessageType::DagPackList
         || message_type == MessageType::DagPackRequest || message_type == MessageType::DagCacheSnapshotRequest
-        || message_type == MessageType::TokenMigrationReadiness || high_priority_dag_sync
-        || high_priority_shadow) {
+        || message_type == MessageType::TokenMigrationReadiness || high_priority_dag_sync || high_priority_shadow
+        || high_priority_shadow_control) {
         priority = SocketService::Priority::High;
     }
 
@@ -1931,7 +1933,10 @@ void NetworkService::message_received(const std::string &message,
     case MessageType::ConsensusBatchData:
     case MessageType::ConsensusSyncRequest:
     case MessageType::ConsensusSyncResponse:
-    case MessageType::ConsensusIntent: {
+    case MessageType::ConsensusIntent:
+    case MessageType::ConsensusBootstrapRequest:
+    case MessageType::ConsensusBootstrapResponse:
+    case MessageType::ConsensusRecovery: {
         if (node->consensus() != nullptr) {
             node->consensus()->receive_network_message(type, status, serialized, responder, identifier);
         }

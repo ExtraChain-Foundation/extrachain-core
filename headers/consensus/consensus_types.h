@@ -25,7 +25,7 @@
 
 namespace ExtraChain::Consensus {
 
-    inline constexpr std::uint16_t ProtocolVersion         = 3;
+    inline constexpr std::uint16_t ProtocolVersion         = 4;
     inline constexpr std::uint64_t ShadowSectionInterval   = 20;
     inline constexpr std::uint64_t MaximumShadowBatchBytes = 64ULL * 1024ULL * 1024ULL;
     inline constexpr std::uint64_t MaximumShadowSyncBytes  = 32ULL * 1024ULL * 1024ULL;
@@ -78,7 +78,9 @@ namespace ExtraChain::Consensus {
         DuplicateIntent,
         PoolFull,
         InvalidProof,
-        InvalidGovernance
+        InvalidGovernance,
+        RecoveryConflict,
+        BootstrapIncomplete
     };
 
     struct SectionBatchManifest {
@@ -183,6 +185,30 @@ namespace ExtraChain::Consensus {
                        logical_time)
     };
 
+    struct StateCommitmentV2 {
+        std::uint16_t protocol_version = ProtocolVersion;
+        ActorId       network_id;
+        std::uint64_t epoch  = 0;
+        std::uint64_t height = 0;
+        std::string   previous_state_commitment;
+        std::string   section_root;
+        std::string   account_state_root;
+        std::string   contract_state_root;
+        std::string   token_registry_root;
+        std::string   validator_set_hash;
+
+        MSGPACK_DEFINE(protocol_version,
+                       network_id,
+                       epoch,
+                       height,
+                       previous_state_commitment,
+                       section_root,
+                       account_state_root,
+                       contract_state_root,
+                       token_registry_root,
+                       validator_set_hash)
+    };
+
     struct QuorumCertificate {
         std::uint16_t             protocol_version = ProtocolVersion;
         ActorId                   network_id;
@@ -276,13 +302,14 @@ namespace ExtraChain::Consensus {
 
     struct Proposal {
         ConsensusHeader                   header;
+        StateCommitmentV2                 state;
         SectionBatchManifest              batch;
         QuorumCertificate                 parent_certificate;
         std::optional<TimeoutCertificate> timeout_certificate;
         std::string                       proposer_id;
         std::string                       signature;
 
-        MSGPACK_DEFINE(header, batch, parent_certificate, timeout_certificate, proposer_id, signature)
+        MSGPACK_DEFINE(header, state, batch, parent_certificate, timeout_certificate, proposer_id, signature)
     };
 
     struct TimeoutAcceptance {
@@ -411,6 +438,16 @@ namespace ExtraChain::Consensus {
         MSGPACK_DEFINE(protocol_version, network_id, epoch, proofs, batches)
     };
 
+    struct ShadowBootstrapRequest {
+        std::uint16_t protocol_version = ProtocolVersion;
+        ActorId       network_id;
+        std::string   trust_anchor_hash;
+        std::uint64_t after_epoch     = 0;
+        std::uint16_t maximum_entries = 64;
+
+        MSGPACK_DEFINE(protocol_version, network_id, trust_anchor_hash, after_epoch, maximum_entries)
+    };
+
     struct AuthenticationChallenge {
         std::uint16_t protocol_version = ProtocolVersion;
         ActorId       network_id;
@@ -455,10 +492,6 @@ namespace ExtraChain::Consensus {
     EXTRACHAIN_EXPORT std::string calculate_data_root(
         const std::vector<std::pair<std::uint64_t, std::string>>& sections);
     EXTRACHAIN_EXPORT std::string hash_certificate(const QuorumCertificate& certificate);
-    EXTRACHAIN_EXPORT std::string calculate_consensus_state_commitment(const QuorumCertificate& parent,
-                                                                       std::string_view         section_root,
-                                                                       std::string_view         batch_root,
-                                                                       std::string_view validator_set_hash);
     EXTRACHAIN_EXPORT std::string hash_timeout_certificate(const TimeoutCertificate& certificate);
     EXTRACHAIN_EXPORT std::string proposal_signing_payload(const Proposal& proposal);
     EXTRACHAIN_EXPORT std::string vote_signing_payload(const Vote& vote);

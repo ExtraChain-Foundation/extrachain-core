@@ -47,7 +47,7 @@ namespace ExtraChain::Consensus {
 
         std::expected<void, ConsensusError>           initialize();
         std::expected<Proposal, ConsensusError>       make_proposal(SectionBatchManifest batch,
-                                                                    std::string          section_root,
+                                                                    StateCommitmentV2    state,
                                                                     std::uint64_t        round = 0);
         std::expected<TimeoutVote, ConsensusError>    make_timeout_vote(std::uint64_t height, std::uint64_t round);
         std::expected<void, ConsensusError>           observe_proposal(const Proposal& proposal);
@@ -89,9 +89,6 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] std::optional<FinalizedCheckpoint> finalization_for(
             const QuorumCertificate& certificate) const;
         [[nodiscard]] std::optional<FinalityProof> finality_proof_for(const QuorumCertificate& certificate) const;
-        [[nodiscard]] std::string                  state_commitment(const QuorumCertificate& parent,
-                                                                    std::string_view         section_root,
-                                                                    std::string_view         batch_root) const;
         void                                       prune_memory(std::uint64_t finalized_height);
 
         ValidatorSetView                                          validators_;

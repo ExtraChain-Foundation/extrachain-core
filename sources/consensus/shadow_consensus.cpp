@@ -23,9 +23,12 @@ namespace ExtraChain::Consensus {
         constexpr std::string_view SafetyFile             = "safety.sqlite";
         constexpr std::string_view ConfigurationFile      = "shadow-config.msgpack";
         constexpr std::string_view GovernancePolicyFile   = "governance-policy.msgpack";
+        constexpr std::string_view RecoveryPolicyFile     = "recovery-policy.msgpack";
+        constexpr std::string_view TrustAnchorFile        = "trust-anchor.msgpack";
         constexpr std::string_view ActivationManifestFile = "activation-manifest.msgpack";
         constexpr std::string_view EpochHistoryFile       = "epoch-history.msgpack";
         constexpr std::string_view PendingEpochFile       = "pending-epoch.msgpack";
+        constexpr std::string_view PendingRecoveryFile    = "pending-recovery.msgpack";
 
         template <typename T>
         std::expected<T, ConsensusError> read_document(const std::filesystem::path& path) {
@@ -92,10 +95,11 @@ namespace ExtraChain::Consensus {
                                      std::unique_ptr<ConsensusEngine>   engine,
                                      ShadowConfiguration                configuration,
                                      std::optional<MultisigPolicy>      governance_policy,
-                                     std::vector<EpochTransitionV1>     epoch_history,
+                                     std::vector<EpochStartV1>          epoch_history,
                                      std::optional<EpochTransitionV1>   pending_epoch,
                                      std::optional<EpochBootstrapV1>    active_bootstrap,
                                      std::uint64_t                      minimum_governance_sequence,
+                                     std::uint64_t                      minimum_recovery_sequence,
                                      ConsensusEngine::ProposalValidator proposal_validator)
         : engine_(std::move(engine))
         , configuration_(configuration)
@@ -105,6 +109,7 @@ namespace ExtraChain::Consensus {
         , pending_epoch_(std::move(pending_epoch))
         , active_bootstrap_(std::move(active_bootstrap))
         , minimum_governance_sequence_(minimum_governance_sequence)
+        , minimum_recovery_sequence_(minimum_recovery_sequence)
         , proposal_validator_(std::move(proposal_validator)) {
     }
 
@@ -145,12 +150,18 @@ namespace ExtraChain::Consensus {
         }
 
         std::optional<MultisigPolicy> governance_policy;
-        std::uint64_t                 minimum_sequence = 1;
+        std::optional<MultisigPolicy> recovery_policy;
+        std::optional<TrustAnchorV1>  trust_anchor;
+        std::uint64_t                 minimum_governance_sequence = 1;
+        std::uint64_t                 minimum_recovery_sequence   = 1;
         if (configuration.mode == ShadowMode::Finality) {
             const auto policy   = read_document<MultisigPolicy>(directory / GovernancePolicyFile);
+            const auto recovery = read_document<MultisigPolicy>(directory / RecoveryPolicyFile);
+            const auto anchor   = read_document<TrustAnchorV1>(directory / TrustAnchorFile);
             const auto manifest = read_document<ActivationManifestV1>(directory / ActivationManifestFile);
             if (initial_validators.value().active().size() != ShadowCommitteeSize || !policy.has_value()
-                || !manifest.has_value() || manifest.value().activation_height == 0
+                || !recovery.has_value() || !anchor.has_value() || !manifest.has_value()
+                || manifest.value().activation_height == 0
                 || manifest.value().authorization.sequence == std::numeric_limits<std::uint64_t>::max()
                 || !verify_multisig_policy(policy.value())
                 || !verify_activation_manifest(manifest.value(),
@@ -160,52 +171,82 @@ namespace ExtraChain::Consensus {
                 || manifest.value().network_id != network_id
                 || manifest.value().activation_height != configuration.activation_height
                 || manifest.value().activation_dag_section != configuration.activation_dag_section
-                || manifest.value().validator_set_hash != hash_validator_set(validator_document.value())) {
+                || manifest.value().validator_set_hash != hash_validator_set(validator_document.value())
+                || !verify_trust_anchor(anchor.value()) || anchor.value().network_id != network_id
+                || hash_validator_set(anchor.value().initial_validators)
+                       != hash_validator_set(validator_document.value())
+                || anchor.value().governance_policy.policy_hash != policy.value().policy_hash
+                || anchor.value().recovery_policy.policy_hash != recovery.value().policy_hash) {
                 return std::unexpected(ConsensusError::InvalidGovernance);
             }
-            governance_policy = policy.value();
-            minimum_sequence  = manifest.value().authorization.sequence + 1;
+            governance_policy           = policy.value();
+            recovery_policy             = recovery.value();
+            trust_anchor                = anchor.value();
+            minimum_governance_sequence = manifest.value().authorization.sequence + 1;
         }
 
-        std::vector<EpochTransitionV1> epoch_history;
+        std::vector<EpochStartV1> epoch_history;
         if (std::filesystem::exists(directory / EpochHistoryFile)) {
-            const auto loaded = read_document<std::vector<EpochTransitionV1>>(directory / EpochHistoryFile);
-            if (!loaded.has_value() || !governance_policy.has_value()) {
+            const auto loaded = read_document<std::vector<EpochStartV1>>(directory / EpochHistoryFile);
+            if (!loaded.has_value() || !governance_policy.has_value() || !recovery_policy.has_value()) {
                 return std::unexpected(ConsensusError::InvalidEpoch);
             }
             epoch_history = loaded.value();
         }
 
-        ValidatorSet                    active_document = validator_document.value();
+        ValidatorSetView                active_validators = initial_validators.value();
+        ValidatorSet                    active_document   = validator_document.value();
         std::optional<EpochBootstrapV1> active_bootstrap;
-        for (const auto& transition : epoch_history) {
-            auto verifier = LightClientVerifier::create(active_document, active_bootstrap);
-            if (!verifier.has_value() || transition.protocol_version != ProtocolVersion
-                || transition.change.authorization.sequence == std::numeric_limits<std::uint64_t>::max()
-                || !verifier.value()
-                        .schedule_epoch(transition.change,
-                                        transition.next_validators,
-                                        governance_policy.value(),
-                                        transition.proof,
-                                        minimum_sequence)
-                        .has_value()) {
+        for (const auto& start : epoch_history) {
+            if (start.validators.epoch <= active_document.epoch
+                || start.bootstrap.previous_epoch != active_document.epoch) {
                 return std::unexpected(ConsensusError::InvalidEpoch);
             }
-            const auto expected =
-                make_epoch_bootstrap(transition.change, transition.next_validators, transition.proof);
-            if (!expected.has_value()
-                || hash_epoch_bootstrap(expected.value()) != hash_epoch_bootstrap(transition.bootstrap)) {
+            if (start.kind == EpochStartKind::Normal) {
+                LightClientVerifier verifier(active_validators, active_bootstrap);
+                if (!start.normal_transition.has_value()
+                    || !verifier
+                            .schedule_epoch(start.normal_transition.value().change,
+                                            start.validators,
+                                            governance_policy.value(),
+                                            start.normal_transition.value().proof,
+                                            minimum_governance_sequence)
+                            .has_value()
+                    || !verifier.pending_validators().has_value()
+                    || hash_epoch_bootstrap(start.normal_transition.value().bootstrap)
+                           != hash_epoch_bootstrap(start.bootstrap)) {
+                    return std::unexpected(ConsensusError::InvalidEpoch);
+                }
+                active_validators           = verifier.pending_validators().value();
+                minimum_governance_sequence = start.normal_transition.value().change.authorization.sequence + 1;
+            } else if (start.kind == EpochStartKind::Recovery && start.recovery.has_value()) {
+                const auto& recovery = start.recovery.value();
+                if (!verify_recovery_document(recovery,
+                                              recovery_policy.value(),
+                                              active_document,
+                                              start.validators,
+                                              minimum_recovery_sequence,
+                                              start.bootstrap.previous_finalized_height,
+                                              recovery.finalized_header_hash,
+                                              start.bootstrap.previous_state_commitment)
+                    || recovery.finalized_state_commitment != start.bootstrap.previous_state_commitment
+                    || recovery.activation_epoch != start.bootstrap.epoch) {
+                    return std::unexpected(ConsensusError::InvalidEpoch);
+                }
+                auto next = ValidatorSetView::create_recovery_transition(start.validators, recovery.operators);
+                if (!next.has_value()) {
+                    return std::unexpected(next.error());
+                }
+                active_validators         = std::move(next.value());
+                minimum_recovery_sequence = recovery.recovery_sequence + 1;
+            } else {
                 return std::unexpected(ConsensusError::InvalidEpoch);
             }
-            minimum_sequence = transition.change.authorization.sequence + 1;
-            active_document  = transition.next_validators;
-            active_bootstrap = transition.bootstrap;
+            active_document  = start.validators;
+            active_bootstrap = start.bootstrap;
         }
 
-        auto validators = ValidatorSetView::create(active_document);
-        if (!validators.has_value()) {
-            return std::unexpected(validators.error());
-        }
+        std::expected<ValidatorSetView, ConsensusError> validators(std::move(active_validators));
 
         std::optional<EpochTransitionV1> pending_epoch;
         if (std::filesystem::exists(directory / PendingEpochFile)) {
@@ -223,15 +264,15 @@ namespace ExtraChain::Consensus {
                     return std::unexpected(ConsensusError::StorageFailure);
                 }
             } else {
-                auto verifier = LightClientVerifier::create(active_document, active_bootstrap);
-                if (!governance_policy.has_value() || !verifier.has_value()
+                LightClientVerifier verifier(validators.value(), active_bootstrap);
+                if (!governance_policy.has_value()
                     || loaded.value().change.authorization.sequence == std::numeric_limits<std::uint64_t>::max()
-                    || !verifier.value()
+                    || !verifier
                             .schedule_epoch(loaded.value().change,
                                             loaded.value().next_validators,
                                             governance_policy.value(),
                                             loaded.value().proof,
-                                            minimum_sequence)
+                                            minimum_governance_sequence)
                             .has_value()) {
                     return std::unexpected(ConsensusError::InvalidEpoch);
                 }
@@ -268,15 +309,60 @@ namespace ExtraChain::Consensus {
         if (!initialized.has_value()) {
             return std::unexpected(initialized.error());
         }
-        return std::unique_ptr<ShadowConsensus>(new ShadowConsensus(directory,
-                                                                    std::move(engine),
-                                                                    configuration,
-                                                                    std::move(governance_policy),
-                                                                    std::move(epoch_history),
-                                                                    std::move(pending_epoch),
-                                                                    std::move(active_bootstrap),
-                                                                    minimum_sequence,
-                                                                    std::move(proposal_validator)));
+        auto instance              = std::unique_ptr<ShadowConsensus>(new ShadowConsensus(directory,
+                                                                             std::move(engine),
+                                                                             configuration,
+                                                                             std::move(governance_policy),
+                                                                             std::move(epoch_history),
+                                                                             std::move(pending_epoch),
+                                                                             std::move(active_bootstrap),
+                                                                             minimum_governance_sequence,
+                                                                             minimum_recovery_sequence,
+                                                                             std::move(proposal_validator)));
+        instance->recovery_policy_ = std::move(recovery_policy);
+        instance->trust_anchor_    = std::move(trust_anchor);
+        if (std::filesystem::exists(directory / PendingRecoveryFile)) {
+            const auto pending = read_document<PendingRecoveryV1>(directory / PendingRecoveryFile);
+            if (!pending.has_value() || !instance->recovery_policy_.has_value()) {
+                return std::unexpected(ConsensusError::InvalidGovernance);
+            }
+            const bool already_active = !instance->epoch_history_.empty()
+                                        && instance->epoch_history_.back().kind == EpochStartKind::Recovery
+                                        && instance->epoch_history_.back().recovery.has_value()
+                                        && recovery_action_hash(instance->epoch_history_.back().recovery.value())
+                                               == recovery_action_hash(pending.value().document)
+                                        && hash_validator_set(instance->epoch_history_.back().validators)
+                                               == hash_validator_set(pending.value().next_validators);
+            if (already_active) {
+                std::error_code remove_error;
+                std::filesystem::remove(directory / PendingRecoveryFile, remove_error);
+                if (remove_error) {
+                    return std::unexpected(ConsensusError::StorageFailure);
+                }
+                return instance;
+            }
+            const auto finalized_height = instance->engine_->safety_state().finalized_height;
+            const auto proofs           = finalized_height == 0
+                                              ? std::expected<std::vector<FinalityProof>, ConsensusError>(
+                                          std::unexpected(ConsensusError::NotReady))
+                                              : instance->engine_->finality_proofs_after(finalized_height - 1, 1);
+            if (pending.value().first_seen_ms == 0
+                || pending.value().first_seen_ms
+                       > std::numeric_limits<std::uint64_t>::max() - MinimumRecoveryDelayMillis
+                || !proofs.has_value() || proofs.value().size() != 1
+                || !verify_recovery_document(pending.value().document,
+                                             instance->recovery_policy_.value(),
+                                             instance->engine_->validators().document(),
+                                             pending.value().next_validators,
+                                             instance->minimum_recovery_sequence_,
+                                             finalized_height,
+                                             hash_header(proofs.value().front().finalized_proposal.header),
+                                             proofs.value().front().finalized_proposal.header.state_commitment)) {
+                return std::unexpected(ConsensusError::InvalidGovernance);
+            }
+            instance->pending_recovery_ = pending.value();
+        }
+        return instance;
     }
 
     std::expected<void, ConsensusError> ShadowConsensus::write_identity(const std::filesystem::path& directory,
@@ -387,6 +473,34 @@ namespace ExtraChain::Consensus {
         return write_document(directory / GovernancePolicyFile, policy);
     }
 
+    std::expected<void, ConsensusError> ShadowConsensus::write_recovery_policy(
+        const std::filesystem::path& directory,
+        const MultisigPolicy&        policy) {
+        if (!verify_multisig_policy(policy) || policy.public_keys.size() != GovernanceSignerCount
+            || policy.threshold != RecoveryThreshold) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        std::error_code error;
+        std::filesystem::create_directories(directory, error);
+        if (error) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        return write_document(directory / RecoveryPolicyFile, policy);
+    }
+
+    std::expected<void, ConsensusError> ShadowConsensus::write_trust_anchor(const std::filesystem::path& directory,
+                                                                            const TrustAnchorV1&         anchor) {
+        if (!verify_trust_anchor(anchor)) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        std::error_code error;
+        std::filesystem::create_directories(directory, error);
+        if (error) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        return write_document(directory / TrustAnchorFile, anchor);
+    }
+
     std::expected<void, ConsensusError> ShadowConsensus::write_activation_manifest(
         const std::filesystem::path& directory,
         const ActivationManifestV1&  manifest,
@@ -413,8 +527,7 @@ namespace ExtraChain::Consensus {
         if (!engine_->is_local_leader(height, round)) {
             return std::optional<Proposal> {};
         }
-        auto proposal =
-            engine_->make_proposal(std::move(checkpoint.batch), std::move(checkpoint.section_root), round);
+        auto proposal = engine_->make_proposal(std::move(checkpoint.batch), std::move(checkpoint.state), round);
         if (!proposal.has_value()) {
             return std::unexpected(proposal.error());
         }
@@ -574,7 +687,12 @@ namespace ExtraChain::Consensus {
         }
 
         auto next_history = epoch_history_;
-        next_history.push_back(transition);
+        next_history.push_back(EpochStartV1 {
+            .kind              = EpochStartKind::Normal,
+            .validators        = transition.next_validators,
+            .bootstrap         = transition.bootstrap,
+            .normal_transition = transition,
+        });
         const auto history_written = write_document(directory_ / EpochHistoryFile, next_history);
         if (!history_written.has_value()) {
             return std::unexpected(history_written.error());
@@ -593,6 +711,156 @@ namespace ExtraChain::Consensus {
         return true;
     }
 
+    std::expected<void, ConsensusError> ShadowConsensus::schedule_recovery(const RecoveryDocumentV2& recovery,
+                                                                           ValidatorSet  next_validators,
+                                                                           std::uint64_t now_ms) {
+        if (configuration_.mode != ShadowMode::Finality || !recovery_policy_.has_value() || now_ms == 0
+            || now_ms > std::numeric_limits<std::uint64_t>::max() - MinimumRecoveryDelayMillis) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        const auto finalized_height = engine_->safety_state().finalized_height;
+        if (finalized_height == 0) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        const auto proofs = engine_->finality_proofs_after(finalized_height - 1, 1);
+        if (!proofs.has_value() || proofs.value().size() != 1
+            || proofs.value().front().finalized_proposal.header.height != finalized_height) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
+        const auto& finalized = proofs.value().front().finalized_proposal;
+        if (!verify_recovery_document(recovery,
+                                      recovery_policy_.value(),
+                                      engine_->validators().document(),
+                                      next_validators,
+                                      minimum_recovery_sequence_,
+                                      finalized_height,
+                                      hash_header(finalized.header),
+                                      finalized.header.state_commitment)) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        if (pending_recovery_.has_value()) {
+            const auto& pending = pending_recovery_.value();
+            if (pending.document.recovery_sequence == recovery.recovery_sequence
+                && recovery_action_hash(pending.document) != recovery_action_hash(recovery)) {
+                return std::unexpected(ConsensusError::RecoveryConflict);
+            }
+            if (pending.document.recovery_sequence >= recovery.recovery_sequence) {
+                return {};
+            }
+        }
+        PendingRecoveryV1 pending {
+            .document        = recovery,
+            .next_validators = std::move(next_validators),
+            .first_seen_ms   = now_ms,
+        };
+        const auto written = write_document(directory_ / PendingRecoveryFile, pending);
+        if (!written.has_value()) {
+            return std::unexpected(written.error());
+        }
+        pending_recovery_ = std::move(pending);
+        return {};
+    }
+
+    std::expected<bool, ConsensusError> ShadowConsensus::activate_scheduled_recovery(std::uint64_t now_ms) {
+        if (!pending_recovery_.has_value()) {
+            return false;
+        }
+        if (!recovery_policy_.has_value()) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        const auto& pending = pending_recovery_.value();
+        const auto  minimum_time =
+            std::max(pending.document.activate_after_ms, pending.first_seen_ms + MinimumRecoveryDelayMillis);
+        if (now_ms < minimum_time) {
+            return false;
+        }
+        const auto finalized_height = engine_->safety_state().finalized_height;
+        const auto proofs = finalized_height == 0 ? std::expected<std::vector<FinalityProof>, ConsensusError>(
+                                                        std::unexpected(ConsensusError::NotReady))
+                                                  : engine_->finality_proofs_after(finalized_height - 1, 1);
+        if (!proofs.has_value() || proofs.value().size() != 1) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
+        const auto& proof     = proofs.value().front();
+        const auto& finalized = proof.finalized_proposal;
+        if (!verify_recovery_document(pending.document,
+                                      recovery_policy_.value(),
+                                      engine_->validators().document(),
+                                      pending.next_validators,
+                                      minimum_recovery_sequence_,
+                                      finalized_height,
+                                      hash_header(finalized.header),
+                                      finalized.header.state_commitment)
+            || finalized.batch.last_section == std::numeric_limits<std::uint64_t>::max()) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+
+        EpochBootstrapV1 bootstrap {
+            .network_id                         = pending.document.network_id,
+            .previous_epoch                     = pending.document.current_epoch,
+            .epoch                              = pending.document.activation_epoch,
+            .activation_height                  = pending.document.finalized_height + 1,
+            .previous_finalized_height          = pending.document.finalized_height,
+            .first_dag_section                  = finalized.batch.last_section + 1,
+            .previous_section_root              = finalized.header.section_root,
+            .previous_state_commitment          = finalized.header.state_commitment,
+            .previous_decision_certificate_hash = hash_certificate(proof.decision_certificate),
+            .epoch_change_hash                  = recovery_action_hash(pending.document),
+            .validator_set_hash                 = hash_validator_set(pending.next_validators),
+        };
+        if (!verify_epoch_bootstrap(bootstrap, pending.next_validators)) {
+            return std::unexpected(ConsensusError::InvalidEpoch);
+        }
+        auto validators =
+            ValidatorSetView::create_recovery_transition(pending.next_validators, pending.document.operators);
+        if (!validators.has_value()) {
+            return std::unexpected(validators.error());
+        }
+        auto identity_path = epoch_identity_path(directory_, pending.next_validators.epoch);
+        if (!std::filesystem::exists(identity_path)) {
+            identity_path = directory_ / IdentityFile;
+        }
+        auto identity = read_identity(identity_path, validators.value());
+        if (!identity.has_value()) {
+            return std::unexpected(identity.error());
+        }
+        auto next_engine =
+            std::make_unique<ConsensusEngine>(std::move(validators.value()),
+                                              std::move(identity.value()),
+                                              std::make_unique<SafetyStore>(
+                                                  epoch_safety_path(directory_, pending.next_validators.epoch)),
+                                              proposal_validator_,
+                                              bootstrap);
+        const auto initialized = next_engine->initialize();
+        if (!initialized.has_value()) {
+            return std::unexpected(initialized.error());
+        }
+
+        auto next_history = epoch_history_;
+        next_history.push_back(EpochStartV1 {
+            .kind       = EpochStartKind::Recovery,
+            .validators = pending.next_validators,
+            .bootstrap  = bootstrap,
+            .recovery   = pending.document,
+        });
+        const auto history_written = write_document(directory_ / EpochHistoryFile, next_history);
+        if (!history_written.has_value()) {
+            return std::unexpected(history_written.error());
+        }
+        std::error_code remove_error;
+        std::filesystem::remove(directory_ / PendingRecoveryFile, remove_error);
+        if (remove_error) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        engine_                    = std::move(next_engine);
+        active_bootstrap_          = bootstrap;
+        epoch_history_             = std::move(next_history);
+        minimum_recovery_sequence_ = pending.document.recovery_sequence + 1;
+        pending_epoch_.reset();
+        pending_recovery_.reset();
+        return true;
+    }
+
     const ConsensusEngine& ShadowConsensus::engine() const noexcept {
         return *engine_;
     }
@@ -607,6 +875,18 @@ namespace ExtraChain::Consensus {
 
     const std::optional<EpochTransitionV1>& ShadowConsensus::pending_epoch() const noexcept {
         return pending_epoch_;
+    }
+
+    const std::optional<PendingRecoveryV1>& ShadowConsensus::pending_recovery() const noexcept {
+        return pending_recovery_;
+    }
+
+    std::vector<EpochStartV1> ShadowConsensus::epoch_starts() const {
+        return epoch_history_;
+    }
+
+    const std::optional<TrustAnchorV1>& ShadowConsensus::trust_anchor() const noexcept {
+        return trust_anchor_;
     }
 
     bool ShadowConsensus::peer_matches_validator(std::string_view validator_id,

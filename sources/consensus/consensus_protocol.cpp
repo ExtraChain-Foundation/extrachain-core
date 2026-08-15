@@ -11,12 +11,15 @@
 #include "consensus/consensus_protocol.h"
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <limits>
 #include <queue>
 #include <set>
 #include <tuple>
 
 #include "chain/transaction.h"
+#include "consensus/validator_set.h"
 #include "core/byte_array.h"
 #include "utils/exc_utils.h"
 #include "utils/exc_utils_base64.h"
@@ -32,9 +35,14 @@ namespace ExtraChain::Consensus {
         constexpr std::string_view AuthorizationDomain  = "EXC_GOVERNANCE_AUTHORIZATION_V1";
         constexpr std::string_view EpochChangeDomain    = "EXC_EPOCH_CHANGE_V1";
         constexpr std::string_view EpochBootstrapDomain = "EXC_EPOCH_BOOTSTRAP_V1";
-        constexpr std::string_view RecoveryDomain       = "EXC_EMERGENCY_RECOVERY_V1";
+        constexpr std::string_view RecoveryV2Domain     = "EXC_EMERGENCY_RECOVERY_V2";
+        constexpr std::string_view TrustAnchorDomain    = "EXC_SHADOW_TRUST_ANCHOR_V1";
         constexpr std::string_view ActivationDomain     = "EXC_SHADOW_ACTIVATION_V1";
         constexpr std::string_view StateDomain          = "EXC_STATE_COMMITMENT_V2";
+        constexpr std::string_view StateKeyDomain       = "EXC_STATE_KEY_V1";
+        constexpr std::string_view StateLeafDomain      = "EXC_STATE_LEAF_V1";
+        constexpr std::string_view StateBucketDomain    = "EXC_STATE_BUCKET_V1";
+        constexpr std::string_view StateRootDomain      = "EXC_SEGMENTED_STATE_ROOT_V1";
         constexpr std::uint64_t    MaximumStoredHeight =
             static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
 
@@ -152,15 +160,39 @@ namespace ExtraChain::Consensus {
                                             change.operators });
         }
 
-        std::string unsigned_recovery_hash(const RecoveryDocumentV1& recovery) {
-            return domain_hash(RecoveryDomain,
+        std::string unsigned_trust_anchor_hash(const TrustAnchorV1& anchor) {
+            return domain_hash(TrustAnchorDomain,
+                               std::tuple { anchor.protocol_version,
+                                            anchor.network_id,
+                                            hash_validator_set(anchor.initial_validators),
+                                            anchor.governance_policy.policy_hash,
+                                            anchor.recovery_policy.policy_hash,
+                                            anchor.minimum_recovery_delay_ms });
+        }
+
+        std::string unsigned_recovery_hash(const RecoveryDocumentV2& recovery) {
+            auto operators = recovery.operators;
+            std::ranges::sort(operators, {}, [](const OperatorAttestation& item) {
+                return std::tuple { item.operator_id_hash,
+                                    item.actor_id.to_string(),
+                                    item.node_identifier,
+                                    item.consensus_public_key };
+            });
+            return domain_hash(RecoveryV2Domain,
                                std::tuple { recovery.protocol_version,
                                             recovery.network_id,
                                             recovery.recovery_sequence,
+                                            recovery.current_epoch,
+                                            recovery.activation_epoch,
                                             recovery.finalized_height,
-                                            recovery.finalized_checkpoint_hash,
+                                            recovery.finalized_header_hash,
+                                            recovery.finalized_state_commitment,
+                                            recovery.current_validator_set_hash,
                                             recovery.next_validator_set_hash,
-                                            recovery.registry_document_hash });
+                                            recovery.registry_document_hash,
+                                            operators,
+                                            recovery.signed_at_ms,
+                                            recovery.activate_after_ms });
         }
 
         std::string unsigned_activation_hash(const ActivationManifestV1& activation) {
@@ -676,9 +708,18 @@ namespace ExtraChain::Consensus {
     }
 
     bool verify_epoch_bootstrap(const EpochBootstrapV1& bootstrap, const ValidatorSet& next_validators) {
+        const bool normal_transition =
+            bootstrap.previous_epoch <= std::numeric_limits<std::uint64_t>::max() - 2
+            && bootstrap.previous_finalized_height <= std::numeric_limits<std::uint64_t>::max() - 3
+            && bootstrap.previous_epoch + 2 == bootstrap.epoch
+            && bootstrap.previous_finalized_height + 3 == bootstrap.activation_height;
+        const bool recovery_transition =
+            bootstrap.previous_epoch != std::numeric_limits<std::uint64_t>::max()
+            && bootstrap.previous_finalized_height != std::numeric_limits<std::uint64_t>::max()
+            && bootstrap.previous_epoch + 1 == bootstrap.epoch
+            && bootstrap.previous_finalized_height + 1 == bootstrap.activation_height;
         return bootstrap.protocol_version == ProtocolVersion && !bootstrap.network_id.is_zero()
-               && bootstrap.previous_epoch + 2 == bootstrap.epoch && bootstrap.activation_height >= 3
-               && bootstrap.previous_finalized_height + 3 == bootstrap.activation_height
+               && (normal_transition || recovery_transition) && bootstrap.activation_height != 0
                && bootstrap.first_dag_section != 0 && !bootstrap.previous_section_root.empty()
                && !bootstrap.previous_state_commitment.empty()
                && !bootstrap.previous_decision_certificate_hash.empty() && !bootstrap.epoch_change_hash.empty()
@@ -687,24 +728,71 @@ namespace ExtraChain::Consensus {
                && bootstrap.validator_set_hash == hash_validator_set(next_validators);
     }
 
-    std::string recovery_action_hash(const RecoveryDocumentV1& recovery) {
+    std::string trust_anchor_action_hash(const TrustAnchorV1& anchor) {
+        return unsigned_trust_anchor_hash(anchor);
+    }
+
+    std::string hash_trust_anchor(const TrustAnchorV1& anchor) {
+        return domain_hash(TrustAnchorDomain, anchor);
+    }
+
+    bool verify_trust_anchor(const TrustAnchorV1& anchor) {
+        const auto validators = ValidatorSetView::create(anchor.initial_validators);
+        return anchor.protocol_version == ProtocolVersion && !anchor.network_id.is_zero()
+               && anchor.initial_validators.network_id == anchor.network_id && validators.has_value()
+               && anchor.governance_policy.network_id == anchor.network_id
+               && anchor.recovery_policy.network_id == anchor.network_id
+               && verify_multisig_policy(anchor.governance_policy)
+               && verify_multisig_policy(anchor.recovery_policy)
+               && anchor.governance_policy.public_keys.size() == GovernanceSignerCount
+               && anchor.governance_policy.threshold == GovernanceThreshold
+               && anchor.recovery_policy.public_keys.size() == GovernanceSignerCount
+               && anchor.recovery_policy.threshold == RecoveryThreshold
+               && anchor.minimum_recovery_delay_ms == MinimumRecoveryDelayMillis
+               && anchor.authorization.action_hash == unsigned_trust_anchor_hash(anchor)
+               && verify_authorization(anchor.governance_policy, anchor.authorization, 1);
+    }
+
+    std::string recovery_action_hash(const RecoveryDocumentV2& recovery) {
         return unsigned_recovery_hash(recovery);
     }
 
-    bool verify_recovery_document(const RecoveryDocumentV1& recovery,
+    bool verify_recovery_document(const RecoveryDocumentV2& recovery,
                                   const MultisigPolicy&     recovery_policy,
-                                  std::uint64_t             expected_sequence,
+                                  const ValidatorSet&       current_validators,
+                                  const ValidatorSet&       next_validators,
+                                  std::uint64_t             minimum_sequence,
                                   std::uint64_t             expected_finalized_height,
-                                  std::string_view          expected_checkpoint_hash) {
+                                  std::string_view          expected_header_hash,
+                                  std::string_view          expected_state_commitment) {
+        const auto next = ValidatorSetView::create_recovery_transition(next_validators, recovery.operators);
         return recovery.protocol_version == ProtocolVersion && recovery.network_id == recovery_policy.network_id
                && recovery_policy.public_keys.size() == GovernanceSignerCount
-               && recovery_policy.threshold == RecoveryThreshold && recovery.recovery_sequence == expected_sequence
+               && recovery_policy.threshold == RecoveryThreshold
+               && current_validators.protocol_version == ProtocolVersion && !current_validators.validators.empty()
+               && current_validators.network_id == recovery.network_id
+               && current_validators.epoch == recovery.current_epoch
+               && recovery.current_epoch != std::numeric_limits<std::uint64_t>::max()
+               && recovery.activation_epoch == recovery.current_epoch + 1
+               && recovery.current_validator_set_hash == hash_validator_set(current_validators) && next.has_value()
+               && next_validators.network_id == recovery.network_id
+               && next_validators.epoch == recovery.activation_epoch
+               && recovery.next_validator_set_hash == next.value().hash()
                && recovery.finalized_height == expected_finalized_height
-               && recovery.finalized_checkpoint_hash == expected_checkpoint_hash
-               && !recovery.next_validator_set_hash.empty() && !recovery.registry_document_hash.empty()
-               && recovery.authorization.action_hash == unsigned_recovery_hash(recovery)
+               && recovery.finalized_header_hash == expected_header_hash
+               && recovery.finalized_state_commitment == expected_state_commitment
+               && !recovery.finalized_header_hash.empty() && !recovery.finalized_state_commitment.empty()
+               && recovery.finalized_height != std::numeric_limits<std::uint64_t>::max()
+               && !recovery.registry_document_hash.empty() && recovery.signed_at_ms != 0
+               && recovery.signed_at_ms <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())
+               && recovery.activate_after_ms
+                      <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())
+               && recovery.activate_after_ms >= recovery.signed_at_ms
+               && recovery.activate_after_ms - recovery.signed_at_ms >= MinimumRecoveryDelayMillis
                && recovery.authorization.sequence == recovery.recovery_sequence
-               && verify_authorization(recovery_policy, recovery.authorization, expected_sequence);
+               && recovery.recovery_sequence >= minimum_sequence
+               && recovery.authorization.action_hash == unsigned_recovery_hash(recovery)
+               && verify_authorization(recovery_policy, recovery.authorization, minimum_sequence);
     }
 
     std::string activation_action_hash(const ActivationManifestV1& activation) {
@@ -726,6 +814,48 @@ namespace ExtraChain::Consensus {
 
     std::string hash_state_commitment(const StateCommitmentV2& commitment) {
         return domain_hash(StateDomain, commitment);
+    }
+
+    std::string segmented_state_root(std::string_view                                        domain,
+                                     const std::vector<std::pair<std::string, std::string>>& entries) {
+        if (domain.empty()) {
+            return {};
+        }
+        std::array<std::vector<std::pair<std::string, std::string>>, 256> buckets;
+        for (const auto& [key, value] : entries) {
+            if (key.empty()) {
+                return {};
+            }
+            const auto   key_hash = domain_hash(StateKeyDomain, std::tuple { std::string(domain), key });
+            unsigned int bucket   = 0;
+            const auto   parsed   = std::from_chars(key_hash.data(), key_hash.data() + 2, bucket, 16);
+            if (parsed.ec != std::errc {} || parsed.ptr != key_hash.data() + 2) {
+                return {};
+            }
+            buckets[bucket].emplace_back(key, value);
+        }
+
+        std::vector<std::string> bucket_roots;
+        bucket_roots.reserve(buckets.size());
+        for (std::size_t index = 0; index < buckets.size(); ++index) {
+            auto& bucket = buckets[index];
+            std::ranges::sort(bucket);
+            const auto duplicate =
+                std::adjacent_find(bucket.begin(), bucket.end(), [](const auto& left, const auto& right) {
+                    return left.first == right.first;
+                });
+            if (duplicate != bucket.end()) {
+                return {};
+            }
+            std::vector<std::string> leaves;
+            leaves.reserve(bucket.size());
+            for (const auto& [key, value] : bucket) {
+                leaves.push_back(domain_hash(StateLeafDomain, std::tuple { std::string(domain), key, value }));
+            }
+            bucket_roots.push_back(
+                domain_hash(StateBucketDomain, std::tuple { std::string(domain), index, leaves }));
+        }
+        return domain_hash(StateRootDomain, std::tuple { std::string(domain), bucket_roots });
     }
 
 } // namespace ExtraChain::Consensus

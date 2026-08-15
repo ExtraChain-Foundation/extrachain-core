@@ -10,8 +10,10 @@
 
 #include "consensus/light_client.h"
 
+#include <algorithm>
 #include <bit>
 #include <limits>
+#include <set>
 
 #include "utils/file_io.h"
 #include "utils/serialization.h"
@@ -137,13 +139,6 @@ namespace ExtraChain::Consensus {
             return true;
         }
 
-        std::string state_commitment(const Proposal& proposal, const ValidatorSetView& validators) {
-            return calculate_consensus_state_commitment(proposal.parent_certificate,
-                                                        proposal.header.section_root,
-                                                        proposal.header.batch_root,
-                                                        validators.hash());
-        }
-
         bool verify_proposal(const Proposal&         proposal,
                              const ValidatorSetView& validators,
                              const EpochBootstrapV1* bootstrap) {
@@ -160,7 +155,14 @@ namespace ExtraChain::Consensus {
                 || proposal.batch.transaction_root != calculate_transaction_root(proposal.batch.transaction_hashes)
                 || proposal.header.batch_root != hash_batch_manifest(proposal.batch)
                 || proposal.batch.data_root.empty() || proposal.batch.payload_bytes == 0
-                || proposal.header.state_commitment != state_commitment(proposal, validators)
+                || proposal.state.protocol_version != ProtocolVersion
+                || proposal.state.network_id != proposal.header.network_id
+                || proposal.state.epoch != proposal.header.epoch || proposal.state.height != proposal.header.height
+                || proposal.state.section_root != proposal.header.section_root
+                || proposal.state.validator_set_hash != validators.hash()
+                || proposal.state.account_state_root.empty() || proposal.state.contract_state_root.empty()
+                || proposal.state.token_registry_root.empty()
+                || proposal.header.state_commitment != hash_state_commitment(proposal.state)
                 || !verify_certificate(proposal.parent_certificate, validators, bootstrap)) {
                 return false;
             }
@@ -182,6 +184,11 @@ namespace ExtraChain::Consensus {
                 }
                 if (bootstrap == nullptr && proposal.batch.first_section == 0
                     && !proposal.batch.previous_section_root.empty()) {
+                    return false;
+                }
+                const auto expected_previous =
+                    bootstrap == nullptr ? std::string {} : bootstrap->previous_state_commitment;
+                if (proposal.state.previous_state_commitment != expected_previous) {
                     return false;
                 }
             }
@@ -216,6 +223,8 @@ namespace ExtraChain::Consensus {
                    && second.parent_certificate.header_hash == hash_header(first.header)
                    && third.parent_certificate.header_hash == hash_header(second.header)
                    && proof.decision_certificate.header_hash == hash_header(third.header)
+                   && second.state.previous_state_commitment == first.header.state_commitment
+                   && third.state.previous_state_commitment == second.header.state_commitment
                    && extends_batch(first, second) && extends_batch(second, third)
                    && verify_certificate(second.parent_certificate, validators, bootstrap)
                    && verify_certificate(third.parent_certificate, validators, bootstrap)
@@ -243,13 +252,70 @@ namespace ExtraChain::Consensus {
         return LightClientVerifier(std::move(validators.value()), std::move(bootstrap));
     }
 
+    std::expected<LightClientVerifier, ConsensusError> LightClientVerifier::bootstrap(TrustAnchorV1 anchor) {
+        if (!verify_trust_anchor(anchor)) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        auto verifier = create(anchor.initial_validators);
+        if (!verifier.has_value()) {
+            return std::unexpected(verifier.error());
+        }
+        verifier.value().trust_anchor_ = std::move(anchor);
+        verifier.value().freshness_    = BootstrapFreshness::Unknown;
+        return verifier;
+    }
+
     std::expected<LightClientVerifier, ConsensusError> LightClientVerifier::restore(LightClientStateV1 state) {
         if (state.protocol_version != ProtocolVersion || state.network_id != state.active_validators.network_id
             || state.trusted_epoch != state.active_validators.epoch
             || (state.trusted_height == 0) != state.trusted_header_hash.empty()) {
             return std::unexpected(ConsensusError::InvalidProof);
         }
-        auto verifier = create(std::move(state.active_validators), std::move(state.active_bootstrap));
+        if (!state.trust_anchor.has_value()
+            && (!state.epoch_history.empty() || state.freshness == BootstrapFreshness::Confirmed)) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        auto verifier = [&]() -> std::expected<LightClientVerifier, ConsensusError> {
+            if (!state.trust_anchor.has_value()) {
+                return create(state.active_validators, state.active_bootstrap);
+            }
+            auto anchored = bootstrap(state.trust_anchor.value());
+            if (!anchored.has_value()) {
+                return anchored;
+            }
+            std::size_t offset = 0;
+            while (offset < state.epoch_history.size()) {
+                const auto count = std::min(MaximumBootstrapEntries, state.epoch_history.size() - offset);
+                BootstrapHistoryPageV1 page {
+                    .network_id        = state.network_id,
+                    .trust_anchor_hash = hash_trust_anchor(state.trust_anchor.value()),
+                    .after_epoch       = anchored.value().active_.document().epoch,
+                    .entries           = std::vector<EpochStartV1>(state.epoch_history.begin() + offset,
+                                                         state.epoch_history.begin() + offset + count),
+                };
+                offset += count;
+                if (offset < state.epoch_history.size()) {
+                    page.next_after_epoch = page.entries.back().validators.epoch;
+                }
+                if (!anchored.value().apply_history_page(page).has_value()) {
+                    return std::unexpected(ConsensusError::InvalidEpoch);
+                }
+            }
+            const bool same_bootstrap =
+                state.active_bootstrap.has_value() == anchored.value().active_bootstrap_.has_value()
+                && (!state.active_bootstrap.has_value()
+                    || hash_epoch_bootstrap(state.active_bootstrap.value())
+                           == hash_epoch_bootstrap(anchored.value().active_bootstrap_.value()));
+            if (hash_validator_set(state.active_validators)
+                    != hash_validator_set(anchored.value().active_.document())
+                || !same_bootstrap || state.trusted_height < anchored.value().trusted_height_
+                || (state.trusted_height == anchored.value().trusted_height_
+                    && !anchored.value().trusted_header_hash_.empty()
+                    && state.trusted_header_hash != anchored.value().trusted_header_hash_)) {
+                return std::unexpected(ConsensusError::InvalidProof);
+            }
+            return anchored;
+        }();
         if (!verifier.has_value()) {
             return std::unexpected(verifier.error());
         }
@@ -272,6 +338,14 @@ namespace ExtraChain::Consensus {
         verifier.value().trusted_epoch_       = state.trusted_epoch;
         verifier.value().trusted_height_      = state.trusted_height;
         verifier.value().trusted_header_hash_ = std::move(state.trusted_header_hash);
+        if (state.trust_anchor.has_value()
+            && (!verify_trust_anchor(state.trust_anchor.value())
+                || state.trust_anchor.value().network_id != verifier.value().active_.document().network_id)) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        verifier.value().trust_anchor_  = std::move(state.trust_anchor);
+        verifier.value().epoch_history_ = std::move(state.epoch_history);
+        verifier.value().freshness_     = BootstrapFreshness::Unknown;
         return verifier;
     }
 
@@ -398,6 +472,9 @@ namespace ExtraChain::Consensus {
             .trusted_epoch            = trusted_epoch_,
             .trusted_height           = trusted_height_,
             .trusted_header_hash      = trusted_header_hash_,
+            .trust_anchor             = trust_anchor_,
+            .epoch_history            = epoch_history_,
+            .freshness                = freshness_,
         };
     }
 
@@ -409,6 +486,144 @@ namespace ExtraChain::Consensus {
 
     std::uint64_t LightClientVerifier::trusted_height() const noexcept {
         return trusted_height_;
+    }
+
+    std::expected<void, ConsensusError> LightClientVerifier::apply_history_page(
+        const BootstrapHistoryPageV1& page) {
+        auto candidate = *this;
+        auto applied   = candidate.apply_history_page_in_place(page);
+        if (!applied.has_value()) {
+            return std::unexpected(applied.error());
+        }
+        *this = std::move(candidate);
+        return {};
+    }
+
+    std::expected<void, ConsensusError> LightClientVerifier::apply_history_page_in_place(
+        const BootstrapHistoryPageV1& page) {
+        if (!trust_anchor_.has_value() || page.protocol_version != ProtocolVersion
+            || page.network_id != trust_anchor_.value().network_id
+            || page.trust_anchor_hash != hash_trust_anchor(trust_anchor_.value())
+            || page.after_epoch != active_.document().epoch || page.entries.size() > MaximumBootstrapEntries
+            || MessagePack::serialize(page).size() > MaximumBootstrapBytes) {
+            return std::unexpected(ConsensusError::InvalidProof);
+        }
+
+        auto governance_sequence = std::uint64_t { 1 };
+        auto recovery_sequence   = std::uint64_t { 1 };
+        for (const auto& prior : epoch_history_) {
+            if (prior.normal_transition.has_value()) {
+                governance_sequence = std::max(governance_sequence,
+                                               prior.normal_transition.value().change.authorization.sequence + 1);
+            }
+            if (prior.recovery.has_value()) {
+                recovery_sequence = std::max(recovery_sequence, prior.recovery.value().recovery_sequence + 1);
+            }
+        }
+
+        for (const auto& start : page.entries) {
+            if (start.protocol_version != ProtocolVersion || start.validators.network_id != page.network_id
+                || !verify_epoch_bootstrap(start.bootstrap, start.validators)
+                || start.bootstrap.previous_epoch != active_.document().epoch) {
+                return std::unexpected(ConsensusError::InvalidEpoch);
+            }
+            if (start.kind == EpochStartKind::Normal) {
+                if (!start.normal_transition.has_value() || start.recovery.has_value()) {
+                    return std::unexpected(ConsensusError::InvalidEpoch);
+                }
+                const auto& transition = start.normal_transition.value();
+                const auto  scheduled  = schedule_epoch(transition.change,
+                                                      transition.next_validators,
+                                                      trust_anchor_.value().governance_policy,
+                                                      transition.proof,
+                                                      governance_sequence);
+                if (!scheduled.has_value() || !pending_.has_value() || !pending_bootstrap_.has_value()
+                    || hash_validator_set(start.validators) != pending_.value().hash()
+                    || hash_epoch_bootstrap(start.bootstrap) != hash_epoch_bootstrap(pending_bootstrap_.value())) {
+                    return std::unexpected(ConsensusError::InvalidEpoch);
+                }
+                const auto& finalized = transition.proof.finality_proof.finalized_proposal;
+                if (finalized.header.height < trusted_height_
+                    || (finalized.header.height == trusted_height_ && !trusted_header_hash_.empty()
+                        && trusted_header_hash_ != hash_header(finalized.header))) {
+                    return std::unexpected(ConsensusError::InvalidHeight);
+                }
+                trusted_height_      = finalized.header.height;
+                trusted_header_hash_ = hash_header(finalized.header);
+                active_              = std::move(pending_.value());
+                active_bootstrap_    = std::move(pending_bootstrap_);
+                pending_.reset();
+                pending_change_.reset();
+                pending_bootstrap_.reset();
+                pending_transition_.reset();
+                pending_policy_.reset();
+                pending_minimum_sequence_ = 0;
+                governance_sequence       = transition.change.authorization.sequence + 1;
+            } else if (start.kind == EpochStartKind::Recovery) {
+                if (start.normal_transition.has_value() || !start.recovery.has_value()) {
+                    return std::unexpected(ConsensusError::InvalidEpoch);
+                }
+                const auto& recovery = start.recovery.value();
+                if (recovery.finalized_height < trusted_height_
+                    || (recovery.finalized_height == trusted_height_ && !trusted_header_hash_.empty()
+                        && recovery.finalized_header_hash != trusted_header_hash_)
+                    || !verify_recovery_document(recovery,
+                                                 trust_anchor_.value().recovery_policy,
+                                                 active_.document(),
+                                                 start.validators,
+                                                 recovery_sequence,
+                                                 recovery.finalized_height,
+                                                 recovery.finalized_header_hash,
+                                                 recovery.finalized_state_commitment)
+                    || start.bootstrap.previous_finalized_height != recovery.finalized_height
+                    || start.bootstrap.previous_state_commitment != recovery.finalized_state_commitment
+                    || start.bootstrap.epoch_change_hash != recovery_action_hash(recovery)) {
+                    return std::unexpected(ConsensusError::InvalidGovernance);
+                }
+                auto next = ValidatorSetView::create_recovery_transition(start.validators, recovery.operators);
+                if (!next.has_value()) {
+                    return std::unexpected(next.error());
+                }
+                active_              = std::move(next.value());
+                active_bootstrap_    = start.bootstrap;
+                trusted_height_      = recovery.finalized_height;
+                trusted_header_hash_ = recovery.finalized_header_hash;
+                recovery_sequence    = recovery.recovery_sequence + 1;
+            } else {
+                return std::unexpected(ConsensusError::InvalidEpoch);
+            }
+            trusted_epoch_ = active_.document().epoch;
+            epoch_history_.push_back(start);
+        }
+        if (page.next_after_epoch.has_value() && page.next_after_epoch.value() != active_.document().epoch) {
+            return std::unexpected(ConsensusError::BootstrapIncomplete);
+        }
+        freshness_ = BootstrapFreshness::Unknown;
+        return {};
+    }
+
+    std::expected<void, ConsensusError> LightClientVerifier::confirm_freshness(
+        const std::vector<PeerFreshnessObservation>& observations) {
+        std::set<std::string> peers;
+        std::size_t           matches = 0;
+        for (const auto& observation : observations) {
+            if (observation.peer_identifier.empty() || !peers.insert(observation.peer_identifier).second) {
+                return std::unexpected(ConsensusError::InvalidProof);
+            }
+            if (observation.epoch == trusted_epoch_ && observation.height == trusted_height_
+                && observation.header_hash == trusted_header_hash_) {
+                ++matches;
+            }
+        }
+        if (peers.size() < 3 || matches < 2) {
+            return std::unexpected(ConsensusError::InvalidProof);
+        }
+        freshness_ = BootstrapFreshness::Confirmed;
+        return {};
+    }
+
+    BootstrapFreshness LightClientVerifier::freshness() const noexcept {
+        return freshness_;
     }
 
     const ValidatorSetView* LightClientVerifier::validators_for(std::uint64_t epoch,

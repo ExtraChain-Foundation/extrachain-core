@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "consensus/consensus_engine.h"
+#include "consensus/light_client.h"
 #include "utils/exc_utils.h"
 
 namespace {
@@ -23,13 +24,13 @@ namespace {
         ValidatorSet                   validator_set;
         ValidatorSetView               view;
 
-        Fixture()
-            : view(make_view()) {
+        explicit Fixture(std::size_t validator_count)
+            : view(make_view(validator_count)) {
         }
 
-        ValidatorSetView make_view() {
+        ValidatorSetView make_view(std::size_t validator_count) {
             governance.create(ActorType::Service);
-            for (std::size_t index = 0; index < 4; ++index) {
+            for (std::size_t index = 0; index < validator_count; ++index) {
                 Actor<KeyPrivate> actor;
                 actor.create(ActorType::Service);
                 KeyPrivate key;
@@ -102,6 +103,25 @@ namespace {
         };
     }
 
+    StateCommitmentV2 state_commitment(ConsensusEngine& engine, std::uint64_t height, std::string section_root) {
+        std::string previous;
+        const auto& parent = engine.safety_state().highest_certificate;
+        if (parent.has_value() && parent.value().phase != Phase::Genesis) {
+            previous = engine.proposal_for(parent.value().header_hash).value().header.state_commitment;
+        }
+        return StateCommitmentV2 {
+            .network_id                = engine.validators().document().network_id,
+            .epoch                     = engine.validators().document().epoch,
+            .height                    = height,
+            .previous_state_commitment = std::move(previous),
+            .section_root              = std::move(section_root),
+            .account_state_root        = "account-root-" + std::to_string(height),
+            .contract_state_root       = "contract-root-" + std::to_string(height),
+            .token_registry_root       = "token-root-" + std::to_string(height),
+            .validator_set_hash        = engine.validators().hash(),
+        };
+    }
+
     template <typename T>
     T require(std::expected<T, ConsensusError> result, std::string_view step) {
         if (!result.has_value()) {
@@ -118,21 +138,39 @@ namespace {
         }
     }
 
-    std::uint64_t read_height_count(int argc, char** argv) {
-        if (argc == 1) {
-            return 100;
+    struct BenchmarkOptions {
+        std::uint64_t heights         = 100;
+        std::size_t   validator_count = 4;
+    };
+
+    BenchmarkOptions read_options(int argc, char** argv) {
+        if (argc < 1 || argc > 3) {
+            throw std::invalid_argument("usage: extrachain-consensus-benchmark [height-count] [validator-count]");
         }
-        if (argc != 2) {
-            throw std::invalid_argument("usage: extrachain-consensus-benchmark [height-count]");
+        BenchmarkOptions result;
+        if (argc == 1) {
+            return result;
         }
         const std::string_view input(argv[1]);
         std::uint64_t          value  = 0;
         const auto             parsed = std::from_chars(input.data(), input.data() + input.size(), value);
         if (parsed.ec != std::errc {} || parsed.ptr != input.data() + input.size() || value < 3
-            || value > 1'000'000) {
-            throw std::invalid_argument("height-count must be an integer from 3 to 1000000");
+            || value > 10'000'000) {
+            throw std::invalid_argument("height-count must be an integer from 3 to 10000000");
         }
-        return value;
+        result.heights = value;
+        if (argc == 3) {
+            const std::string_view count_input(argv[2]);
+            std::size_t            count = 0;
+            const auto             count_parsed =
+                std::from_chars(count_input.data(), count_input.data() + count_input.size(), count);
+            if (count_parsed.ec != std::errc {} || count_parsed.ptr != count_input.data() + count_input.size()
+                || (count != 4 && count != ShadowCommitteeSize)) {
+                throw std::invalid_argument("validator-count must be 4 or 7");
+            }
+            result.validator_count = count;
+        }
+        return result;
     }
 } // namespace
 
@@ -140,11 +178,13 @@ int main(int argc, char** argv) {
     using namespace ExtraChain::Consensus;
     std::filesystem::path root;
     try {
-        const auto heights = read_height_count(argc, argv);
+        const auto options = read_options(argc, argv);
+        const auto heights = options.heights;
         root = std::filesystem::temp_directory_path() / ("shadow-bench-" + Utils::generate_random_hex(8));
         std::filesystem::create_directories(root);
 
-        Fixture                                       fixture;
+        Fixture fixture(options.validator_count);
+        auto    light_client = require(LightClientVerifier::create(fixture.validator_set), "create light client");
         std::vector<std::unique_ptr<ConsensusEngine>> engines;
         for (std::size_t index = 0; index < fixture.keys.size(); ++index) {
             auto engine =
@@ -168,11 +208,15 @@ int main(int argc, char** argv) {
             const auto& leader_record = fixture.view.leader(height, 0);
             const auto  leader_index  = identity_index(fixture, leader_record.validator_id);
 
-            auto before   = Clock::now();
-            auto proposal = require(engines[leader_index]->make_proposal(batch_manifest(height),
-                                                                         "section-root-" + std::to_string(height),
-                                                                         0),
-                                    "make proposal");
+            auto before = Clock::now();
+            auto proposal =
+                require(engines[leader_index]->make_proposal(batch_manifest(height),
+                                                             state_commitment(*engines[leader_index],
+                                                                              height,
+                                                                              "section-root-"
+                                                                                  + std::to_string(height)),
+                                                             0),
+                        "make proposal");
             proposal_time += Clock::now() - before;
             const auto proposal_hash = hash_header(proposal.header);
 
@@ -203,6 +247,14 @@ int main(int argc, char** argv) {
                 require(engine->accept_certificate(certificate.value()), "accept certificate");
             }
             certificate_time += Clock::now() - before;
+            if (height >= 3) {
+                const auto light_proofs =
+                    require(engines.front()->finality_proofs_after(height - 3, 1), "load light-client proof");
+                if (light_proofs.size() != 1) {
+                    throw std::runtime_error("light client received a non-contiguous proof stream");
+                }
+                require(light_client.advance(light_proofs.front()), "advance light client");
+            }
         }
 
         const auto elapsed      = Clock::now() - start;
@@ -215,15 +267,20 @@ int main(int argc, char** argv) {
             return engines.front()->verify_finality_proof(proof);
         });
         const bool valid        = engines.front()->safety_state().finalized_height == heights - 2
-                           && proofs.size() == heights - 2 && proofs_valid;
+                           && proofs.size() == heights - 2 && proofs_valid
+                           && light_client.trusted_height() == heights - 2;
 
-        std::printf("heights=%llu elapsed_ms=%.3f heights_s=%.3f finalized=%llu proofs=%zu valid=%s\n",
-                    static_cast<unsigned long long>(heights),
-                    milliseconds(elapsed),
-                    heights / seconds,
-                    static_cast<unsigned long long>(engines.front()->safety_state().finalized_height),
-                    proofs.size(),
-                    valid ? "yes" : "no");
+        std::printf(
+            "validators=%zu heights=%llu elapsed_ms=%.3f heights_s=%.3f finalized=%llu proofs=%zu "
+            "mobile_light=%llu valid=%s\n",
+            options.validator_count,
+            static_cast<unsigned long long>(heights),
+            milliseconds(elapsed),
+            heights / seconds,
+            static_cast<unsigned long long>(engines.front()->safety_state().finalized_height),
+            proofs.size(),
+            static_cast<unsigned long long>(light_client.trusted_height()),
+            valid ? "yes" : "no");
         std::printf("proposal_ms=%.3f stage_ms=%.3f vote_ms=%.3f aggregate_ms=%.3f certificate_ms=%.3f\n",
                     milliseconds(proposal_time),
                     milliseconds(stage_time),
