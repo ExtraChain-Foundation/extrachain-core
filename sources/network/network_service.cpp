@@ -1209,12 +1209,19 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         message_type == MessageType::DagSections || message_type == MessageType::DagLightData
         || message_type == MessageType::DagFileSections || message_type == MessageType::DagPackData
         || message_type == MessageType::DagCacheSnapshotData;
+    const bool high_priority_shadow =
+        message_type == MessageType::ConsensusChallenge || message_type == MessageType::ConsensusAuthentication
+        || message_type == MessageType::ConsensusProposal || message_type == MessageType::ConsensusVote
+        || message_type == MessageType::ConsensusCertificate || message_type == MessageType::ConsensusTimeoutVote
+        || message_type == MessageType::ConsensusTimeoutCertificate
+        || message_type == MessageType::ConsensusBatchRequest || message_type == MessageType::ConsensusSyncRequest;
     if (message_type == MessageType::Custom || message_type == MessageType::NewActor
         || message_type == MessageType::DagTransactionResult || message_type == MessageType::DagIntervalHash
         || message_type == MessageType::DagSyncLastInfo || message_type == MessageType::DagControlRangeRequest
         || message_type == MessageType::DagControlRangeResponse || message_type == MessageType::DagPackList
         || message_type == MessageType::DagPackRequest || message_type == MessageType::DagCacheSnapshotRequest
-        || message_type == MessageType::TokenMigrationReadiness || high_priority_dag_sync) {
+        || message_type == MessageType::TokenMigrationReadiness || high_priority_dag_sync
+        || high_priority_shadow) {
         priority = SocketService::Priority::High;
     }
 
@@ -1917,7 +1924,13 @@ void NetworkService::message_received(const std::string &message,
     case MessageType::ConsensusAuthentication:
     case MessageType::ConsensusProposal:
     case MessageType::ConsensusVote:
-    case MessageType::ConsensusCertificate: {
+    case MessageType::ConsensusCertificate:
+    case MessageType::ConsensusTimeoutVote:
+    case MessageType::ConsensusTimeoutCertificate:
+    case MessageType::ConsensusBatchRequest:
+    case MessageType::ConsensusBatchData:
+    case MessageType::ConsensusSyncRequest:
+    case MessageType::ConsensusSyncResponse: {
         if (node->consensus() != nullptr) {
             node->consensus()->receive_network_message(type, status, serialized, responder, identifier);
         }

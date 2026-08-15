@@ -34,16 +34,37 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError>                       open();
         std::expected<std::optional<SafetyState>, ConsensusError> load_state();
         std::expected<bool, ConsensusError> persist_vote(const Vote& vote, const SafetyState& state);
+        std::expected<bool, ConsensusError> persist_timeout_vote(const TimeoutVote& vote,
+                                                                 const SafetyState& state);
         std::expected<void, ConsensusError> persist_state(const SafetyState& state);
         std::expected<void, ConsensusError> persist_proposal(const Proposal& proposal);
+        std::expected<void, ConsensusError> persist_batch(const SectionBatchData& batch, std::uint64_t height);
+        std::expected<void, ConsensusError> persist_proposal_batch(const Proposal&         proposal,
+                                                                   const SectionBatchData& batch);
+        std::expected<bool, ConsensusError> persist_proposal_batch_vote(const Proposal&         proposal,
+                                                                        const SectionBatchData& batch,
+                                                                        const Vote&             vote,
+                                                                        const SafetyState&      state);
         std::expected<void, ConsensusError> persist_certificate_state(const QuorumCertificate& certificate,
-                                                                      const SafetyState&       state);
-        std::expected<std::vector<Proposal>, ConsensusError>          load_proposals(std::uint64_t minimum_height);
-        std::expected<std::vector<QuorumCertificate>, ConsensusError> load_certificates(
+                                                                      const SafetyState&       state,
+                                                                      const std::optional<FinalityProof>& proof);
+        std::expected<void, ConsensusError> persist_timeout_certificate_state(
+            const TimeoutCertificate& certificate,
+            const SafetyState&        state);
+        std::expected<std::vector<Proposal>, ConsensusError> load_proposals(std::uint64_t minimum_height);
+        std::expected<std::optional<SectionBatchData>, ConsensusError> load_batch(std::string_view header_hash);
+        std::expected<std::vector<QuorumCertificate>, ConsensusError>  load_certificates(
+             std::uint64_t minimum_height);
+        std::expected<std::vector<TimeoutCertificate>, ConsensusError> load_timeout_certificates(
             std::uint64_t minimum_height);
+        std::expected<std::vector<FinalityProof>, ConsensusError> load_finality_proofs_after(std::uint64_t height,
+                                                                                             std::size_t   limit);
+        std::expected<std::optional<FinalityProof>, ConsensusError> load_finality_proof_for_section(
+            std::uint64_t section);
 
     private:
         [[nodiscard]] static std::string    vote_key(const Vote& vote);
+        [[nodiscard]] static std::string    timeout_vote_key(const TimeoutVote& vote);
         std::expected<void, ConsensusError> persist_state_unlocked(const SafetyState& state);
 
         std::filesystem::path        database_path_;

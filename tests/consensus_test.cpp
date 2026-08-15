@@ -63,6 +63,43 @@ namespace {
         }
         throw std::runtime_error("validator identity is absent");
     }
+
+    std::vector<std::pair<std::uint64_t, std::string>> batch_sections(std::uint64_t height) {
+        std::vector<std::pair<std::uint64_t, std::string>> sections;
+        const auto                                         first = (height - 1) * 20 + 1;
+        for (std::uint64_t section = first; section <= height * 20; ++section) {
+            sections.emplace_back(section,
+                                  "section-data-" + std::to_string(height) + '-' + std::to_string(section));
+        }
+        return sections;
+    }
+
+    SectionBatchManifest batch_manifest(std::uint64_t height) {
+        const auto    transaction_hash = "transaction-" + std::to_string(height);
+        const auto    sections         = batch_sections(height);
+        std::uint64_t payload_bytes    = 0;
+        for (const auto& [_, bytes] : sections) {
+            payload_bytes += bytes.size();
+        }
+        return SectionBatchManifest {
+            .first_section      = (height - 1) * 20 + 1,
+            .last_section       = height * 20,
+            .transaction_hashes = { transaction_hash },
+            .transaction_root   = calculate_transaction_root({ transaction_hash }),
+            .data_root          = calculate_data_root(sections),
+            .previous_section_root =
+                height == 1 ? "activation-root" : "section-root-" + std::to_string(height - 1),
+            .payload_bytes = payload_bytes,
+        };
+    }
+
+    SectionBatchData batch_data(std::uint64_t height, std::string header_hash) {
+        return SectionBatchData {
+            .header_hash = std::move(header_hash),
+            .manifest    = batch_manifest(height),
+            .sections    = batch_sections(height),
+        };
+    }
 } // namespace
 
 int main() {
@@ -149,6 +186,19 @@ int main() {
         const auto observer = ShadowConsensus::load(observer_directory, fixture.governance.id());
         check("observer loads without a private validator key",
               observer.has_value() && !observer.value()->engine().identity().has_value());
+        const auto finality_directory = root / "finality-validator";
+        check("finality configuration is written atomically",
+              ShadowConsensus::write_configuration(finality_directory,
+                                                   ShadowConfiguration { .mode              = ShadowMode::Finality,
+                                                                         .activation_height = 10,
+                                                                         .activation_dag_section = 200 })
+                  .has_value());
+        check("finality configuration requires an activation section",
+              !ShadowConsensus::write_configuration(finality_directory,
+                                                    ShadowConfiguration { .mode = ShadowMode::Finality,
+                                                                          .activation_height      = 1,
+                                                                          .activation_dag_section = 0 })
+                   .has_value());
     }
 
     std::vector<std::unique_ptr<ConsensusEngine>> engines;
@@ -164,22 +214,71 @@ int main() {
         engines.push_back(std::move(engine));
     }
 
+    std::optional<TimeoutCertificate> timeout_certificate;
+    std::size_t                       timeout_vote_count = 0;
+    for (auto& engine : engines) {
+        const auto timeout_vote = engine->make_timeout_vote(1, 0);
+        check("validator persists a timeout vote", timeout_vote.has_value());
+        if (!timeout_vote.has_value()) {
+            continue;
+        }
+        const auto accepted = engines.front()->accept_timeout_vote(timeout_vote.value());
+        check("timeout vote is accepted", accepted.has_value());
+        ++timeout_vote_count;
+        if (timeout_vote_count == 2) {
+            check("a two-validator partition cannot change the round",
+                  accepted.has_value() && !accepted.value().certificate.has_value());
+        }
+        if (accepted.has_value() && accepted.value().certificate.has_value()) {
+            timeout_certificate = accepted.value().certificate;
+        }
+    }
+    check("timeout quorum forms a certificate", timeout_certificate.has_value());
+    if (timeout_certificate.has_value()) {
+        auto invalid_timeout_certificate = timeout_certificate.value();
+        invalid_timeout_certificate.signatures.front()[0] =
+            invalid_timeout_certificate.signatures.front()[0] == 'A' ? 'B' : 'A';
+        check("timeout certificate with a changed signature is rejected",
+              !engines.front()->verify_timeout_certificate(invalid_timeout_certificate));
+        for (auto& engine : engines) {
+            check("timeout certificate advances the round",
+                  engine->accept_timeout_certificate(timeout_certificate.value()).has_value()
+                      && engine->safety_state().current_round == 1);
+        }
+    }
+
     std::optional<FinalizedCheckpoint> finalized;
     Proposal                           last_proposal;
     for (std::uint64_t height = 1; height <= 3; ++height) {
-        const auto& leader_record = fixture.view.leader(height, 0);
+        const auto  round         = height == 1 ? std::uint64_t(1) : std::uint64_t(0);
+        const auto& leader_record = fixture.view.leader(height, round);
         const auto  leader_index  = identity_index(fixture, leader_record.validator_id);
-        auto        proposal      = engines[leader_index]->make_proposal(height * 20,
+        auto        proposal      = engines[leader_index]->make_proposal(batch_manifest(height),
                                                              "section-root-" + std::to_string(height),
-                                                             "transaction-root-" + std::to_string(height));
+                                                             round);
         check("scheduled leader creates proposal", proposal.has_value());
         if (!proposal.has_value()) {
             break;
         }
         last_proposal = proposal.value();
 
+        const auto proposal_hash = hash_header(proposal.value().header);
+        check("leader stores proposal data before voting",
+              engines[leader_index]->stage_batch(batch_data(height, proposal_hash)).has_value());
+
         std::optional<QuorumCertificate> certificate;
-        for (auto& engine : engines) {
+        for (std::size_t index = 0; index < engines.size(); ++index) {
+            auto& engine = engines[index];
+            if (index != leader_index) {
+                check("validator observes a proposal before data arrives",
+                      engine->observe_proposal(proposal.value()).has_value());
+                const auto unavailable_vote = engine->accept_proposal(proposal.value());
+                check("validator refuses to vote before durable data",
+                      !unavailable_vote.has_value()
+                          && unavailable_vote.error() == ConsensusError::DataUnavailable);
+                check("validator stores proposal data before voting",
+                      engine->stage_batch(batch_data(height, proposal_hash)).has_value());
+            }
             const auto vote = engine->accept_proposal(proposal.value());
             check("validator accepts safe proposal", vote.has_value());
             if (!vote.has_value()) {
@@ -207,12 +306,43 @@ int main() {
           finalized.has_value() && finalized.value().height == 1);
     check("finalized checkpoint keeps the DAG section",
           finalized.has_value() && finalized.value().dag_section == 20);
+    const auto proofs = engines.front()->finality_proofs_after(0, 8);
+    check("finality creates a portable three-chain proof",
+          proofs.has_value() && proofs.value().size() == 1
+              && engines.front()->verify_finality_proof(proofs.value().front()));
+    if (proofs.has_value() && !proofs.value().empty()) {
+        auto changed_proof                             = proofs.value().front();
+        changed_proof.decision_certificate.header_hash = "changed-header";
+        check("a changed finality proof is rejected", !engines.front()->verify_finality_proof(changed_proof));
+    } else {
+        check("a changed finality proof is rejected", false);
+    }
     if (!finalized.has_value()) {
         engines.clear();
         std::filesystem::remove_all(root);
         std::printf("CONSENSUS: %d pass, %d fail\n", passed, failed);
         return 1;
     }
+    check("the finalized batch remains available for repair",
+          engines.front()->batch_for(finalized.value().header_hash).has_value());
+    check("batch lookup treats a peer hash as data", !engines.front()->batch_for("' OR 1=1 --").has_value());
+
+    const auto observer_path = root / "durable-observer.sqlite";
+    auto       observer      = std::make_unique<ConsensusEngine>(fixture.view,
+                                                      std::nullopt,
+                                                      std::make_unique<SafetyStore>(observer_path));
+    check("observer engine initializes", observer->initialize().has_value());
+    const auto observed_hash = hash_header(last_proposal.header);
+    check("observer accepts a valid proposal", observer->observe_proposal(last_proposal).has_value());
+    check("observer stores proposal and batch atomically",
+          observer->stage_batch(batch_data(last_proposal.header.height, observed_hash)).has_value());
+    observer.reset();
+    observer = std::make_unique<ConsensusEngine>(fixture.view,
+                                                 std::nullopt,
+                                                 std::make_unique<SafetyStore>(observer_path));
+    check("observer restarts from durable proposal and batch",
+          observer->initialize().has_value() && observer->batch_for(observed_hash).has_value());
+    observer.reset();
 
     auto invalid_certificate                  = engines.front()->safety_state().highest_certificate.value();
     invalid_certificate.signatures.front()[0] = invalid_certificate.signatures.front()[0] == 'A' ? 'B' : 'A';
@@ -251,7 +381,7 @@ int main() {
     conflicting_proposal.header.state_commitment =
         Utils::calculate_hash("EXC_CONSENSUS_STATE_V1" + hash_certificate(conflicting_proposal.parent_certificate)
                                   + conflicting_proposal.header.section_root
-                                  + conflicting_proposal.header.transaction_root + fixture.view.hash(),
+                                  + conflicting_proposal.header.batch_root + fixture.view.hash(),
                               Utils::HashAlgorithm::Blake3);
     conflicting_proposal.signature =
         sign_payload(fixture.keys[leader_index], proposal_signing_payload(conflicting_proposal)).value();
@@ -293,6 +423,15 @@ int main() {
           restarted->safety_state().last_voted_height == restart_state.last_voted_height);
     check("restart restores finality height",
           restarted->safety_state().finalized_height == restart_state.finalized_height);
+    check("restart restores durable proposal data",
+          restarted->batch_for(finalized.value().header_hash).has_value());
+    const auto restarted_proofs = restarted->finality_proofs_after(0, 8);
+    check("restart restores the finality proof index",
+          restarted_proofs.has_value() && restarted_proofs.value().size() == 1
+              && restarted->verify_finality_proof(restarted_proofs.value().front()));
+    const auto restarted_timeout = restarted->make_timeout_vote(4, 0);
+    check("restart restores the high certificate used by timeout votes",
+          restarted_timeout.has_value() && restarted->accept_timeout_vote(restarted_timeout.value()).has_value());
 
     restarted.reset();
     engines.clear();

@@ -51,6 +51,7 @@ add_core_test_executable(extrachain-token-registry token_registry.cpp)
 add_core_test_executable(extrachain-dag-recovery dag_recovery.cpp)
 add_core_test_executable(extrachain-runtime-tests runtime/runtime_test.cpp)
 add_core_test_executable(extrachain-consensus-tests consensus_test.cpp)
+add_core_test_executable(extrachain-consensus-benchmark consensus_benchmark.cpp)
 
 if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)
     add_executable(extrachain-qt-compat-tests qt_compat_test.cpp)

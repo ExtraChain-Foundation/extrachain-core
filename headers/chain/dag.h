@@ -37,6 +37,7 @@
 #include "chain/dag_cache.h"
 #include "chain/chain_index.h"
 #include "chain/control_index.h"
+#include "consensus/consensus_types.h"
 #include "chain/pack_registry.h"
 #include "chain/hot_section_store.h"
 #include "runtime/event.h"
@@ -601,6 +602,16 @@ public:
      * @return std::optional<Section> The section if found, or nullopt
      */
     std::optional<Section> read_section(const SectionId &section_id) const;
+    std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError>
+    build_shadow_batch(const SectionId &first_section, const SectionId &last_section, std::string header_hash);
+    std::expected<void, ExtraChain::Consensus::ConsensusError> validate_shadow_batch(
+        const ExtraChain::Consensus::Proposal         &proposal,
+        const ExtraChain::Consensus::SectionBatchData &batch,
+        std::uint64_t                                  maximum_batch_bytes);
+    std::expected<void, ExtraChain::Consensus::ConsensusError> install_shadow_batch(
+        const ExtraChain::Consensus::Proposal         &proposal,
+        const ExtraChain::Consensus::SectionBatchData &batch,
+        std::uint64_t                                  maximum_batch_bytes);
 
     /**
      * @brief exists_section_file
@@ -847,8 +858,12 @@ private:
     std::uint64_t                                search_control_started_ms_   = 0;
     std::string                                  search_control_message_id_;
     SectionId                                    historical_control_cursor_    = SectionId(-1);
+    SectionId                                    latest_audited_control_       = SectionId(-1);
+    SectionId                                    pending_audit_next_cursor_    = SectionId(-1);
+    SectionId                                    pending_audit_control_        = SectionId(-1);
     std::uint64_t                                historical_audit_started_ms_  = 0;
     bool                                         historical_recent_audit_done_ = false;
+    bool                                         pending_audit_recent_         = false;
     bool                                         light_requested_              = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
@@ -952,17 +967,17 @@ private:
 
     //
     void add_to_cached_tx(const Transaction &transaction, const Responder &responder);
-    void                                           schedule_watchdog_tick();
-    void                                           watchdog_tick();
-    void                                           schedule_sync_check();
-    void                                           sync_check();
-    void                                           clear_pending_sync_responses();
-    bool                                           track_pending_sync_response(const Responder    &responder,
-                                                                               const SectionId    &from,
-                                                                               const SectionId    &to,
-                                                                               bool                file_response,
-                                                                               bool                repair_response = false,
-                                                                               SyncRequestPriority priority = SyncRequestPriority::Tip);
+    void schedule_watchdog_tick();
+    void watchdog_tick();
+    void schedule_sync_check();
+    void sync_check();
+    void clear_pending_sync_responses();
+    bool track_pending_sync_response(const Responder    &responder,
+                                     const SectionId    &from,
+                                     const SectionId    &to,
+                                     bool                file_response,
+                                     bool                repair_response = false,
+                                     SyncRequestPriority priority        = SyncRequestPriority::Tip);
     std::optional<std::pair<SectionId, SectionId>> pending_sync_range(const Responder &responder,
                                                                       const SectionId &to,
                                                                       bool             file_response) const;
@@ -970,6 +985,8 @@ private:
     bool                     pending_sync_is_repair(const Responder &responder) const;
     void                     schedule_section_repair(const SectionId &section_id);
     void                     schedule_progressive_audit();
+    void                     commit_progressive_audit();
+    void                     clear_pending_progressive_audit();
     void                     reset_progressive_audit();
     std::optional<SectionId> invalid_control_in_window(const SectionId &from, const SectionId &to);
     std::optional<std::map<SectionId, std::string>> collect_repair_vote(

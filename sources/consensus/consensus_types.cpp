@@ -20,15 +20,20 @@
 
 namespace ExtraChain::Consensus {
     namespace {
-        constexpr std::string_view ValidatorIdDomain  = "EXC_CONSENSUS_VALIDATOR_ID_V1";
-        constexpr std::string_view ValidatorDomain    = "EXC_CONSENSUS_VALIDATOR_BINDING_V1";
-        constexpr std::string_view ValidatorSetDomain = "EXC_CONSENSUS_VALIDATOR_SET_V1";
-        constexpr std::string_view HeaderDomain       = "EXC_CONSENSUS_HEADER_V1";
-        constexpr std::string_view ProposalDomain     = "EXC_CONSENSUS_PROPOSAL_V1";
-        constexpr std::string_view VoteDomain         = "EXC_CONSENSUS_VOTE_V1";
-        constexpr std::string_view CertificateDomain  = "EXC_CONSENSUS_CERTIFICATE_V1";
-        constexpr std::string_view ChallengeDomain    = "EXC_CONSENSUS_AUTH_CHALLENGE_V1";
-        constexpr std::string_view AuthResponseDomain = "EXC_CONSENSUS_AUTH_RESPONSE_V1";
+        constexpr std::string_view ValidatorIdDomain        = "EXC_CONSENSUS_VALIDATOR_ID_V1";
+        constexpr std::string_view ValidatorDomain          = "EXC_CONSENSUS_VALIDATOR_BINDING_V1";
+        constexpr std::string_view ValidatorSetDomain       = "EXC_CONSENSUS_VALIDATOR_SET_V1";
+        constexpr std::string_view HeaderDomain             = "EXC_CONSENSUS_HEADER_V1";
+        constexpr std::string_view BatchDomain              = "EXC_SHADOW_BATCH_V1";
+        constexpr std::string_view TransactionRootDomain    = "EXC_SHADOW_TRANSACTION_ROOT_V1";
+        constexpr std::string_view DataRootDomain           = "EXC_SHADOW_DATA_ROOT_V1";
+        constexpr std::string_view ProposalDomain           = "EXC_CONSENSUS_PROPOSAL_V1";
+        constexpr std::string_view VoteDomain               = "EXC_CONSENSUS_VOTE_V1";
+        constexpr std::string_view TimeoutVoteDomain        = "EXC_SHADOW_TIMEOUT_VOTE_V1";
+        constexpr std::string_view CertificateDomain        = "EXC_CONSENSUS_CERTIFICATE_V1";
+        constexpr std::string_view TimeoutCertificateDomain = "EXC_SHADOW_TIMEOUT_CERTIFICATE_V1";
+        constexpr std::string_view ChallengeDomain          = "EXC_CONSENSUS_AUTH_CHALLENGE_V1";
+        constexpr std::string_view AuthResponseDomain       = "EXC_CONSENSUS_AUTH_RESPONSE_V1";
 
         template <typename T>
         std::string domain_hash(std::string_view domain, const T& value) {
@@ -84,14 +89,39 @@ namespace ExtraChain::Consensus {
         return domain_hash(HeaderDomain, header);
     }
 
+    std::string hash_batch_manifest(const SectionBatchManifest& manifest) {
+        return domain_hash(BatchDomain, manifest);
+    }
+
+    std::string calculate_transaction_root(const std::vector<std::string>& hashes) {
+        return domain_hash(TransactionRootDomain, hashes);
+    }
+
+    std::string calculate_data_root(const std::vector<std::pair<std::uint64_t, std::string>>& sections) {
+        std::vector<std::pair<std::uint64_t, std::string>> hashes;
+        hashes.reserve(sections.size());
+        for (const auto& [section, bytes] : sections) {
+            hashes.emplace_back(section, Utils::calculate_hash(bytes, Utils::HashAlgorithm::Blake3));
+        }
+        return domain_hash(DataRootDomain, hashes);
+    }
+
     std::string hash_certificate(const QuorumCertificate& certificate) {
         return domain_hash(CertificateDomain, certificate);
+    }
+
+    std::string hash_timeout_certificate(const TimeoutCertificate& certificate) {
+        return domain_hash(TimeoutCertificateDomain, certificate);
     }
 
     std::string proposal_signing_payload(const Proposal& proposal) {
         return domain_payload(ProposalDomain,
                               std::tuple { hash_header(proposal.header),
+                                           hash_batch_manifest(proposal.batch),
                                            hash_certificate(proposal.parent_certificate),
+                                           proposal.timeout_certificate.has_value()
+                                               ? hash_timeout_certificate(proposal.timeout_certificate.value())
+                                               : std::string {},
                                            proposal.proposer_id });
     }
 
@@ -104,6 +134,17 @@ namespace ExtraChain::Consensus {
                                            vote.round,
                                            vote.phase,
                                            vote.header_hash,
+                                           vote.validator_id });
+    }
+
+    std::string timeout_vote_signing_payload(const TimeoutVote& vote) {
+        return domain_payload(TimeoutVoteDomain,
+                              std::tuple { vote.protocol_version,
+                                           vote.network_id,
+                                           vote.epoch,
+                                           vote.height,
+                                           vote.round,
+                                           vote.highest_certificate_hash,
                                            vote.validator_id });
     }
 

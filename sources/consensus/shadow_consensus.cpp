@@ -15,9 +15,10 @@
 
 namespace ExtraChain::Consensus {
     namespace {
-        constexpr std::string_view ValidatorSetFile = "validator-set.msgpack";
-        constexpr std::string_view IdentityFile     = "identity.msgpack";
-        constexpr std::string_view SafetyFile       = "safety.sqlite";
+        constexpr std::string_view ValidatorSetFile  = "validator-set.msgpack";
+        constexpr std::string_view IdentityFile      = "identity.msgpack";
+        constexpr std::string_view SafetyFile        = "safety.sqlite";
+        constexpr std::string_view ConfigurationFile = "shadow-config.msgpack";
 
         template <typename T>
         std::expected<T, ConsensusError> read_document(const std::filesystem::path& path) {
@@ -42,8 +43,9 @@ namespace ExtraChain::Consensus {
         }
     } // namespace
 
-    ShadowConsensus::ShadowConsensus(std::unique_ptr<ConsensusEngine> engine)
-        : engine_(std::move(engine)) {
+    ShadowConsensus::ShadowConsensus(std::unique_ptr<ConsensusEngine> engine, ShadowConfiguration configuration)
+        : engine_(std::move(engine))
+        , configuration_(configuration) {
     }
 
     std::expected<std::unique_ptr<ShadowConsensus>, ConsensusError> ShadowConsensus::load(
@@ -86,6 +88,26 @@ namespace ExtraChain::Consensus {
                 ValidatorIdentity { .validator_id = document.value().validator_id, .key = document.value().key };
         }
 
+        ShadowConfiguration configuration;
+        if (std::filesystem::exists(directory / ConfigurationFile)) {
+            const auto loaded_configuration = read_document<ShadowConfiguration>(directory / ConfigurationFile);
+            if (!loaded_configuration.has_value()
+                || loaded_configuration.value().protocol_version != ProtocolVersion
+                || (loaded_configuration.value().mode != ShadowMode::Observe
+                    && loaded_configuration.value().mode != ShadowMode::Finality)
+                || loaded_configuration.value().proposal_timeout_ms == 0
+                || loaded_configuration.value().maximum_timeout_ms
+                       < loaded_configuration.value().proposal_timeout_ms
+                || loaded_configuration.value().maximum_batch_bytes == 0
+                || loaded_configuration.value().maximum_batch_bytes > MaximumShadowBatchBytes
+                || loaded_configuration.value().activation_dag_section % ShadowSectionInterval != 0
+                || (loaded_configuration.value().mode == ShadowMode::Finality
+                    && loaded_configuration.value().activation_dag_section == 0)) {
+                return std::unexpected(ConsensusError::InvalidProtocol);
+            }
+            configuration = loaded_configuration.value();
+        }
+
         auto       engine      = std::make_unique<ConsensusEngine>(std::move(validators.value()),
                                                         std::move(identity),
                                                         std::make_unique<SafetyStore>(directory / SafetyFile),
@@ -94,7 +116,7 @@ namespace ExtraChain::Consensus {
         if (!initialized.has_value()) {
             return std::unexpected(initialized.error());
         }
-        return std::unique_ptr<ShadowConsensus>(new ShadowConsensus(std::move(engine)));
+        return std::unique_ptr<ShadowConsensus>(new ShadowConsensus(std::move(engine), configuration));
     }
 
     std::expected<void, ConsensusError> ShadowConsensus::write_identity(const std::filesystem::path& directory,
@@ -139,6 +161,27 @@ namespace ExtraChain::Consensus {
         return write_document(directory / ValidatorSetFile, validators);
     }
 
+    std::expected<void, ConsensusError> ShadowConsensus::write_configuration(
+        const std::filesystem::path& directory,
+        const ShadowConfiguration&   configuration) {
+        if (configuration.protocol_version != ProtocolVersion
+            || (configuration.mode != ShadowMode::Observe && configuration.mode != ShadowMode::Finality)
+            || configuration.proposal_timeout_ms == 0
+            || configuration.maximum_timeout_ms < configuration.proposal_timeout_ms
+            || configuration.maximum_batch_bytes == 0
+            || configuration.maximum_batch_bytes > MaximumShadowBatchBytes
+            || configuration.activation_dag_section % ShadowSectionInterval != 0
+            || (configuration.mode == ShadowMode::Finality && configuration.activation_dag_section == 0)) {
+            return std::unexpected(ConsensusError::InvalidProtocol);
+        }
+        std::error_code error;
+        std::filesystem::create_directories(directory, error);
+        if (error) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        return write_document(directory / ConfigurationFile, configuration);
+    }
+
     std::expected<std::optional<Proposal>, ConsensusError> ShadowConsensus::make_checkpoint_proposal(
         ShadowCheckpoint checkpoint,
         std::uint64_t    round) {
@@ -149,10 +192,8 @@ namespace ExtraChain::Consensus {
         if (!engine_->is_local_leader(height, round)) {
             return std::optional<Proposal> {};
         }
-        auto proposal = engine_->make_proposal(checkpoint.dag_section,
-                                               std::move(checkpoint.section_root),
-                                               std::move(checkpoint.transaction_root),
-                                               round);
+        auto proposal =
+            engine_->make_proposal(std::move(checkpoint.batch), std::move(checkpoint.section_root), round);
         if (!proposal.has_value()) {
             return std::unexpected(proposal.error());
         }
@@ -187,6 +228,25 @@ namespace ExtraChain::Consensus {
         return engine_->accept_vote(vote);
     }
 
+    std::expected<TimeoutVote, ConsensusError> ShadowConsensus::make_timeout_vote(std::uint64_t height,
+                                                                                  std::uint64_t round) {
+        return engine_->make_timeout_vote(height, round);
+    }
+
+    std::expected<TimeoutAcceptance, ConsensusError> ShadowConsensus::receive_timeout_vote(
+        const TimeoutVote& vote,
+        std::string_view   peer_identifier) {
+        if (!peer_matches_validator(vote.validator_id, peer_identifier)) {
+            return std::unexpected(ConsensusError::InvalidValidator);
+        }
+        return engine_->accept_timeout_vote(vote);
+    }
+
+    std::expected<void, ConsensusError> ShadowConsensus::receive_timeout_certificate(
+        const TimeoutCertificate& certificate) {
+        return engine_->accept_timeout_certificate(certificate);
+    }
+
     std::expected<std::optional<FinalizedCheckpoint>, ConsensusError> ShadowConsensus::receive_certificate(
         const QuorumCertificate& certificate) {
         return engine_->accept_certificate(certificate);
@@ -198,6 +258,10 @@ namespace ExtraChain::Consensus {
 
     ConsensusEngine& ShadowConsensus::engine() noexcept {
         return *engine_;
+    }
+
+    const ShadowConfiguration& ShadowConsensus::configuration() const noexcept {
+        return configuration_;
     }
 
     bool ShadowConsensus::peer_matches_validator(std::string_view validator_id,

@@ -230,7 +230,7 @@ SocketService::Data SocketService::generate_first_message() {
         .capabilities = std::set<std::string> { std::string(DAG_TX_BATCH_CAPABILITY),
                                                 std::string(TOKEN_MIGRATION_CAPABILITY),
                                                 std::string(DAG_REPAIR_CAPABILITY),
-                                                std::string(IDENTITY_BFT_SHADOW_CAPABILITY) },
+                                                std::string(SHADOW_CONSENSUS_CAPABILITY) },
     };
 
     message.connections = context_.shareable_peers(ip_);

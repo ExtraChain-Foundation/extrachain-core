@@ -8,6 +8,7 @@
 #include "chain/dag.h"
 #include "chain/dag_quarantine.h"
 #include "core/extrachain_node.h"
+#include "managers/account_controller.h"
 #include "network/responder.h"
 #include "test_support.h"
 
@@ -59,6 +60,7 @@ int main() {
     auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 0);
     node->process();
     node->dag()->set_mode(DagMode::Full);
+    node->account_controller()->create_profile("dag-recovery-profile", ActorType::User, actor);
 
     const auto make_reward = [&actor](const SectionId &section, std::uint64_t timestamp) {
         Transaction reward;
@@ -77,23 +79,64 @@ int main() {
     TEST_REQUIRE(node->dag()->save_transaction(make_reward(SectionId(45), 2)));
     node->dag()->cache().write_cached_balances({}, SectionId(40));
     TEST_REQUIRE(node->dag()->generate_hash_from_section(SectionId(0), Force::Active, Force::None).has_value());
-    TEST_REQUIRE(node->dag()->read_control(SectionId(20)).has_value());
-    TEST_REQUIRE(node->dag()->read_control(SectionId(40)).has_value());
-    const auto control_20_before = node->dag()->read_control(SectionId(20))->control;
-    const auto control_40_before = node->dag()->read_control(SectionId(40))->control;
+    const auto initial_control_20 = node->dag()->read_control(SectionId(20));
+    const auto initial_control_40 = node->dag()->read_control(SectionId(40));
+    TEST_REQUIRE(initial_control_20.has_value());
+    TEST_REQUIRE(initial_control_40.has_value());
+    const auto control_20_before = initial_control_20.value().control;
+    const auto control_40_before = initial_control_40.value().control;
 
+    auto shadow_batch = node->dag()->build_shadow_batch(SectionId(1), SectionId(20), {});
+    TEST_REQUIRE(shadow_batch.has_value());
+    ExtraChain::Consensus::Proposal shadow_proposal {
+        .header =
+            ExtraChain::Consensus::ConsensusHeader {
+                .dag_section      = 20,
+                .section_root     = control_20_before,
+                .transaction_root = shadow_batch.value().manifest.transaction_root,
+                .batch_root       = ExtraChain::Consensus::hash_batch_manifest(shadow_batch.value().manifest),
+            },
+        .batch = shadow_batch.value().manifest,
+    };
+    shadow_batch.value().header_hash = ExtraChain::Consensus::hash_header(shadow_proposal.header);
+    const auto shadow_validation =
+        node->dag()->validate_shadow_batch(shadow_proposal, shadow_batch.value(), 16ULL * 1024ULL * 1024ULL);
+    TEST_REQUIRE_MESSAGE(shadow_validation.has_value(),
+                         shadow_validation.has_value()
+                             ? std::string {}
+                             : std::to_string(std::to_underlying(shadow_validation.error())));
+    auto corrupted_shadow_batch = shadow_batch.value();
+    corrupted_shadow_batch.sections.front().second.push_back('x');
+    TEST_REQUIRE(!node->dag()
+                      ->validate_shadow_batch(shadow_proposal, corrupted_shadow_batch, 16ULL * 1024ULL * 1024ULL)
+                      .has_value());
     const auto historical_reward = make_reward(SectionId(5), 3);
     TEST_REQUIRE(node->dag()->save_transaction(historical_reward));
-    TEST_REQUIRE(node->dag()->read_control(SectionId(20)).has_value());
-    TEST_REQUIRE(node->dag()->read_control(SectionId(40)).has_value());
-    const auto control_20_after = node->dag()->read_control(SectionId(20))->control;
-    const auto control_40_after = node->dag()->read_control(SectionId(40))->control;
+    const auto changed_control_20 = node->dag()->read_control(SectionId(20));
+    const auto changed_control_40 = node->dag()->read_control(SectionId(40));
+    TEST_REQUIRE(changed_control_20.has_value());
+    TEST_REQUIRE(changed_control_40.has_value());
+    const auto control_20_after = changed_control_20.value().control;
+    const auto control_40_after = changed_control_40.value().control;
     TEST_REQUIRE(control_20_after != control_20_before);
     TEST_REQUIRE(control_40_after != control_40_before);
 
     TEST_REQUIRE(node->dag()->save_transaction(historical_reward));
-    TEST_REQUIRE_EQ(node->dag()->read_control(SectionId(20))->control, control_20_after);
-    TEST_REQUIRE_EQ(node->dag()->read_control(SectionId(40))->control, control_40_after);
+    const auto unchanged_control_20 = node->dag()->read_control(SectionId(20));
+    const auto unchanged_control_40 = node->dag()->read_control(SectionId(40));
+    TEST_REQUIRE(unchanged_control_20.has_value());
+    TEST_REQUIRE(unchanged_control_40.has_value());
+    TEST_REQUIRE_EQ(unchanged_control_20.value().control, control_20_after);
+    TEST_REQUIRE_EQ(unchanged_control_40.value().control, control_40_after);
+
+    TEST_REQUIRE(node->dag()
+                     ->install_shadow_batch(shadow_proposal, shadow_batch.value(), 16ULL * 1024ULL * 1024ULL)
+                     .has_value());
+    const auto installed_control_20   = node->dag()->read_control(SectionId(20));
+    const auto invalidated_control_40 = node->dag()->read_control(SectionId(40));
+    TEST_REQUIRE(installed_control_20.has_value());
+    TEST_REQUIRE_EQ(installed_control_20.value().control, control_20_before);
+    TEST_REQUIRE(!invalidated_control_40.has_value());
 
     node->dag()->cache().write_cached_balances({}, SectionId(123));
     TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(123));
@@ -131,7 +174,6 @@ int main() {
     node->dag()->cache().write_cached_balance(actor.id(), actor.id(), BigNumberFloat("321"));
     TEST_REQUIRE_EQ(node->dag()->cache().read_cached_balance(actor.id(), actor.id()), BigNumberFloat("321"));
 
-    TEST_REQUIRE(node->actor_index()->store_new_actor(actor.to_public()).has_value());
     node->dag()->set_status(DagStatus::Ready);
     const auto future_reward = make_reward(node->dag()->current_section() + SectionId(CACHE_LAG_SECTIONS + 1), 4);
     CapturingSender future_sender;

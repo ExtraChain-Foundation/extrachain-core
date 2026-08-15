@@ -24,10 +24,10 @@
 #include <string>
 #include <string_view>
 
-inline constexpr std::string_view DAG_TX_BATCH_CAPABILITY         = "dag_tx_batch_v1";
-inline constexpr std::string_view TOKEN_MIGRATION_CAPABILITY      = "contract_token_migration_v1";
-inline constexpr std::string_view DAG_REPAIR_CAPABILITY           = "dag_repair_v1";
-inline constexpr std::string_view IDENTITY_BFT_SHADOW_CAPABILITY  = "identity_bft_shadow_v1";
+inline constexpr std::string_view DAG_TX_BATCH_CAPABILITY     = "dag_tx_batch_v1";
+inline constexpr std::string_view TOKEN_MIGRATION_CAPABILITY  = "contract_token_migration_v1";
+inline constexpr std::string_view DAG_REPAIR_CAPABILITY       = "dag_repair_v1";
+inline constexpr std::string_view SHADOW_CONSENSUS_CAPABILITY = "shadow_consensus_v2";
 
 #include "core/types.h"
 
@@ -80,7 +80,7 @@ struct PeerMeta {
         return capabilities.contains(std::string(DAG_REPAIR_CAPABILITY));
     }
 
-    bool supports_identity_bft_shadow() const {
-        return capabilities.contains(std::string(IDENTITY_BFT_SHADOW_CAPABILITY));
+    bool supports_shadow_consensus() const {
+        return capabilities.contains(std::string(SHADOW_CONSENSUS_CAPABILITY));
     }
 };

@@ -19,6 +19,7 @@
 
 #include "chain/dag.h"
 #include "chain/dag_quarantine.h"
+#include "consensus/consensus_service.h"
 #include "contracts/contract_manager.h"
 #include "contracts/contract_transaction.h"
 
@@ -27,7 +28,6 @@
 #include <cctype>
 #include <future>
 #include <limits>
-
 
 #include "dfs/dfs_service.h"
 #include "core/extrachain_node.h"
@@ -384,7 +384,7 @@ void Dag::schedule_watchdog_tick() {
     if (watchdog_tick_pending_.exchange(true)) {
         return;
     }
-    boost::asio::post(node->runtime_executor(), [node = node] {
+    boost::asio::post(node->serial_executor(), [node = node] {
         node->dagWatchdogTick();
     });
 }
@@ -434,7 +434,7 @@ void Dag::schedule_sync_check() {
     if (sync_check_pending_.exchange(true)) {
         return;
     }
-    boost::asio::post(node->runtime_executor(), [node = node] {
+    boost::asio::post(node->serial_executor(), [node = node] {
         node->dagSyncCheck();
     });
 }
@@ -983,7 +983,7 @@ void Dag::process_cached_transactions(bool not_ready) {
                     break;
                 }
                 while (!guard_mut->empty() && txs_to_process.size() < batch_limit) {
-                    auto transaction = guard_mut->extract(guard_mut->begin());
+                    auto                       transaction = guard_mut->extract(guard_mut->begin());
                     auto                       value       = std::move(transaction.value());
                     std::shared_ptr<Responder> cached_responder;
                     {
@@ -1475,7 +1475,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
             eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
         }
 
-        const bool written       = write_section(section).has_value();
+        const bool written = write_section(section).has_value();
         if (written && changes_existing_history) {
             invalidate_control_chain_from(section.id);
         }
@@ -1578,7 +1578,19 @@ void Dag::schedule_section_repair(const SectionId &section_id) {
         refetched_intervals_.insert_or_assign(section_id, now);
     }
 
-    boost::asio::dispatch(node->runtime_executor(), [this, section_id] {
+    const auto    section_text  = section_id.to_string();
+    std::uint64_t section_value = 0;
+    const auto    parsed =
+        std::from_chars(section_text.data(), section_text.data() + section_text.size(), section_value);
+    if (parsed.ec == std::errc {} && parsed.ptr == section_text.data() + section_text.size()
+        && node->consensus() != nullptr && node->consensus()->controls_section(section_value)) {
+        boost::asio::dispatch(node->serial_executor(), [this, section_value] {
+            static_cast<void>(node->consensus()->repair_section(section_value));
+        });
+        return;
+    }
+
+    boost::asio::dispatch(node->serial_executor(), [this, section_id] {
         const auto  from        = section_id > CONTROL_INTERVAL ? section_id - CONTROL_INTERVAL : SectionId(0);
         const auto  to          = std::min(current_section_, section_id + CONTROL_INTERVAL);
         std::size_t requested   = 0;
@@ -1606,9 +1618,23 @@ void Dag::schedule_section_repair(const SectionId &section_id) {
 
 void Dag::schedule_progressive_audit() {
     static constexpr std::uint64_t AUDIT_INTERVAL_MS = 60'000;
+    static constexpr std::uint64_t SEARCH_TIMEOUT_MS = 30'000;
     const auto                     now               = Utils::current_date_ms();
-    if (mode_ != DagMode::Full || current_section_ < SectionId(0) || search_control_
-        || (historical_audit_started_ms_ != 0 && now - historical_audit_started_ms_ < AUDIT_INTERVAL_MS)) {
+    if (mode_ != DagMode::Full || current_section_ < SectionId(0)) {
+        return;
+    }
+    if (search_control_) {
+        if (search_control_started_ms_ == 0 || now - search_control_started_ms_ < SEARCH_TIMEOUT_MS) {
+            return;
+        }
+        search_control_            = false;
+        search_control_started_ms_ = 0;
+        search_control_message_id_.clear();
+        control_search_ended_event_.publish();
+        clear_pending_progressive_audit();
+        historical_audit_started_ms_ = 0;
+    }
+    if (historical_audit_started_ms_ != 0 && now - historical_audit_started_ms_ < AUDIT_INTERVAL_MS) {
         return;
     }
 
@@ -1617,7 +1643,8 @@ void Dag::schedule_progressive_audit() {
         return;
     }
     const auto current_control = align_down20(closed_tip);
-    auto       cursor          = historical_recent_audit_done_ ? historical_control_cursor_ : current_control;
+    const bool audit_recent    = !historical_recent_audit_done_ || current_control > latest_audited_control_;
+    auto       cursor          = audit_recent ? current_control : historical_control_cursor_;
     if (cursor < SectionId(0) || cursor > current_control) {
         cursor = current_control;
     }
@@ -1642,22 +1669,42 @@ void Dag::schedule_progressive_audit() {
         return;
     }
 
-    historical_recent_audit_done_ = true;
-    historical_control_cursor_    = audit_from > SectionId(0) ? audit_from - CONTROL_INTERVAL : current_control;
-    historical_audit_started_ms_  = now;
-
-    auto settings             = Utils::read_settings();
-    settings.dag_audit_cursor = historical_control_cursor_.to_string();
-    static_cast<void>(Utils::write_settings(settings));
+    pending_audit_recent_        = audit_recent;
+    pending_audit_control_       = current_control;
+    pending_audit_next_cursor_   = audit_from > SectionId(0) ? audit_from - CONTROL_INTERVAL : current_control;
+    historical_audit_started_ms_ = now;
     request_control_section(cursor, responder);
+}
+
+void Dag::commit_progressive_audit() {
+    if (pending_audit_next_cursor_ < SectionId(0)) {
+        return;
+    }
+    historical_recent_audit_done_ = true;
+    if (pending_audit_recent_) {
+        latest_audited_control_ = pending_audit_control_;
+    }
+    historical_control_cursor_ = pending_audit_next_cursor_;
+    auto settings              = Utils::read_settings();
+    settings.dag_audit_cursor  = historical_control_cursor_.to_string();
+    static_cast<void>(Utils::write_settings(settings));
+    clear_pending_progressive_audit();
+}
+
+void Dag::clear_pending_progressive_audit() {
+    pending_audit_next_cursor_ = SectionId(-1);
+    pending_audit_control_     = SectionId(-1);
+    pending_audit_recent_      = false;
 }
 
 void Dag::reset_progressive_audit() {
     historical_control_cursor_    = align_down20(current_section_);
+    latest_audited_control_       = SectionId(-1);
     historical_audit_started_ms_  = 0;
     historical_recent_audit_done_ = false;
-    auto settings                 = Utils::read_settings();
-    settings.dag_audit_cursor     = historical_control_cursor_.to_string();
+    clear_pending_progressive_audit();
+    auto settings             = Utils::read_settings();
+    settings.dag_audit_cursor = historical_control_cursor_.to_string();
     static_cast<void>(Utils::write_settings(settings));
 }
 
@@ -1850,6 +1897,216 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
     return result;
 }
 
+std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError> Dag::
+    build_shadow_batch(const SectionId &first_section, const SectionId &last_section, std::string header_hash) {
+    using namespace ExtraChain::Consensus;
+    if (first_section < SectionId(0) || last_section < first_section
+        || last_section - first_section >= CONTROL_INTERVAL) {
+        return std::unexpected(ConsensusError::InvalidRoot);
+    }
+
+    SectionBatchData  batch { .header_hash = std::move(header_hash) };
+    std::uint64_t     payload_bytes = 0;
+    WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+    for (auto section_id = first_section; section_id <= last_section; section_id += SectionId(1)) {
+        auto section = read_section(section_id);
+        if (!section.has_value()) {
+            section = Section { .id = section_id, .transactions = {}, .control = std::nullopt };
+        }
+        section.value().id = section_id;
+        section.value().control.reset();
+        const auto bytes = Json::serialize(section.value());
+        if (bytes.size() > std::numeric_limits<std::uint64_t>::max() - payload_bytes) {
+            return std::unexpected(ConsensusError::DataTooLarge);
+        }
+        payload_bytes += bytes.size();
+        for (const auto &transaction : section.value().transactions) {
+            batch.manifest.transaction_hashes.push_back(transaction.hash());
+        }
+        const auto    section_text  = section_id.to_string();
+        std::uint64_t section_value = 0;
+        const auto    parsed =
+            std::from_chars(section_text.data(), section_text.data() + section_text.size(), section_value);
+        if (parsed.ec != std::errc {} || parsed.ptr != section_text.data() + section_text.size()) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        batch.sections.emplace_back(section_value, bytes);
+    }
+
+    const auto first_text = first_section.to_string();
+    const auto last_text  = last_section.to_string();
+    const auto first_parsed =
+        std::from_chars(first_text.data(), first_text.data() + first_text.size(), batch.manifest.first_section);
+    const auto last_parsed =
+        std::from_chars(last_text.data(), last_text.data() + last_text.size(), batch.manifest.last_section);
+    if (first_parsed.ec != std::errc {} || first_parsed.ptr != first_text.data() + first_text.size()
+        || last_parsed.ec != std::errc {} || last_parsed.ptr != last_text.data() + last_text.size()) {
+        return std::unexpected(ConsensusError::InvalidRoot);
+    }
+    batch.manifest.transaction_root = calculate_transaction_root(batch.manifest.transaction_hashes);
+    batch.manifest.data_root        = calculate_data_root(batch.sections);
+    if (first_section != SectionId(0)) {
+        const auto previous = read_control(first_section - SectionId(1));
+        if (!previous.has_value()) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
+        batch.manifest.previous_section_root = previous.value().control;
+    }
+    batch.manifest.payload_bytes = payload_bytes;
+    return batch;
+}
+
+std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_batch(
+    const ExtraChain::Consensus::Proposal         &proposal,
+    const ExtraChain::Consensus::SectionBatchData &batch,
+    std::uint64_t                                  maximum_batch_bytes) {
+    using namespace ExtraChain::Consensus;
+    if (batch.header_hash != hash_header(proposal.header)
+        || hash_batch_manifest(batch.manifest) != proposal.header.batch_root
+        || hash_batch_manifest(batch.manifest) != hash_batch_manifest(proposal.batch)
+        || batch.manifest.payload_bytes > maximum_batch_bytes
+        || batch.manifest.first_section > batch.manifest.last_section
+        || batch.manifest.last_section - batch.manifest.first_section >= CONTROL_INTERVAL_MOD
+        || batch.sections.size() != batch.manifest.last_section - batch.manifest.first_section + 1
+        || calculate_data_root(batch.sections) != batch.manifest.data_root) {
+        return std::unexpected(ConsensusError::InvalidRoot);
+    }
+
+    std::map<SectionId, std::string> sections;
+    std::vector<std::string>         transaction_hashes;
+    std::uint64_t                    payload_bytes    = 0;
+    std::uint64_t                    expected_section = batch.manifest.first_section;
+    WireFormat::Scope                canonical_scope(WireFormat::Mode::Canonical);
+    for (const auto &[section_value, bytes] : batch.sections) {
+        if (section_value != expected_section || bytes.size() > maximum_batch_bytes - payload_bytes) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        payload_bytes += bytes.size();
+        auto section = Json::deserialize<Section>(bytes);
+        if (!section.has_value()) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        const auto section_id = SectionId(section_value);
+        section.value().id    = section_id;
+        section.value().control.reset();
+        if (Json::serialize(section.value()) != bytes
+            || std::ranges::any_of(section.value().transactions, [&](const auto &transaction) {
+                   return transaction.section() != section_id;
+               })) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        for (const auto &transaction : section.value().transactions) {
+            transaction_hashes.push_back(transaction.hash());
+        }
+        sections.insert_or_assign(section_id, bytes);
+        ++expected_section;
+    }
+    if (payload_bytes != batch.manifest.payload_bytes || transaction_hashes != batch.manifest.transaction_hashes
+        || calculate_transaction_root(transaction_hashes) != batch.manifest.transaction_root) {
+        return std::unexpected(ConsensusError::InvalidRoot);
+    }
+    const auto validated = validated_repair_candidate(sections);
+    if (!validated.has_value() || validated.value() != sections) {
+        return std::unexpected(ConsensusError::InvalidRoot);
+    }
+
+    std::string section_hashes;
+    for (const auto &[section_id, bytes] : sections) {
+        const auto section = Json::deserialize<Section>(bytes);
+        if (!section.has_value()) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        const auto input = section.value().transactions.empty()
+                               ? section_id.to_string()
+                               : section_id.to_string() + section.value().calculate_hash();
+        section_hashes += Utils::calculate_hash(input);
+    }
+    auto       expected_root = Utils::calculate_hash(section_hashes);
+    const auto first_section = SectionId(batch.manifest.first_section);
+    if (first_section != SectionId(0)) {
+        if (batch.manifest.previous_section_root.empty()) {
+            return std::unexpected(ConsensusError::InvalidParent);
+        }
+        expected_root = Utils::calculate_hash(batch.manifest.previous_section_root + expected_root);
+    }
+    if (expected_root != proposal.header.section_root) {
+        return std::unexpected(ConsensusError::InvalidRoot);
+    }
+    return {};
+}
+
+std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_batch(
+    const ExtraChain::Consensus::Proposal         &proposal,
+    const ExtraChain::Consensus::SectionBatchData &batch,
+    std::uint64_t                                  maximum_batch_bytes) {
+    using ExtraChain::Consensus::ConsensusError;
+    const auto validated = validate_shadow_batch(proposal, batch, maximum_batch_bytes);
+    if (!validated.has_value()) {
+        return std::unexpected(validated.error());
+    }
+    if (!is_admission_worker()) {
+        flush_admission();
+    }
+    std::unique_lock<std::recursive_mutex> save_lock(save_mutex_);
+
+    std::map<SectionId, std::string> sections;
+    for (const auto &[section, bytes] : batch.sections) {
+        sections.insert_or_assign(SectionId(section), bytes);
+    }
+    const auto first             = sections.begin()->first;
+    const auto last              = sections.rbegin()->first;
+    const auto previous_control  = read_control(last);
+    auto       finalized_section = Json::deserialize<Section>(sections.at(last));
+    if (!finalized_section.has_value()) {
+        return std::unexpected(ConsensusError::StorageFailure);
+    }
+    finalized_section.value().control = proposal.header.section_root;
+    sections.insert_or_assign(last, Json::serialize(finalized_section.value()));
+    const auto committed_first =
+        first_saved_section_ < SectionId(0) ? first : std::min(first_saved_section_, first);
+    const auto committed_last = std::max(current_section_, last);
+    {
+        std::unique_lock<std::shared_mutex> section_lock(section_mutex_);
+        if (!hot_section_store_ || !hot_section_store_->is_open()
+            || !hot_section_store_->commit_batch(sections, std::pair { committed_first, committed_last })) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        std::lock_guard cache_lock(pack_hot_cache_mutex_);
+        for (const auto &[section_id, bytes] : sections) {
+            pack_hot_cache_.insert_or_assign(section_id, bytes);
+        }
+    }
+
+    first_saved_section_ = committed_first;
+    current_section_     = committed_last;
+    if (!previous_control.has_value() || previous_control.value().control != proposal.header.section_root) {
+        clear_controls(last + SectionId(1));
+    }
+    if (control_index_) {
+        control_index_->put(last, proposal.header.section_root);
+    }
+    if (first <= cache_.section()) {
+        cache_.reset_db();
+        cache_.init_db();
+        cache_.check_and_update_cache_thread(current_section_);
+    }
+    if (chain_index_enabled_ && chain_index_) {
+        for (const auto &[_, bytes] : sections) {
+            const auto section = Json::deserialize<Section>(bytes);
+            if (!section.has_value()) {
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+            chain_index_->on_section_written(section.value());
+        }
+        chain_index_->flush();
+    }
+    if (quarantine_) {
+        quarantine_->resolve_range(first, last);
+    }
+    update_range(true);
+    return {};
+}
+
 std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std::set<Transaction> &transactions) {
     cache_.invalidate_live_balances();
     if (transactions.empty()) {
@@ -1858,10 +2115,10 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
     // Same section RMW race as save_transaction — serialize the batch too.
     std::unique_lock<std::recursive_mutex> save_lock(save_mutex_);
 
-    bool      all_saved   = true;
-    bool      has_changes = false;
-    SectionId min_section = SectionId(-1);
-    SectionId max_section;
+    bool                     all_saved   = true;
+    bool                     has_changes = false;
+    SectionId                min_section = SectionId(-1);
+    SectionId                max_section;
     std::optional<SectionId> invalid_controls_from;
 
     auto it = transactions.begin();
@@ -5603,6 +5860,8 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         search_control_started_ms_ = 0;
         search_control_message_id_.clear();
         control_search_ended_event_.publish();
+        clear_pending_progressive_audit();
+        historical_audit_started_ms_ = 0;
         return;
     }
 
@@ -5627,6 +5886,8 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         search_control_started_ms_ = 0;
         search_control_message_id_.clear();
         control_search_ended_event_.publish();
+        clear_pending_progressive_audit();
+        historical_audit_started_ms_ = 0;
         schedule_sync_check();
         return;
     }
@@ -5674,6 +5935,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
         if (sync_last_index_ <= current_section_) {
             node->luminance_manager()->increment(responder.node_id());
+            commit_progressive_audit();
             search_control_            = false;
             search_control_started_ms_ = 0;
             search_control_message_id_.clear();
@@ -5700,6 +5962,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
             control_progress_event_.publish(next_lo);
             auto responder_new         = responder.with_new_message_id();
             search_control_message_id_ = responder_new.message_id();
+            search_control_started_ms_ = Utils::current_date_ms();
             node->network()->send_message(req,
                                           MessageType::DagControlRangeRequest,
                                           SendMode::Neighbours,

@@ -109,11 +109,17 @@ enum class MessageType {
 
     ShareConnections = 113,
 
-    ConsensusChallenge      = 120,
-    ConsensusAuthentication = 121,
-    ConsensusProposal       = 122,
-    ConsensusVote           = 123,
-    ConsensusCertificate    = 124,
+    ConsensusChallenge          = 120,
+    ConsensusAuthentication     = 121,
+    ConsensusProposal           = 122,
+    ConsensusVote               = 123,
+    ConsensusCertificate        = 124,
+    ConsensusTimeoutVote        = 125,
+    ConsensusTimeoutCertificate = 126,
+    ConsensusBatchRequest       = 127,
+    ConsensusBatchData          = 128,
+    ConsensusSyncRequest        = 129,
+    ConsensusSyncResponse       = 130,
 
     Unknown = 250
 };
@@ -225,9 +231,9 @@ inline std::string generate_message_id(const std::string& body = std::string()) 
     // the receive dedup on every node (lost transactions under load). The message
     // body, millisecond time, and 128 random bits reduce this collision risk. The
     // wire format stays the same 15-hex id.
-    const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                               std::chrono::system_clock::now().time_since_epoch())
-                               .count();
+    const auto timestamp =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
     std::string random_bytes(16, '\0');
     randombytes_buf(random_bytes.data(), random_bytes.size());
     return Utils::calculate_hash(body + std::to_string(timestamp) + random_bytes).substr(0, 15);
@@ -240,12 +246,11 @@ inline MessageBody make_init_message(const std::string& data,
                                      const ActorId&     sender,
                                      std::string        to_message_id,
                                      std::string        sender_identifier) {
-    const auto valid_response_id = to_message_id.empty()
-                                   || (to_message_id.length() == 15
-                                       && std::ranges::all_of(to_message_id, [](char character) {
-                                              return (character >= '0' && character <= '9')
-                                                     || (character >= 'a' && character <= 'f');
-                                          }));
+    const auto valid_response_id =
+        to_message_id.empty()
+        || (to_message_id.length() == 15 && std::ranges::all_of(to_message_id, [](char character) {
+                return (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f');
+            }));
     if (!valid_response_id) {
         throw std::invalid_argument("Response message ID must contain 15 hexadecimal characters");
     }

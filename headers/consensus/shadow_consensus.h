@@ -28,9 +28,8 @@ namespace ExtraChain::Consensus {
     };
 
     struct ShadowCheckpoint {
-        std::uint64_t dag_section = 0;
-        std::string   section_root;
-        std::string   transaction_root;
+        SectionBatchManifest batch;
+        std::string          section_root;
     };
 
     class EXTRACHAIN_EXPORT ShadowConsensus {
@@ -44,6 +43,8 @@ namespace ExtraChain::Consensus {
                                                                   const IdentityDocument&      identity);
         static std::expected<void, ConsensusError> write_validator_set(const std::filesystem::path& directory,
                                                                        const ValidatorSet&          validators);
+        static std::expected<void, ConsensusError> write_configuration(const std::filesystem::path& directory,
+                                                                       const ShadowConfiguration&   configuration);
 
         std::expected<std::optional<Proposal>, ConsensusError> make_checkpoint_proposal(
             ShadowCheckpoint checkpoint,
@@ -52,18 +53,24 @@ namespace ExtraChain::Consensus {
                                                                             std::string_view peer_identifier);
         std::expected<VoteAcceptance, ConsensusError>      receive_vote(const Vote&      vote,
                                                                         std::string_view peer_identifier);
+        std::expected<TimeoutVote, ConsensusError> make_timeout_vote(std::uint64_t height, std::uint64_t round);
+        std::expected<TimeoutAcceptance, ConsensusError> receive_timeout_vote(const TimeoutVote& vote,
+                                                                              std::string_view   peer_identifier);
+        std::expected<void, ConsensusError> receive_timeout_certificate(const TimeoutCertificate& certificate);
         std::expected<std::optional<FinalizedCheckpoint>, ConsensusError> receive_certificate(
             const QuorumCertificate& certificate);
 
-        [[nodiscard]] const ConsensusEngine& engine() const noexcept;
-        [[nodiscard]] ConsensusEngine&       engine() noexcept;
+        [[nodiscard]] const ConsensusEngine&     engine() const noexcept;
+        [[nodiscard]] ConsensusEngine&           engine() noexcept;
+        [[nodiscard]] const ShadowConfiguration& configuration() const noexcept;
 
     private:
-        explicit ShadowConsensus(std::unique_ptr<ConsensusEngine> engine);
+        explicit ShadowConsensus(std::unique_ptr<ConsensusEngine> engine, ShadowConfiguration configuration);
         [[nodiscard]] bool peer_matches_validator(std::string_view validator_id,
                                                   std::string_view peer_identifier) const;
 
         std::unique_ptr<ConsensusEngine> engine_;
+        ShadowConfiguration              configuration_;
     };
 
 } // namespace ExtraChain::Consensus

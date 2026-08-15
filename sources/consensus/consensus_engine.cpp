@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <limits>
 #include <tuple>
 
 #include <fmt/format.h>
@@ -30,6 +31,14 @@ namespace ExtraChain::Consensus {
                                vote.round,
                                std::to_underlying(vote.phase),
                                vote.validator_id);
+        }
+
+        std::string timeout_slot(const TimeoutVote& vote) {
+            return fmt::format("{}:{}:{}:{}", vote.epoch, vote.height, vote.round, vote.validator_id);
+        }
+
+        std::string timeout_round(const TimeoutVote& vote) {
+            return fmt::format("{}:{}:{}", vote.epoch, vote.height, vote.round);
         }
 
         bool bit_is_set(const std::vector<std::uint8_t>& bitmap, std::size_t index) {
@@ -51,6 +60,12 @@ namespace ExtraChain::Consensus {
         bool active_at(const ValidatorRecord& validator, std::uint64_t height) {
             return validator.status == ValidatorStatus::Active && validator.valid_from <= height
                    && (validator.valid_until == 0 || height < validator.valid_until);
+        }
+
+        bool extends_batch(const Proposal& parent, const Proposal& child) {
+            return parent.batch.last_section != std::numeric_limits<std::uint64_t>::max()
+                   && parent.batch.last_section + 1 == child.batch.first_section
+                   && parent.header.section_root == child.batch.previous_section_root;
         }
     } // namespace
 
@@ -108,6 +123,7 @@ namespace ExtraChain::Consensus {
                      .highest_certificate = genesis,
                      .locked_certificate  = genesis,
                      .finalized_height    = 0,
+                     .current_round       = 0,
                      .validator_set_hash  = validators_.hash(),
             };
             const auto persisted = store_->persist_state(safety_state_);
@@ -117,10 +133,26 @@ namespace ExtraChain::Consensus {
         }
         const auto genesis = genesis_certificate();
         certificates_.insert_or_assign(hash_certificate(genesis), genesis);
+        if (safety_state_.highest_certificate.has_value()) {
+            const auto& certificate = safety_state_.highest_certificate.value();
+            certificates_.insert_or_assign(hash_certificate(certificate), certificate);
+            if (certificate.phase != Phase::Genesis) {
+                certified_headers_.insert(certificate.header_hash);
+            }
+        }
+        if (safety_state_.locked_certificate.has_value()) {
+            const auto& certificate = safety_state_.locked_certificate.value();
+            certificates_.insert_or_assign(hash_certificate(certificate), certificate);
+            if (certificate.phase != Phase::Genesis) {
+                certified_headers_.insert(certificate.header_hash);
+            }
+        }
         const auto retained_height  = safety_state_.finalized_height > 2 ? safety_state_.finalized_height - 2 : 0;
         const auto stored_proposals = store_->load_proposals(retained_height);
-        const auto stored_certificates = store_->load_certificates(retained_height);
-        if (!stored_proposals.has_value() || !stored_certificates.has_value()) {
+        const auto stored_certificates         = store_->load_certificates(retained_height);
+        const auto stored_timeout_certificates = store_->load_timeout_certificates(retained_height);
+        if (!stored_proposals.has_value() || !stored_certificates.has_value()
+            || !stored_timeout_certificates.has_value()) {
             return std::unexpected(ConsensusError::StorageFailure);
         }
         for (const auto& proposal : stored_proposals.value()) {
@@ -128,6 +160,13 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::StorageFailure);
             }
             proposals_.insert_or_assign(hash_header(proposal.header), proposal);
+            const auto batch = store_->load_batch(hash_header(proposal.header));
+            if (!batch.has_value()) {
+                return std::unexpected(batch.error());
+            }
+            if (batch.value().has_value()) {
+                batches_.insert_or_assign(hash_header(proposal.header), batch.value().value());
+            }
         }
         for (const auto& certificate : stored_certificates.value()) {
             if (!verify_certificate(certificate)) {
@@ -136,14 +175,26 @@ namespace ExtraChain::Consensus {
             certificates_.insert_or_assign(hash_certificate(certificate), certificate);
             certified_headers_.insert(certificate.header_hash);
         }
+        for (const auto& certificate : stored_timeout_certificates.value()) {
+            if (!verify_timeout_certificate(certificate)) {
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+            timeout_certificates_.insert_or_assign(hash_timeout_certificate(certificate), certificate);
+        }
+        for (const auto& certificate : stored_certificates.value()) {
+            const auto finalized = finalization_for(certificate);
+            const auto proof     = finality_proof_for(certificate);
+            if (finalized.has_value() && proof.has_value()) {
+                finality_proofs_.insert_or_assign(finalized.value().height, proof.value());
+            }
+        }
         initialized_ = true;
         return {};
     }
 
-    std::expected<Proposal, ConsensusError> ConsensusEngine::make_proposal(std::uint64_t dag_section,
-                                                                           std::string   section_root,
-                                                                           std::string   transaction_root,
-                                                                           std::uint64_t round) {
+    std::expected<Proposal, ConsensusError> ConsensusEngine::make_proposal(SectionBatchManifest batch,
+                                                                           std::string          section_root,
+                                                                           std::uint64_t        round) {
         std::lock_guard lock(mutex_);
         if (!initialized_ || !identity_.has_value() || !safety_state_.highest_certificate.has_value()) {
             return std::unexpected(ConsensusError::NotReady);
@@ -153,40 +204,104 @@ namespace ExtraChain::Consensus {
         if (!is_local_leader(height, round)) {
             return std::unexpected(ConsensusError::NotLeader);
         }
-        if (section_root.empty() || transaction_root.empty() || dag_section == 0) {
+        if (section_root.empty() || batch.first_section > batch.last_section || batch.last_section == 0
+            || batch.transaction_root.empty() || batch.data_root.empty() || batch.payload_bytes == 0
+            || batch.transaction_root != calculate_transaction_root(batch.transaction_hashes)) {
             return std::unexpected(ConsensusError::InvalidRoot);
         }
-        const auto commitment = state_commitment(parent, section_root, transaction_root);
-        Proposal   proposal {
-              .header =
+        if (parent.phase == Phase::Genesis) {
+            if (batch.first_section != 0 && batch.previous_section_root.empty()) {
+                return std::unexpected(ConsensusError::InvalidParent);
+            }
+        } else {
+            const auto parent_proposal = proposals_.find(parent.header_hash);
+            if (parent_proposal == proposals_.end()
+                || parent_proposal->second.batch.last_section == std::numeric_limits<std::uint64_t>::max()
+                || parent_proposal->second.batch.last_section + 1 != batch.first_section
+                || parent_proposal->second.header.section_root != batch.previous_section_root) {
+                return std::unexpected(ConsensusError::InvalidParent);
+            }
+        }
+        const auto                        batch_root = hash_batch_manifest(batch);
+        const auto                        commitment = state_commitment(parent, section_root, batch_root);
+        std::optional<TimeoutCertificate> timeout_certificate;
+        if (round != 0) {
+            if (!safety_state_.highest_timeout_certificate.has_value()
+                || safety_state_.highest_timeout_certificate.value().height != height
+                || safety_state_.highest_timeout_certificate.value().round + 1 != round
+                || hash_certificate(safety_state_.highest_timeout_certificate.value().highest_certificate)
+                       != hash_certificate(parent)) {
+                return std::unexpected(ConsensusError::InvalidRound);
+            }
+            timeout_certificate = safety_state_.highest_timeout_certificate;
+        }
+        Proposal proposal {
+            .header =
                 ConsensusHeader {
-                      .protocol_version        = ProtocolVersion,
-                      .network_id              = validators_.document().network_id,
-                      .epoch                   = validators_.document().epoch,
-                      .height                  = height,
-                      .round                   = round,
-                      .dag_section             = dag_section,
-                      .parent_certificate_hash = hash_certificate(parent),
-                      .section_root            = std::move(section_root),
-                      .transaction_root        = std::move(transaction_root),
-                      .validator_set_hash      = validators_.hash(),
-                      .state_commitment        = commitment,
-                      .logical_time            = height,
+                    .protocol_version        = ProtocolVersion,
+                    .network_id              = validators_.document().network_id,
+                    .epoch                   = validators_.document().epoch,
+                    .height                  = height,
+                    .round                   = round,
+                    .dag_section             = batch.last_section,
+                    .parent_certificate_hash = hash_certificate(parent),
+                    .section_root            = std::move(section_root),
+                    .transaction_root        = batch.transaction_root,
+                    .batch_root              = batch_root,
+                    .validator_set_hash      = validators_.hash(),
+                    .state_commitment        = commitment,
+                    .logical_time            = height,
                 },
-              .parent_certificate = parent,
-              .proposer_id        = identity_.value().validator_id,
+            .batch               = std::move(batch),
+            .parent_certificate  = parent,
+            .timeout_certificate = std::move(timeout_certificate),
+            .proposer_id         = identity_.value().validator_id,
         };
         const auto signature = sign_payload(identity_.value().key, proposal_signing_payload(proposal));
         if (!signature.has_value()) {
             return std::unexpected(signature.error());
         }
-        proposal.signature   = signature.value();
-        const auto persisted = store_->persist_proposal(proposal);
+        proposal.signature = signature.value();
+        proposals_.insert_or_assign(hash_header(proposal.header), proposal);
+        return proposal;
+    }
+
+    std::expected<TimeoutVote, ConsensusError> ConsensusEngine::make_timeout_vote(std::uint64_t height,
+                                                                                  std::uint64_t round) {
+        std::lock_guard lock(mutex_);
+        if (!initialized_ || !identity_.has_value() || !safety_state_.highest_certificate.has_value()) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        if (height != safety_state_.highest_certificate.value().height + 1 || round < safety_state_.current_round
+            || std::tie(height, round)
+                   < std::tie(safety_state_.last_timeout_height, safety_state_.last_timeout_round)) {
+            return std::unexpected(ConsensusError::InvalidRound);
+        }
+
+        TimeoutVote vote {
+            .protocol_version         = ProtocolVersion,
+            .network_id               = validators_.document().network_id,
+            .epoch                    = validators_.document().epoch,
+            .height                   = height,
+            .round                    = round,
+            .highest_certificate_hash = hash_certificate(safety_state_.highest_certificate.value()),
+            .validator_id             = identity_.value().validator_id,
+        };
+        const auto signature = sign_payload(identity_.value().key, timeout_vote_signing_payload(vote));
+        if (!signature.has_value()) {
+            return std::unexpected(signature.error());
+        }
+        vote.signature = signature.value();
+
+        auto next_state                = safety_state_;
+        next_state.last_timeout_height = height;
+        next_state.last_timeout_round  = round;
+        const auto persisted           = store_->persist_timeout_vote(vote, next_state);
         if (!persisted.has_value()) {
             return std::unexpected(persisted.error());
         }
-        proposals_.insert_or_assign(hash_header(proposal.header), proposal);
-        return proposal;
+        safety_state_ = std::move(next_state);
+        return vote;
     }
 
     std::expected<Vote, ConsensusError> ConsensusEngine::accept_proposal(const Proposal& proposal) {
@@ -197,8 +312,14 @@ namespace ExtraChain::Consensus {
         if (!verify_proposal(proposal)) {
             return std::unexpected(ConsensusError::InvalidSignature);
         }
-        if (proposal_validator_ && !proposal_validator_(proposal.header)) {
-            return std::unexpected(ConsensusError::InvalidRoot);
+        if (!batches_.contains(hash_header(proposal.header))) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
+        if (proposal_validator_) {
+            const auto validated = proposal_validator_(proposal);
+            if (!validated.has_value()) {
+                return std::unexpected(validated.error());
+            }
         }
         if (!safe_to_vote(proposal)) {
             return std::unexpected(ConsensusError::UnsafeProposal);
@@ -225,15 +346,15 @@ namespace ExtraChain::Consensus {
         next_state.last_voted_round  = vote.round;
         next_state.last_voted_phase  = vote.phase;
         next_state.last_voted_hash   = vote.header_hash;
-        const auto persisted         = store_->persist_vote(vote, next_state);
+        const auto batch             = batches_.find(vote.header_hash);
+        if (batch == batches_.end()) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
+        const auto persisted = store_->persist_proposal_batch_vote(proposal, batch->second, vote, next_state);
         if (!persisted.has_value()) {
             return std::unexpected(persisted.error());
         }
-        safety_state_              = std::move(next_state);
-        const auto stored_proposal = store_->persist_proposal(proposal);
-        if (!stored_proposal.has_value()) {
-            return std::unexpected(stored_proposal.error());
-        }
+        safety_state_ = std::move(next_state);
         proposals_.insert_or_assign(vote.header_hash, proposal);
         return vote;
     }
@@ -246,14 +367,52 @@ namespace ExtraChain::Consensus {
         if (!verify_proposal(proposal)) {
             return std::unexpected(ConsensusError::InvalidSignature);
         }
-        if (proposal_validator_ && !proposal_validator_(proposal.header)) {
-            return std::unexpected(ConsensusError::InvalidRoot);
-        }
-        const auto persisted = store_->persist_proposal(proposal);
-        if (!persisted.has_value()) {
-            return std::unexpected(persisted.error());
+        if (proposal_validator_) {
+            const auto validated = proposal_validator_(proposal);
+            if (!validated.has_value() && validated.error() != ConsensusError::DataUnavailable) {
+                return std::unexpected(validated.error());
+            }
         }
         proposals_.insert_or_assign(hash_header(proposal.header), proposal);
+        return {};
+    }
+
+    std::expected<void, ConsensusError> ConsensusEngine::stage_batch(SectionBatchData batch) {
+        std::lock_guard lock(mutex_);
+        if (!initialized_) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        const auto proposal = proposals_.find(batch.header_hash);
+        if (proposal == proposals_.end()) {
+            return std::unexpected(ConsensusError::InvalidParent);
+        }
+        if (hash_batch_manifest(batch.manifest) != proposal->second.header.batch_root
+            || hash_batch_manifest(batch.manifest) != hash_batch_manifest(proposal->second.batch)
+            || batch.manifest.first_section > batch.manifest.last_section || batch.sections.empty()
+            || batch.sections.size() != batch.manifest.last_section - batch.manifest.first_section + 1
+            || batch.manifest.transaction_root != calculate_transaction_root(batch.manifest.transaction_hashes)) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        std::uint64_t payload_bytes = 0;
+        std::uint64_t expected      = batch.manifest.first_section;
+        for (const auto& [section, bytes] : batch.sections) {
+            if (section != expected || bytes.size() > std::numeric_limits<std::uint64_t>::max() - payload_bytes) {
+                return std::unexpected(ConsensusError::InvalidRoot);
+            }
+            payload_bytes += bytes.size();
+            ++expected;
+        }
+        if (payload_bytes != batch.manifest.payload_bytes
+            || calculate_data_root(batch.sections) != batch.manifest.data_root) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        if (!identity_.has_value()) {
+            const auto stored = store_->persist_proposal_batch(proposal->second, batch);
+            if (!stored.has_value()) {
+                return std::unexpected(stored.error());
+            }
+        }
+        batches_.insert_or_assign(batch.header_hash, std::move(batch));
         return {};
     }
 
@@ -309,6 +468,96 @@ namespace ExtraChain::Consensus {
         return result;
     }
 
+    std::expected<TimeoutAcceptance, ConsensusError> ConsensusEngine::accept_timeout_vote(
+        const TimeoutVote& vote) {
+        std::lock_guard lock(mutex_);
+        if (!initialized_ || !verify_timeout_vote(vote)) {
+            return std::unexpected(ConsensusError::InvalidSignature);
+        }
+        TimeoutAcceptance result;
+        const auto        slot  = timeout_slot(vote);
+        const auto        prior = observed_timeout_slots_.find(slot);
+        if (prior != observed_timeout_slots_.end()
+            && prior->second.highest_certificate_hash != vote.highest_certificate_hash) {
+            result.equivocation = std::pair { prior->second, vote };
+            return result;
+        }
+        observed_timeout_slots_.insert_or_assign(slot, vote);
+
+        const auto certificate = certificates_.find(vote.highest_certificate_hash);
+        if (certificate == certificates_.end()) {
+            return std::unexpected(ConsensusError::InvalidParent);
+        }
+        const auto round_key = timeout_round(vote) + ':' + vote.highest_certificate_hash;
+        auto&      votes     = timeout_votes_[round_key];
+        votes.insert_or_assign(vote.validator_id, vote);
+        if (votes.size() < validators_.quorum()) {
+            return result;
+        }
+
+        TimeoutCertificate timeout_certificate {
+            .protocol_version    = ProtocolVersion,
+            .network_id          = vote.network_id,
+            .epoch               = vote.epoch,
+            .height              = vote.height,
+            .round               = vote.round,
+            .highest_certificate = certificate->second,
+            .signer_bitmap       = std::vector<std::uint8_t>((validators_.active().size() + 7) / 8, 0),
+        };
+        for (std::size_t index = 0; index < validators_.active().size(); ++index) {
+            const auto found = votes.find(validators_.active()[index].validator_id);
+            if (found == votes.end()) {
+                continue;
+            }
+            set_bit(timeout_certificate.signer_bitmap, index);
+            timeout_certificate.signatures.push_back(found->second.signature);
+        }
+        if (!verify_timeout_certificate(timeout_certificate)) {
+            return std::unexpected(ConsensusError::InvalidCertificate);
+        }
+        result.certificate = std::move(timeout_certificate);
+        return result;
+    }
+
+    std::expected<void, ConsensusError> ConsensusEngine::accept_timeout_certificate(
+        const TimeoutCertificate& certificate) {
+        std::lock_guard lock(mutex_);
+        if (!initialized_ || !verify_timeout_certificate(certificate)) {
+            return std::unexpected(ConsensusError::InvalidCertificate);
+        }
+        auto next_state = safety_state_;
+        if (!next_state.highest_certificate.has_value()
+            || newer(certificate.highest_certificate, next_state.highest_certificate.value())) {
+            next_state.highest_certificate = certificate.highest_certificate;
+        }
+        if (certificate.height != next_state.highest_certificate.value().height + 1) {
+            return std::unexpected(ConsensusError::InvalidHeight);
+        }
+        if (certificate.height == next_state.highest_certificate.value().height + 1
+            && certificate.round + 1 > next_state.current_round) {
+            next_state.current_round = certificate.round + 1;
+        }
+        if (!next_state.highest_timeout_certificate.has_value()
+            || std::tie(certificate.height, certificate.round)
+                   > std::tie(next_state.highest_timeout_certificate.value().height,
+                              next_state.highest_timeout_certificate.value().round)) {
+            next_state.highest_timeout_certificate = certificate;
+        }
+        next_state.last_timeout_certificate_hash = hash_timeout_certificate(certificate);
+        const auto stored = store_->persist_timeout_certificate_state(certificate, next_state);
+        if (!stored.has_value()) {
+            return std::unexpected(stored.error());
+        }
+        timeout_certificates_.insert_or_assign(hash_timeout_certificate(certificate), certificate);
+        certificates_.insert_or_assign(hash_certificate(certificate.highest_certificate),
+                                       certificate.highest_certificate);
+        if (certificate.highest_certificate.phase != Phase::Genesis) {
+            certified_headers_.insert(certificate.highest_certificate.header_hash);
+        }
+        safety_state_ = std::move(next_state);
+        return {};
+    }
+
     std::expected<std::optional<FinalizedCheckpoint>, ConsensusError> ConsensusEngine::accept_certificate(
         const QuorumCertificate& certificate) {
         std::lock_guard lock(mutex_);
@@ -323,6 +572,8 @@ namespace ExtraChain::Consensus {
         if (!next_state.highest_certificate.has_value()
             || newer(certificate, next_state.highest_certificate.value())) {
             next_state.highest_certificate = certificate;
+            next_state.current_round       = 0;
+            next_state.highest_timeout_certificate.reset();
         }
         if (proposal != proposals_.end() && proposal->second.parent_certificate.phase != Phase::Genesis
             && (!next_state.locked_certificate.has_value()
@@ -336,7 +587,14 @@ namespace ExtraChain::Consensus {
         } else {
             finalized.reset();
         }
-        const auto stored = store_->persist_certificate_state(certificate, next_state);
+        std::optional<FinalityProof> finality_proof;
+        if (finalized.has_value()) {
+            finality_proof = finality_proof_for(certificate);
+            if (!finality_proof.has_value()) {
+                return std::unexpected(ConsensusError::InvalidParent);
+            }
+        }
+        const auto stored = store_->persist_certificate_state(certificate, next_state, finality_proof);
         if (!stored.has_value()) {
             return std::unexpected(stored.error());
         }
@@ -344,6 +602,9 @@ namespace ExtraChain::Consensus {
         certified_headers_.insert(certificate.header_hash);
         votes_.erase(certificate.header_hash);
         safety_state_ = std::move(next_state);
+        if (finalized.has_value()) {
+            finality_proofs_.insert_or_assign(finalized.value().height, finality_proof.value());
+        }
         prune_memory(safety_state_.finalized_height);
         return finalized;
     }
@@ -398,6 +659,101 @@ namespace ExtraChain::Consensus {
         return true;
     }
 
+    bool ConsensusEngine::verify_timeout_certificate(const TimeoutCertificate& certificate) const {
+        std::lock_guard lock(mutex_);
+        if (certificate.protocol_version != ProtocolVersion
+            || certificate.network_id != validators_.document().network_id
+            || certificate.epoch != validators_.document().epoch || certificate.height == 0
+            || certificate.height != certificate.highest_certificate.height + 1
+            || !verify_certificate(certificate.highest_certificate)
+            || certificate.signer_bitmap.size() != (validators_.active().size() + 7) / 8
+            || bit_count(certificate.signer_bitmap) != certificate.signatures.size()
+            || certificate.signatures.size() < validators_.quorum()) {
+            return false;
+        }
+        if (validators_.active().size() % 8 != 0) {
+            const auto valid_bits = static_cast<std::uint8_t>((1U << (validators_.active().size() % 8)) - 1U);
+            if ((certificate.signer_bitmap.back() & static_cast<std::uint8_t>(~valid_bits)) != 0) {
+                return false;
+            }
+        }
+
+        std::size_t signature_index = 0;
+        for (std::size_t index = 0; index < validators_.active().size(); ++index) {
+            if (!bit_is_set(certificate.signer_bitmap, index)) {
+                continue;
+            }
+            TimeoutVote vote {
+                .protocol_version         = certificate.protocol_version,
+                .network_id               = certificate.network_id,
+                .epoch                    = certificate.epoch,
+                .height                   = certificate.height,
+                .round                    = certificate.round,
+                .highest_certificate_hash = hash_certificate(certificate.highest_certificate),
+                .validator_id             = validators_.active()[index].validator_id,
+                .signature                = certificate.signatures[signature_index++],
+            };
+            if (!active_at(validators_.active()[index], vote.height) || !verify_timeout_vote(vote)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool ConsensusEngine::verify_finality_proof(const FinalityProof& proof) const {
+        std::lock_guard lock(mutex_);
+        const auto&     first  = proof.finalized_proposal;
+        const auto&     second = proof.child_proposal;
+        const auto&     third  = proof.grandchild_proposal;
+        return verify_proposal(first) && verify_proposal(second) && verify_proposal(third)
+               && first.header.height + 1 == second.header.height
+               && second.header.height + 1 == third.header.height
+               && second.parent_certificate.height == first.header.height
+               && third.parent_certificate.height == second.header.height
+               && proof.decision_certificate.height == third.header.height
+               && second.parent_certificate.header_hash == hash_header(first.header)
+               && third.parent_certificate.header_hash == hash_header(second.header)
+               && proof.decision_certificate.header_hash == hash_header(third.header)
+               && extends_batch(first, second) && extends_batch(second, third)
+               && verify_certificate(second.parent_certificate) && verify_certificate(third.parent_certificate)
+               && verify_certificate(proof.decision_certificate);
+    }
+
+    std::expected<std::vector<FinalityProof>, ConsensusError> ConsensusEngine::finality_proofs_after(
+        std::uint64_t height,
+        std::size_t   limit) const {
+        std::lock_guard lock(mutex_);
+        const auto      stored = store_->load_finality_proofs_after(height, limit);
+        if (!stored.has_value()) {
+            return std::unexpected(stored.error());
+        }
+        for (const auto& proof : stored.value()) {
+            if (!verify_finality_proof(proof)) {
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+        }
+        return stored.value();
+    }
+
+    std::expected<std::optional<FinalityProof>, ConsensusError> ConsensusEngine::finality_proof_for_section(
+        std::uint64_t section) const {
+        std::lock_guard lock(mutex_);
+        for (const auto& [_, proof] : finality_proofs_) {
+            if (proof.finalized_proposal.batch.first_section <= section
+                && section <= proof.finalized_proposal.batch.last_section) {
+                return std::optional<FinalityProof>(proof);
+            }
+        }
+        const auto stored = store_->load_finality_proof_for_section(section);
+        if (!stored.has_value()) {
+            return std::unexpected(stored.error());
+        }
+        if (stored.value().has_value() && !verify_finality_proof(stored.value().value())) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        return stored.value();
+    }
+
     QuorumCertificate ConsensusEngine::genesis_certificate() const {
         const auto payload =
             std::string(GenesisDomain) + validators_.document().network_id.to_string() + validators_.hash();
@@ -431,6 +787,22 @@ namespace ExtraChain::Consensus {
                && validators_.leader(height, round).validator_id == identity_.value().validator_id;
     }
 
+    std::optional<Proposal> ConsensusEngine::proposal_for(std::string_view header_hash) const {
+        std::lock_guard lock(mutex_);
+        const auto      proposal = proposals_.find(std::string(header_hash));
+        return proposal == proposals_.end() ? std::nullopt : std::optional<Proposal>(proposal->second);
+    }
+
+    std::optional<SectionBatchData> ConsensusEngine::batch_for(std::string_view header_hash) const {
+        std::lock_guard lock(mutex_);
+        const auto      batch = batches_.find(std::string(header_hash));
+        if (batch != batches_.end()) {
+            return batch->second;
+        }
+        const auto stored = store_->load_batch(header_hash);
+        return stored.has_value() ? stored.value() : std::nullopt;
+    }
+
     bool ConsensusEngine::verify_proposal(const Proposal& proposal) const {
         if (proposal.header.protocol_version != ProtocolVersion
             || proposal.header.network_id != validators_.document().network_id
@@ -439,12 +811,41 @@ namespace ExtraChain::Consensus {
             || proposal.header.parent_certificate_hash != hash_certificate(proposal.parent_certificate)
             || proposal.header.height != proposal.parent_certificate.height + 1
             || proposal.header.section_root.empty() || proposal.header.transaction_root.empty()
+            || proposal.batch.first_section > proposal.batch.last_section
+            || proposal.batch.last_section != proposal.header.dag_section
+            || proposal.batch.transaction_root != proposal.header.transaction_root
+            || proposal.batch.transaction_root != calculate_transaction_root(proposal.batch.transaction_hashes)
+            || proposal.header.batch_root != hash_batch_manifest(proposal.batch)
+            || proposal.batch.data_root.empty() || proposal.batch.payload_bytes == 0
             || proposal.header.state_commitment
                    != state_commitment(proposal.parent_certificate,
                                        proposal.header.section_root,
-                                       proposal.header.transaction_root)
+                                       proposal.header.batch_root)
             || !verify_certificate(proposal.parent_certificate)) {
             return false;
+        }
+        if ((proposal.header.round == 0 && proposal.timeout_certificate.has_value())
+            || (proposal.header.round != 0
+                && (!proposal.timeout_certificate.has_value()
+                    || !verify_timeout_certificate(proposal.timeout_certificate.value())
+                    || proposal.timeout_certificate.value().height != proposal.header.height
+                    || proposal.timeout_certificate.value().round + 1 != proposal.header.round
+                    || hash_certificate(proposal.timeout_certificate.value().highest_certificate)
+                           != hash_certificate(proposal.parent_certificate)))) {
+            return false;
+        }
+        if (proposal.parent_certificate.phase == Phase::Genesis) {
+            if (proposal.batch.first_section == 0 && !proposal.batch.previous_section_root.empty()) {
+                return false;
+            }
+        } else {
+            const auto parent = proposals_.find(proposal.parent_certificate.header_hash);
+            if (parent != proposals_.end()
+                && (parent->second.batch.last_section == std::numeric_limits<std::uint64_t>::max()
+                    || parent->second.batch.last_section + 1 != proposal.batch.first_section
+                    || parent->second.header.section_root != proposal.batch.previous_section_root)) {
+                return false;
+            }
         }
         const auto* proposer = validators_.find(proposal.proposer_id);
         return proposer != nullptr && active_at(*proposer, proposal.header.height)
@@ -466,7 +867,23 @@ namespace ExtraChain::Consensus {
                && verify_payload(validator->consensus_public_key, vote_signing_payload(vote), vote.signature);
     }
 
+    bool ConsensusEngine::verify_timeout_vote(const TimeoutVote& vote) const {
+        if (vote.protocol_version != ProtocolVersion || vote.network_id != validators_.document().network_id
+            || vote.epoch != validators_.document().epoch || vote.height == 0
+            || vote.highest_certificate_hash.empty()) {
+            return false;
+        }
+        const auto* validator = validators_.find(vote.validator_id);
+        return validator != nullptr && active_at(*validator, vote.height)
+               && verify_payload(validator->consensus_public_key,
+                                 timeout_vote_signing_payload(vote),
+                                 vote.signature);
+    }
+
     bool ConsensusEngine::safe_to_vote(const Proposal& proposal) const {
+        if (proposal.header.round < safety_state_.current_round) {
+            return false;
+        }
         if (safety_state_.last_voted_height > proposal.header.height
             || (safety_state_.last_voted_height == proposal.header.height
                 && safety_state_.last_voted_round > proposal.header.round)) {
@@ -507,19 +924,43 @@ namespace ExtraChain::Consensus {
             return std::nullopt;
         }
         return FinalizedCheckpoint {
-            .height           = grandparent->second.header.height,
-            .dag_section      = grandparent->second.header.dag_section,
-            .header_hash      = hash_header(grandparent->second.header),
-            .section_root     = grandparent->second.header.section_root,
-            .certificate_hash = hash_certificate(certificate),
+            .height            = grandparent->second.header.height,
+            .dag_section       = grandparent->second.header.dag_section,
+            .first_dag_section = grandparent->second.batch.first_section,
+            .header_hash       = hash_header(grandparent->second.header),
+            .section_root      = grandparent->second.header.section_root,
+            .transaction_root  = grandparent->second.header.transaction_root,
+            .batch_root        = grandparent->second.header.batch_root,
+            .certificate_hash  = hash_certificate(certificate),
+        };
+    }
+
+    std::optional<FinalityProof> ConsensusEngine::finality_proof_for(const QuorumCertificate& certificate) const {
+        const auto child = proposals_.find(certificate.header_hash);
+        if (child == proposals_.end()) {
+            return std::nullopt;
+        }
+        const auto parent = proposals_.find(child->second.parent_certificate.header_hash);
+        if (parent == proposals_.end()) {
+            return std::nullopt;
+        }
+        const auto grandparent = proposals_.find(parent->second.parent_certificate.header_hash);
+        if (grandparent == proposals_.end()) {
+            return std::nullopt;
+        }
+        return FinalityProof {
+            .finalized_proposal   = grandparent->second,
+            .child_proposal       = parent->second,
+            .grandchild_proposal  = child->second,
+            .decision_certificate = certificate,
         };
     }
 
     std::string ConsensusEngine::state_commitment(const QuorumCertificate& parent,
                                                   std::string_view         section_root,
-                                                  std::string_view         transaction_root) const {
+                                                  std::string_view         batch_root) const {
         return Utils::calculate_hash(std::string(StateDomain) + hash_certificate(parent)
-                                         + std::string(section_root) + std::string(transaction_root)
+                                         + std::string(section_root) + std::string(batch_root)
                                          + validators_.hash(),
                                      Utils::HashAlgorithm::Blake3);
     }
@@ -531,6 +972,10 @@ namespace ExtraChain::Consensus {
         const auto minimum_height = finalized_height - 2;
         std::erase_if(proposals_, [minimum_height](const auto& item) {
             return item.second.header.height < minimum_height;
+        });
+        std::erase_if(batches_, [minimum_height, this](const auto& item) {
+            const auto proposal = proposals_.find(item.first);
+            return proposal == proposals_.end() || proposal->second.header.height < minimum_height;
         });
         std::erase_if(certificates_, [minimum_height](const auto& item) {
             return item.second.phase != Phase::Genesis && item.second.height < minimum_height;
@@ -547,6 +992,18 @@ namespace ExtraChain::Consensus {
         });
         std::erase_if(observed_vote_slots_, [minimum_height](const auto& item) {
             return item.second.height < minimum_height;
+        });
+        std::erase_if(timeout_votes_, [minimum_height](const auto& item) {
+            return item.second.empty() || item.second.begin()->second.height < minimum_height;
+        });
+        std::erase_if(observed_timeout_slots_, [minimum_height](const auto& item) {
+            return item.second.height < minimum_height;
+        });
+        std::erase_if(timeout_certificates_, [minimum_height](const auto& item) {
+            return item.second.height < minimum_height;
+        });
+        std::erase_if(finality_proofs_, [minimum_height](const auto& item) {
+            return item.first < minimum_height;
         });
     }
 
