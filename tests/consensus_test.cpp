@@ -8,6 +8,7 @@
 #include "consensus/peer_authenticator.h"
 #include "consensus/shadow_consensus.h"
 #include "utils/exc_utils.h"
+#include "utils/exc_utils_base64.h"
 
 namespace {
     using namespace ExtraChain::Consensus;
@@ -186,6 +187,7 @@ int main() {
         const auto observer = ShadowConsensus::load(observer_directory, fixture.governance.id());
         check("observer loads without a private validator key",
               observer.has_value() && !observer.value()->engine().identity().has_value());
+        Fixture    finality_fixture(7);
         const auto finality_directory = root / "finality-validator";
         check("finality configuration is written atomically",
               ShadowConsensus::write_configuration(finality_directory,
@@ -199,6 +201,40 @@ int main() {
                                                                           .activation_height      = 1,
                                                                           .activation_dag_section = 0 })
                    .has_value());
+        check("finality receives the signed validator set",
+              ShadowConsensus::write_validator_set(finality_directory, finality_fixture.validator_set)
+                  .has_value());
+        check("finality cannot load without a governed activation",
+              !ShadowConsensus::load(finality_directory, finality_fixture.governance.id()).has_value());
+        std::vector<KeyPrivate>  governance_keys(5);
+        std::vector<std::string> governance_public_keys;
+        for (auto& key : governance_keys) {
+            key.generate_random();
+            governance_public_keys.push_back(Utils::to_base64(key.public_key()));
+        }
+        const auto governance_policy =
+            make_multisig_policy(finality_fixture.governance.id(), GovernanceThreshold, governance_public_keys);
+        check("governance policy is written atomically",
+              governance_policy.has_value()
+                  && ShadowConsensus::write_governance_policy(finality_directory, governance_policy.value())
+                         .has_value());
+        ActivationManifestV1 manifest {
+            .network_id             = finality_fixture.governance.id(),
+            .activation_height      = 10,
+            .activation_dag_section = 200,
+            .validator_set_hash     = finality_fixture.view.hash(),
+        };
+        const auto manifest_authorization =
+            authorize_action(governance_policy.value(),
+                             1,
+                             activation_action_hash(manifest),
+                             { governance_keys[0], governance_keys[1], governance_keys[2] });
+        manifest.authorization = manifest_authorization.value();
+        check("activation manifest is written atomically",
+              ShadowConsensus::write_activation_manifest(finality_directory, manifest, governance_policy.value())
+                  .has_value());
+        const auto finality = ShadowConsensus::load(finality_directory, finality_fixture.governance.id());
+        check("finality loads only after governed activation", finality.has_value());
     }
 
     std::vector<std::unique_ptr<ConsensusEngine>> engines;
@@ -310,6 +346,18 @@ int main() {
     check("finality creates a portable three-chain proof",
           proofs.has_value() && proofs.value().size() == 1
               && engines.front()->verify_finality_proof(proofs.value().front()));
+    const auto inclusion = engines.front()->transaction_inclusion_proof("transaction-1");
+    check("finalized transaction has a Merkle inclusion proof",
+          inclusion.has_value() && inclusion.value().has_value()
+              && engines.front()->verify_transaction_inclusion_proof(inclusion.value().value()));
+    if (inclusion.has_value() && inclusion.value().has_value()) {
+        auto changed_inclusion             = inclusion.value().value();
+        changed_inclusion.transaction_hash = "transaction-changed";
+        check("changed transaction inclusion proof is rejected",
+              !engines.front()->verify_transaction_inclusion_proof(changed_inclusion));
+    } else {
+        check("changed transaction inclusion proof is rejected", false);
+    }
     if (proofs.has_value() && !proofs.value().empty()) {
         auto changed_proof                             = proofs.value().front();
         changed_proof.decision_certificate.header_hash = "changed-header";

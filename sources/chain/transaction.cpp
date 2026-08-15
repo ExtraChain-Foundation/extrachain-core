@@ -19,6 +19,7 @@
 
 #include "chain/transaction.h"
 
+#include "consensus/consensus_protocol.h"
 #include "utils/exc_utils.h"
 
 namespace {
@@ -41,6 +42,9 @@ namespace {
         append_field(result, transaction.amount().to_string());
         append_field(result, std::to_string(transaction.timestamp()));
         append_field(result, transaction.meta().value_or(""));
+        if (transaction.consensus_intent().has_value()) {
+            append_field(result, transaction.consensus_intent().value());
+        }
         append_field(result, std::to_string(transaction.prev_hashs().size()));
         for (const auto &previous_hash : transaction.prev_hashs()) {
             append_field(result, previous_hash);
@@ -51,45 +55,48 @@ namespace {
 } // namespace
 
 Transaction::Transaction() {
-    this->sender_    = ActorId();
-    this->receiver_  = ActorId();
-    this->token_     = ActorId();
-    this->amount_    = BigNumberFloat(0);
-    this->timestamp_ = 0;
-    this->meta_      = std::nullopt;
-    this->section_   = BigNumber(0);
-    this->hash_      = "";
-    this->signature_ = Signature();
-    this->type_      = TransactionType::Regular;
+    this->sender_           = ActorId();
+    this->receiver_         = ActorId();
+    this->token_            = ActorId();
+    this->amount_           = BigNumberFloat(0);
+    this->timestamp_        = 0;
+    this->meta_             = std::nullopt;
+    this->consensus_intent_ = std::nullopt;
+    this->section_          = BigNumber(0);
+    this->hash_             = "";
+    this->signature_        = Signature();
+    this->type_             = TransactionType::Regular;
     update_hash();
 }
 
 Transaction::Transaction(const Transaction &other) {
-    this->sender_     = other.sender_;
-    this->receiver_   = other.receiver_;
-    this->amount_     = other.amount_;
-    this->timestamp_  = other.timestamp_;
-    this->meta_       = other.meta_;
-    this->token_      = other.token_;
-    this->section_    = other.section_;
-    this->hash_       = other.hash_;
-    this->signature_  = other.signature_;
-    this->type_       = other.type_;
-    this->prev_hashs_ = other.prev_hashs_;
+    this->sender_           = other.sender_;
+    this->receiver_         = other.receiver_;
+    this->amount_           = other.amount_;
+    this->timestamp_        = other.timestamp_;
+    this->meta_             = other.meta_;
+    this->consensus_intent_ = other.consensus_intent_;
+    this->token_            = other.token_;
+    this->section_          = other.section_;
+    this->hash_             = other.hash_;
+    this->signature_        = other.signature_;
+    this->type_             = other.type_;
+    this->prev_hashs_       = other.prev_hashs_;
 }
 
 Transaction::Transaction(Transaction &&other) noexcept {
-    sender_     = std::move(other.sender_);
-    receiver_   = std::move(other.receiver_);
-    amount_     = std::move(other.amount_);
-    timestamp_  = other.timestamp_;
-    meta_       = std::move(other.meta_);
-    token_      = std::move(other.token_);
-    section_    = std::move(other.section_);
-    hash_       = std::move(other.hash_);
-    signature_  = std::move(other.signature_);
-    type_       = std::move(other.type_);
-    prev_hashs_ = std::move(other.prev_hashs_);
+    sender_           = std::move(other.sender_);
+    receiver_         = std::move(other.receiver_);
+    amount_           = std::move(other.amount_);
+    timestamp_        = other.timestamp_;
+    meta_             = std::move(other.meta_);
+    consensus_intent_ = std::move(other.consensus_intent_);
+    token_            = std::move(other.token_);
+    section_          = std::move(other.section_);
+    hash_             = std::move(other.hash_);
+    signature_        = std::move(other.signature_);
+    type_             = std::move(other.type_);
+    prev_hashs_       = std::move(other.prev_hashs_);
 
     other.hash_ = "";
 }
@@ -114,6 +121,12 @@ void Transaction::set_meta(const std::string &value) {
     meta_ = value;
 }
 
+void Transaction::set_consensus_intent(std::string payload, Signature signature) {
+    consensus_intent_ = std::move(payload);
+    signature_        = std::move(signature);
+    update_hash();
+}
+
 void Transaction::set_prev_hashs(const std::set<std::string> &prev_hashs) {
     this->prev_hashs_ = prev_hashs;
 }
@@ -134,6 +147,9 @@ std::string Transaction::hash_preimage(bool hex) const {
 
     for (const auto &prev_hash : prev_hashs_) {
         hashData += prev_hash;
+    }
+    if (consensus_intent_.has_value()) {
+        hashData += consensus_intent_.value();
     }
     return hashData;
 }
@@ -196,6 +212,11 @@ bool Transaction::verify(const Actor<KeyPublic> &actor) const {
         return false;
     }
 
+    if (consensus_intent_.has_value()) {
+        return ExtraChain::Consensus::verify_materialized_intent(*this,
+                                                                 Utils::to_base64(actor.key().public_key()));
+    }
+
     // New signatures are computed over the decimal form. Transactions signed before
     // the hex → decimal migration still validate against the legacy hex form.
     auto verify_primary = actor.key().verify(calculate_hash(), signature_);
@@ -245,6 +266,10 @@ std::optional<std::string> Transaction::meta() const {
     return this->meta_;
 }
 
+const std::optional<std::string> &Transaction::consensus_intent() const noexcept {
+    return consensus_intent_;
+}
+
 Signature Transaction::signature() const {
     return this->signature_;
 }
@@ -278,6 +303,8 @@ bool Transaction::operator<(const Transaction &other) const {
         return token_ < other.token_;
     if (meta_ != other.meta_)
         return meta_ < other.meta_;
+    if (consensus_intent_ != other.consensus_intent_)
+        return consensus_intent_ < other.consensus_intent_;
     if (type_ != other.type_)
         return static_cast<int>(type_) < static_cast<int>(other.type_);
     if (prev_hashs_ != other.prev_hashs_) {
@@ -308,6 +335,8 @@ bool Transaction::operator==(const Transaction &transaction) const {
         return false;
     if (this->meta_ != transaction.meta())
         return false;
+    if (this->consensus_intent_ != transaction.consensus_intent())
+        return false;
     if (this->prev_hashs_ != transaction.prev_hashs())
         return false;
 
@@ -319,17 +348,18 @@ void Transaction::operator=(const Transaction &other) {
         return;
     }
 
-    this->sender_     = other.sender_;
-    this->receiver_   = other.receiver_;
-    this->amount_     = other.amount_;
-    this->timestamp_  = other.timestamp_;
-    this->meta_       = other.meta_;
-    this->token_      = other.token_;
-    this->section_    = other.section_;
-    this->hash_       = other.hash_;
-    this->signature_  = other.signature_;
-    this->type_       = other.type_;
-    this->prev_hashs_ = other.prev_hashs_;
+    this->sender_           = other.sender_;
+    this->receiver_         = other.receiver_;
+    this->amount_           = other.amount_;
+    this->timestamp_        = other.timestamp_;
+    this->meta_             = other.meta_;
+    this->consensus_intent_ = other.consensus_intent_;
+    this->token_            = other.token_;
+    this->section_          = other.section_;
+    this->hash_             = other.hash_;
+    this->signature_        = other.signature_;
+    this->type_             = other.type_;
+    this->prev_hashs_       = other.prev_hashs_;
 }
 
 Transaction &Transaction::operator=(Transaction &&other) noexcept {
@@ -337,17 +367,18 @@ Transaction &Transaction::operator=(Transaction &&other) noexcept {
         return *this;
     }
 
-    sender_     = std::move(other.sender_);
-    receiver_   = std::move(other.receiver_);
-    amount_     = std::move(other.amount_);
-    timestamp_  = std::move(other.timestamp_);
-    meta_       = std::move(other.meta_);
-    token_      = std::move(other.token_);
-    section_    = std::move(other.section_);
-    hash_       = std::move(other.hash_);
-    signature_  = std::move(other.signature_);
-    type_       = std::move(other.type_);
-    prev_hashs_ = std::move(other.prev_hashs_);
+    sender_           = std::move(other.sender_);
+    receiver_         = std::move(other.receiver_);
+    amount_           = std::move(other.amount_);
+    timestamp_        = std::move(other.timestamp_);
+    meta_             = std::move(other.meta_);
+    consensus_intent_ = std::move(other.consensus_intent_);
+    token_            = std::move(other.token_);
+    section_          = std::move(other.section_);
+    hash_             = std::move(other.hash_);
+    signature_        = std::move(other.signature_);
+    type_             = std::move(other.type_);
+    prev_hashs_       = std::move(other.prev_hashs_);
 
     other.hash_      = "";
     other.signature_ = {};

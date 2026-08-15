@@ -7,6 +7,7 @@
 #include "chain/actor.h"
 #include "chain/dag.h"
 #include "chain/dag_recovery.h"
+#include "consensus/consensus_protocol.h"
 #include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "network/responder.h"
@@ -129,13 +130,31 @@ int main() {
             },
         .batch = shadow_batch.value().manifest,
     };
-    shadow_batch.value().header_hash = ExtraChain::Consensus::hash_header(shadow_proposal.header);
+    shadow_batch.value().header_hash  = ExtraChain::Consensus::hash_header(shadow_proposal.header);
+    const auto calculated_shadow_root = node->dag()->shadow_batch_section_root(shadow_batch.value());
+    TEST_REQUIRE(calculated_shadow_root.has_value());
+    TEST_REQUIRE_EQ(calculated_shadow_root.value(), control_20_before);
     const auto shadow_validation =
         node->dag()->validate_shadow_batch(shadow_proposal, shadow_batch.value(), 16ULL * 1024ULL * 1024ULL);
     TEST_REQUIRE_MESSAGE(shadow_validation.has_value(),
                          shadow_validation.has_value()
                              ? std::string {}
                              : std::to_string(std::to_underlying(shadow_validation.error())));
+    WireFormat::Scope speculative_scope(WireFormat::Mode::Canonical);
+    const auto        speculative_parent =
+        Json::serialize(Section { .id = SectionId(60), .transactions = {}, .control = std::nullopt });
+    const auto speculative_empty_batch =
+        node->dag()->build_shadow_intent_batch(SectionId(61),
+                                               SectionId(80),
+                                               2,
+                                               std::vector<ExtraChain::Consensus::IntentEnvelope> {},
+                                               {},
+                                               speculative_parent,
+                                               "speculative-parent-root");
+    TEST_REQUIRE(speculative_empty_batch.has_value());
+    TEST_REQUIRE(speculative_empty_batch.value().manifest.transaction_hashes.empty());
+    TEST_REQUIRE_EQ(speculative_empty_batch.value().manifest.previous_section_root, "speculative-parent-root");
+    TEST_REQUIRE(node->dag()->shadow_batch_section_root(speculative_empty_batch.value()).has_value());
     auto corrupted_shadow_batch = shadow_batch.value();
     corrupted_shadow_batch.sections.front().second.push_back('x');
     TEST_REQUIRE(!node->dag()

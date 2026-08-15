@@ -350,8 +350,12 @@ private:
                 const auto sender = actors.find(transaction.sender());
                 result.sender_exists = sender != actors.end() && !sender->second.empty();
                 if (result.sender_exists.value() && !transaction.signature().empty()) {
-                    const auto signature = sender->second.key().verify(result.hash, transaction.signature());
-                    result.signature_valid = signature.has_value() && signature.value();
+                    if (transaction.consensus_intent().has_value()) {
+                        result.signature_valid = transaction.verify(sender->second);
+                    } else {
+                        const auto signature = sender->second.key().verify(result.hash, transaction.signature());
+                        result.signature_valid = signature.has_value() && signature.value();
+                    }
                 } else {
                     result.signature_valid = false;
                 }
@@ -425,7 +429,8 @@ private:
                                                              nullptr,
                                                              &pending_hashes,
                                                              &validation_frontier,
-                                                             &prevalidated[request_index]);
+                                                             &prevalidated[request_index],
+                                                             true);
             if (result != TransactionProveError::NoError) {
                 if (defer_future(request, prevalidated[request_index], result)) {
                     continue;

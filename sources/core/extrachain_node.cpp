@@ -1528,7 +1528,8 @@ namespace ExtraChain::Core {
         }
     }
 
-    TransactionProveError ExtraChainNode::validate_contract_transaction(const Transaction& transaction) {
+    TransactionProveError ExtraChainNode::validate_contract_transaction(const Transaction& transaction,
+                                                                        bool               stage_change) {
         if (!transaction.meta().has_value()) {
             return TransactionProveError::InvalidContractPayload;
         }
@@ -1654,8 +1655,8 @@ namespace ExtraChain::Core {
                 return TransactionProveError::InvalidContractPayload;
             }
             const auto verified = verify_output(change->output);
-            if (verified == TransactionProveError::NoError) {
-                if (!stage_contract_change(transaction.hash(), std::move(*change))) {
+            if (verified == TransactionProveError::NoError && stage_change) {
+                if (!stage_contract_change(transaction.hash(), std::move(change.value()))) {
                     return TransactionProveError::InvalidContractPayload;
                 }
             }
@@ -1705,8 +1706,8 @@ namespace ExtraChain::Core {
                 return TransactionProveError::InvalidContractPayload;
             }
             const auto verified = verify_output(change->output);
-            if (verified == TransactionProveError::NoError) {
-                if (!stage_contract_change(transaction.hash(), std::move(*change))) {
+            if (verified == TransactionProveError::NoError && stage_change) {
+                if (!stage_contract_change(transaction.hash(), std::move(change.value()))) {
                     return TransactionProveError::InvalidContractPayload;
                 }
             }
@@ -1750,8 +1751,8 @@ namespace ExtraChain::Core {
             return TransactionProveError::InvalidContractPayload;
         }
         const auto verified = verify_output(change->output);
-        if (verified == TransactionProveError::NoError) {
-            if (!stage_contract_change(transaction.hash(), std::move(*change))) {
+        if (verified == TransactionProveError::NoError && stage_change) {
+            if (!stage_contract_change(transaction.hash(), std::move(change.value()))) {
                 return TransactionProveError::InvalidContractPayload;
             }
         }

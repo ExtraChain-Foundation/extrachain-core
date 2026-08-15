@@ -163,6 +163,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/wasm_runtime.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/toolchain_registry.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/consensus_engine.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/consensus_protocol.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/intent_store.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/light_client.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/consensus_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/consensus_types.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/peer_authenticator.h
@@ -236,6 +239,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_engine.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_protocol.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/intent_store.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/light_client.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_types.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/peer_authenticator.cpp

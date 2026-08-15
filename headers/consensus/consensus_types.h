@@ -25,7 +25,7 @@
 
 namespace ExtraChain::Consensus {
 
-    inline constexpr std::uint16_t ProtocolVersion         = 2;
+    inline constexpr std::uint16_t ProtocolVersion         = 3;
     inline constexpr std::uint64_t ShadowSectionInterval   = 20;
     inline constexpr std::uint64_t MaximumShadowBatchBytes = 64ULL * 1024ULL * 1024ULL;
     inline constexpr std::uint64_t MaximumShadowSyncBytes  = 32ULL * 1024ULL * 1024ULL;
@@ -71,7 +71,14 @@ namespace ExtraChain::Consensus {
         NotValidator,
         NotLeader,
         NotReady,
-        Replay
+        Replay,
+        InvalidIntent,
+        InvalidNonce,
+        IntentExpired,
+        DuplicateIntent,
+        PoolFull,
+        InvalidProof,
+        InvalidGovernance
     };
 
     struct SectionBatchManifest {
@@ -348,6 +355,16 @@ namespace ExtraChain::Consensus {
         MSGPACK_DEFINE(finalized_proposal, child_proposal, grandchild_proposal, decision_certificate)
     };
 
+    struct ConsensusMetricsSnapshot {
+        std::uint64_t proposals_created = 0;
+        std::uint64_t batches_staged    = 0;
+        std::uint64_t votes_created     = 0;
+        std::uint64_t timeout_votes     = 0;
+        std::uint64_t certificates      = 0;
+        std::uint64_t finalized         = 0;
+        std::uint64_t stage_nanoseconds = 0;
+    };
+
     struct ShadowConfiguration {
         std::uint16_t protocol_version       = ProtocolVersion;
         ShadowMode    mode                   = ShadowMode::Observe;
@@ -438,6 +455,10 @@ namespace ExtraChain::Consensus {
     EXTRACHAIN_EXPORT std::string calculate_data_root(
         const std::vector<std::pair<std::uint64_t, std::string>>& sections);
     EXTRACHAIN_EXPORT std::string hash_certificate(const QuorumCertificate& certificate);
+    EXTRACHAIN_EXPORT std::string calculate_consensus_state_commitment(const QuorumCertificate& parent,
+                                                                       std::string_view         section_root,
+                                                                       std::string_view         batch_root,
+                                                                       std::string_view validator_set_hash);
     EXTRACHAIN_EXPORT std::string hash_timeout_certificate(const TimeoutCertificate& certificate);
     EXTRACHAIN_EXPORT std::string proposal_signing_payload(const Proposal& proposal);
     EXTRACHAIN_EXPORT std::string vote_signing_payload(const Vote& vote);
@@ -458,3 +479,4 @@ namespace ExtraChain::Consensus {
 MSGPACK_ADD_ENUM(ExtraChain::Consensus::ValidatorStatus)
 MSGPACK_ADD_ENUM(ExtraChain::Consensus::Phase)
 MSGPACK_ADD_ENUM(ExtraChain::Consensus::ShadowMode)
+MSGPACK_ADD_ENUM(ExtraChain::Consensus::ConsensusError)

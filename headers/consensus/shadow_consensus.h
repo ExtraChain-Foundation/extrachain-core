@@ -14,6 +14,7 @@
 #include <memory>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "consensus/consensus_engine.h"
 
@@ -45,6 +46,15 @@ namespace ExtraChain::Consensus {
                                                                        const ValidatorSet&          validators);
         static std::expected<void, ConsensusError> write_configuration(const std::filesystem::path& directory,
                                                                        const ShadowConfiguration&   configuration);
+        static std::expected<void, ConsensusError> write_governance_policy(const std::filesystem::path& directory,
+                                                                           const MultisigPolicy&        policy);
+        static std::expected<void, ConsensusError> write_activation_manifest(
+            const std::filesystem::path& directory,
+            const ActivationManifestV1&  manifest,
+            const MultisigPolicy&        policy);
+        static std::expected<void, ConsensusError> write_epoch_identity(const std::filesystem::path& directory,
+                                                                        std::uint64_t                epoch,
+                                                                        const IdentityDocument&      identity);
 
         std::expected<std::optional<Proposal>, ConsensusError> make_checkpoint_proposal(
             ShadowCheckpoint checkpoint,
@@ -59,18 +69,41 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError> receive_timeout_certificate(const TimeoutCertificate& certificate);
         std::expected<std::optional<FinalizedCheckpoint>, ConsensusError> receive_certificate(
             const QuorumCertificate& certificate);
+        std::expected<void, ConsensusError>               schedule_epoch(const EpochChangeV1&               change,
+                                                                         ValidatorSet                       next_validators,
+                                                                         const TransactionInclusionProofV1& proof);
+        [[nodiscard]] std::expected<void, ConsensusError> validate_epoch_request(
+            const EpochChangeRequestV1& request,
+            std::uint64_t               proposal_height) const;
+        std::expected<bool, ConsensusError> activate_scheduled_epoch();
 
-        [[nodiscard]] const ConsensusEngine&     engine() const noexcept;
-        [[nodiscard]] ConsensusEngine&           engine() noexcept;
-        [[nodiscard]] const ShadowConfiguration& configuration() const noexcept;
+        [[nodiscard]] const ConsensusEngine&                  engine() const noexcept;
+        [[nodiscard]] ConsensusEngine&                        engine() noexcept;
+        [[nodiscard]] const ShadowConfiguration&              configuration() const noexcept;
+        [[nodiscard]] const std::optional<EpochTransitionV1>& pending_epoch() const noexcept;
 
     private:
-        explicit ShadowConsensus(std::unique_ptr<ConsensusEngine> engine, ShadowConfiguration configuration);
+        explicit ShadowConsensus(std::filesystem::path              directory,
+                                 std::unique_ptr<ConsensusEngine>   engine,
+                                 ShadowConfiguration                configuration,
+                                 std::optional<MultisigPolicy>      governance_policy,
+                                 std::vector<EpochTransitionV1>     epoch_history,
+                                 std::optional<EpochTransitionV1>   pending_epoch,
+                                 std::optional<EpochBootstrapV1>    active_bootstrap,
+                                 std::uint64_t                      minimum_governance_sequence,
+                                 ConsensusEngine::ProposalValidator proposal_validator);
         [[nodiscard]] bool peer_matches_validator(std::string_view validator_id,
                                                   std::string_view peer_identifier) const;
 
-        std::unique_ptr<ConsensusEngine> engine_;
-        ShadowConfiguration              configuration_;
+        std::unique_ptr<ConsensusEngine>   engine_;
+        ShadowConfiguration                configuration_;
+        std::filesystem::path              directory_;
+        std::optional<MultisigPolicy>      governance_policy_;
+        std::vector<EpochTransitionV1>     epoch_history_;
+        std::optional<EpochTransitionV1>   pending_epoch_;
+        std::optional<EpochBootstrapV1>    active_bootstrap_;
+        std::uint64_t                      minimum_governance_sequence_ = 1;
+        ConsensusEngine::ProposalValidator proposal_validator_;
     };
 
 } // namespace ExtraChain::Consensus

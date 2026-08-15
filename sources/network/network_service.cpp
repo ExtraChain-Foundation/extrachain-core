@@ -1930,7 +1930,8 @@ void NetworkService::message_received(const std::string &message,
     case MessageType::ConsensusBatchRequest:
     case MessageType::ConsensusBatchData:
     case MessageType::ConsensusSyncRequest:
-    case MessageType::ConsensusSyncResponse: {
+    case MessageType::ConsensusSyncResponse:
+    case MessageType::ConsensusIntent: {
         if (node->consensus() != nullptr) {
             node->consensus()->receive_network_message(type, status, serialized, responder, identifier);
         }

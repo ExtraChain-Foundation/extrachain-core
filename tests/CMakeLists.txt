@@ -51,6 +51,8 @@ add_core_test_executable(extrachain-token-registry token_registry.cpp)
 add_core_test_executable(extrachain-dag-recovery dag_recovery.cpp)
 add_core_test_executable(extrachain-runtime-tests runtime/runtime_test.cpp)
 add_core_test_executable(extrachain-consensus-tests consensus_test.cpp)
+add_core_test_executable(extrachain-consensus-protocol-tests consensus_protocol_test.cpp)
+add_core_test_executable(extrachain-consensus-network-tests consensus_network_test.cpp)
 add_core_test_executable(extrachain-consensus-benchmark consensus_benchmark.cpp)
 
 if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)
@@ -71,10 +73,12 @@ add_test(NAME token-registry COMMAND extrachain-token-registry)
 add_test(NAME dag-recovery COMMAND extrachain-dag-recovery)
 add_test(NAME runtime COMMAND extrachain-runtime-tests)
 add_test(NAME consensus COMMAND extrachain-consensus-tests)
+add_test(NAME consensus-protocol COMMAND extrachain-consensus-protocol-tests)
+add_test(NAME consensus-network COMMAND extrachain-consensus-network-tests)
 if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)
     add_test(NAME qt-compat COMMAND extrachain-qt-compat-tests)
 endif()
-set(EXTRACHAIN_TEST_NAMES core-unit amount-roundtrip sync-roundtrip native-balance token-registry dag-recovery runtime consensus)
+set(EXTRACHAIN_TEST_NAMES core-unit amount-roundtrip sync-roundtrip native-balance token-registry dag-recovery runtime consensus consensus-protocol consensus-network)
 if(EXTRACHAIN_BUILD_LEGACY_TESTS)
     list(APPEND EXTRACHAIN_TEST_NAMES legacy-monolith)
 endif()
@@ -104,6 +108,9 @@ set(EXTRACHAIN_HEADER_CHECKS
     contracts/contract_manager.h
     contracts/wasm_runtime.h
     consensus/consensus_engine.h
+    consensus/consensus_protocol.h
+    consensus/intent_store.h
+    consensus/light_client.h
     consensus/consensus_service.h
     consensus/consensus_types.h
     consensus/peer_authenticator.h

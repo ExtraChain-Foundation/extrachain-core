@@ -25,12 +25,15 @@ namespace ExtraChain::Consensus {
         constexpr std::string_view ValidatorSetDomain       = "EXC_CONSENSUS_VALIDATOR_SET_V1";
         constexpr std::string_view HeaderDomain             = "EXC_CONSENSUS_HEADER_V1";
         constexpr std::string_view BatchDomain              = "EXC_SHADOW_BATCH_V1";
-        constexpr std::string_view TransactionRootDomain    = "EXC_SHADOW_TRANSACTION_ROOT_V1";
+        constexpr std::string_view TransactionLeafDomain    = "EXC_SHADOW_TRANSACTION_LEAF_V2";
+        constexpr std::string_view TransactionNodeDomain    = "EXC_SHADOW_TRANSACTION_NODE_V2";
+        constexpr std::string_view TransactionEmptyDomain   = "EXC_SHADOW_TRANSACTION_EMPTY_V2";
         constexpr std::string_view DataRootDomain           = "EXC_SHADOW_DATA_ROOT_V1";
         constexpr std::string_view ProposalDomain           = "EXC_CONSENSUS_PROPOSAL_V1";
         constexpr std::string_view VoteDomain               = "EXC_CONSENSUS_VOTE_V1";
         constexpr std::string_view TimeoutVoteDomain        = "EXC_SHADOW_TIMEOUT_VOTE_V1";
         constexpr std::string_view CertificateDomain        = "EXC_CONSENSUS_CERTIFICATE_V1";
+        constexpr std::string_view StateDomain              = "EXC_CONSENSUS_STATE_V1";
         constexpr std::string_view TimeoutCertificateDomain = "EXC_SHADOW_TIMEOUT_CERTIFICATE_V1";
         constexpr std::string_view ChallengeDomain          = "EXC_CONSENSUS_AUTH_CHALLENGE_V1";
         constexpr std::string_view AuthResponseDomain       = "EXC_CONSENSUS_AUTH_RESPONSE_V1";
@@ -94,7 +97,26 @@ namespace ExtraChain::Consensus {
     }
 
     std::string calculate_transaction_root(const std::vector<std::string>& hashes) {
-        return domain_hash(TransactionRootDomain, hashes);
+        if (hashes.empty()) {
+            return Utils::calculate_hash(std::string(TransactionEmptyDomain), Utils::HashAlgorithm::Blake3);
+        }
+        std::vector<std::string> level;
+        level.reserve(hashes.size());
+        for (const auto& hash : hashes) {
+            level.push_back(
+                Utils::calculate_hash(std::string(TransactionLeafDomain) + hash, Utils::HashAlgorithm::Blake3));
+        }
+        while (level.size() > 1) {
+            std::vector<std::string> next;
+            next.reserve((level.size() + 1) / 2);
+            for (std::size_t index = 0; index < level.size(); index += 2) {
+                const auto& right = index + 1 < level.size() ? level[index + 1] : level[index];
+                next.push_back(Utils::calculate_hash(std::string(TransactionNodeDomain) + level[index] + right,
+                                                     Utils::HashAlgorithm::Blake3));
+            }
+            level = std::move(next);
+        }
+        return level.front();
     }
 
     std::string calculate_data_root(const std::vector<std::pair<std::uint64_t, std::string>>& sections) {
@@ -108,6 +130,16 @@ namespace ExtraChain::Consensus {
 
     std::string hash_certificate(const QuorumCertificate& certificate) {
         return domain_hash(CertificateDomain, certificate);
+    }
+
+    std::string calculate_consensus_state_commitment(const QuorumCertificate& parent,
+                                                     std::string_view         section_root,
+                                                     std::string_view         batch_root,
+                                                     std::string_view         validator_set_hash) {
+        return Utils::calculate_hash(std::string(StateDomain) + hash_certificate(parent)
+                                         + std::string(section_root) + std::string(batch_root)
+                                         + std::string(validator_set_hash),
+                                     Utils::HashAlgorithm::Blake3);
     }
 
     std::string hash_timeout_certificate(const TimeoutCertificate& certificate) {

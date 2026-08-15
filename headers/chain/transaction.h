@@ -39,6 +39,7 @@ enum class TransactionType {
     ContractCall    = 9,  ///< Execute a WebAssembly contract method
     ContractUpgrade = 10, ///< Activate a new immutable contract version
     TokenMigration  = 11, ///< Schedule deterministic legacy-token migration
+    EpochChange     = 12, ///< Activate a governed Shadow validator epoch
     Balance         = 99, ///< Balance query transaction
     Unknown         = 100 ///< Unrecognized transaction type
 };
@@ -53,6 +54,10 @@ constexpr bool is_token_migration_transaction(TransactionType type) {
     return type == TransactionType::TokenMigration;
 }
 
+constexpr bool is_epoch_change_transaction(TransactionType type) {
+    return type == TransactionType::EpochChange;
+}
+
 /**
  * @brief Transaction processing error codes
  */
@@ -65,7 +70,8 @@ enum class TransactionError {
     NoCurrentUser,     ///< No active user context
     ZeroAmount,        ///< Transaction amount is zero
     SubscriptionRowFull,
-    NotReady ///< Chain view is stale (still syncing) — the section stamp would be wrong
+    NotReady,      ///< Chain view is stale (still syncing) — the section stamp would be wrong
+    IntentRequired ///< Shadow requires TransactionIntentV2 for new operations
 };
 
 /**
@@ -115,7 +121,8 @@ enum class TransactionProveError {
     TokenMigrationInvalid,
     TokenMigrationFrozen,
     AdmissionBusy,
-    StateUnavailable
+    StateUnavailable,
+    IntentRequired ///< Legacy transaction arrived after the V2 activation point
 };
 
 /**
@@ -126,17 +133,18 @@ enum class TransactionProveError {
  */
 class EXTRACHAIN_EXPORT Transaction {
 private:
-    ActorId                    sender_;     ///< Transaction sender address
-    ActorId                    receiver_;   ///< Transaction receiver address
-    BigNumberFloat             amount_;     ///< Transaction amount
-    std::optional<std::string> meta_;       ///< Optional metadata payload
-    ActorId                    token_;      ///< Token contract address
-    SectionId                  section_;    ///< Chain section ID
-    std::string                hash_;       ///< Transaction hash (Blake3)
-    Signature                  signature_;  ///< Digital signature
-    TransactionType            type_;       ///< Transaction type
-    std::uint64_t              timestamp_;  ///< Creation timestamp
-    std::set<std::string>      prev_hashs_; ///< Previous transaction hashes
+    ActorId                    sender_;           ///< Transaction sender address
+    ActorId                    receiver_;         ///< Transaction receiver address
+    BigNumberFloat             amount_;           ///< Transaction amount
+    std::optional<std::string> meta_;             ///< Optional metadata payload
+    std::optional<std::string> consensus_intent_; ///< Signed V2 intent encoded as Base64 MessagePack
+    ActorId                    token_;            ///< Token contract address
+    SectionId                  section_;          ///< Chain section ID
+    std::string                hash_;             ///< Transaction hash (Blake3)
+    Signature                  signature_;        ///< Digital signature
+    TransactionType            type_;             ///< Transaction type
+    std::uint64_t              timestamp_;        ///< Creation timestamp
+    std::set<std::string>      prev_hashs_;       ///< Previous transaction hashes
 
     // Shared preimage for calculate_hash()/calculate_hash_hex(); hex=true encodes
     // section/amount in the legacy hex form. Single source so the two can't desync.
@@ -203,6 +211,12 @@ public:
      * @return Optional metadata string
      */
     std::optional<std::string> meta() const;
+
+    /**
+     * @brief Get the stable consensus intent used to authorize this transaction
+     * @return Base64 MessagePack envelope for V2 transactions, or no value for historical V1 data
+     */
+    [[nodiscard]] const std::optional<std::string> &consensus_intent() const noexcept;
 
     /**
      * @brief Get transaction hash
@@ -352,6 +366,13 @@ public:
     void set_meta(const std::string &value);
 
     /**
+     * @brief Bind a signed V2 intent to the deterministic DAG materialization
+     * @param payload Base64 MessagePack IntentEnvelope
+     * @param signature Raw Ed25519 signature copied from the intent
+     */
+    void set_consensus_intent(std::string payload, Signature signature);
+
+    /**
      * @brief Set previous transaction hashes
      * @param prev_hashs Set of hash strings
      */
@@ -365,12 +386,22 @@ public:
         this->prev_hashs_.insert(hash);
     }
 
-    BOOST_DESCRIBE_CLASS(
-        Transaction,
-        (),
-        (),
-        (),
-        (section_, type_, sender_, receiver_, token_, amount_, timestamp_, meta_, prev_hashs_, hash_, signature_))
+    BOOST_DESCRIBE_CLASS(Transaction,
+                         (),
+                         (),
+                         (),
+                         (section_,
+                          type_,
+                          sender_,
+                          receiver_,
+                          token_,
+                          amount_,
+                          timestamp_,
+                          meta_,
+                          prev_hashs_,
+                          hash_,
+                          signature_,
+                          consensus_intent_))
 };
 
 /**
