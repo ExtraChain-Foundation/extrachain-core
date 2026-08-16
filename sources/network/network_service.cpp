@@ -98,9 +98,14 @@ SafePtr<std::set<SocketService::Ptr>> NetworkService::connections() const {
     return connections_;
 }
 
-std::optional<PeerMeta> NetworkService::peer_meta_for(const std::string &identifier) const {
+std::vector<SocketService::Ptr> NetworkService::connection_snapshot() const {
     auto locked = *connections_;
-    for (const auto &svc : *locked) {
+    return { locked->begin(), locked->end() };
+}
+
+std::optional<PeerMeta> NetworkService::peer_meta_for(const std::string &identifier) const {
+    const auto connections = connection_snapshot();
+    for (const auto &svc : connections) {
         if (svc->identifier() == identifier) {
             return svc->peer_meta();
         }
@@ -243,24 +248,28 @@ DfsMode NetworkService::local_dfs_mode() const {
 }
 
 bool NetworkService::has_active_duplicate(std::string_view identifier, const SocketService *candidate) {
-    auto locked = *connections_;
-    for (const auto &connection : *locked) {
+    SocketService::Ptr stale;
+    const auto         connections = connection_snapshot();
+    for (const auto &connection : connections) {
         if (connection.get() == candidate || connection->identifier() != identifier) {
             continue;
         }
         if (connection->is_active()) {
             return true;
         }
-        connection->close_connection();
-        return false;
+        stale = connection;
+        break;
+    }
+    if (stale != nullptr) {
+        stale->close_connection();
     }
     return false;
 }
 
 int NetworkService::active_peer_count() const {
-    int  count  = 0;
-    auto locked = *connections_;
-    for (const auto &connection : *locked) {
+    const auto connections = connection_snapshot();
+    int        count       = 0;
+    for (const auto &connection : connections) {
         if (connection->is_active()) {
             ++count;
         }
@@ -274,8 +283,8 @@ int NetworkService::peer_limit() const {
 
 std::set<PeerConnection> NetworkService::shareable_peers(std::string_view remote_ip) const {
     std::set<PeerConnection> result;
-    auto                     locked = *connections_;
-    for (const auto &connection : *locked) {
+    const auto               connections = connection_snapshot();
+    for (const auto &connection : connections) {
         const auto &connection_ip = connection->ip();
         if (connection_ip.empty() || connection_ip == remote_ip || connection_ip == "127.0.0.1"
             || !connection->is_active()) {
@@ -386,8 +395,8 @@ void NetworkService::add_all_services_identifiers_to_message(MessageBody &msg) {
 
     msg.nodes_identifiers_to_ignore_later.emplace(node->node_identifier());
 
-    auto connectionsLocked = *connections_;
-    for (const auto &service : *connectionsLocked) {
+    const auto connections = connection_snapshot();
+    for (const auto &service : connections) {
         std::string ident = service->identifier();
 
         if (!ident.empty())
@@ -396,12 +405,12 @@ void NetworkService::add_all_services_identifiers_to_message(MessageBody &msg) {
 }
 
 bool NetworkService::is_first_node(const std::string &identifier) {
-    auto connectionsLocked = *connections_;
-    if (connectionsLocked->empty()) {
+    const auto connections = connection_snapshot();
+    if (connections.empty()) {
         return false;
     }
 
-    for (const auto &el : *connectionsLocked) {
+    for (const auto &el : connections) {
         if (el->identifier() == identifier && el->ip() == first_node_) {
             return true;
         }
@@ -438,8 +447,8 @@ void NetworkService::go_offline() {
         auto reconnectionsLocked = *reconnections_to_identifier_;
         reconnectionsLocked->clear();
     }
-    auto connectionsLocked = *connections_;
-    for (const auto &connection : *connectionsLocked) {
+    const auto connections = connection_snapshot();
+    for (const auto &connection : connections) {
         connection->close_connection();
     }
     eWarning("[NetworkService] offline mode: all connections closed, reconnects disabled");
@@ -454,11 +463,11 @@ bool NetworkService::is_own_address(const std::string &ip) const {
     if (error) {
         return false;
     }
-    // A first_node equal to one of this host's own interface addresses means this
-    // node is the seed. Loopback is deliberately NOT treated as "self" here: on a
-    // single-host test mesh several nodes share 127.0.0.x and must still dial each
-    // other; a genuine self-loop there is caught by the network-id check instead.
-    return !target.is_loopback() && !local_ip_.empty() && target.to_string() == local_ip_;
+    const auto address = target.to_string();
+    if (target.is_loopback()) {
+        return !node->bind_address().empty() && address == node->bind_address();
+    }
+    return !local_ip_.empty() && address == local_ip_;
 }
 
 void NetworkService::reconnection() {
@@ -633,8 +642,8 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
 
                 bool can_connect = ip != init_ip && identifier != node->node_identifier();
                 if (can_connect) {
-                    auto locked = *connections_;
-                    for (const auto &current : *locked) {
+                    const auto connections = connection_snapshot();
+                    for (const auto &current : connections) {
                         if (current->identifier() == identifier || current->ip() == ip) {
                             can_connect = false;
                             break;
@@ -657,11 +666,16 @@ void NetworkService::disconnect_peer(std::string identifier) {
         eFatal("Try remove with empty identifier");
     }
     dispatch_serial([this, identifier = std::move(identifier)] {
-        auto connections_locked = *connections_;
-        for (const auto &connection : *connections_locked) {
+        const auto         connections = connection_snapshot();
+        SocketService::Ptr target;
+        for (const auto &connection : connections) {
             if (connection->identifier() == identifier) {
-                connection->close_connection();
+                target = connection;
+                break;
             }
+        }
+        if (target != nullptr) {
+            target->close_connection();
         }
     });
 }
@@ -785,17 +799,16 @@ void NetworkService::prepare_shutdown() {
 void NetworkService::check_connections_status() {
     std::unordered_set<std::string> ind_temp;
     // m_reconnectTimer->stop();
-    bool flag  = false;
-    int  count = 0;
-    {
-        auto connectionsLocked = *connections_;
-        std::for_each(connectionsLocked->begin(), connectionsLocked->end(), [&](const SocketService::Ptr &el) {
-            flag = flag || el->is_active();
-            if (el->is_active()) {
-                count++;
-                ind_temp.insert(el->identifier());
-            }
-        });
+    bool       flag        = false;
+    int        count       = 0;
+    const auto connections = connection_snapshot();
+    for (const auto &connection : connections) {
+        const auto active = connection->is_active();
+        flag              = flag || active;
+        if (active) {
+            ++count;
+            ind_temp.insert(connection->identifier());
+        }
     }
     connection_state_event_.publish(flag, count);
 }
@@ -934,22 +947,20 @@ void NetworkService::connect_to_websocket(std::string   ip,
         return;
     }
 
-    {
-        std::vector<SocketService::Ptr> to_close;
-        auto                            connectionsLocked = *connections_;
-        for (const auto &el : *connectionsLocked) {
-            if (el->ip() == ip) {
-                if (el->is_active()) {
-                    return;
-                }
-                if (!el->is_closed()) {
-                    to_close.push_back(el);
-                }
+    const auto                      connections = connection_snapshot();
+    std::vector<SocketService::Ptr> to_close;
+    for (const auto &connection : connections) {
+        if (connection->ip() == ip) {
+            if (connection->is_active()) {
+                return;
+            }
+            if (!connection->is_closed()) {
+                to_close.push_back(connection);
             }
         }
-        for (const auto &el : to_close) {
-            el->close_connection();
-        }
+    }
+    for (const auto &el : to_close) {
+        el->close_connection();
     }
 
     network_runtime_->spawn(connect_websocket(std::move(ip), port, request_list_nodes, is_constant, is_light));
@@ -1143,8 +1154,8 @@ bool NetworkService::needs_legacy_payload(SendMode send_mode, const Responder &r
             focused_identifier = found->second.first;
     }
 
-    auto connections_locked = *connections_;
-    for (const auto &service : *connections_locked) {
+    const auto connections = connection_snapshot();
+    for (const auto &service : connections) {
         if (service == nullptr || !service->is_active())
             continue;
         if (send_mode == SendMode::Focused && service->identifier() != focused_identifier) {
@@ -1227,13 +1238,13 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         priority = SocketService::Priority::High;
     }
 
-    auto connections_locked = *connections_;
+    const auto connections = connection_snapshot();
 
     if (send_mode == SendMode::NeighboursRandom || send_mode == SendMode::OneNeighbourRandom) {
         std::vector<SocketService::Ptr> active_identifiers;
         const int                       randoms = send_mode == SendMode::NeighboursRandom ? 3 : 1;
 
-        for (auto service : *connections_locked) {
+        for (const auto &service : connections) {
             if (service->is_active()) {
                 active_identifiers.push_back(service);
             }
@@ -1278,7 +1289,7 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
     int skipped_light    = 0;
     int sent_to          = 0;
 
-    for (const auto &service : *connections_locked) {
+    for (const auto &service : connections) {
         if (!service->is_active()) {
             ++skipped_inactive;
             continue;
@@ -1353,13 +1364,13 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         // one run were relays. Counting them as losses is what made this look alarming.
         if (non_serialized_message.nodes_identifiers_to_ignore.empty()) {
             std::string peers;
-            for (const auto &service : *connections_locked) {
+            for (const auto &service : connections) {
                 peers += service->identifier().substr(0, 6) + " ";
             }
             eCritical(
                 "[Network] Own transaction reached nobody — it can never be approved: "
                 "{} connections, {} inactive, {} light, peers=[{}]",
-                connections_locked->size(),
+                connections.size(),
                 skipped_inactive,
                 skipped_light,
                 peers);
@@ -1613,8 +1624,8 @@ void NetworkService::send_from_cache() {
 }
 
 bool NetworkService::is_connection_exists(const std::string &identifier) {
-    auto connections_locked = *connections_;
-    for (const auto &service : *connections_locked) {
+    const auto connections = connection_snapshot();
+    for (const auto &service : connections) {
         if (!service->is_active()) {
             continue;
         }
@@ -1627,12 +1638,12 @@ bool NetworkService::is_connection_exists(const std::string &identifier) {
 }
 
 bool NetworkService::is_active_connection_exists() {
-    auto connectionsLocked = *connections_;
-    if (connectionsLocked->empty()) {
+    const auto connections = connection_snapshot();
+    if (connections.empty()) {
         return false;
     }
 
-    for (const auto &el : *connectionsLocked) {
+    for (const auto &el : connections) {
         if (el && el->is_active()) {
             return true;
         }
@@ -1642,13 +1653,13 @@ bool NetworkService::is_active_connection_exists() {
 }
 
 int NetworkService::active_connections_count() {
-    auto connectionsLocked = *connections_;
-    if (connectionsLocked->empty()) {
+    const auto connections = connection_snapshot();
+    if (connections.empty()) {
         return 0;
     }
 
     int count = 0;
-    for (const auto &el : *connectionsLocked) {
+    for (const auto &el : connections) {
         if (el && el->is_active()) {
             count++;
         }
@@ -1664,10 +1675,10 @@ int NetworkService::max_connections() const {
 
 std::vector<std::string> NetworkService::active_connection_identifiers() const {
     std::vector<std::string> identifiers;
-    auto                     connectionsLocked = *connections();
-    identifiers.reserve(connectionsLocked->size());
+    const auto               connections_snapshot = connection_snapshot();
+    identifiers.reserve(connections_snapshot.size());
 
-    for (const auto &service : *connectionsLocked) {
+    for (const auto &service : connections_snapshot) {
         if (!service || !service->is_active()) {
             continue;
         }
@@ -1685,9 +1696,9 @@ std::vector<std::string> NetworkService::active_connection_identifiers() const {
 
 std::vector<std::string> NetworkService::active_full_peer_identifiers() const {
     std::vector<std::string> identifiers;
-    auto                     connections_locked = *connections();
-    identifiers.reserve(connections_locked->size());
-    for (const auto &service : *connections_locked) {
+    const auto               connections_snapshot = connection_snapshot();
+    identifiers.reserve(connections_snapshot.size());
+    for (const auto &service : connections_snapshot) {
         if (service == nullptr || !service->is_active() || service->mode() != SocketMode::Full
             || service->identifier().empty()) {
             continue;
@@ -1701,9 +1712,9 @@ std::vector<std::string> NetworkService::active_full_peer_identifiers() const {
 
 std::vector<std::string> NetworkService::active_full_peers_with_capability(std::string_view capability) const {
     std::vector<std::string> identifiers;
-    auto                     connections_locked = *connections();
-    identifiers.reserve(connections_locked->size());
-    for (const auto &service : *connections_locked) {
+    const auto               connections_snapshot = connection_snapshot();
+    identifiers.reserve(connections_snapshot.size());
+    for (const auto &service : connections_snapshot) {
         if (service == nullptr || !service->is_active() || service->mode() != SocketMode::Full
             || !service->peer_meta().capabilities.contains(std::string(capability))) {
             continue;
@@ -3013,38 +3024,21 @@ bool NetworkService::save_first_node(const std::string_view first_node) {
 }
 
 bool NetworkService::remove_one_connection() {
-    auto connectionsLocked = *connections_;
-    bool isChanged         = false;
-
     SocketService::Ptr doomed;
-
-    for (auto socket : *connectionsLocked) {
-        if (!socket->is_constant()) {
-            eLog("[NetworkService] Socket with ip {} was changed to another", socket->ip());
-
-            doomed = socket;
-            //
-            // connectionsLocked->erase(it);
-
-            // NetworkReconnect tempConnection { .ip       = (*it)->ip(),
-            //                                   .port     = (*it)->port(),
-            //                                   .protocol = Network::Protocol::WebSocket };
-
-            // auto reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-            // auto findRes                         = reconnectionsToIdentifierLocked->find(tempConnection);
-            // if (findRes != reconnectionsToIdentifierLocked->end())
-            //     reconnectionsToIdentifierLocked->erase(tempConnection);
-
-            isChanged = true;
-            break;
+    {
+        auto connections_locked = *connections_;
+        for (const auto &socket : *connections_locked) {
+            if (!socket->is_constant()) {
+                eLog("[NetworkService] Socket with ip {} was changed to another", socket->ip());
+                doomed = socket;
+                break;
+            }
         }
     }
-
-    if (isChanged) {
+    if (doomed != nullptr) {
         doomed->close_connection();
     }
-
-    return isChanged;
+    return doomed != nullptr;
 }
 
 std::pair<std::string, std::string> NetworkService::public_ip_and_country(std::string ip, bool alt) {

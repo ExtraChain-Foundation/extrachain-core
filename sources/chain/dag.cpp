@@ -726,7 +726,8 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
                  current_section_.to_string());
         return std::unexpected(TransactionError::NotReady);
     }
-    if (node->consensus() != nullptr && node->consensus()->requires_intent_v2()) {
+    if (shadow_transition_sealed_.load(std::memory_order_acquire)
+        || (node->consensus() != nullptr && node->consensus()->requires_intent_v2())) {
         return std::unexpected(TransactionError::IntentRequired);
     }
 
@@ -753,7 +754,8 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
     if (!state_projection_ready()) {
         return std::unexpected(TransactionProveError::StateUnavailable);
     }
-    if (node->consensus() != nullptr && node->consensus()->requires_intent_v2()) {
+    if (shadow_transition_sealed_.load(std::memory_order_acquire)
+        || (node->consensus() != nullptr && node->consensus()->requires_intent_v2())) {
         return std::unexpected(TransactionProveError::IntentRequired);
     }
     if (status_ != DagStatus::Final) {
@@ -1190,6 +1192,58 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
     } catch (const std::system_error &e) {
         return std::nullopt;
     }
+}
+
+std::expected<SectionId, ExtraChain::Consensus::ConsensusError> Dag::prepare_shadow_activation() {
+    using ExtraChain::Consensus::ConsensusError;
+
+    if (mode_ != DagMode::Full || status_ != DagStatus::Ready || !state_projection_ready()
+        || shadow_transition_sealed_.exchange(true, std::memory_order_acq_rel)) {
+        return std::unexpected(ConsensusError::NotReady);
+    }
+
+    const auto fail = [this](ConsensusError error) -> std::expected<SectionId, ConsensusError> {
+        shadow_transition_sealed_.store(false, std::memory_order_release);
+        return std::unexpected(error);
+    };
+
+    flush_admission();
+    const auto boundary = current_section_;
+    if (first_saved_section_ < SectionId(0) || boundary <= SectionId(0) || !is_aligned20(boundary)) {
+        return fail(ConsensusError::InvalidHeight);
+    }
+    for (auto section = first_saved_section_; section <= boundary; section += SectionId(1)) {
+        if (!read_section(section).has_value()) {
+            return fail(ConsensusError::DataUnavailable);
+        }
+    }
+
+    const auto violation = cache_.validate_state_to(boundary);
+    if (violation.has_value()) {
+        return fail(ConsensusError::InvalidRoot);
+    }
+    const auto updated = cache_.update_to_genesis_section(boundary,
+                                                          boundary,
+                                                          first_saved_section_,
+                                                          [this](const SectionId &section) {
+                                                              return read_section(section);
+                                                          });
+    if (!updated.first || cache_.section() != boundary) {
+        return fail(ConsensusError::StorageFailure);
+    }
+
+    const auto previous_control =
+        boundary == SectionId(0) ? std::optional<DagControl> {} : find_last_control(boundary - SectionId(1), true);
+    const auto control_start =
+        previous_control.has_value() ? previous_control.value().section_id + SectionId(1) : SectionId(0);
+    const auto control = generate_hash_from_section(control_start, Force::Active, Force::None);
+    if (!control.has_value() || !read_control(boundary).has_value()) {
+        return fail(ConsensusError::StorageFailure);
+    }
+
+    set_state_projection(StateProjectionStatus::Ready, boundary);
+    eInfo("[Shadow] Sealed legacy DAG transition at section {}", boundary);
+    return boundary;
 }
 
 std::map<SectionId, Section> Dag::read_hot_sections(const SectionId &from, const SectionId &to) const {

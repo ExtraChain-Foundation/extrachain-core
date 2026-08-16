@@ -12,6 +12,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(EXTRACHAIN_STATIC_BUILD "Build ExtraChain Core as a static library" OFF)
+option(EXTRACHAIN_BUILD_TOOLS "Build ExtraChain operator tools" OFF)
 
 if(EXTRACHAIN_STATIC_BUILD)
   message("Build static ExtraChain")
@@ -455,6 +456,14 @@ if(UNIX AND NOT APPLE)
   # the static Core library.
   target_link_options(extrachain-core PUBLIC "-Wl,-z,noexecstack")
 endif()
+
+if(EXTRACHAIN_BUILD_TOOLS)
+  add_executable(extrachain-shadowctl
+                 ${CMAKE_CURRENT_LIST_DIR}/tools/shadowctl.cpp)
+  target_link_libraries(extrachain-shadowctl PRIVATE extrachain-core)
+  target_compile_features(extrachain-shadowctl PRIVATE cxx_std_23)
+endif()
+
 # C FFI bindings
 if(EXTRACHAIN_BUILD_CBINDINGS)
   add_subdirectory(Cbindings)

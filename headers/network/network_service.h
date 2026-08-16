@@ -302,12 +302,13 @@ private:
                               bool          request_list_nodes,
                               bool          is_constant,
                               bool          is_light);
-    void remove_socket_connection(SocketService::Ptr connection);
-    void socket_error(Network::SocketServiceError error,
-                      std::string                 error_data,
-                      std::string                 ip,
-                      std::string                 identifier,
-                      SocketDirection             direction);
+    [[nodiscard]] std::vector<SocketService::Ptr> connection_snapshot() const;
+    void                                          remove_socket_connection(SocketService::Ptr connection);
+    void                                          socket_error(Network::SocketServiceError error,
+                                                               std::string                 error_data,
+                                                               std::string                 ip,
+                                                               std::string                 identifier,
+                                                               SocketDirection             direction);
 
 public:
     [[nodiscard]] const std::string& local_ip_value() const noexcept;

@@ -443,6 +443,9 @@ namespace ExtraChain::Core {
         reward_timer_.reset();
         info_timer_.reset();
         luminance_timer_.reset();
+        if (consensus_service_) {
+            consensus_service_->deactivate();
+        }
         if (thoth_manager_) {
             thoth_manager_->prepare_shutdown();
         }
@@ -1235,10 +1238,10 @@ namespace ExtraChain::Core {
             };
         case RuntimeProfile::FullNode:
             return {
-                .io_workers                      = 2,
-                .storage_workers                 = 4,
-                .compute_workers                 = 8,
-                .peer_limit                      = 0,
+                .io_workers      = 2,
+                .storage_workers = 4,
+                .compute_workers = 8,
+                .peer_limit      = 0,
                 // In-flight fragment requests across ALL transfers. 5 was a phone-sized
                 // budget on a full node: with 256K fragments that caps replication at
                 // ~1.25MB in flight, and a busy stand (dozens of files) crawled at one
@@ -2641,7 +2644,7 @@ namespace ExtraChain::Core {
             }
         }
 
-        this->generate_node_identifier();
+        static_cast<void>(this->node_identifier());
     }
 
     void ExtraChainNode::calculateBlockCount() {

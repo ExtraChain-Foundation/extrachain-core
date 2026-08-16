@@ -27,7 +27,7 @@ DFS_PAYLOAD_BYTES="${EXTRACHAIN_TEST_DFS_BYTES:-1048576}"
 LOGIN="gen-login"
 PASSWORD="gen-password"
 
-WORK="/tmp/exc-multi-sync"
+WORK="${EXTRACHAIN_TEST_WORK:-/tmp/exc-multi-sync}"
 PIDS=()
 
 cleanup() {

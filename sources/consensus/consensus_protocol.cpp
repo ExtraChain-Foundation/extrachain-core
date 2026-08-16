@@ -137,16 +137,6 @@ namespace ExtraChain::Consensus {
             return std::nullopt;
         }
 
-        std::string authorization_payload(const MultisigPolicy&          policy,
-                                          const GovernanceAuthorization& authorization) {
-            return std::string(AuthorizationDomain)
-                   + MessagePack::serialize(std::tuple { policy.policy_hash,
-                                                         authorization.protocol_version,
-                                                         authorization.network_id,
-                                                         authorization.sequence,
-                                                         authorization.action_hash });
-        }
-
         std::string unsigned_epoch_change_hash(const EpochChangeV1& change) {
             return domain_hash(EpochChangeDomain,
                                std::tuple { change.protocol_version,
@@ -579,44 +569,93 @@ namespace ExtraChain::Consensus {
                                            policy.public_keys });
     }
 
-    std::expected<GovernanceAuthorization, ConsensusError> authorize_action(
-        const MultisigPolicy&          policy,
-        std::uint64_t                  sequence,
-        std::string                    action_hash,
-        const std::vector<KeyPrivate>& signers) {
+    std::string authorization_signing_payload(const MultisigPolicy&          policy,
+                                              const GovernanceAuthorization& authorization) {
+        return std::string(AuthorizationDomain)
+               + MessagePack::serialize(std::tuple { policy.policy_hash,
+                                                     authorization.protocol_version,
+                                                     authorization.network_id,
+                                                     authorization.sequence,
+                                                     authorization.action_hash });
+    }
+
+    std::expected<GovernanceAuthorization, ConsensusError> make_authorization(const MultisigPolicy& policy,
+                                                                              std::uint64_t         sequence,
+                                                                              std::string           action_hash) {
         if (sequence == 0 || action_hash.empty() || !verify_multisig_policy(policy)) {
             return std::unexpected(ConsensusError::InvalidGovernance);
         }
-        GovernanceAuthorization authorization {
+        return GovernanceAuthorization {
             .protocol_version = ProtocolVersion,
             .network_id       = policy.network_id,
             .sequence         = sequence,
             .action_hash      = std::move(action_hash),
         };
-        const auto              payload = authorization_payload(policy, authorization);
-        std::set<std::uint16_t> used;
+    }
+
+    std::expected<IndexedSignature, ConsensusError> sign_authorization(
+        const MultisigPolicy&          policy,
+        const GovernanceAuthorization& authorization,
+        const KeyPrivate&              signer) {
+        if (!verify_multisig_policy(policy) || signer.empty() || authorization.protocol_version != ProtocolVersion
+            || authorization.network_id != policy.network_id || authorization.sequence == 0
+            || authorization.action_hash.empty()) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        const auto encoded = Utils::to_base64(signer.public_key());
+        const auto found   = std::ranges::lower_bound(policy.public_keys, encoded);
+        if (found == policy.public_keys.end() || *found != encoded) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        const auto signature = sign_payload(signer, authorization_signing_payload(policy, authorization));
+        if (!signature.has_value()) {
+            return std::unexpected(signature.error());
+        }
+        return IndexedSignature {
+            .signer_index = static_cast<std::uint16_t>(std::distance(policy.public_keys.begin(), found)),
+            .signature    = signature.value(),
+        };
+    }
+
+    std::expected<GovernanceAuthorization, ConsensusError> assemble_authorization(
+        const MultisigPolicy&         policy,
+        GovernanceAuthorization       authorization,
+        std::vector<IndexedSignature> signatures) {
+        authorization.signatures = std::move(signatures);
+        std::ranges::sort(authorization.signatures, {}, &IndexedSignature::signer_index);
+        if (!verify_authorization(policy, authorization, authorization.sequence)) {
+            return std::unexpected(ConsensusError::InvalidGovernance);
+        }
+        return authorization;
+    }
+
+    std::expected<GovernanceAuthorization, ConsensusError> authorize_action(
+        const MultisigPolicy&          policy,
+        std::uint64_t                  sequence,
+        std::string                    action_hash,
+        const std::vector<KeyPrivate>& signers) {
+        auto authorization = make_authorization(policy, sequence, std::move(action_hash));
+        if (!authorization.has_value()) {
+            return std::unexpected(authorization.error());
+        }
+        std::vector<IndexedSignature> signatures;
+        std::set<std::uint16_t>       used;
         for (const auto& signer : signers) {
             const auto encoded = Utils::to_base64(signer.public_key());
             const auto found   = std::ranges::lower_bound(policy.public_keys, encoded);
             if (found == policy.public_keys.end() || *found != encoded) {
                 continue;
             }
-            const auto index = static_cast<std::uint16_t>(std::distance(policy.public_keys.begin(), found));
-            if (!used.insert(index).second) {
-                continue;
-            }
-            const auto signature = sign_payload(signer, payload);
+            const auto signature = sign_authorization(policy, authorization.value(), signer);
             if (!signature.has_value()) {
                 return std::unexpected(signature.error());
             }
-            authorization.signatures.push_back(
-                IndexedSignature { .signer_index = index, .signature = signature.value() });
+            if (!used.insert(signature.value().signer_index).second) {
+                continue;
+            }
+            signatures.push_back(signature.value());
         }
-        std::ranges::sort(authorization.signatures, {}, &IndexedSignature::signer_index);
-        if (authorization.signatures.size() < policy.threshold) {
-            return std::unexpected(ConsensusError::InvalidGovernance);
-        }
-        return authorization;
+        return assemble_authorization(policy, std::move(authorization.value()), std::move(signatures));
     }
 
     bool verify_authorization(const MultisigPolicy&          policy,
@@ -628,7 +667,7 @@ namespace ExtraChain::Consensus {
             || authorization.signatures.size() > policy.public_keys.size()) {
             return false;
         }
-        const auto              payload = authorization_payload(policy, authorization);
+        const auto              payload = authorization_signing_payload(policy, authorization);
         std::set<std::uint16_t> used;
         for (const auto& item : authorization.signatures) {
             if (item.signer_index >= policy.public_keys.size() || !used.insert(item.signer_index).second

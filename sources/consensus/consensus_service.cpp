@@ -129,6 +129,20 @@ namespace ExtraChain::Consensus {
         if (!loaded.has_value()) {
             return std::unexpected(loaded.error());
         }
+        const auto& configuration = loaded.value()->configuration();
+        const auto& safety        = loaded.value()->engine().safety_state();
+        if (configuration.mode == ShadowMode::Finality
+            && safety.finalized_height < configuration.activation_height) {
+            if (configuration.activation_dag_section < ShadowSectionInterval) {
+                return std::unexpected(ConsensusError::InvalidHeight);
+            }
+            const auto boundary = SectionId(configuration.activation_dag_section - ShadowSectionInterval);
+            const auto state    = node_.dag()->state_projection();
+            if (node_.dag()->current_section() != boundary || state.status != StateProjectionStatus::Ready
+                || state.verified_section < boundary || !node_.dag()->read_control(boundary).has_value()) {
+                return std::unexpected(ConsensusError::BootstrapIncomplete);
+            }
+        }
         consensus_    = std::move(loaded.value());
         intent_store_ = std::make_unique<IntentStore>(directory_ / "intent-pool.sqlite");
         if (!intent_store_->open().has_value()) {
@@ -406,6 +420,9 @@ namespace ExtraChain::Consensus {
                                     MessageType::ConsensusAuthentication,
                                     SendMode::Focused,
                                     MessageStatus::Response);
+        } else {
+            eWarning("[Consensus] Validator challenge could not be answered: {}",
+                     std::to_underlying(response.error()));
         }
     }
 
@@ -420,6 +437,7 @@ namespace ExtraChain::Consensus {
             eWarning("[Consensus] Validator authentication failed for peer {}", peer_identifier);
             return;
         }
+        eLog("[Consensus] Authenticated validator {} on peer {}", verified.value(), peer_identifier);
         if (latest_proposal_.has_value()) {
             send_to_peer(latest_proposal_.value(),
                          MessageType::ConsensusProposal,
@@ -980,6 +998,7 @@ namespace ExtraChain::Consensus {
                                           SendMode::Broadcast,
                                           MessageStatus::NoStatus);
         }
+        queue_next_checkpoint();
         return hash;
     }
 
@@ -1212,9 +1231,28 @@ namespace ExtraChain::Consensus {
         if (!authenticator_) {
             return;
         }
-        // A node identifier can reconnect on a new transport. The new connection must
-        // complete its own challenge before it can carry consensus messages.
-        authenticator_->forget_peer(identifier);
+        challenge_peer(identifier, true);
+        send_to_peer(
+            ShadowSyncRequest {
+                .protocol_version = ProtocolVersion,
+                .network_id       = consensus_->engine().validators().document().network_id,
+                .epoch            = consensus_->engine().validators().document().epoch,
+                .finalized_height = consensus_->engine().safety_state().finalized_height,
+            },
+            MessageType::ConsensusSyncRequest,
+            identifier,
+            MessageStatus::Request);
+    }
+
+    void ConsensusService::challenge_peer(const std::string& identifier, bool reset_existing) {
+        if (!authenticator_) {
+            return;
+        }
+        if (reset_existing) {
+            authenticator_->forget_peer(identifier);
+        } else if (authenticator_->authenticated_validator(identifier).has_value()) {
+            return;
+        }
         const auto meta = node_.network()->peer_meta_for(identifier);
         if (!meta.has_value() || !meta.value().supports_shadow_consensus()) {
             return;
@@ -1228,17 +1266,21 @@ namespace ExtraChain::Consensus {
                                           SendMode::Focused,
                                           MessageStatus::Request,
                                           responder);
+        } else {
+            eWarning("[Consensus] Validator challenge could not be created for peer {}: {}",
+                     identifier,
+                     std::to_underlying(challenge.error()));
         }
-        send_to_peer(
-            ShadowSyncRequest {
-                .protocol_version = ProtocolVersion,
-                .network_id       = consensus_->engine().validators().document().network_id,
-                .epoch            = consensus_->engine().validators().document().epoch,
-                .finalized_height = consensus_->engine().safety_state().finalized_height,
-            },
-            MessageType::ConsensusSyncRequest,
-            identifier,
-            MessageStatus::Request);
+    }
+
+    void ConsensusService::refresh_peer_authentication() {
+        if (!authenticator_) {
+            return;
+        }
+        for (const auto& identifier :
+             node_.network()->active_full_peers_with_capability(SHADOW_CONSENSUS_CAPABILITY)) {
+            challenge_peer(identifier, false);
+        }
     }
 
     void ConsensusService::checkpoint_ready(std::uint64_t section) {
@@ -1335,9 +1377,13 @@ namespace ExtraChain::Consensus {
                                                                 {},
                                                                 std::move(previous_section_bytes),
                                                                 std::move(previous_section_root));
-            if (!batch.has_value()
-                || batch.value().manifest.payload_bytes > consensus_->configuration().maximum_batch_bytes) {
-                eWarning("[Shadow] Leader could not materialize the next intent batch");
+            if (!batch.has_value()) {
+                eWarning("[Shadow] Leader could not materialize the next intent batch: {}",
+                         std::to_underlying(batch.error()));
+                return;
+            }
+            if (batch.value().manifest.payload_bytes > consensus_->configuration().maximum_batch_bytes) {
+                eWarning("[Shadow] Leader intent batch exceeds the configured byte limit");
                 return;
             }
             const auto section_root = node_.dag()->shadow_batch_section_root(batch.value());
@@ -1405,18 +1451,36 @@ namespace ExtraChain::Consensus {
         const auto& proposal_value = proposal.value().value();
         const auto  stored_batch   = pending_batches_.find(proposal_value.batch.last_section);
         if (stored_batch == pending_batches_.end()) {
-            eWarning("[Shadow] Leader has no data for the proposed batch");
             return;
         }
         auto batch        = stored_batch->second;
         batch.header_hash = hash_header(proposal_value.header);
-        if (hash_batch_manifest(batch.manifest) != proposal_value.header.batch_root
-            || !node_.dag()
-                    ->validate_shadow_batch(proposal_value, batch, consensus_->configuration().maximum_batch_bytes)
-                    .has_value()
-            || !admit_batch_intents(proposal_value, batch).has_value()
-            || !consensus_->engine().stage_batch(batch).has_value()) {
-            eWarning("[Shadow] Leader could not stage the proposed batch");
+        if (hash_batch_manifest(batch.manifest) != proposal_value.header.batch_root) {
+            return;
+        }
+        const auto valid = [&]() -> std::expected<void, ConsensusError> {
+            try {
+                return node_.dag()->validate_shadow_batch(proposal_value,
+                                                          batch,
+                                                          consensus_->configuration().maximum_batch_bytes);
+            } catch (const std::exception& exception) {
+                eCritical("[Shadow] Leader batch validation failed with an exception: {}", exception.what());
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+        }();
+        if (!valid.has_value()) {
+            eWarning("[Shadow] Leader batch validation failed: {}", std::to_underlying(valid.error()));
+            return;
+        }
+        const auto admitted = admit_batch_intents(proposal_value, batch);
+        if (!admitted.has_value()) {
+            eWarning("[Shadow] Leader intent admission failed: {}", std::to_underlying(admitted.error()));
+            return;
+        }
+        const auto staged = consensus_->engine().stage_batch(batch);
+        if (!staged.has_value()) {
+            eWarning("[Shadow] Leader could not persist the proposed batch: {}",
+                     std::to_underlying(staged.error()));
             return;
         }
         const auto self_vote = consensus_->engine().accept_proposal(proposal_value);
@@ -1476,6 +1540,7 @@ namespace ExtraChain::Consensus {
             || !consensus_->engine().safety_state().highest_certificate.has_value()) {
             return;
         }
+        refresh_peer_authentication();
         const auto height = consensus_->engine().safety_state().highest_certificate.value().height + 1;
         const auto round  = consensus_->engine().safety_state().current_round;
         const auto vote   = consensus_->make_timeout_vote(height, round);

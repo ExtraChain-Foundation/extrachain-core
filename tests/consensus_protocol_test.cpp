@@ -279,6 +279,35 @@ int main() {
           verify_authorization(governance_policy.value(), authorization.value(), 7));
     check("old governance sequence is rejected",
           !verify_authorization(governance_policy.value(), authorization.value(), 8));
+    const auto unsigned_authorization =
+        make_authorization(governance_policy.value(), 8, "offline-validator-set-change");
+    const auto first_share =
+        sign_authorization(governance_policy.value(), unsigned_authorization.value(), governance_keys[0]);
+    const auto second_share =
+        sign_authorization(governance_policy.value(), unsigned_authorization.value(), governance_keys[1]);
+    const auto third_share =
+        sign_authorization(governance_policy.value(), unsigned_authorization.value(), governance_keys[2]);
+    check("operators create independent authorization shares",
+          first_share.has_value() && second_share.has_value() && third_share.has_value());
+    const auto assembled_authorization =
+        assemble_authorization(governance_policy.value(),
+                               unsigned_authorization.value(),
+                               { third_share.value(), first_share.value(), second_share.value() });
+    check("independent authorization shares assemble in canonical order",
+          assembled_authorization.has_value()
+              && verify_authorization(governance_policy.value(), assembled_authorization.value(), 8)
+              && assembled_authorization.value().signatures[0].signer_index
+                     < assembled_authorization.value().signatures[1].signer_index);
+    check("an incomplete offline authorization is rejected",
+          !assemble_authorization(governance_policy.value(),
+                                  unsigned_authorization.value(),
+                                  { first_share.value(), second_share.value() })
+               .has_value());
+    auto outsider_key = KeyPrivate {};
+    outsider_key.generate_random();
+    check("a key outside the policy cannot sign an authorization",
+          !sign_authorization(governance_policy.value(), unsigned_authorization.value(), outsider_key)
+               .has_value());
     check("two governance keys cannot authorize an action",
           !authorize_action(governance_policy.value(),
                             8,

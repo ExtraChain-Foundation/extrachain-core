@@ -608,6 +608,7 @@ public:
      * @return std::optional<Section> The section if found, or nullopt
      */
     std::optional<Section> read_section(const SectionId &section_id) const;
+    std::expected<SectionId, ExtraChain::Consensus::ConsensusError> prepare_shadow_activation();
     std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError>
     build_shadow_batch(const SectionId &first_section, const SectionId &last_section, std::string header_hash);
     std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError>
@@ -985,6 +986,7 @@ private:
     //   handlers must check this to drop inbound traffic during shutdown.
     std::atomic<bool> started_ { false };
     std::atomic<bool> accepting_messages_ { false };
+    std::atomic<bool> shadow_transition_sealed_ { false };
 
     //
     void add_to_cached_tx(const Transaction &transaction, const Responder &responder);

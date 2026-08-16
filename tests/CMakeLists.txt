@@ -54,6 +54,7 @@ add_core_test_executable(extrachain-consensus-tests consensus_test.cpp)
 add_core_test_executable(extrachain-consensus-protocol-tests consensus_protocol_test.cpp)
 add_core_test_executable(extrachain-consensus-network-tests consensus_network_test.cpp)
 add_core_test_executable(extrachain-shadow-recovery-tests shadow_recovery_test.cpp)
+add_core_test_executable(extrachain-shadow-bundle shadow_bundle.cpp)
 add_core_test_executable(extrachain-consensus-benchmark consensus_benchmark.cpp)
 
 if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)

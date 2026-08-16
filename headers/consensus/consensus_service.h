@@ -101,6 +101,8 @@ namespace ExtraChain::Consensus {
 
     private:
         void                                peer_connected(const std::string& identifier);
+        void                                challenge_peer(const std::string& identifier, bool reset_existing);
+        void                                refresh_peer_authentication();
         void                                checkpoint_ready(std::uint64_t section);
         void                                queue_next_checkpoint();
         bool                                apply_certificate(const QuorumCertificate& certificate);

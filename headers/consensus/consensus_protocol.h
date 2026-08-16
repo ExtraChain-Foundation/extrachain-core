@@ -421,6 +421,20 @@ namespace ExtraChain::Consensus {
         std::uint16_t            threshold,
         std::vector<std::string> public_keys);
     EXTRACHAIN_EXPORT bool verify_multisig_policy(const MultisigPolicy& policy);
+    EXTRACHAIN_EXPORT std::string authorization_signing_payload(const MultisigPolicy&          policy,
+                                                                const GovernanceAuthorization& authorization);
+    EXTRACHAIN_EXPORT std::expected<GovernanceAuthorization, ConsensusError> make_authorization(
+        const MultisigPolicy& policy,
+        std::uint64_t         sequence,
+        std::string           action_hash);
+    EXTRACHAIN_EXPORT std::expected<IndexedSignature, ConsensusError> sign_authorization(
+        const MultisigPolicy&          policy,
+        const GovernanceAuthorization& authorization,
+        const KeyPrivate&              signer);
+    EXTRACHAIN_EXPORT std::expected<GovernanceAuthorization, ConsensusError> assemble_authorization(
+        const MultisigPolicy&         policy,
+        GovernanceAuthorization       authorization,
+        std::vector<IndexedSignature> signatures);
     EXTRACHAIN_EXPORT std::expected<GovernanceAuthorization, ConsensusError> authorize_action(
         const MultisigPolicy&          policy,
         std::uint64_t                  sequence,

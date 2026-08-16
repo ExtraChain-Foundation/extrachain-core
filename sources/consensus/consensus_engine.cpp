@@ -329,7 +329,7 @@ namespace ExtraChain::Consensus {
     }
 
     std::expected<Vote, ConsensusError> ConsensusEngine::accept_proposal(const Proposal& proposal) {
-        std::lock_guard lock(mutex_);
+        std::unique_lock lock(mutex_);
         if (!initialized_ || !identity_.has_value()) {
             return std::unexpected(ConsensusError::NotValidator);
         }
@@ -340,9 +340,17 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::DataUnavailable);
         }
         if (proposal_validator_) {
+            lock.unlock();
             const auto validated = proposal_validator_(proposal);
             if (!validated.has_value()) {
                 return std::unexpected(validated.error());
+            }
+            lock.lock();
+            if (!initialized_ || !identity_.has_value() || !verify_proposal(proposal)) {
+                return std::unexpected(ConsensusError::NotValidator);
+            }
+            if (!batches_.contains(hash_header(proposal.header))) {
+                return std::unexpected(ConsensusError::DataUnavailable);
             }
         }
         if (!safe_to_vote(proposal)) {
@@ -385,7 +393,7 @@ namespace ExtraChain::Consensus {
     }
 
     std::expected<void, ConsensusError> ConsensusEngine::observe_proposal(const Proposal& proposal) {
-        std::lock_guard lock(mutex_);
+        std::unique_lock lock(mutex_);
         if (!initialized_) {
             return std::unexpected(ConsensusError::NotReady);
         }
@@ -393,9 +401,14 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidSignature);
         }
         if (proposal_validator_) {
+            lock.unlock();
             const auto validated = proposal_validator_(proposal);
             if (!validated.has_value() && validated.error() != ConsensusError::DataUnavailable) {
                 return std::unexpected(validated.error());
+            }
+            lock.lock();
+            if (!initialized_ || !verify_proposal(proposal)) {
+                return std::unexpected(ConsensusError::NotReady);
             }
         }
         proposals_.insert_or_assign(hash_header(proposal.header), proposal);
