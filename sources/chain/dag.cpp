@@ -2042,29 +2042,55 @@ std::optional<std::map<SectionId, std::string>> Dag::collect_repair_vote(
 }
 
 bool Dag::validate_repair_transaction(const Transaction &transaction, const std::set<Transaction> &pending) {
+    // TEST STAND ONLY (do not commit): this function has five silent rejection
+    // paths, so a "Reject repair candidate" line alone cannot say which one fired.
     if (transaction.hash() != transaction.calculate_hash()
         && transaction.hash() != transaction.calculate_hash_hex()) {
+        eWarning("[DagDiag] repair reject: hash mismatch tx={} type={}",
+                 transaction.hash(),
+                 static_cast<int>(transaction.type()));
         return false;
     }
     if (transaction.type() == TransactionType::Genesis || transaction.type() == TransactionType::Balance) {
         const std::set<Transaction> empty;
         const auto                  frontier = transaction.section();
-        return prove_transaction(transaction, empty, &pending, &frontier) == TransactionProveError::NoError;
+        const auto                  proof    = prove_transaction(transaction, empty, &pending, &frontier);
+        if (proof != TransactionProveError::NoError) {
+            eWarning("[DagDiag] repair reject: prove(genesis/balance)={} tx={} section={}",
+                     static_cast<int>(proof),
+                     transaction.hash(),
+                     transaction.section().to_string());
+        }
+        return proof == TransactionProveError::NoError;
     }
     if (transaction.signature().empty()) {
+        eWarning("[DagDiag] repair reject: empty signature tx={}", transaction.hash());
         return false;
     }
     const auto sender = node->actor_index()->read_actor_old(transaction.sender());
     if (sender.empty()) {
+        eWarning("[DagDiag] repair reject: unknown sender {} tx={}",
+                 transaction.sender().to_string(),
+                 transaction.hash());
         return false;
     }
     if (!transaction.verify(sender)) {
+        eWarning("[DagDiag] repair reject: signature verify failed tx={}", transaction.hash());
         return false;
     }
 
     const std::set<Transaction> empty;
     const auto                  frontier = transaction.section();
-    return prove_transaction(transaction, empty, &pending, &frontier, false) == TransactionProveError::NoError;
+    const auto proof = prove_transaction(transaction, empty, &pending, &frontier, false);
+    if (proof != TransactionProveError::NoError) {
+        eWarning("[DagDiag] repair reject: prove={} tx={} sender={} section={} pending={}",
+                 static_cast<int>(proof),
+                 transaction.hash(),
+                 transaction.sender().to_string(),
+                 transaction.section().to_string(),
+                 pending.size());
+    }
+    return proof == TransactionProveError::NoError;
 }
 
 std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
