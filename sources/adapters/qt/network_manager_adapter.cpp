@@ -110,7 +110,6 @@ QString NetworkManager::local_ip() {
     return QString::fromStdString(local_ip_value());
 }
 
-std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const QString& ip, bool alt) {
-    const auto result = public_ip_and_country(ip.toStdString(), alt);
-    return { QString::fromStdString(result.first), QString::fromStdString(result.second) };
+QString NetworkManager::public_ip_() {
+    return QString::fromStdString(public_ip());
 }

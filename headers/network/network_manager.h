@@ -50,8 +50,7 @@ public slots:
                      const QString&           password);
 
     [[nodiscard]] QString                     local_ip();
-    [[nodiscard]] std::pair<QString, QString> search_public_ip_and_country_(const QString& ip  = {},
-                                                                            bool           alt = false);
+    [[nodiscard]] QString                     public_ip_();
 
 signals:
     void finished();

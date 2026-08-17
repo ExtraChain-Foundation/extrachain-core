@@ -69,11 +69,6 @@ DfsController* ExtraChainNode::dfs() const {
     return static_cast<DfsController*>(ExtraChain::Core::ExtraChainNode::dfs());
 }
 
-std::pair<QString, QString> ExtraChainNode::init_public_ip_and_country() const {
-    const auto& [ip, country] = public_ip_and_country_value();
-    return { QString::fromStdString(ip), QString::fromStdString(country) };
-}
-
 void ExtraChainNode::notificationToken(QString os, QString actor_id, QString token) {
     notification_token(os.toStdString(), actor_id.toStdString(), token.toStdString());
 }

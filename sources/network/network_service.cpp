@@ -221,14 +221,6 @@ void NetworkService::set_public_ip(const std::string &new_public_ip) {
     }
 
     public_ip_ = new_public_ip;
-
-#if defined(__linux__) && !defined(__ANDROID__)
-    return;
-#endif
-
-    if (node->public_ip_and_country_value().first.empty()) {
-        node->set_public_ip_and_country(public_ip_, "Security");
-    }
 }
 
 ActorId NetworkService::local_network_id() const {
@@ -627,7 +619,7 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
     service->on_share_connections = [this](SocketService::Ptr,
                                            const std::set<SocketService::SocketPair> &connections) {
         dispatch_serial([this, connections] {
-            const auto &init_ip = node->public_ip_and_country_value().first;
+            const auto &init_ip = public_ip_;
             if (active_connections_count() >= max_connections()) {
                 eLog("shareConnections ignored by max connections limit");
                 if (init_ip != first_node_) {
@@ -3041,55 +3033,6 @@ bool NetworkService::remove_one_connection() {
     return doomed != nullptr;
 }
 
-std::pair<std::string, std::string> NetworkService::public_ip_and_country(std::string ip, bool alt) {
-    (void)alt;
-    refresh_public_ip_and_country(ip);
-    const auto &current = node->public_ip_and_country_value();
-    if (!current.first.empty()) {
-        return current;
-    }
-    return { ip.empty() ? public_ip_ : std::move(ip), "Security" };
-}
-
-void NetworkService::refresh_public_ip_and_country(std::string ip) {
-    const auto target = ip.empty() ? std::string("/json") : "/json/" + ip;
-    network_runtime_
-        ->async_http_get("ip-api.com",
-                         80,
-                         target,
-                         std::chrono::seconds(5),
-                         [this, requested_ip = std::move(ip)](
-                             ExtraChain::Core::NetworkRuntime::HttpResult result) mutable {
-                             if (!result.has_value()) {
-                                 eWarning("[NetworkService] Public IP lookup failed: {}", result.error());
-                                 return;
-                             }
-
-                             boost::system::error_code parse_error;
-                             auto                      document = boost::json::parse(result.value(), parse_error);
-                             if (parse_error || !document.is_object()) {
-                                 eWarning("[NetworkService] Public IP response is invalid: {}",
-                                          parse_error.message());
-                                 return;
-                             }
-                             const auto &object        = document.as_object();
-                             const auto *ip_value      = object.if_contains("query");
-                             const auto *country_value = object.if_contains("country");
-                             if (ip_value == nullptr || country_value == nullptr || !ip_value->is_string()
-                                 || !country_value->is_string()) {
-                                 eWarning("[NetworkService] Public IP response has no required fields");
-                                 return;
-                             }
-
-                             std::string resolved_ip =
-                                 requested_ip.empty() ? std::string(ip_value->as_string()) : requested_ip;
-                             std::string country(country_value->as_string());
-                             dispatch_serial(
-                                 [this, resolved_ip = std::move(resolved_ip), country = std::move(country)] {
-                                     node->set_public_ip_and_country(std::move(resolved_ip), std::move(country));
-                                 });
-                         });
-}
 
 NetworkPackageStorage::NetworkPackageStorage(const MessageBody &body,
                                              const std::string &identifier,

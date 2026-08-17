@@ -387,8 +387,6 @@ namespace ExtraChain::Core {
             luminance_timer_->start();
         }
 
-        init_public_ip_and_country_ = network_service_->public_ip_and_country();
-
         connect_signals();
 
         node_enabled = true;
@@ -2687,14 +2685,6 @@ namespace ExtraChain::Core {
 
     void ExtraChainNode::logout() {
         account_controller_->clear();
-    }
-
-    const std::pair<std::string, std::string>& ExtraChainNode::public_ip_and_country_value() const noexcept {
-        return init_public_ip_and_country_;
-    }
-
-    void ExtraChainNode::set_public_ip_and_country(std::string ip, std::string country) {
-        init_public_ip_and_country_ = { std::move(ip), std::move(country) };
     }
 
     void ExtraChainNode::set_cleanup_callback(std::function<void()> callback) {

@@ -188,7 +188,6 @@ public:
     void                                prepare_shutdown();
     void                                local_inizialization();
     void                                probe_first_node_candidate(std::size_t index);
-    std::pair<std::string, std::string> public_ip_and_country(std::string ip = {}, bool alt = false);
 
     bool                                           remove_one_connection();
     [[nodiscard]] SocketActivatedEvent&            socket_activated_event() noexcept;
@@ -235,7 +234,6 @@ private:
                                            std::unordered_set<std::string> ignored_identifiers);
 
     void add_all_services_identifiers_to_message(MessageBody& msg);
-    void refresh_public_ip_and_country(std::string ip = {});
 
 public:
     bool                                  is_first_node(const std::string& identifier); // detect for safety

@@ -193,7 +193,6 @@ namespace ExtraChain::Core {
 
         bool                                started_               = false;
         bool                                is_client_application_ = false;
-        std::pair<std::string, std::string> init_public_ip_and_country_;
         std::function<void()>               cleanup_callback_ = nullptr;
 
         std::optional<SubscriptionRow> subscription_row_;
@@ -278,8 +277,6 @@ namespace ExtraChain::Core {
             boost::asio::post(compute_executor(), std::forward<Function>(function));
         }
 
-        [[nodiscard]] const std::pair<std::string, std::string>& public_ip_and_country_value() const noexcept;
-        void set_public_ip_and_country(std::string ip, std::string country);
 
         Dag*                    dag() const;
         StateProjectionSnapshot state_projection() const;

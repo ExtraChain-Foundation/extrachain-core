@@ -35,7 +35,6 @@ public:
 
     [[nodiscard]] NetworkManager*             network() const override;
     [[nodiscard]] DfsController*              dfs() const override;
-    [[nodiscard]] std::pair<QString, QString> init_public_ip_and_country() const;
 
 signals:
     void initNode();
