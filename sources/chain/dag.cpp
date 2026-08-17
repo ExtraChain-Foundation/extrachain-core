@@ -2068,9 +2068,12 @@ bool Dag::validate_repair_transaction(const Transaction &transaction, const std:
 }
 
 std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
-    const std::map<SectionId, std::string> &peer_sections) {
+    const std::map<SectionId, std::string> &peer_sections,
+    const std::set<Transaction>            &prior) {
     std::map<SectionId, Section> candidate_sections;
-    std::set<Transaction>        accepted_transactions;
+    // Seed with the ancestors' transactions so a balance proof sees the funds they
+    // already moved. For plain repair traffic `prior` is empty and nothing changes.
+    std::set<Transaction>        accepted_transactions = prior;
 
     for (const auto &[section_id, bytes] : peer_sections) {
         WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
@@ -2296,7 +2299,8 @@ std::expected<std::string, ExtraChain::Consensus::ConsensusError> Dag::shadow_ba
 std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_batch(
     const ExtraChain::Consensus::Proposal         &proposal,
     const ExtraChain::Consensus::SectionBatchData &batch,
-    std::uint64_t                                  maximum_batch_bytes) {
+    std::uint64_t                                  maximum_batch_bytes,
+    const std::set<Transaction>                   &staged_ancestors) {
     using namespace ExtraChain::Consensus;
     if (batch.header_hash != hash_header(proposal.header)
         || hash_batch_manifest(batch.manifest) != proposal.header.batch_root
@@ -2342,7 +2346,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
         || calculate_transaction_root(transaction_hashes) != batch.manifest.transaction_root) {
         return std::unexpected(ConsensusError::InvalidRoot);
     }
-    const auto validated = validated_repair_candidate(sections);
+    const auto validated = validated_repair_candidate(sections, staged_ancestors);
     if (!validated.has_value() || validated.value() != sections) {
         return std::unexpected(ConsensusError::InvalidRoot);
     }
@@ -3051,7 +3055,16 @@ void Dag::update_range(bool allow_lower_first) {
 
             const auto existing_last   = SectionId::create(persisted_range_->last);
             const auto first_unchanged = existing_first.has_value() && existing_first.value() == new_first;
-            if (!force && first_unchanged && existing_last.has_value() && new_last >= existing_last.value()) {
+            // The write is throttled on `last` so a growing chain does not rewrite the
+            // file every section. `last_cached` lives in the same file though, and it
+            // must never be held back: the balance cache on disk would then be valid
+            // for a section the range file does not name, and a restart would either
+            // recompute from scratch or, worse, reuse those balances under the wrong
+            // section. That is how two nodes with identical data end up with different
+            // balances for the same actor.
+            const bool cached_unchanged = persisted_range_->last_cached == cache_.section().to_string();
+            if (!force && first_unchanged && cached_unchanged && existing_last.has_value()
+                && new_last >= existing_last.value()) {
                 const auto distance = (new_last - existing_last.value()).to_int();
                 if (distance.has_value() && *distance < RANGE_PERSIST_INTERVAL) {
                     return;

@@ -387,7 +387,14 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
     {
         std::lock_guard lock(mutex_);
         // Check if we have a valid cache that we can use
-        if (cached_section_ != BigNumber(-1)) {
+        // The cache holds balances as of cached_section_, so it can only seed a query
+        // that asks for that point or later. If it has already moved past
+        // target_section its balances include transactions the caller explicitly
+        // excluded, and the loop below only adds — it cannot take them back out.
+        // Two nodes whose caches sit at different sections would then answer the same
+        // historical query differently, which breaks anything comparing balances
+        // across nodes.
+        if (cached_section_ != BigNumber(-1) && cached_section_ <= target_section) {
             // We have some cache, which may be at an earlier point than the genesis_section
             balance_start_section = cached_section_ + 1;
 

@@ -624,7 +624,8 @@ public:
     std::expected<void, ExtraChain::Consensus::ConsensusError> validate_shadow_batch(
         const ExtraChain::Consensus::Proposal         &proposal,
         const ExtraChain::Consensus::SectionBatchData &batch,
-        std::uint64_t                                  maximum_batch_bytes);
+        std::uint64_t                                  maximum_batch_bytes,
+        const std::set<Transaction>                   &staged_ancestors = {});
     std::expected<void, ExtraChain::Consensus::ConsensusError> install_shadow_batch(
         const ExtraChain::Consensus::Proposal         &proposal,
         const ExtraChain::Consensus::SectionBatchData &batch,
@@ -1024,8 +1025,12 @@ private:
         const std::pair<SectionId, SectionId>  &range,
         const std::map<SectionId, std::string> &sections,
         const Responder                        &responder);
+    /// @param prior transactions already committed by certified-but-unfinalized
+    ///        ancestors; they are not in the canonical chain yet, so balance proofs
+    ///        must account for them explicitly. Empty for ordinary repair traffic.
     std::optional<std::map<SectionId, std::string>> validated_repair_candidate(
-        const std::map<SectionId, std::string> &peer_sections);
+        const std::map<SectionId, std::string> &peer_sections,
+        const std::set<Transaction>            &prior = {});
     bool validate_repair_transaction(const Transaction &transaction, const std::set<Transaction> &pending);
 
     std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
