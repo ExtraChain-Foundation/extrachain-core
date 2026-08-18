@@ -709,8 +709,16 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
 
-    auto     cache_res = read_cached_balances();
-    Balances balances  = std::move(cache_res.second);
+    // The stored balances are only a valid starting point when the replay actually
+    // continues from where they left off. With no cache section we replay the whole
+    // chain from first_saved_section, so seeding from the table would count every
+    // one of those transactions twice — the table can still hold rows from an
+    // earlier run whose section marker did not survive.
+    Balances balances;
+    if (cached_section_ != BigNumber(-1)) {
+        auto cache_res = read_cached_balances();
+        balances       = std::move(cache_res.second);
+    }
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
@@ -776,9 +784,13 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
 
 std::optional<StateTransitionViolation> DagCache::validate_state_to(const SectionId& current_section) {
     std::lock_guard cache_lock(mutex_);
-    auto            cache_res = read_cached_balances();
-    auto            balances  = std::move(cache_res.second);
-    auto            from = cache_res.first == SectionId(-1) ? dag->first_saved_section() : cache_res.first + 1;
+    auto cache_res = read_cached_balances();
+    // Same rule as the replay in update_to_genesis_section: the stored balances are
+    // a valid base only when we continue from the section they were taken at. When
+    // there is no cache section we walk the chain from the start, so seeding from
+    // the table would double every transaction it already accounts for.
+    auto balances = cache_res.first == SectionId(-1) ? Balances {} : std::move(cache_res.second);
+    auto from = cache_res.first == SectionId(-1) ? dag->first_saved_section() : cache_res.first + 1;
     if (from < SectionId(0) || current_section < from) {
         return std::nullopt;
     }
