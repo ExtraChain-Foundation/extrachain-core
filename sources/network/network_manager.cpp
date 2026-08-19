@@ -382,10 +382,16 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 void NetworkManager::remove_connection(const QString &identifier) {
     if (identifier.isEmpty())
         eFatal("Try remove with empty identifier");
-    auto connectionsLocked = *connections_;
-    for (const auto &connection : *connectionsLocked) {
-        if (connection->identifier() == identifier)
-            emit connection->close();
+    std::set<SocketService *> matched;
+    {
+        auto connectionsLocked = *connections_;
+        for (const auto &connection : *connectionsLocked) {
+            if (connection->identifier() == identifier)
+                matched.insert(connection);
+        }
+    }
+    for (const auto &connection : matched) {
+        emit connection->close();
     }
 }
 
