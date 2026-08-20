@@ -481,6 +481,20 @@ namespace ExtraChain::Consensus {
                      hash_header(proposal.header),
                      proposal.header.height,
                      std::to_underlying(observed.error()));
+            if (observed.error() == ConsensusError::InvalidNonce) {
+                // A stale-nonce proposal means an authenticated proposer fell behind
+                // and does not know it: it will re-propose the same doomed batch
+                // forever. Hand it our verified tip in a focused reply so it can
+                // catch up; no amplification, one certificate per bad proposal.
+                const auto& state = consensus_->engine().safety_state();
+                if (state.highest_certificate.has_value()
+                    && state.highest_certificate.value().height >= proposal.header.height) {
+                    send_to_peer(state.highest_certificate.value(),
+                                 MessageType::ConsensusCertificate,
+                                 std::string(peer_identifier),
+                                 MessageStatus::NoStatus);
+                }
+            }
             return;
         }
         pending_proposals_.insert_or_assign(hash_header(proposal.header), proposal);
@@ -579,6 +593,10 @@ namespace ExtraChain::Consensus {
             return;
         }
         const auto batch = consensus_->engine().batch_for(request.header_hash);
+        eWarning("[Shadow] Batch request from {} for {}: {}",
+                 peer_identifier,
+                 request.header_hash.substr(0, 12),
+                 batch.has_value() ? "serving" : "not stored here either");
         if (batch.has_value()) {
             responder.send_response(batch.value(),
                                     MessageType::ConsensusBatchData,
@@ -595,8 +613,11 @@ namespace ExtraChain::Consensus {
         }
         const auto proposal = pending_proposals_.find(batch.header_hash);
         if (proposal == pending_proposals_.end()) {
+            eWarning("[Shadow] Batch data for {} arrived without a pending proposal; dropped",
+                     batch.header_hash.substr(0, 12));
             return;
         }
+        eWarning("[Shadow] Batch data for {} arrived; resuming validation", batch.header_hash.substr(0, 12));
         const auto ancestors = staged_ancestors_for(proposal->second);
         if (!ancestors.has_value()) {
             eWarning("[Shadow] Batch {} has an unusable ancestor chain: {}",
@@ -1499,8 +1520,14 @@ namespace ExtraChain::Consensus {
             pending_batches_.erase(pending_checkpoints_.begin()->first);
             pending_checkpoints_.erase(pending_checkpoints_.begin());
         }
-        if (pending_checkpoints_.empty()
-            || (next_section != 0 && pending_checkpoints_.begin()->second.batch.first_section != next_section)) {
+        if (pending_checkpoints_.empty()) {
+            return;
+        }
+        if (next_section != 0 && pending_checkpoints_.begin()->second.batch.first_section != next_section) {
+            eWarning("[Shadow] Pending checkpoint [{}..{}] does not start at expected section {}; not proposing",
+                     pending_checkpoints_.begin()->second.batch.first_section,
+                     pending_checkpoints_.begin()->second.batch.last_section,
+                     next_section);
             return;
         }
         const auto proposal = consensus_->make_checkpoint_proposal(pending_checkpoints_.begin()->second, round);
@@ -1517,11 +1544,15 @@ namespace ExtraChain::Consensus {
         const auto& proposal_value = proposal.value().value();
         const auto  stored_batch   = pending_batches_.find(proposal_value.batch.last_section);
         if (stored_batch == pending_batches_.end()) {
+            eWarning("[Shadow] Checkpoint for section {} has no stored batch; not proposing",
+                     proposal_value.batch.last_section);
             return;
         }
         auto batch        = stored_batch->second;
         batch.header_hash = hash_header(proposal_value.header);
         if (hash_batch_manifest(batch.manifest) != proposal_value.header.batch_root) {
+            eWarning("[Shadow] Stored batch for section {} does not match the checkpoint root; not proposing",
+                     proposal_value.batch.last_section);
             return;
         }
         const auto valid = [&]() -> std::expected<void, ConsensusError> {
@@ -1628,6 +1659,7 @@ namespace ExtraChain::Consensus {
             send_to_validators(accepted.value().certificate.value(), MessageType::ConsensusTimeoutCertificate);
         }
         send_to_validators(vote.value(), MessageType::ConsensusTimeoutVote);
+        queue_next_checkpoint();
         reset_timeout();
     }
 
