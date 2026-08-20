@@ -115,14 +115,14 @@ namespace ExtraChain::Consensus {
         const auto hash_match = database_->select("SELECT hash, payload FROM consensus_intents WHERE hash = ?",
                                                   "consensus_intents",
                                                   { { "hash", hash } });
+        const auto receipts   = database_->select("SELECT payload FROM consensus_intent_receipts WHERE hash = ?",
+                                                "consensus_intent_receipts",
+                                                  { { "hash", hash } });
         if (!hash_match.empty()) {
             if (hash_match.size() != 1 || !hash_match.front().contains("payload")
                 || hash_match.front().at("payload") != encoded) {
                 return fail(ConsensusError::DuplicateIntent);
             }
-            const auto receipts = database_->select("SELECT payload FROM consensus_intent_receipts WHERE hash = ?",
-                                                    "consensus_intent_receipts",
-                                                    { { "hash", hash } });
             const IntentReceipt accepted { .intent_hash = hash, .status = IntentStatus::Accepted };
             if ((!receipts.empty()
                  && (receipts.size() != 1 || !receipts.front().contains("payload")
@@ -136,6 +136,17 @@ namespace ExtraChain::Consensus {
                 return fail(ConsensusError::StorageFailure);
             }
             return {};
+        }
+        if (!receipts.empty()) {
+            if (receipts.size() != 1 || !receipts.front().contains("payload")) {
+                return fail(ConsensusError::StorageFailure);
+            }
+            const auto stored_receipt = decode<IntentReceipt>(receipts.front().at("payload"));
+            if (!stored_receipt.has_value() || stored_receipt.value().intent_hash != hash
+                || stored_receipt.value().status == IntentStatus::Accepted) {
+                return fail(ConsensusError::StorageFailure);
+            }
+            return fail(ConsensusError::DuplicateIntent);
         }
         const auto sender_matches = database_->select("SELECT hash, nonce FROM consensus_intents WHERE sender = ?",
                                                       "consensus_intents",
@@ -231,6 +242,27 @@ namespace ExtraChain::Consensus {
                 .status      = IntentStatus::Rejected,
                 .error       = error,
             };
+            const auto pending = database_->select("SELECT payload FROM consensus_intents WHERE hash = ?",
+                                                   "consensus_intents",
+                                                   { { "hash", hash } });
+            const auto stored_receipts =
+                database_->select("SELECT payload FROM consensus_intent_receipts WHERE hash = ?",
+                                  "consensus_intent_receipts",
+                                  { { "hash", hash } });
+            if (pending.empty()) {
+                if (stored_receipts.size() == 1 && stored_receipts.front().contains("payload")
+                    && stored_receipts.front().at("payload") == encode(receipt)) {
+                    continue;
+                }
+                database_->query("ROLLBACK");
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+            const IntentReceipt accepted { .intent_hash = hash, .status = IntentStatus::Accepted };
+            if (pending.size() != 1 || stored_receipts.size() != 1 || !stored_receipts.front().contains("payload")
+                || stored_receipts.front().at("payload") != encode(accepted)) {
+                database_->query("ROLLBACK");
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
             if (!database_->replace("consensus_intent_receipts",
                                     { { "hash", hash }, { "payload", encode(receipt) } })
                 || !database_->delete_row("consensus_intents", { { "hash", hash } })) {

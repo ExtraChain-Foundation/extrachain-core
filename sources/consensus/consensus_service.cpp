@@ -620,6 +620,12 @@ namespace ExtraChain::Consensus {
             eWarning("[Shadow] Batch {} could not be stored before voting", batch.header_hash);
             return;
         }
+        const auto& highest = consensus_->engine().safety_state().highest_certificate;
+        if (highest.has_value() && highest.value().header_hash == batch.header_hash) {
+            pending_proposals_.erase(proposal);
+            queue_next_checkpoint();
+            return;
+        }
         vote_for_proposal(proposal->second, peer_identifier);
     }
 
@@ -1347,8 +1353,9 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !consensus_->engine().safety_state().highest_certificate.has_value()) {
             return;
         }
-        const auto& highest = consensus_->engine().safety_state().highest_certificate.value();
-        auto        target  = consensus_->configuration().activation_dag_section;
+        const auto&             highest = consensus_->engine().safety_state().highest_certificate.value();
+        auto                    target  = consensus_->configuration().activation_dag_section;
+        std::optional<Proposal> highest_proposal;
         if (highest.phase == Phase::Genesis) {
             if (consensus_->engine().epoch_bootstrap().has_value()) {
                 const auto first = consensus_->engine().epoch_bootstrap().value().first_dag_section;
@@ -1360,13 +1367,27 @@ namespace ExtraChain::Consensus {
                 target = target == 0 ? ShadowSectionInterval : target;
             }
         } else {
-            const auto parent = consensus_->engine().proposal_for(highest.header_hash);
-            if (!parent.has_value()
-                || parent.value().batch.last_section
-                       > std::numeric_limits<std::uint64_t>::max() - ShadowSectionInterval) {
+            highest_proposal = consensus_->engine().proposal_for(highest.header_hash);
+            if (!highest_proposal.has_value()) {
+                // A certificate can arrive before its proposal, so recovery must use authenticated sync.
+                eWarning("[Shadow] Proposal for certified height {} is not stored yet; requesting sync",
+                         highest.height);
+                send_to_validators(
+                    ShadowSyncRequest {
+                        .protocol_version = ProtocolVersion,
+                        .network_id       = consensus_->engine().validators().document().network_id,
+                        .epoch            = consensus_->engine().validators().document().epoch,
+                        .finalized_height = consensus_->engine().safety_state().finalized_height,
+                    },
+                    MessageType::ConsensusSyncRequest,
+                    MessageStatus::Request);
                 return;
             }
-            target = parent.value().batch.last_section + ShadowSectionInterval;
+            if (highest_proposal.value().batch.last_section
+                > std::numeric_limits<std::uint64_t>::max() - ShadowSectionInterval) {
+                return;
+            }
+            target = highest_proposal.value().batch.last_section + ShadowSectionInterval;
         }
         if (requires_intent_v2()) {
             if (pending_checkpoints_.contains(target)) {
@@ -1387,34 +1408,13 @@ namespace ExtraChain::Consensus {
             std::optional<std::string> previous_section_bytes;
             std::string                previous_section_root;
             if (highest.phase != Phase::Genesis) {
-                const auto parent       = consensus_->engine().proposal_for(highest.header_hash);
-                const auto parent_batch = consensus_->engine().batch_for(highest.header_hash);
-                if (!parent.has_value()) {
-                    // A certificate can arrive ahead of its proposal. That is a
-                    // delivery race, not corruption: ask the committee to sync us
-                    // up and try again on a later tick instead of giving up the
-                    // vote permanently.
-                    eWarning("[Shadow] Proposal for certified height {} is not stored yet; requesting sync",
-                             highest.height);
-                    send_to_validators(
-                        ShadowSyncRequest {
-                            .protocol_version = ProtocolVersion,
-                            .network_id       = consensus_->engine().validators().document().network_id,
-                            .epoch            = consensus_->engine().validators().document().epoch,
-                            .finalized_height = consensus_->engine().safety_state().finalized_height,
-                        },
-                        MessageType::ConsensusSyncRequest,
-                        MessageStatus::Request);
-                    return;
-                }
+                const auto& parent       = highest_proposal.value();
+                const auto  parent_batch = consensus_->engine().batch_for(highest.header_hash);
                 if (!parent_batch.has_value()) {
-                    // Same race for the batch payload: request it from the
-                    // committee. Parking the proposal in pending_proposals_ lets
-                    // receive_batch_data resume the normal validate-stage-vote
-                    // path when the payload arrives.
+                    // A certified proposal can arrive before its batch payload.
                     eWarning("[Shadow] Batch for certified height {} is not stored yet; requesting it",
                              highest.height);
-                    pending_proposals_.insert_or_assign(highest.header_hash, parent.value());
+                    pending_proposals_.insert_or_assign(highest.header_hash, parent);
                     send_to_validators(
                         SectionBatchRequest {
                             .protocol_version = ProtocolVersion,
@@ -1427,14 +1427,13 @@ namespace ExtraChain::Consensus {
                     return;
                 }
                 if (parent_batch.value().sections.empty()
-                    || parent_batch.value().sections.back().first != parent.value().batch.last_section) {
-                    eWarning("[Shadow] Voting halted: parent batch for height {} is inconsistent",
-                             highest.height);
+                    || parent_batch.value().sections.back().first != parent.batch.last_section) {
+                    eWarning("[Shadow] Voting halted: parent batch for height {} is inconsistent", highest.height);
                     halt_voting();
                     return;
                 }
                 previous_section_bytes = parent_batch.value().sections.back().second;
-                previous_section_root  = parent.value().header.section_root;
+                previous_section_root  = parent.header.section_root;
             }
             auto batch = node_.dag()->build_shadow_intent_batch(first,
                                                                 SectionId(target),
@@ -2077,7 +2076,7 @@ namespace ExtraChain::Consensus {
             // would evict valid work.
             return;
         }
-        const auto unprovable = node_.dag()->unprovable_batch_transactions(batch, ancestors.value());
+        const auto               unprovable = node_.dag()->unprovable_batch_transactions(batch, ancestors.value());
         std::vector<std::string> rejected;
         rejected.reserve(unprovable.size());
         for (const auto& transaction : unprovable) {
@@ -2093,8 +2092,18 @@ namespace ExtraChain::Consensus {
         if (rejected.empty()) {
             return;
         }
-        if (intent_store_ && !intent_store_->reject(rejected, ConsensusError::InvalidIntent).has_value()) {
-            eWarning("[Shadow] Could not persist rejection receipts for {} intents", rejected.size());
+        if (!intent_store_) {
+            eCritical("[Shadow] Cannot persist rejection receipts because the intent store is unavailable");
+            halt_voting();
+            return;
+        }
+        const auto stored = intent_store_->reject(rejected, ConsensusError::InvalidIntent);
+        if (!stored.has_value()) {
+            eCritical("[Shadow] Could not persist rejection receipts for {} intents: {}",
+                      rejected.size(),
+                      std::to_underlying(stored.error()));
+            halt_voting();
+            return;
         }
         intent_pool_.erase(rejected);
         // The staged batch would keep re-proposing the same rejected intents; drop it
@@ -2104,6 +2113,7 @@ namespace ExtraChain::Consensus {
         eWarning("[Shadow] Evicted {} unprovable intents; batch for section {} will be rebuilt",
                  rejected.size(),
                  proposal.batch.last_section);
+        queue_next_checkpoint();
     }
 
     std::expected<void, ConsensusError> ConsensusService::admit_batch_intents(const Proposal&         proposal,

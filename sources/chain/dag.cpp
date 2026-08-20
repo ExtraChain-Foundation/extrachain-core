@@ -2027,46 +2027,64 @@ std::optional<std::map<SectionId, std::string>> Dag::collect_repair_vote(
     return result;
 }
 
-bool Dag::validate_repair_transaction(const Transaction &transaction, const std::set<Transaction> &pending) {
+bool Dag::validate_repair_transaction(const Transaction           &transaction,
+                                      const std::set<Transaction> &pending,
+                                      bool                         report_failure) {
     if (transaction.hash() != transaction.calculate_hash()
         && transaction.hash() != transaction.calculate_hash_hex()) {
-        eWarning("[DagDiag] repair reject: bad hash tx={}", transaction.hash());
+        if (report_failure) {
+            eWarning("[Dag] Repair transaction has an invalid hash: {}", transaction.hash());
+        }
         return false;
     }
     if (transaction.type() == TransactionType::Genesis || transaction.type() == TransactionType::Balance) {
         const std::set<Transaction> empty;
         const auto                  frontier = transaction.section();
-        const auto prove = prove_transaction(transaction, empty, &pending, &frontier);
-        if (prove != TransactionProveError::NoError) {
-            eWarning("[DagDiag] repair reject: prove={} tx={} sender={} section={} pending={}",
-                     std::to_underlying(prove), transaction.hash(), transaction.sender().to_string(),
-                     transaction.section().to_string(), pending.size());
+        const auto                  prove    = prove_transaction(transaction, empty, &pending, &frontier);
+        if (report_failure && prove != TransactionProveError::NoError) {
+            eWarning("[Dag] Repair transaction proof failed: prove={} tx={} sender={} section={} pending={}",
+                     std::to_underlying(prove),
+                     transaction.hash(),
+                     transaction.sender().to_string(),
+                     transaction.section().to_string(),
+                     pending.size());
         }
         return prove == TransactionProveError::NoError;
     }
     if (transaction.signature().empty()) {
-        eWarning("[DagDiag] repair reject: empty signature tx={}", transaction.hash());
+        if (report_failure) {
+            eWarning("[Dag] Repair transaction has no signature: {}", transaction.hash());
+        }
         return false;
     }
     const auto sender = node->actor_index()->read_actor_old(transaction.sender());
     if (sender.empty()) {
-        eWarning("[DagDiag] repair reject: unknown sender tx={} sender={}", transaction.hash(),
-                 transaction.sender().to_string());
+        if (report_failure) {
+            eWarning("[Dag] Repair transaction has an unknown sender: tx={} sender={}",
+                     transaction.hash(),
+                     transaction.sender().to_string());
+        }
         return false;
     }
     if (!transaction.verify(sender)) {
-        eWarning("[DagDiag] repair reject: bad signature tx={} sender={}", transaction.hash(),
-                 transaction.sender().to_string());
+        if (report_failure) {
+            eWarning("[Dag] Repair transaction has an invalid signature: tx={} sender={}",
+                     transaction.hash(),
+                     transaction.sender().to_string());
+        }
         return false;
     }
 
     const std::set<Transaction> empty;
     const auto                  frontier = transaction.section();
-    const auto prove = prove_transaction(transaction, empty, &pending, &frontier, false);
-    if (prove != TransactionProveError::NoError) {
-        eWarning("[DagDiag] repair reject: prove={} tx={} sender={} section={} pending={}",
-                 std::to_underlying(prove), transaction.hash(), transaction.sender().to_string(),
-                 transaction.section().to_string(), pending.size());
+    const auto                  prove    = prove_transaction(transaction, empty, &pending, &frontier, false);
+    if (report_failure && prove != TransactionProveError::NoError) {
+        eWarning("[Dag] Repair transaction proof failed: prove={} tx={} sender={} section={} pending={}",
+                 std::to_underlying(prove),
+                 transaction.hash(),
+                 transaction.sender().to_string(),
+                 transaction.section().to_string(),
+                 pending.size());
     }
     return prove == TransactionProveError::NoError;
 }
@@ -2109,20 +2127,19 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
     return result;
 }
 
-std::vector<Transaction> Dag::unprovable_batch_transactions(
-    const ExtraChain::Consensus::SectionBatchData &batch,
-    const std::set<Transaction>                   &staged_ancestors) {
+std::vector<Transaction> Dag::unprovable_batch_transactions(const ExtraChain::Consensus::SectionBatchData &batch,
+                                                            const std::set<Transaction> &staged_ancestors) {
     std::set<Transaction>    accepted_transactions = staged_ancestors;
     std::vector<Transaction> unprovable;
-    for (const auto &[section_value, bytes] : batch.sections) {
+    for (const auto &section_data : batch.sections) {
         WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
-        auto              candidate = Json::deserialize<Section>(bytes);
+        auto              candidate = Json::deserialize<Section>(section_data.second);
         if (!candidate.has_value()) {
             // An undecodable section is a batch problem, not an intent problem.
             return {};
         }
         for (const auto &transaction : candidate->transactions) {
-            if (validate_repair_transaction(transaction, accepted_transactions)) {
+            if (validate_repair_transaction(transaction, accepted_transactions, false)) {
                 accepted_transactions.insert(transaction);
             } else {
                 unprovable.push_back(transaction);

@@ -288,6 +288,11 @@ int main(int argc, char *argv[]) {
                                               16ULL * 1024ULL * 1024ULL,
                                               std::set<Transaction> { staged_transfer })
                       .has_value());
+    TEST_REQUIRE(node->dag()->unprovable_batch_transactions(child_batch, {}).empty());
+    const auto unprovable =
+        node->dag()->unprovable_batch_transactions(child_batch, std::set<Transaction> { staged_transfer });
+    TEST_REQUIRE_EQ(unprovable.size(), std::size_t(1));
+    TEST_REQUIRE_EQ(unprovable.front().hash(), child_transfer.hash());
 
     Balances first_snapshot {
         { { actor.id(), actor.id() }, BigNumberFloat("123") },

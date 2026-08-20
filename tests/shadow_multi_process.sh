@@ -22,9 +22,17 @@ cleanup() {
     for pid in "${PIDS[@]}"; do
         kill "$pid" 2>/dev/null || true
     done
-    sleep 2
+    local deadline=$(( $(date +%s) + 15 ))
+    local alive=1
+    while [ "$alive" -eq 1 ] && [ "$(date +%s)" -lt "$deadline" ]; do
+        alive=0
+        for pid in "${PIDS[@]}"; do
+            kill -0 "$pid" 2>/dev/null && alive=1
+        done
+        [ "$alive" -eq 1 ] && sleep 1
+    done
     for pid in "${PIDS[@]}"; do
-        kill -9 "$pid" 2>/dev/null || true
+        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
     done
     for pid in "${PIDS[@]}"; do
         wait "$pid" 2>/dev/null || true
@@ -95,7 +103,7 @@ for index in $(seq 0 6); do
     (
         cd "$parent" || exit 73
         EXC_BIND_IP="127.0.0.$((index + 1))" exec "$NODE_RUN" committee data "$role" "$index" "$port" "$((BASE_PORT + 20))" 7 \
-            "$([ "$index" -eq 0 ] && printf '%s' "$INTENT_COUNT" || printf '0')" "$RUN_SECONDS" "$BARRIER"
+            "$([ "$index" -eq 0 ] && printf '%s' "$INTENT_COUNT" || printf '0')" "$RUN_SECONDS" "$BARRIER" 1 1
     ) >"$WORK/node-$index.log" 2>&1 &
     PIDS+=("$!")
     # Each node connects only to lower indexes. Give the new listener time to

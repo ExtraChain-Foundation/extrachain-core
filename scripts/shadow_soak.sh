@@ -19,9 +19,10 @@
 set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-CORE_TESTS="${EXC_CORE_TESTS:-$HOME/ExC/Messenger/testnet/core-integ/tests}"
+REPO_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+CORE_TESTS="${EXC_CORE_TESTS:-$REPO_DIR/tests}"
 BUILD_DIR="${EXTRACHAIN_TEST_BUILD:-$CORE_TESTS/build}"
-SEED="${1:-$HOME/ExC/Messenger/testnet/seeds/gen-25k}"
+SEED="${1:-/tmp/gen-shadow-seed}"
 BASE_PORT="${2:-17840}"
 SENDERS="${EXC_SHADOW_SENDERS:-4}"
 PER_SENDER="${EXC_SHADOW_PER_SENDER:-32}"
@@ -35,14 +36,26 @@ WORK="${EXC_SHADOW_WORK:-$(mktemp -d /tmp/exc-shadow-soak-XXXXXX)}"
 SYNC_WORK="$WORK/bootstrap"
 NODE_RUN="$BUILD_DIR/extrachain-node-run"
 BUNDLE="$BUILD_DIR/extrachain-shadow-bundle"
+DAG_AUDIT="$BUILD_DIR/extrachain-dag-audit"
+SHADOW_VERIFY="$SCRIPT_DIR/shadow_verify.py"
 BARRIER="$WORK/barrier"
 PIDS=()
 
 cleanup() {
     [ "${#PIDS[@]}" -eq 0 ] && return 0
     for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
-    sleep 2
-    for pid in "${PIDS[@]}"; do kill -9 "$pid" 2>/dev/null || true; done
+    local deadline=$(( $(date +%s) + 15 ))
+    local alive=1
+    while [ "$alive" -eq 1 ] && [ "$(date +%s)" -lt "$deadline" ]; do
+        alive=0
+        for pid in "${PIDS[@]}"; do
+            kill -0 "$pid" 2>/dev/null && alive=1
+        done
+        [ "$alive" -eq 1 ] && sleep 1
+    done
+    for pid in "${PIDS[@]}"; do
+        kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+    done
     for pid in "${PIDS[@]}"; do wait "$pid" 2>/dev/null || true; done
     PIDS=()
 }
@@ -88,16 +101,17 @@ summary() {
 
 [ -x "$NODE_RUN" ] || fail "node runner is absent: $NODE_RUN"
 [ -x "$BUNDLE" ]   || fail "Shadow bundle tool is absent: $BUNDLE"
+[ -x "$DAG_AUDIT" ] || fail "DAG audit tool is absent: $DAG_AUDIT"
+[ -f "$SHADOW_VERIFY" ] || fail "cross-node verifier is absent: $SHADOW_VERIFY"
 [ -d "$SEED/dag" ] || fail "seed DAG is absent: $SEED"
 [ "$SENDERS" -ge 1 ] && [ "$SENDERS" -le "$NODE_COUNT" ] || fail "SENDERS must be 1..$NODE_COUNT"
 [ "$PER_SENDER" -le 64 ] || fail "PER_SENDER above 64 hits maximum_nonce_gap; use more senders instead"
 
-# Zombie nodes from a killed run poison the next one with fake rejections, and a
-# busy port makes a node look silently unreachable. Both cost us a series once.
-pkill -f extrachain-node-run 2>/dev/null && sleep 2
-for port in $(seq "$BASE_PORT" $((BASE_PORT + 40))); do
-    lsof -ti "tcp:$port" >/dev/null 2>&1 && fail "port $port is still busy"
-done
+if command -v lsof >/dev/null 2>&1; then
+    for port in $(seq "$BASE_PORT" $((BASE_PORT + 40))); do
+        lsof -ti "tcp:$port" >/dev/null 2>&1 && fail "port $port is still busy"
+    done
+fi
 
 log "=== bootstrap $NODE_COUNT nodes from $SEED ==="
 EXTRACHAIN_TEST_BUILD="$BUILD_DIR" \
@@ -199,13 +213,31 @@ done
 
 # A stack from a live node is worth more than the same node killed — this is how
 # the ABBA deadlock was found. Take it before the processes go away.
-if [ "$verdict" != "pass" ]; then
+if [ "$verdict" != "pass" ] && [ "$verdict" != "pass-negative" ] && command -v sample >/dev/null 2>&1; then
     for pid in "${PIDS[@]}"; do
         kill -0 "$pid" 2>/dev/null && sample "$pid" 3 -f "$WORK/sample-$pid.txt" >/dev/null 2>&1 &
     done
     wait
 fi
 cleanup
+
+if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
+    CACHE_SNAPSHOT=""
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        role="joiner"; [ "$index" -eq 0 ] && role="seed"
+        "$DAG_AUDIT" "${NODE_HOMES[$index]}" "$role" >"$WORK/audit-$index.log" 2>&1 \
+            || { tail -60 "$WORK/audit-$index.log" >&2; fail "DAG or balance audit failed for node $index"; }
+        snapshot="$(sed -n 's/.*balance cache: section=\([^ ]*\).*hash=\([^ ]*\).*/\1:\2/p' \
+                    "$WORK/audit-$index.log")"
+        [ -n "$snapshot" ] || fail "node $index did not report a balance snapshot"
+        if [ -z "$CACHE_SNAPSHOT" ]; then CACHE_SNAPSHOT="$snapshot"
+        elif [ "$CACHE_SNAPSHOT" != "$snapshot" ]; then
+            fail "node $index has a different logical balance snapshot"
+        fi
+    done
+    python3 "$SHADOW_VERIFY" "$WORK" >"$WORK/cross-node.log" 2>&1 \
+        || { tail -80 "$WORK/cross-node.log" >&2; fail "cross-node content verification failed"; }
+fi
 
 case "$verdict" in
     pass)

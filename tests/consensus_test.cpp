@@ -414,6 +414,38 @@ int main() {
     check("finality waits for the finalized batch", lagging_rejected_finality);
     check("missing batch cannot advance finalized height", lagging_engine->safety_state().finalized_height == 0);
     lagging_engine.reset();
+
+    const auto certified_observer_path = root / "certified-observer.sqlite";
+    auto       certified_observer =
+        std::make_unique<ConsensusEngine>(fixture.view,
+                                          std::nullopt,
+                                          std::make_unique<SafetyStore>(certified_observer_path));
+    check("certified observer initializes", certified_observer->initialize().has_value());
+    for (std::size_t index = 0; index < chain_proposals.size() && index < chain_certificates.size(); ++index) {
+        check("certified observer sees proposal",
+              certified_observer->observe_proposal(chain_proposals[index]).has_value());
+        if (index == 0) {
+            check("certified observer stores finalized batch",
+                  certified_observer
+                      ->stage_batch(batch_data(chain_proposals[index].header.height,
+                                               hash_header(chain_proposals[index].header)))
+                      .has_value());
+        }
+        check("certified observer accepts certificate without latest batch",
+              certified_observer->accept_certificate(chain_certificates[index]).has_value());
+    }
+    certified_observer.reset();
+    certified_observer = std::make_unique<ConsensusEngine>(fixture.view,
+                                                           std::nullopt,
+                                                           std::make_unique<SafetyStore>(certified_observer_path));
+    check("certified observer restarts with referenced proposals",
+          certified_observer->initialize().has_value()
+              && certified_observer->proposal_for(hash_header(chain_proposals.back().header)).has_value());
+    const auto observer_proofs = certified_observer->finality_proofs_after(0, 1);
+    check("certified observer reloads its finality proof",
+          observer_proofs.has_value() && observer_proofs.value().size() == 1);
+    certified_observer.reset();
+
     check("finalized checkpoint keeps the DAG section",
           finalized.has_value() && finalized.value().dag_section == 20);
     const auto proofs = engines.front()->finality_proofs_after(0, 8);

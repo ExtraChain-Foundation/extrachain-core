@@ -415,17 +415,24 @@ namespace ExtraChain::Consensus {
 
     std::expected<void, ConsensusError> SafetyStore::persist_certificate_state(
         const QuorumCertificate&            certificate,
+        const Proposal&                     proposal,
         const SafetyState&                  state,
         const std::optional<FinalityProof>& proof) {
         std::lock_guard lock(mutex_);
-        if (!database_ || !database_->is_open() || !database_->query("BEGIN IMMEDIATE TRANSACTION")) {
+        if (!database_ || !database_->is_open() || certificate.header_hash != hash_header(proposal.header)
+            || !database_->query("BEGIN IMMEDIATE TRANSACTION")) {
             return std::unexpected(ConsensusError::StorageFailure);
         }
-        const bool certificate_stored = database_->replace("consensus_certificates",
-                                                           { { "hash", hash_certificate(certificate) },
-                                                             { "height", std::to_string(certificate.height) },
-                                                             { "payload", encode(certificate) } });
-        bool       proof_stored       = true;
+        const bool proposal_stored    = database_->replace("consensus_proposals",
+                                                           { { "hash", certificate.header_hash },
+                                                             { "height", std::to_string(proposal.header.height) },
+                                                             { "payload", encode(proposal) } });
+        const bool certificate_stored = proposal_stored
+                                        && database_->replace("consensus_certificates",
+                                                              { { "hash", hash_certificate(certificate) },
+                                                                { "height", std::to_string(certificate.height) },
+                                                                { "payload", encode(certificate) } });
+        bool proof_stored = true;
         if (certificate_stored && proof.has_value()) {
             const auto& value = proof.value();
             proof_stored =

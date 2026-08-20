@@ -140,12 +140,9 @@ namespace ExtraChain::Consensus {
         finalized_intents(const Proposal& proposal, const SectionBatchData& batch) const;
         [[nodiscard]] std::expected<void, ConsensusError> admit_batch_intents(const Proposal&         proposal,
                                                                               const SectionBatchData& batch);
-        /// Called with mutex_ held when the leader's own batch fails validation:
-        /// evicts the intents whose transactions cannot be proven and drops the
-        /// pending batch so the next tick materializes a fresh one without them.
         void evict_unprovable_intents(const Proposal& proposal, const SectionBatchData& batch);
-        std::expected<void, ConsensusError>               process_epoch_changes(
-                          const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized);
+        std::expected<void, ConsensusError> process_epoch_changes(
+            const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized);
         std::expected<bool, ConsensusError> activate_pending_epoch();
         std::expected<bool, ConsensusError> activate_pending_recovery(std::uint64_t now_ms);
         void                                schedule_recovery_activation();

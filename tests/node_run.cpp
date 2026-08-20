@@ -33,6 +33,7 @@
 // must run as separate processes.
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -70,7 +71,7 @@ namespace {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    if (std::getenv("EXC_DEBUG_LOG") != nullptr) { // surface eWarning/eLog rejection reasons
+    if (std::getenv("EXC_DEBUG_LOG") != nullptr) {
         Logger::instance().set_debug(true);
     }
     if (argc < 3) {
@@ -224,11 +225,11 @@ int main(int argc, char* argv[]) {
         }
         if (!barrier_directory.empty()) {
             std::filesystem::create_directories(barrier_directory);
-            // publish this node's actor so a funding phase can find it
-            FileIo::write_atomic(barrier_directory / ("actor-" + std::to_string(node_index)),
-                                 node->account_controller()->system_actor().id().to_string());
+            const auto actor_marker =
+                FileIo::write_atomic(barrier_directory / ("actor-" + std::to_string(node_index)),
+                                     node->account_controller()->system_actor().id().to_string());
             const auto marker = barrier_directory / ("node-" + std::to_string(node_index));
-            if (!FileIo::write_atomic(marker, "ready").has_value()) {
+            if (!actor_marker.has_value() || !FileIo::write_atomic(marker, "ready").has_value()) {
                 node->cleanUp();
                 return 4;
             }
@@ -242,10 +243,6 @@ int main(int argc, char* argv[]) {
                 return 4;
             }
         }
-        // funding phase: EXC_FUND_NODES="1,2,3" makes node 0 transfer
-        // EXC_FUND_AMOUNT (default 1.0) to each listed node's actor and publish a
-        // "funded" barrier marker once those transfers finalize; listed senders
-        // wait for the marker before submitting their own load.
         std::uint64_t funding_nonces = 0;
         if (const char* fund_nodes_env = std::getenv("EXC_FUND_NODES");
             fund_nodes_env != nullptr && !barrier_directory.empty()) {
@@ -255,10 +252,19 @@ int main(int argc, char* argv[]) {
                 std::size_t       pos = 0;
                 while (pos <= list.size()) {
                     const auto comma = list.find(',', pos);
-                    const auto item  = list.substr(pos, comma == std::string::npos ? std::string::npos
-                                                                                   : comma - pos);
+                    const auto item =
+                        list.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
                     if (!item.empty()) {
-                        fund_targets.push_back(std::strtoull(item.c_str(), nullptr, 10));
+                        std::size_t target = 0;
+                        const auto  parsed = std::from_chars(item.data(), item.data() + item.size(), target);
+                        if (parsed.ec != std::errc {} || parsed.ptr != item.data() + item.size()
+                            || target >= node_count
+                            || std::find(fund_targets.begin(), fund_targets.end(), target) != fund_targets.end()) {
+                            std::printf("[node-run] invalid EXC_FUND_NODES value\n");
+                            node->cleanUp();
+                            return 64;
+                        }
+                        fund_targets.push_back(target);
                     }
                     if (comma == std::string::npos) {
                         break;
@@ -269,7 +275,7 @@ int main(int argc, char* argv[]) {
             const bool is_funded_sender =
                 std::find(fund_targets.begin(), fund_targets.end(), node_index) != fund_targets.end();
             if (node_index == 0) {
-                const auto&              funder = node->account_controller()->system_actor();
+                const auto&              funder      = node->account_controller()->system_actor();
                 const char*              amount_env  = std::getenv("EXC_FUND_AMOUNT");
                 const std::string        fund_amount = amount_env != nullptr ? amount_env : "1.0";
                 std::vector<std::string> funding_hashes;
@@ -277,8 +283,7 @@ int main(int argc, char* argv[]) {
                     if (target == 0) {
                         continue;
                     }
-                    const auto id_text =
-                        FileIo::read_all(barrier_directory / ("actor-" + std::to_string(target)));
+                    const auto id_text = FileIo::read_all(barrier_directory / ("actor-" + std::to_string(target)));
                     if (!id_text.has_value()) {
                         std::printf("[node-run] funding: no actor id for node %zu\n", target);
                         node->cleanUp();
@@ -330,8 +335,7 @@ int main(int argc, char* argv[]) {
                 std::fflush(stdout);
                 const auto funding_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(180);
                 bool       funded           = funding_hashes.empty();
-                while (stop_requested == 0 && !funded
-                       && std::chrono::steady_clock::now() < funding_deadline) {
+                while (stop_requested == 0 && !funded && std::chrono::steady_clock::now() < funding_deadline) {
                     std::this_thread::sleep_for(std::chrono::seconds(1));
                     funded = true;
                     for (const auto& hash : funding_hashes) {
@@ -350,7 +354,10 @@ int main(int argc, char* argv[]) {
                 }
                 std::printf("[node-run] funding: finalized, releasing senders\n");
                 std::fflush(stdout);
-                FileIo::write_atomic(barrier_directory / "funded", "ok");
+                if (!FileIo::write_atomic(barrier_directory / "funded", "ok").has_value()) {
+                    node->cleanUp();
+                    return 5;
+                }
             } else if (is_funded_sender && intent_count > 0) {
                 const auto funded_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(200);
                 while (stop_requested == 0 && std::chrono::steady_clock::now() < funded_deadline
@@ -541,13 +548,16 @@ int main(int argc, char* argv[]) {
         int        ticks    = 0;
         int        result   = 1;
         while (std::chrono::steady_clock::now() < deadline) {
-            const auto cur   = node->dag()->current_section();
-            const auto conns = node->network()->active_connections_count();
-            std::printf("[node-run] t=%ds conns=%d current_section=%s status=%d\n",
+            const auto cur        = node->dag()->current_section();
+            const auto conns      = node->network()->active_connections_count();
+            const auto projection = node->dag()->state_projection();
+            std::printf("[node-run] t=%ds conns=%d current_section=%s status=%d verified=%s reason=%s\n",
                         ticks * 3,
                         conns,
                         cur.to_string().c_str(),
-                        static_cast<int>(node->dag()->status()));
+                        static_cast<int>(projection.status),
+                        projection.verified_section.to_string().c_str(),
+                        projection.reason.c_str());
             std::fflush(stdout);
             ticks++;
             bool dfs_ready = !verify_dfs;

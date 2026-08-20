@@ -45,12 +45,12 @@ def section_hashes(data_dir):
     for section, payload in dst.execute("SELECT section, payload FROM sections"):
         try:
             body = json.loads(payload)["transactions"]
-            hashes[section] = hashlib.md5(
+            hashes[section] = hashlib.sha256(
                 json.dumps(body, sort_keys=True).encode()
             ).hexdigest()
         except (ValueError, KeyError, TypeError):
-            hashes[section] = hashlib.md5(payload if isinstance(payload, bytes)
-                                          else str(payload).encode()).hexdigest()
+            hashes[section] = hashlib.sha256(payload if isinstance(payload, bytes)
+                                             else str(payload).encode()).hexdigest()
     dst.close()
     return hashes
 
@@ -96,6 +96,9 @@ def main():
         hashes = section_hashes(path)
         if hashes is None:
             print(f"FAIL: {name} has no readable hot store")
+            return 1
+        if not hashes:
+            print(f"FAIL: {name} has no hot sections to compare")
             return 1
         per_node[name] = hashes
         print(f"{name}: {len(hashes)} hot sections, range "
