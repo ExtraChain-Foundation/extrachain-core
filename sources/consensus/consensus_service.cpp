@@ -1389,9 +1389,46 @@ namespace ExtraChain::Consensus {
             if (highest.phase != Phase::Genesis) {
                 const auto parent       = consensus_->engine().proposal_for(highest.header_hash);
                 const auto parent_batch = consensus_->engine().batch_for(highest.header_hash);
-                if (!parent.has_value() || !parent_batch.has_value() || parent_batch.value().sections.empty()
+                if (!parent.has_value()) {
+                    // A certificate can arrive ahead of its proposal. That is a
+                    // delivery race, not corruption: ask the committee to sync us
+                    // up and try again on a later tick instead of giving up the
+                    // vote permanently.
+                    eWarning("[Shadow] Proposal for certified height {} is not stored yet; requesting sync",
+                             highest.height);
+                    send_to_validators(
+                        ShadowSyncRequest {
+                            .protocol_version = ProtocolVersion,
+                            .network_id       = consensus_->engine().validators().document().network_id,
+                            .epoch            = consensus_->engine().validators().document().epoch,
+                            .finalized_height = consensus_->engine().safety_state().finalized_height,
+                        },
+                        MessageType::ConsensusSyncRequest,
+                        MessageStatus::Request);
+                    return;
+                }
+                if (!parent_batch.has_value()) {
+                    // Same race for the batch payload: request it from the
+                    // committee. Parking the proposal in pending_proposals_ lets
+                    // receive_batch_data resume the normal validate-stage-vote
+                    // path when the payload arrives.
+                    eWarning("[Shadow] Batch for certified height {} is not stored yet; requesting it",
+                             highest.height);
+                    pending_proposals_.insert_or_assign(highest.header_hash, parent.value());
+                    send_to_validators(
+                        SectionBatchRequest {
+                            .protocol_version = ProtocolVersion,
+                            .network_id       = consensus_->engine().validators().document().network_id,
+                            .epoch            = consensus_->engine().validators().document().epoch,
+                            .header_hash      = highest.header_hash,
+                        },
+                        MessageType::ConsensusBatchRequest,
+                        MessageStatus::Request);
+                    return;
+                }
+                if (parent_batch.value().sections.empty()
                     || parent_batch.value().sections.back().first != parent.value().batch.last_section) {
-                    eWarning("[Shadow] Voting halted: parent batch for height {} is unavailable or inconsistent",
+                    eWarning("[Shadow] Voting halted: parent batch for height {} is inconsistent",
                              highest.height);
                     halt_voting();
                     return;

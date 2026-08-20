@@ -151,7 +151,7 @@ for index in $(seq 0 $((NODE_COUNT - 1))); do
         cd "$parent" || exit 73
         EXC_DEBUG_LOG=1 EXC_BIND_IP="127.0.0.$((index + 1))" EXC_FUND_NODES="$FUND_NODES" \
             exec "$NODE_RUN" committee data "$role" "$index" "$port" "$((BASE_PORT + 20))" "$NODE_COUNT" \
-                 "$intents" "$RUN_SECONDS" "$BARRIER"
+                 "$intents" "$RUN_SECONDS" "$BARRIER" 1 1
     ) >"$WORK/node-$index.log" 2>&1 &
     PIDS+=("$!")
     sleep 1
