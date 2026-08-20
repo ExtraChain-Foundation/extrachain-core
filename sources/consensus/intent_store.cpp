@@ -213,6 +213,38 @@ namespace ExtraChain::Consensus {
         return {};
     }
 
+    std::expected<void, ConsensusError> IntentStore::reject(const std::vector<std::string>& intent_hashes,
+                                                            ConsensusError                  error) {
+        std::lock_guard lock(mutex_);
+        if (!database_ || !database_->is_open()) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        if (intent_hashes.empty()) {
+            return {};
+        }
+        if (!database_->query("BEGIN IMMEDIATE TRANSACTION")) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        for (const auto& hash : intent_hashes) {
+            const IntentReceipt receipt {
+                .intent_hash = hash,
+                .status      = IntentStatus::Rejected,
+                .error       = error,
+            };
+            if (!database_->replace("consensus_intent_receipts",
+                                    { { "hash", hash }, { "payload", encode(receipt) } })
+                || !database_->delete_row("consensus_intents", { { "hash", hash } })) {
+                database_->query("ROLLBACK");
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+        }
+        if (!database_->query("COMMIT")) {
+            database_->query("ROLLBACK");
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        return {};
+    }
+
     std::expected<std::vector<IntentEnvelope>, ConsensusError> IntentStore::load_pending() {
         std::lock_guard lock(mutex_);
         if (!database_ || !database_->is_open()) {

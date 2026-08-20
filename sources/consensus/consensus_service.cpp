@@ -1500,6 +1500,9 @@ namespace ExtraChain::Consensus {
         }();
         if (!valid.has_value()) {
             eWarning("[Shadow] Leader batch validation failed: {}", std::to_underlying(valid.error()));
+            if (valid.error() == ConsensusError::InvalidRoot) {
+                evict_unprovable_intents(proposal_value, batch);
+            }
             return;
         }
         const auto admitted = admit_batch_intents(proposal_value, batch);
@@ -2023,6 +2026,42 @@ namespace ExtraChain::Consensus {
             }
         }
         return result;
+    }
+
+    void ConsensusService::evict_unprovable_intents(const Proposal& proposal, const SectionBatchData& batch) {
+        const auto ancestors = staged_ancestors_for(proposal);
+        if (!ancestors.has_value()) {
+            // A broken ancestor chain is a consensus problem; blaming intents for it
+            // would evict valid work.
+            return;
+        }
+        const auto unprovable = node_.dag()->unprovable_batch_transactions(batch, ancestors.value());
+        std::vector<std::string> rejected;
+        rejected.reserve(unprovable.size());
+        for (const auto& transaction : unprovable) {
+            if (!transaction.consensus_intent().has_value()) {
+                continue;
+            }
+            const auto envelope = intent_from_transaction(transaction);
+            if (!envelope.has_value()) {
+                continue;
+            }
+            rejected.push_back(hash_intent(envelope.value().intent));
+        }
+        if (rejected.empty()) {
+            return;
+        }
+        if (intent_store_ && !intent_store_->reject(rejected, ConsensusError::InvalidIntent).has_value()) {
+            eWarning("[Shadow] Could not persist rejection receipts for {} intents", rejected.size());
+        }
+        intent_pool_.erase(rejected);
+        // The staged batch would keep re-proposing the same rejected intents; drop it
+        // so the next queue_next_checkpoint materializes a fresh one without them.
+        pending_checkpoints_.erase(proposal.batch.last_section);
+        pending_batches_.erase(proposal.batch.last_section);
+        eWarning("[Shadow] Evicted {} unprovable intents; batch for section {} will be rebuilt",
+                 rejected.size(),
+                 proposal.batch.last_section);
     }
 
     std::expected<void, ConsensusError> ConsensusService::admit_batch_intents(const Proposal&         proposal,

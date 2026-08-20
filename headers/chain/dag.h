@@ -621,6 +621,17 @@ public:
                               std::string                previous_section_root  = {});
     std::expected<std::string, ExtraChain::Consensus::ConsensusError> shadow_batch_section_root(
         const ExtraChain::Consensus::SectionBatchData &batch) const;
+    /**
+     * @brief Transactions of a shadow batch that fail the incremental balance proof
+     *
+     * Walks the batch the same way validate_shadow_batch does, but instead of
+     * stopping at the first failure it collects every transaction that cannot be
+     * proven and keeps going, so the caller can evict exactly the offending
+     * intents instead of re-proposing a doomed batch forever.
+     */
+    std::vector<Transaction> unprovable_batch_transactions(
+        const ExtraChain::Consensus::SectionBatchData &batch,
+        const std::set<Transaction>                   &staged_ancestors);
     std::expected<void, ExtraChain::Consensus::ConsensusError> validate_shadow_batch(
         const ExtraChain::Consensus::Proposal         &proposal,
         const ExtraChain::Consensus::SectionBatchData &batch,

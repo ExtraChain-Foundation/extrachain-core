@@ -2091,6 +2091,29 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
     return result;
 }
 
+std::vector<Transaction> Dag::unprovable_batch_transactions(
+    const ExtraChain::Consensus::SectionBatchData &batch,
+    const std::set<Transaction>                   &staged_ancestors) {
+    std::set<Transaction>    accepted_transactions = staged_ancestors;
+    std::vector<Transaction> unprovable;
+    for (const auto &[section_value, bytes] : batch.sections) {
+        WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+        auto              candidate = Json::deserialize<Section>(bytes);
+        if (!candidate.has_value()) {
+            // An undecodable section is a batch problem, not an intent problem.
+            return {};
+        }
+        for (const auto &transaction : candidate->transactions) {
+            if (validate_repair_transaction(transaction, accepted_transactions)) {
+                accepted_transactions.insert(transaction);
+            } else {
+                unprovable.push_back(transaction);
+            }
+        }
+    }
+    return unprovable;
+}
+
 std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError> Dag::
     build_shadow_batch(const SectionId &first_section, const SectionId &last_section, std::string header_hash) {
     using namespace ExtraChain::Consensus;
