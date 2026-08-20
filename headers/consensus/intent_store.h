@@ -38,6 +38,8 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError> put(const IntentEnvelope& envelope);
         std::expected<void, ConsensusError> erase(const std::vector<std::string>& intent_hashes);
         std::expected<void, ConsensusError> expire(const std::vector<std::string>& intent_hashes);
+        std::expected<void, ConsensusError> reject(const std::vector<std::string>& intent_hashes,
+                                                   ConsensusError                  error);
         std::expected<std::vector<IntentEnvelope>, ConsensusError>      load_pending();
         std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> load_committed_nonces();
         std::expected<void, ConsensusError>                             commit_finalized(

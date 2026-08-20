@@ -621,6 +621,8 @@ public:
                               std::string                previous_section_root  = {});
     std::expected<std::string, ExtraChain::Consensus::ConsensusError> shadow_batch_section_root(
         const ExtraChain::Consensus::SectionBatchData &batch) const;
+    std::vector<Transaction> unprovable_batch_transactions(const ExtraChain::Consensus::SectionBatchData &batch,
+                                                           const std::set<Transaction> &staged_ancestors);
     std::expected<void, ExtraChain::Consensus::ConsensusError> validate_shadow_batch(
         const ExtraChain::Consensus::Proposal         &proposal,
         const ExtraChain::Consensus::SectionBatchData &batch,
@@ -1031,7 +1033,9 @@ private:
     std::optional<std::map<SectionId, std::string>> validated_repair_candidate(
         const std::map<SectionId, std::string> &peer_sections,
         const std::set<Transaction>            &prior = {});
-    bool validate_repair_transaction(const Transaction &transaction, const std::set<Transaction> &pending);
+    bool validate_repair_transaction(const Transaction           &transaction,
+                                     const std::set<Transaction> &pending,
+                                     bool                         report_failure = true);
 
     std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
 

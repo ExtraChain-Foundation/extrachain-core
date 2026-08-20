@@ -640,7 +640,8 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::InvalidParent);
             }
         }
-        const auto stored = store_->persist_certificate_state(certificate, next_state, finality_proof);
+        const auto stored =
+            store_->persist_certificate_state(certificate, proposal->second, next_state, finality_proof);
         if (!stored.has_value()) {
             return std::unexpected(stored.error());
         }

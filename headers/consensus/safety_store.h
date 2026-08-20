@@ -46,6 +46,7 @@ namespace ExtraChain::Consensus {
                                                                         const Vote&             vote,
                                                                         const SafetyState&      state);
         std::expected<void, ConsensusError> persist_certificate_state(const QuorumCertificate& certificate,
+                                                                      const Proposal&          proposal,
                                                                       const SafetyState&       state,
                                                                       const std::optional<FinalityProof>& proof);
         std::expected<void, ConsensusError> persist_timeout_certificate_state(

@@ -251,6 +251,50 @@ int main() {
         check("finalized receipt replaces the accepted receipt",
               finalized.has_value() && finalized.value().has_value()
                   && finalized.value().value().status == IntentStatus::Finalized);
+        const IntentEnvelope rejected_envelope {
+            .intent   = signed_delayed.value(),
+            .metadata = "delayed",
+        };
+        const auto rejected_hash = hash_intent(rejected_envelope.intent);
+        check("intent store persists an intent before rejection", restarted.put(rejected_envelope).has_value());
+        check("mixed valid and terminal rejection rolls back atomically",
+              !restarted.reject({ rejected_hash, first_hash.value() }, ConsensusError::InvalidIntent).has_value());
+        const auto accepted_after_rollback = restarted.receipt(rejected_hash);
+        check("failed rejection keeps the accepted receipt",
+              accepted_after_rollback.has_value() && accepted_after_rollback.value().has_value()
+                  && accepted_after_rollback.value().value().status == IntentStatus::Accepted);
+        check("intent rejection closes pending storage atomically",
+              restarted.reject({ rejected_hash }, ConsensusError::InvalidIntent).has_value());
+        check("exact intent rejection replay is idempotent",
+              restarted.reject({ rejected_hash }, ConsensusError::InvalidIntent).has_value());
+        const auto terminal_replay = restarted.put(rejected_envelope);
+        check("terminal intent cannot return to pending storage",
+              !terminal_replay.has_value() && terminal_replay.error() == ConsensusError::DuplicateIntent);
+        check("rejection cannot replace a finalized receipt",
+              !restarted.reject({ first_hash.value() }, ConsensusError::InvalidIntent).has_value());
+        const auto finalized_after_rejection = restarted.receipt(first_hash.value());
+        check("finalized receipt survives a rejected overwrite attempt",
+              finalized_after_rejection.has_value() && finalized_after_rejection.value().has_value()
+                  && finalized_after_rejection.value().value().status == IntentStatus::Finalized);
+    }
+    {
+        IntentStore restarted(store_path);
+        check("intent store reopens after rejection", restarted.open().has_value());
+        const auto rejected_hash = hash_intent(signed_delayed.value());
+        const auto rejected      = restarted.receipt(rejected_hash);
+        check("rejected receipt survives restart",
+              rejected.has_value() && rejected.value().has_value()
+                  && rejected.value().value().status == IntentStatus::Rejected
+                  && rejected.value().value().error == ConsensusError::InvalidIntent);
+        const auto pending = restarted.load_pending();
+        check("rejected intent does not return after restart", pending.has_value() && pending.value().empty());
+        const IntentEnvelope rejected_envelope {
+            .intent   = signed_delayed.value(),
+            .metadata = "delayed",
+        };
+        const auto terminal_replay = restarted.put(rejected_envelope);
+        check("rejected intent cannot be resubmitted after restart",
+              !terminal_replay.has_value() && terminal_replay.error() == ConsensusError::DuplicateIntent);
     }
     std::filesystem::remove_all(store_root);
 

@@ -32,6 +32,8 @@
 // own node (ExtraChainNode is a per-process singleton), so server and clients
 // must run as separate processes.
 
+#include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -69,6 +71,9 @@ namespace {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    if (std::getenv("EXC_DEBUG_LOG") != nullptr) {
+        Logger::instance().set_debug(true);
+    }
     if (argc < 3) {
         std::printf(
             "usage: %s serve <home> [listen-port] [dfs-payload-bytes] | "
@@ -220,8 +225,11 @@ int main(int argc, char* argv[]) {
         }
         if (!barrier_directory.empty()) {
             std::filesystem::create_directories(barrier_directory);
+            const auto actor_marker =
+                FileIo::write_atomic(barrier_directory / ("actor-" + std::to_string(node_index)),
+                                     node->account_controller()->system_actor().id().to_string());
             const auto marker = barrier_directory / ("node-" + std::to_string(node_index));
-            if (!FileIo::write_atomic(marker, "ready").has_value()) {
+            if (!actor_marker.has_value() || !FileIo::write_atomic(marker, "ready").has_value()) {
                 node->cleanUp();
                 return 4;
             }
@@ -235,6 +243,135 @@ int main(int argc, char* argv[]) {
                 return 4;
             }
         }
+        std::uint64_t funding_nonces = 0;
+        if (const char* fund_nodes_env = std::getenv("EXC_FUND_NODES");
+            fund_nodes_env != nullptr && !barrier_directory.empty()) {
+            std::vector<std::size_t> fund_targets;
+            {
+                const std::string list(fund_nodes_env);
+                std::size_t       pos = 0;
+                while (pos <= list.size()) {
+                    const auto comma = list.find(',', pos);
+                    const auto item =
+                        list.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+                    if (!item.empty()) {
+                        std::size_t target = 0;
+                        const auto  parsed = std::from_chars(item.data(), item.data() + item.size(), target);
+                        if (parsed.ec != std::errc {} || parsed.ptr != item.data() + item.size()
+                            || target >= node_count
+                            || std::find(fund_targets.begin(), fund_targets.end(), target) != fund_targets.end()) {
+                            std::printf("[node-run] invalid EXC_FUND_NODES value\n");
+                            node->cleanUp();
+                            return 64;
+                        }
+                        fund_targets.push_back(target);
+                    }
+                    if (comma == std::string::npos) {
+                        break;
+                    }
+                    pos = comma + 1;
+                }
+            }
+            const bool is_funded_sender =
+                std::find(fund_targets.begin(), fund_targets.end(), node_index) != fund_targets.end();
+            if (node_index == 0) {
+                const auto&              funder      = node->account_controller()->system_actor();
+                const char*              amount_env  = std::getenv("EXC_FUND_AMOUNT");
+                const std::string        fund_amount = amount_env != nullptr ? amount_env : "1.0";
+                std::vector<std::string> funding_hashes;
+                for (const auto target : fund_targets) {
+                    if (target == 0) {
+                        continue;
+                    }
+                    const auto id_text = FileIo::read_all(barrier_directory / ("actor-" + std::to_string(target)));
+                    if (!id_text.has_value()) {
+                        std::printf("[node-run] funding: no actor id for node %zu\n", target);
+                        node->cleanUp();
+                        return 5;
+                    }
+                    const auto target_actor = ActorId::create(id_text.value());
+                    if (!target_actor.has_value()) {
+                        std::printf("[node-run] funding: bad actor id for node %zu\n", target);
+                        node->cleanUp();
+                        return 5;
+                    }
+                    const auto metadata = "shadow-fund-" + std::to_string(target);
+                    const auto intent   = make_intent(
+                        TransactionIntentV2 {
+                              .network_id           = node->network_id(),
+                              .sender               = funder.id(),
+                              .receiver             = target_actor.value(),
+                              .token                = TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"),
+                              .amount               = fund_amount,
+                              .operation            = IntentOperation::Transfer,
+                              .account_nonce        = ++funding_nonces,
+                              .valid_after_height   = 0,
+                              .expires_after_height = 1'000'000,
+                        },
+                        metadata,
+                        funder);
+                    if (!intent.has_value()) {
+                        std::printf("[node-run] funding intent creation failed (error %d)\n",
+                                    static_cast<int>(intent.error()));
+                        node->cleanUp();
+                        return 5;
+                    }
+                    const auto submitted = node->consensus()->submit_intent(IntentEnvelope {
+                        .intent   = intent.value(),
+                        .metadata = metadata,
+                    });
+                    if (!submitted.has_value()) {
+                        std::printf("[node-run] funding submission failed for node %zu (error %d)\n",
+                                    target,
+                                    static_cast<int>(submitted.error()));
+                        node->cleanUp();
+                        return 5;
+                    }
+                    funding_hashes.push_back(submitted.value());
+                }
+                std::printf("[node-run] funding: submitted %zu transfers of %s\n",
+                            funding_hashes.size(),
+                            fund_amount.c_str());
+                std::fflush(stdout);
+                const auto funding_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(180);
+                bool       funded           = funding_hashes.empty();
+                while (stop_requested == 0 && !funded && std::chrono::steady_clock::now() < funding_deadline) {
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    funded = true;
+                    for (const auto& hash : funding_hashes) {
+                        const auto receipt = node->consensus()->intent_receipt(hash);
+                        if (!receipt.has_value() || !receipt.value().has_value()
+                            || receipt.value().value().status != IntentStatus::Finalized) {
+                            funded = false;
+                            break;
+                        }
+                    }
+                }
+                if (!funded) {
+                    std::printf("[node-run] funding: transfers did not finalize in time\n");
+                    node->cleanUp();
+                    return 5;
+                }
+                std::printf("[node-run] funding: finalized, releasing senders\n");
+                std::fflush(stdout);
+                if (!FileIo::write_atomic(barrier_directory / "funded", "ok").has_value()) {
+                    node->cleanUp();
+                    return 5;
+                }
+            } else if (is_funded_sender && intent_count > 0) {
+                const auto funded_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(200);
+                while (stop_requested == 0 && std::chrono::steady_clock::now() < funded_deadline
+                       && !std::filesystem::exists(barrier_directory / "funded")) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                }
+                if (!std::filesystem::exists(barrier_directory / "funded")) {
+                    std::printf("[node-run] funding marker did not appear in time\n");
+                    node->cleanUp();
+                    return 5;
+                }
+            }
+        }
+
         std::vector<std::string> submitted_hashes;
         if (intent_count > 0) {
             const auto&              sender   = node->account_controller()->system_actor();
@@ -253,7 +390,7 @@ int main(int argc, char* argv[]) {
             submitted_hashes.reserve(intent_count);
             for (std::size_t index = 0; index < intent_count; ++index) {
                 const auto metadata = "shadow-live-intent-" + std::to_string(index);
-                const auto nonce    = first_intent_nonce + index;
+                const auto nonce    = funding_nonces + first_intent_nonce + index;
                 const auto intent   = make_intent(
                     TransactionIntentV2 {
                           .network_id           = node->network_id(),
@@ -411,13 +548,16 @@ int main(int argc, char* argv[]) {
         int        ticks    = 0;
         int        result   = 1;
         while (std::chrono::steady_clock::now() < deadline) {
-            const auto cur   = node->dag()->current_section();
-            const auto conns = node->network()->active_connections_count();
-            std::printf("[node-run] t=%ds conns=%d current_section=%s status=%d\n",
+            const auto cur        = node->dag()->current_section();
+            const auto conns      = node->network()->active_connections_count();
+            const auto projection = node->dag()->state_projection();
+            std::printf("[node-run] t=%ds conns=%d current_section=%s status=%d verified=%s reason=%s\n",
                         ticks * 3,
                         conns,
                         cur.to_string().c_str(),
-                        static_cast<int>(node->dag()->status()));
+                        static_cast<int>(projection.status),
+                        projection.verified_section.to_string().c_str(),
+                        projection.reason.c_str());
             std::fflush(stdout);
             ticks++;
             bool dfs_ready = !verify_dfs;
