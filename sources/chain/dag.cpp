@@ -1474,9 +1474,16 @@ void Dag::invalidate_control_chain_from(const SectionId &section_id) {
 }
 
 void Dag::timer_tick() {
+    std::lock_guard sync_lock(sync_last_info_mutex_);
     eLog("[Dag] Timer tick");
     timer_stop_event_.publish();
     clear_pending_sync_responses();
+    if (status_ == DagStatus::Sync && sync_status_ == DagSyncStatus::Sections
+        && !sync_source_identifier_.empty()) {
+        timed_out_sync_sources_.insert(sync_source_identifier_);
+        eWarning("[Dag] Sync source {} timed out; trying another peer", sync_source_identifier_.substr(0, 8));
+        sync_source_identifier_.clear();
+    }
     this->set_status(DagStatus::Timered);
     this->sync_status_ = DagSyncStatus::None;
 
@@ -3189,6 +3196,10 @@ void Dag::start_sync() {
     if (status_ == DagStatus::Sync) {
         return;
     }
+    if (status_ == DagStatus::Ready) {
+        sync_source_identifier_.clear();
+        timed_out_sync_sources_.clear();
+    }
 
     // Cancel a background pack sweep before waiting for its storage lock. The
     // worker checks this generation between packs, so the Qt event thread waits
@@ -3224,6 +3235,8 @@ void Dag::start_check() {
     std::lock_guard sync_lock(sync_last_info_mutex_);
 #ifndef IS_APP_CLIENT
     if (status_ == DagStatus::Ready) {
+        sync_source_identifier_.clear();
+        timed_out_sync_sources_.clear();
         // Section 0 is the sync base and must exist on every FULL node (the
         // genesis tx also carries the network id). A fresh full node joins
         // already-Ready (set unconditionally at init), so without this check it
@@ -3360,6 +3373,7 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
     // handle_sync_request() select the responder with the highest section.
     if (last_info_.size() == 1) {
         node->schedule_dag_peer_info_collection(SYNC_LAST_INFO_COLLECTION_DELAY);
+        return;
     }
     if (last_info_.size() >= static_cast<std::size_t>(requests_count_)) {
         node->cancel_dag_peer_info_collection();
@@ -4413,6 +4427,17 @@ void Dag::handle_sync_request() {
         return;
     }
 
+    const auto available_sources = std::ranges::count_if(nodes_by_block, [this](const auto &source) {
+        return !timed_out_sync_sources_.contains(source.first);
+    });
+    if (available_sources == 0) {
+        timed_out_sync_sources_.clear();
+    } else {
+        std::erase_if(nodes_by_block, [this](const auto &source) {
+            return timed_out_sync_sources_.contains(source.first);
+        });
+    }
+
     if (nodes_by_block.size() > max_nodes) {
         std::partial_sort(nodes_by_block.begin(),
                           nodes_by_block.begin() + max_nodes,
@@ -4453,6 +4478,7 @@ void Dag::handle_sync_request() {
         // TODO
         responder.add_identifier(id);
     }
+    sync_source_identifier_ = nodes_by_block.front().first;
 
     auto last_block = this->read_section(current_section_);
     auto sync_index = hot_gap_from.value_or(last_block.has_value() ? last_block->id + 1 : SectionId(0));

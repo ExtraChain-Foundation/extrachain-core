@@ -157,7 +157,14 @@ namespace ExtraChain::Consensus {
             intent_store_.reset();
             return std::unexpected(committed_nonces.error());
         }
+        const auto applied_checkpoint = intent_store_->load_applied_checkpoint();
+        if (!applied_checkpoint.has_value()) {
+            consensus_.reset();
+            intent_store_.reset();
+            return std::unexpected(applied_checkpoint.error());
+        }
         committed_nonces_     = committed_nonces.value();
+        applied_checkpoint_   = applied_checkpoint.value();
         const auto reconciled = reconcile_finalized_checkpoint();
         if (!reconciled.has_value()) {
             consensus_.reset();
@@ -222,15 +229,23 @@ namespace ExtraChain::Consensus {
                                                              consensus_->engine().identity());
         voting_enabled_ =
             consensus_->engine().identity().has_value() && !consensus_->pending_recovery().has_value();
-        timeout_task_  = Core::DeadlineTask::create(node_.runtime_executor(), [this] {
+        timeout_task_      = Core::DeadlineTask::create(node_.runtime_executor(), [this] {
             timeout_elapsed();
         });
-        recovery_task_ = Core::DeadlineTask::create(node_.runtime_executor(), [this] {
+        recovery_task_     = Core::DeadlineTask::create(node_.runtime_executor(), [this] {
             std::lock_guard lock(mutex_);
             const auto      activated = activate_pending_recovery(wall_clock_millis());
             if (!activated.has_value()) {
                 eCritical("[Shadow] Scheduled recovery could not be activated");
             }
+        });
+        intent_batch_task_ = Core::DeadlineTask::create(node_.runtime_executor(), [this] {
+            std::lock_guard lock(mutex_);
+            if (!latest_proposal_.has_value() || latest_proposal_.value().header.height != intent_height()) {
+                pending_checkpoints_.clear();
+                pending_batches_.clear();
+            }
+            queue_next_checkpoint();
         });
         connections_.emplace_back(node_.network()->socket_activated_event().subscribe(
             [this](const std::string&, const std::string& identifier) {
@@ -270,7 +285,12 @@ namespace ExtraChain::Consensus {
             recovery_task_->cancel();
         }
         recovery_task_.reset();
+        if (intent_batch_task_) {
+            intent_batch_task_->cancel();
+        }
+        intent_batch_task_.reset();
         consensus_.reset();
+        applied_checkpoint_.reset();
         latest_proposal_.reset();
         latest_certificate_.reset();
         latest_timeout_certificate_.reset();
@@ -481,6 +501,20 @@ namespace ExtraChain::Consensus {
                      hash_header(proposal.header),
                      proposal.header.height,
                      std::to_underlying(observed.error()));
+            if (observed.error() == ConsensusError::InvalidNonce) {
+                // A stale-nonce proposal means an authenticated proposer fell behind
+                // and does not know it: it will re-propose the same doomed batch
+                // forever. Hand it our verified tip in a focused reply so it can
+                // catch up; no amplification, one certificate per bad proposal.
+                const auto& state = consensus_->engine().safety_state();
+                if (state.highest_certificate.has_value()
+                    && state.highest_certificate.value().height >= proposal.header.height) {
+                    send_to_peer(state.highest_certificate.value(),
+                                 MessageType::ConsensusCertificate,
+                                 std::string(peer_identifier),
+                                 MessageStatus::NoStatus);
+                }
+            }
             return;
         }
         pending_proposals_.insert_or_assign(hash_header(proposal.header), proposal);
@@ -580,10 +614,15 @@ namespace ExtraChain::Consensus {
         }
         const auto batch = consensus_->engine().batch_for(request.header_hash);
         if (batch.has_value()) {
+            eDebug("[Shadow] Serving batch {} to {}", request.header_hash.substr(0, 12), peer_identifier);
             responder.send_response(batch.value(),
                                     MessageType::ConsensusBatchData,
                                     SendMode::Focused,
                                     MessageStatus::Response);
+        } else {
+            eDebug("[Shadow] Batch {} requested by {} is not stored",
+                   request.header_hash.substr(0, 12),
+                   peer_identifier);
         }
     }
 
@@ -595,8 +634,10 @@ namespace ExtraChain::Consensus {
         }
         const auto proposal = pending_proposals_.find(batch.header_hash);
         if (proposal == pending_proposals_.end()) {
+            eDebug("[Shadow] Dropped batch {} without a pending proposal", batch.header_hash.substr(0, 12));
             return;
         }
+        eDebug("[Shadow] Resuming validation for batch {}", batch.header_hash.substr(0, 12));
         const auto ancestors = staged_ancestors_for(proposal->second);
         if (!ancestors.has_value()) {
             eWarning("[Shadow] Batch {} has an unusable ancestor chain: {}",
@@ -615,13 +656,23 @@ namespace ExtraChain::Consensus {
                      std::to_underlying(valid.error()));
             return;
         }
-        const auto staged = consensus_->engine().stage_batch(batch);
-        if (!staged.has_value()) {
-            eWarning("[Shadow] Batch {} could not be stored before voting", batch.header_hash);
+        const auto admitted = admit_batch_intents(proposal->second, batch);
+        if (!admitted.has_value()) {
+            eWarning("[Shadow] Batch {} intents could not be admitted: {}",
+                     batch.header_hash,
+                     std::to_underlying(admitted.error()));
             return;
         }
-        const auto& highest = consensus_->engine().safety_state().highest_certificate;
-        if (highest.has_value() && highest.value().header_hash == batch.header_hash) {
+        const auto& highest           = consensus_->engine().safety_state().highest_certificate;
+        const bool  already_certified = highest.has_value() && highest.value().header_hash == batch.header_hash;
+        const auto  staged            = voting_enabled_ && !already_certified
+                                            ? consensus_->engine().stage_batch_for_vote(batch)
+                                            : consensus_->engine().stage_batch(batch);
+        if (!staged.has_value()) {
+            eWarning("[Shadow] Batch {} could not be staged", batch.header_hash);
+            return;
+        }
+        if (already_certified) {
             pending_proposals_.erase(proposal);
             queue_next_checkpoint();
             return;
@@ -743,6 +794,13 @@ namespace ExtraChain::Consensus {
                 return;
             }
             ++expected_height;
+        }
+        const auto reconciled = reconcile_finalized_checkpoint();
+        if (!reconciled.has_value()) {
+            eCritical("[Shadow] Synchronized finality could not be applied: {}",
+                      std::to_underlying(reconciled.error()));
+            halt_voting();
+            return;
         }
         reset_timeout();
         if (response.proofs.size() == MaximumShadowSyncProofs) {
@@ -873,15 +931,21 @@ namespace ExtraChain::Consensus {
     }
 
     std::expected<void, ConsensusError> ConsensusService::finalize_intents(
-        const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized) {
+        const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized,
+        std::optional<AppliedCheckpoint>                             checkpoint) {
         std::lock_guard lock(mutex_);
         if (!consensus_ || !intent_store_) {
             return std::unexpected(ConsensusError::NotReady);
         }
+        auto ordered = finalized;
+        std::ranges::sort(ordered, [](const auto& left, const auto& right) {
+            return std::tie(left.first.intent.sender, left.first.intent.account_nonce)
+                   < std::tie(right.first.intent.sender, right.first.intent.account_nonce);
+        });
         auto                     next_nonces = committed_nonces_;
         std::vector<std::string> hashes;
-        hashes.reserve(finalized.size());
-        for (const auto& [envelope, receipt] : finalized) {
+        hashes.reserve(ordered.size());
+        for (const auto& [envelope, receipt] : ordered) {
             const auto hash          = hash_intent(envelope.intent);
             const auto current_nonce = next_nonces[envelope.intent.sender];
             if (receipt.status != IntentStatus::Finalized || receipt.intent_hash != hash
@@ -893,11 +957,14 @@ namespace ExtraChain::Consensus {
             }
             hashes.push_back(hash);
         }
-        const auto committed = intent_store_->commit_finalized(finalized);
+        const auto committed = intent_store_->commit_finalized(ordered, checkpoint);
         if (!committed.has_value()) {
             return std::unexpected(committed.error());
         }
         committed_nonces_ = std::move(next_nonces);
+        if (checkpoint.has_value()) {
+            applied_checkpoint_ = std::move(checkpoint);
+        }
         intent_pool_.erase(hashes);
         return {};
     }
@@ -1018,7 +1085,11 @@ namespace ExtraChain::Consensus {
                                           SendMode::Broadcast,
                                           MessageStatus::NoStatus);
         }
-        queue_next_checkpoint();
+        if (intent_batch_task_) {
+            intent_batch_task_->schedule_earlier(std::chrono::milliseconds(25));
+        } else {
+            queue_next_checkpoint();
+        }
         return hash;
     }
 
@@ -1059,55 +1130,93 @@ namespace ExtraChain::Consensus {
         reset_timeout();
         if (finalized.value().has_value()) {
             const auto& checkpoint = finalized.value().value();
-            if (consensus_->configuration().mode == ShadowMode::Finality
-                && checkpoint.height >= consensus_->configuration().activation_height
-                && checkpoint.dag_section >= consensus_->configuration().activation_dag_section) {
-                const auto proposal = consensus_->engine().proposal_for(checkpoint.header_hash);
-                const auto batch    = consensus_->engine().batch_for(checkpoint.header_hash);
-                if (!proposal.has_value() || !batch.has_value()) {
-                    eCritical("[Shadow] Finalized batch {} is unavailable", checkpoint.header_hash);
-                    halt_voting();
-                    return false;
-                }
-                const auto installed =
-                    node_.dag()->install_shadow_batch(proposal.value(),
-                                                      batch.value(),
-                                                      consensus_->configuration().maximum_batch_bytes,
-                                                      hash_certificate(certificate));
-                if (!installed.has_value()) {
-                    eCritical("[Shadow] Finalized batch {} could not be installed: {}",
+            if (consensus_->configuration().mode == ShadowMode::Finality) {
+                const auto reconciled = reconcile_finalized_checkpoint();
+                if (!reconciled.has_value()) {
+                    eCritical("[Shadow] Finalized checkpoint {} could not be applied: {}",
                               checkpoint.header_hash,
-                              std::to_underlying(installed.error()));
+                              std::to_underlying(reconciled.error()));
                     halt_voting();
                     return false;
                 }
-                const auto finalized = finalized_intents(proposal.value(), batch.value());
-                if (!finalized.has_value() || !finalize_intents(finalized.value()).has_value()) {
-                    eCritical("[Shadow] Finalized intents for batch {} could not be committed",
-                              checkpoint.header_hash);
-                    halt_voting();
-                    return false;
-                }
-                const auto epoch_changes = process_epoch_changes(finalized.value());
-                if (!epoch_changes.has_value()) {
-                    eCritical("[Shadow] Finalized epoch change in batch {} is invalid", checkpoint.header_hash);
-                    halt_voting();
-                    return false;
-                }
-                const auto epoch_activated = activate_pending_epoch();
-                if (!epoch_activated.has_value()) {
-                    eCritical("[Shadow] Scheduled epoch could not be activated");
-                    halt_voting();
-                    return false;
-                }
+            } else {
+                finalized_event_.publish(checkpoint);
+                eInfo("[Shadow] Finalized height {} at Dag section {}", checkpoint.height, checkpoint.dag_section);
             }
-            finalized_event_.publish(finalized.value().value());
-            eInfo("[Shadow] Finalized height {} at DAG section {}",
-                  finalized.value().value().height,
-                  finalized.value().value().dag_section);
         }
         queue_next_checkpoint();
         return true;
+    }
+
+    std::expected<void, ConsensusError> ConsensusService::apply_finality_proof(const FinalityProof& proof) {
+        const auto& proposal   = proof.finalized_proposal;
+        const auto  checkpoint = AppliedCheckpoint {
+             .height      = proposal.header.height,
+             .header_hash = hash_header(proposal.header),
+        };
+        const auto activation_height = consensus_->engine().epoch_bootstrap().has_value()
+                                           ? consensus_->engine().epoch_bootstrap().value().activation_height
+                                           : consensus_->configuration().activation_height;
+        const auto first_height      = std::max<std::uint64_t>(1, activation_height);
+        if (applied_checkpoint_.has_value()
+            && applied_checkpoint_.value().height == std::numeric_limits<std::uint64_t>::max()) {
+            return std::unexpected(ConsensusError::InvalidHeight);
+        }
+        const auto expected_height =
+            applied_checkpoint_.has_value() ? applied_checkpoint_.value().height + 1 : first_height;
+        if (checkpoint.height != expected_height
+            || proposal.header.dag_section < consensus_->configuration().activation_dag_section) {
+            return std::unexpected(ConsensusError::InvalidHeight);
+        }
+        auto batch = consensus_->engine().batch_for(checkpoint.header_hash);
+        if (!batch.has_value()) {
+            auto rebuilt = node_.dag()->build_shadow_batch(SectionId(proposal.batch.first_section),
+                                                           SectionId(proposal.batch.last_section),
+                                                           checkpoint.header_hash);
+            if (!rebuilt.has_value()
+                || hash_batch_manifest(rebuilt.value().manifest) != proposal.header.batch_root) {
+                return std::unexpected(ConsensusError::DataUnavailable);
+            }
+            batch = std::move(rebuilt.value());
+        }
+        const auto installed = node_.dag()->install_shadow_batch(proposal,
+                                                                 batch.value(),
+                                                                 consensus_->configuration().maximum_batch_bytes,
+                                                                 hash_certificate(proof.decision_certificate));
+        if (!installed.has_value()) {
+            return std::unexpected(installed.error());
+        }
+        const auto finalized = finalized_intents(proposal, batch.value());
+        if (!finalized.has_value()) {
+            return std::unexpected(finalized.error());
+        }
+        const auto epoch_changes = process_epoch_changes(finalized.value());
+        if (!epoch_changes.has_value()) {
+            return std::unexpected(epoch_changes.error());
+        }
+        const auto intents_committed = finalize_intents(finalized.value(), checkpoint);
+        if (!intents_committed.has_value()) {
+            return std::unexpected(intents_committed.error());
+        }
+        const auto epoch_activated = activate_pending_epoch();
+        if (!epoch_activated.has_value()) {
+            return std::unexpected(epoch_activated.error());
+        }
+        const auto finalized_checkpoint = FinalizedCheckpoint {
+            .height            = proposal.header.height,
+            .dag_section       = proposal.header.dag_section,
+            .first_dag_section = proposal.batch.first_section,
+            .header_hash       = checkpoint.header_hash,
+            .section_root      = proposal.header.section_root,
+            .transaction_root  = proposal.header.transaction_root,
+            .batch_root        = proposal.header.batch_root,
+            .certificate_hash  = hash_certificate(proof.decision_certificate),
+        };
+        finalized_event_.publish(finalized_checkpoint);
+        eInfo("[Shadow] Finalized height {} at Dag section {}",
+              finalized_checkpoint.height,
+              finalized_checkpoint.dag_section);
+        return {};
     }
 
     std::expected<void, ConsensusError> ConsensusService::reconcile_finalized_checkpoint() {
@@ -1121,36 +1230,32 @@ namespace ExtraChain::Consensus {
         if (finalized_height < activation_height || finalized_height == 0) {
             return {};
         }
-        const auto proofs = consensus_->engine().finality_proofs_after(finalized_height - 1, 1);
-        if (!proofs.has_value() || proofs.value().size() != 1
-            || proofs.value().front().finalized_proposal.header.height != finalized_height) {
+        if (applied_checkpoint_.has_value() && applied_checkpoint_.value().height > finalized_height) {
             return std::unexpected(ConsensusError::StorageFailure);
         }
-        const auto& proposal = proofs.value().front().finalized_proposal;
-        if (proposal.header.dag_section < consensus_->configuration().activation_dag_section) {
-            return {};
+        const auto first_height = std::max<std::uint64_t>(1, activation_height);
+        auto cursor = applied_checkpoint_.has_value() ? applied_checkpoint_.value().height : first_height - 1;
+        while (cursor < finalized_height) {
+            const auto proofs = consensus_->engine().finality_proofs_after(cursor, MaximumShadowSyncProofs);
+            if (!proofs.has_value() || proofs.value().empty()) {
+                return std::unexpected(proofs.has_value() ? ConsensusError::StorageFailure : proofs.error());
+            }
+            for (const auto& proof : proofs.value()) {
+                const auto height = proof.finalized_proposal.header.height;
+                if (height > finalized_height) {
+                    break;
+                }
+                if (height != cursor + 1) {
+                    return std::unexpected(ConsensusError::InvalidHeight);
+                }
+                const auto applied = apply_finality_proof(proof);
+                if (!applied.has_value()) {
+                    return std::unexpected(applied.error());
+                }
+                cursor = height;
+            }
         }
-        const auto batch = consensus_->engine().batch_for(hash_header(proposal.header));
-        if (!batch.has_value()) {
-            return std::unexpected(ConsensusError::StorageFailure);
-        }
-        const auto installed =
-            node_.dag()->install_shadow_batch(proposal,
-                                              batch.value(),
-                                              consensus_->configuration().maximum_batch_bytes,
-                                              hash_certificate(proofs.value().front().decision_certificate));
-        if (!installed.has_value()) {
-            return std::unexpected(installed.error());
-        }
-        const auto finalized = finalized_intents(proposal, batch.value());
-        if (!finalized.has_value()) {
-            return std::unexpected(finalized.error());
-        }
-        const auto intents_committed = finalize_intents(finalized.value());
-        if (!intents_committed.has_value()) {
-            return std::unexpected(intents_committed.error());
-        }
-        return process_epoch_changes(finalized.value());
+        return {};
     }
 
     bool ConsensusService::apply_timeout_certificate(const TimeoutCertificate& certificate) {
@@ -1499,8 +1604,14 @@ namespace ExtraChain::Consensus {
             pending_batches_.erase(pending_checkpoints_.begin()->first);
             pending_checkpoints_.erase(pending_checkpoints_.begin());
         }
-        if (pending_checkpoints_.empty()
-            || (next_section != 0 && pending_checkpoints_.begin()->second.batch.first_section != next_section)) {
+        if (pending_checkpoints_.empty()) {
+            return;
+        }
+        if (next_section != 0 && pending_checkpoints_.begin()->second.batch.first_section != next_section) {
+            eWarning("[Shadow] Pending checkpoint {}..{} does not start at expected section {}; not proposing",
+                     pending_checkpoints_.begin()->second.batch.first_section,
+                     pending_checkpoints_.begin()->second.batch.last_section,
+                     next_section);
             return;
         }
         const auto proposal = consensus_->make_checkpoint_proposal(pending_checkpoints_.begin()->second, round);
@@ -1517,11 +1628,15 @@ namespace ExtraChain::Consensus {
         const auto& proposal_value = proposal.value().value();
         const auto  stored_batch   = pending_batches_.find(proposal_value.batch.last_section);
         if (stored_batch == pending_batches_.end()) {
+            eWarning("[Shadow] Checkpoint for section {} has no stored batch; not proposing",
+                     proposal_value.batch.last_section);
             return;
         }
         auto batch        = stored_batch->second;
         batch.header_hash = hash_header(proposal_value.header);
         if (hash_batch_manifest(batch.manifest) != proposal_value.header.batch_root) {
+            eWarning("[Shadow] Stored batch for section {} does not match the checkpoint root; not proposing",
+                     proposal_value.batch.last_section);
             return;
         }
         const auto valid = [&]() -> std::expected<void, ConsensusError> {
@@ -1551,10 +1666,9 @@ namespace ExtraChain::Consensus {
             eWarning("[Shadow] Leader intent admission failed: {}", std::to_underlying(admitted.error()));
             return;
         }
-        const auto staged = consensus_->engine().stage_batch(batch);
+        const auto staged = consensus_->engine().stage_batch_for_vote(batch);
         if (!staged.has_value()) {
-            eWarning("[Shadow] Leader could not persist the proposed batch: {}",
-                     std::to_underlying(staged.error()));
+            eWarning("[Shadow] Leader could not stage the proposed batch: {}", std::to_underlying(staged.error()));
             return;
         }
         const auto self_vote = consensus_->engine().accept_proposal(proposal_value);
@@ -1594,6 +1708,11 @@ namespace ExtraChain::Consensus {
         }
         const auto vote = consensus_->engine().accept_proposal(proposal);
         if (!vote.has_value()) {
+            const auto batch = consensus_->engine().batch_for(hash_header(proposal.header));
+            if (batch.has_value() && !consensus_->engine().stage_batch(batch.value()).has_value()) {
+                eCritical("[Shadow] Rejected proposal batch could not be persisted");
+                halt_voting();
+            }
             eWarning("[Shadow] Proposal {} at height {} was not voted for: {}",
                      hash_header(proposal.header),
                      proposal.header.height,
@@ -1628,6 +1747,7 @@ namespace ExtraChain::Consensus {
             send_to_validators(accepted.value().certificate.value(), MessageType::ConsensusTimeoutCertificate);
         }
         send_to_validators(vote.value(), MessageType::ConsensusTimeoutVote);
+        queue_next_checkpoint();
         reset_timeout();
     }
 
@@ -2009,6 +2129,9 @@ namespace ExtraChain::Consensus {
         const auto admitted = admit_batch_intents(proposal, local.value());
         if (!admitted.has_value()) {
             return admitted;
+        }
+        if (voting_enabled_) {
+            return consensus_->engine().stage_batch_for_vote(std::move(local.value()));
         }
         return consensus_->engine().stage_batch(std::move(local.value()));
     }

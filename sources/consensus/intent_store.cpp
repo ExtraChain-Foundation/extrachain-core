@@ -32,6 +32,9 @@ namespace ExtraChain::Consensus {
             "CREATE TABLE IF NOT EXISTS consensus_intent_receipts (hash TEXT PRIMARY KEY, payload TEXT NOT NULL)";
         constexpr std::string_view CreateNonceTable =
             "CREATE TABLE IF NOT EXISTS consensus_intent_nonces (sender TEXT PRIMARY KEY, nonce INTEGER NOT NULL)";
+        constexpr std::string_view CreateAppliedCheckpointTable =
+            "CREATE TABLE IF NOT EXISTS consensus_applied_checkpoint (slot TEXT PRIMARY KEY, "
+            "height INTEGER NOT NULL, header_hash TEXT NOT NULL)";
 
         template <typename T>
         std::string encode(const T& value) {
@@ -80,7 +83,8 @@ namespace ExtraChain::Consensus {
             || !database_->query(std::string(CreateSenderNonceIndex))
             || !database_->query(std::string(CreateExpiryIndex))
             || !database_->query(std::string(CreateReceiptTable))
-            || !database_->query(std::string(CreateNonceTable))) {
+            || !database_->query(std::string(CreateNonceTable))
+            || !database_->query(std::string(CreateAppliedCheckpointTable))) {
             database_.reset();
             return std::unexpected(ConsensusError::StorageUnavailable);
         }
@@ -322,14 +326,81 @@ namespace ExtraChain::Consensus {
         return result;
     }
 
-    std::expected<void, ConsensusError> IntentStore::commit_finalized(
-        const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized) {
+    std::expected<std::optional<AppliedCheckpoint>, ConsensusError> IntentStore::load_applied_checkpoint() {
         std::lock_guard lock(mutex_);
         if (!database_ || !database_->is_open()) {
             return std::unexpected(ConsensusError::StorageUnavailable);
         }
-        if (finalized.empty()) {
+        const auto rows = database_->select(
+            "SELECT height, header_hash FROM consensus_applied_checkpoint WHERE slot = 'current'");
+        if (rows.empty()) {
+            return std::optional<AppliedCheckpoint> {};
+        }
+        if (rows.size() != 1 || !rows.front().contains("height") || !rows.front().contains("header_hash")) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        std::uint64_t height      = 0;
+        const auto&   height_text = rows.front().at("height");
+        const auto parsed = std::from_chars(height_text.data(), height_text.data() + height_text.size(), height);
+        if (parsed.ec != std::errc {} || parsed.ptr != height_text.data() + height_text.size()
+            || rows.front().at("header_hash").empty()) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        return std::optional<AppliedCheckpoint>(AppliedCheckpoint {
+            .height      = height,
+            .header_hash = rows.front().at("header_hash"),
+        });
+    }
+
+    std::expected<void, ConsensusError> IntentStore::commit_finalized(
+        const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized,
+        std::optional<AppliedCheckpoint>                             checkpoint) {
+        std::lock_guard lock(mutex_);
+        if (!database_ || !database_->is_open()) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        if (finalized.empty() && !checkpoint.has_value()) {
             return {};
+        }
+        std::optional<AppliedCheckpoint> stored_checkpoint;
+        const auto                       checkpoint_rows = database_->select(
+            "SELECT height, header_hash FROM consensus_applied_checkpoint WHERE slot = 'current'");
+        if (checkpoint_rows.size() > 1) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        if (!checkpoint_rows.empty()) {
+            if (!checkpoint_rows.front().contains("height") || !checkpoint_rows.front().contains("header_hash")) {
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+            std::uint64_t height      = 0;
+            const auto&   height_text = checkpoint_rows.front().at("height");
+            const auto    parsed =
+                std::from_chars(height_text.data(), height_text.data() + height_text.size(), height);
+            if (parsed.ec != std::errc {} || parsed.ptr != height_text.data() + height_text.size()) {
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+            stored_checkpoint = AppliedCheckpoint {
+                .height      = height,
+                .header_hash = checkpoint_rows.front().at("header_hash"),
+            };
+        }
+        constexpr auto maximum_integer = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+        if (stored_checkpoint.has_value()
+            && (stored_checkpoint.value().header_hash.empty()
+                || stored_checkpoint.value().height > maximum_integer)) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        if (checkpoint.has_value() && checkpoint.value().header_hash.empty()) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        if (checkpoint.has_value() && checkpoint.value().height > maximum_integer) {
+            return std::unexpected(ConsensusError::InvalidHeight);
+        }
+        if (checkpoint.has_value() && stored_checkpoint.has_value()
+            && checkpoint.value() != stored_checkpoint.value()
+            && (stored_checkpoint.value().height == std::numeric_limits<std::uint64_t>::max()
+                || checkpoint.value().height != stored_checkpoint.value().height + 1)) {
+            return std::unexpected(ConsensusError::InvalidHeight);
         }
         std::map<ActorId, std::uint64_t> committed_nonces;
         for (const auto& row : database_->select("SELECT sender, nonce FROM consensus_intent_nonces")) {
@@ -380,6 +451,14 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::StorageFailure);
             }
             committed_nonces[envelope.intent.sender] = envelope.intent.account_nonce;
+        }
+        if (checkpoint.has_value()
+            && !database_->replace("consensus_applied_checkpoint",
+                                   { { "slot", "current" },
+                                     { "height", std::to_string(checkpoint.value().height) },
+                                     { "header_hash", checkpoint.value().header_hash } })) {
+            database_->query("ROLLBACK");
+            return std::unexpected(ConsensusError::StorageFailure);
         }
         if (!database_->query("COMMIT")) {
             database_->query("ROLLBACK");

@@ -878,6 +878,8 @@ private:
     int                                          requests_count_ = 0; // Number of outstanding requests
     int                                          min_req_count_  = 5;
     std::unordered_map<std::string, DagLastInfo> last_info_; // Last chain info from peers
+    std::string                                  sync_source_identifier_;
+    std::unordered_set<std::string>              timed_out_sync_sources_;
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
     bool                                         search_control_              = false;
     std::uint64_t                                search_control_started_ms_   = 0;

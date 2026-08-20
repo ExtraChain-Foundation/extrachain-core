@@ -1,6 +1,8 @@
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -135,8 +137,9 @@ int main() {
                .has_value());
 
     const auto selected = pool.ready({}, 10, 10, 1024 * 1024);
-    check("one batch selects one sequential nonce for a sender",
-          selected.size() == 1 && selected.front().intent.account_nonce == 1);
+    check("one batch selects consecutive transfers for a sender",
+          selected.size() == 2 && selected.front().intent.account_nonce == 1
+              && selected.back().intent.account_nonce == 2);
     const auto next_selected = pool.ready({ { sender.id(), 1 } }, 10, 10, 1024 * 1024);
     check("the next batch selects the next committed sender nonce",
           next_selected.size() == 1 && next_selected.front().intent.account_nonce == 2);
@@ -169,6 +172,34 @@ int main() {
                      .has_value());
     check("one batch selects at most one contract mutation",
           contract_pool.ready({}, 10, 10, 1024 * 1024).size() == 1);
+
+    auto transfer_before_call              = first;
+    transfer_before_call.sender            = contract_sender.id();
+    transfer_before_call.account_nonce     = 1;
+    const auto signed_transfer_before_call = make_intent(transfer_before_call, "transfer-first", contract_sender);
+    auto       call_after_transfer         = contract_call;
+    call_after_transfer.account_nonce      = 2;
+    const auto signed_call_after_transfer  = make_intent(call_after_transfer, "call-second", contract_sender);
+    IntentPool sender_barrier_pool;
+    check("sender transfer and later contract intent enter the pool",
+          signed_transfer_before_call.has_value() && signed_call_after_transfer.has_value()
+              && sender_barrier_pool
+                     .submit(IntentEnvelope { .intent   = signed_transfer_before_call.value(),
+                                              .metadata = "transfer-first" },
+                             Utils::to_base64(contract_sender.key().public_key()),
+                             0,
+                             10)
+                     .has_value()
+              && sender_barrier_pool
+                     .submit(IntentEnvelope { .intent   = signed_call_after_transfer.value(),
+                                              .metadata = "call-second" },
+                             Utils::to_base64(contract_sender.key().public_key()),
+                             0,
+                             10)
+                     .has_value());
+    const auto barrier_selected = sender_barrier_pool.ready({}, 10, 10, 1024 * 1024);
+    check("a non-transfer intent is a sender batch barrier",
+          barrier_selected.size() == 1 && barrier_selected.front().intent.account_nonce == 1);
 
     auto large              = first;
     large.sender            = other_sender.id();
@@ -226,20 +257,76 @@ int main() {
         auto invalid_second_receipt        = finalized_receipt;
         invalid_second_receipt.intent_hash = "wrong-hash";
         invalid_second_receipt.position    = 1;
+        const AppliedCheckpoint rollback_checkpoint {
+            .height      = 13,
+            .header_hash = "rolled-back-header-13",
+        };
         check("failed batch finalization rolls back every intent",
               !restarted
-                   .commit_finalized(
-                       { { first_envelope, finalized_receipt }, { second_envelope, invalid_second_receipt } })
+                   .commit_finalized({ { first_envelope, finalized_receipt },
+                                       { second_envelope, invalid_second_receipt } },
+                                     rollback_checkpoint)
                    .has_value());
         const auto after_rollback        = restarted.load_pending();
         const auto nonces_after_rollback = restarted.load_committed_nonces();
         check("failed finalization keeps pending data and nonce",
               after_rollback.has_value() && after_rollback.value().size() == 2 && nonces_after_rollback.has_value()
                   && nonces_after_rollback.value().empty());
-        check("intent finalization and nonce advance are atomic",
-              restarted.commit_finalized({ { first_envelope, finalized_receipt } }).has_value());
-        check("exact finalization replay is idempotent",
-              restarted.commit_finalized({ { first_envelope, finalized_receipt } }).has_value());
+        const auto checkpoint_after_rollback = restarted.load_applied_checkpoint();
+        check("failed finalization rolls back its application checkpoint",
+              checkpoint_after_rollback.has_value() && !checkpoint_after_rollback.value().has_value());
+        const AppliedCheckpoint applied_checkpoint {
+            .height      = 14,
+            .header_hash = "finalized-header-14",
+        };
+        check("intent, nonce, and application checkpoint commit atomically",
+              restarted.commit_finalized({ { first_envelope, finalized_receipt } }, applied_checkpoint)
+                  .has_value());
+        const auto stored_checkpoint = restarted.load_applied_checkpoint();
+        check("application checkpoint survives its commit",
+              stored_checkpoint.has_value() && stored_checkpoint.value() == applied_checkpoint);
+        check("exact finalization and checkpoint replay is idempotent",
+              restarted.commit_finalized({ { first_envelope, finalized_receipt } }, applied_checkpoint)
+                  .has_value());
+        const auto empty_checkpoint_hash =
+            restarted.commit_finalized({}, AppliedCheckpoint { .height = 15, .header_hash = "" });
+        check("empty application checkpoint hash is rejected",
+              !empty_checkpoint_hash.has_value() && empty_checkpoint_hash.error() == ConsensusError::InvalidRoot);
+        const auto excessive_checkpoint_height =
+            restarted.commit_finalized({},
+                                       AppliedCheckpoint {
+                                           .height      = std::numeric_limits<std::uint64_t>::max(),
+                                           .header_hash = "oversized-height",
+                                       });
+        check("application checkpoint outside SQLite integer range is rejected",
+              !excessive_checkpoint_height.has_value()
+                  && excessive_checkpoint_height.error() == ConsensusError::InvalidHeight);
+        check("conflicting application checkpoint is rejected",
+              !restarted
+                   .commit_finalized({ { first_envelope, finalized_receipt } },
+                                     AppliedCheckpoint {
+                                         .height      = 14,
+                                         .header_hash = "conflicting-header-14",
+                                     })
+                   .has_value());
+        const AppliedCheckpoint empty_checkpoint {
+            .height      = 15,
+            .header_hash = "empty-header-15",
+        };
+        check("empty finalized batch advances the application checkpoint",
+              restarted.commit_finalized({}, empty_checkpoint).has_value());
+        const auto checkpoint_after_empty_batch = restarted.load_applied_checkpoint();
+        check("empty finalized batch persists its application checkpoint",
+              checkpoint_after_empty_batch.has_value()
+                  && checkpoint_after_empty_batch.value() == empty_checkpoint);
+        check("application checkpoint gap is rejected",
+              !restarted
+                   .commit_finalized({ { first_envelope, finalized_receipt } },
+                                     AppliedCheckpoint {
+                                         .height      = 17,
+                                         .header_hash = "finalized-header-17",
+                                     })
+                   .has_value());
         check("expired pending intent closes atomically",
               restarted.expire({ hash_intent(second_envelope.intent) }).has_value());
         const auto pending = restarted.load_pending();
@@ -280,6 +367,11 @@ int main() {
     {
         IntentStore restarted(store_path);
         check("intent store reopens after rejection", restarted.open().has_value());
+        const auto applied_checkpoint = restarted.load_applied_checkpoint();
+        check("application checkpoint survives restart",
+              applied_checkpoint.has_value() && applied_checkpoint.value().has_value()
+                  && applied_checkpoint.value().value().height == 15
+                  && applied_checkpoint.value().value().header_hash == "empty-header-15");
         const auto rejected_hash = hash_intent(signed_delayed.value());
         const auto rejected      = restarted.receipt(rejected_hash);
         check("rejected receipt survives restart",

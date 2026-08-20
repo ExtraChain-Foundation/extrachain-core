@@ -266,7 +266,7 @@ int main(int argc, char** argv) {
                 if (index != leader_index) {
                     require(engine->observe_proposal(proposal), "observe proposal");
                 }
-                require(engine->stage_batch(batch_data(height, proposal_hash)), "stage batch");
+                require(engine->stage_batch_for_vote(batch_data(height, proposal_hash)), "stage batch");
             };
             if (options.parallel) {
                 parallel_for(workers, engines.size(), stage_validator);

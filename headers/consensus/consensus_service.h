@@ -80,7 +80,8 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] std::expected<std::optional<IntentReceipt>, ConsensusError> intent_receipt(
             std::string_view intent_hash);
         std::expected<void, ConsensusError> finalize_intents(
-            const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized);
+            const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized,
+            std::optional<AppliedCheckpoint>                             checkpoint = std::nullopt);
         std::expected<void, ConsensusError>        submit_recovery(const RecoveryDocumentV2& recovery,
                                                                    ValidatorSet              next_validators,
                                                                    std::uint64_t             now_ms);
@@ -106,6 +107,7 @@ namespace ExtraChain::Consensus {
         void                                checkpoint_ready(std::uint64_t section);
         void                                queue_next_checkpoint();
         bool                                apply_certificate(const QuorumCertificate& certificate);
+        std::expected<void, ConsensusError> apply_finality_proof(const FinalityProof& proof);
         std::expected<void, ConsensusError> reconcile_finalized_checkpoint();
         bool                                apply_timeout_certificate(const TimeoutCertificate& certificate);
         void                                propose_checkpoint(std::uint64_t round);
@@ -154,6 +156,7 @@ namespace ExtraChain::Consensus {
         std::unique_ptr<IntentStore>                                  intent_store_;
         IntentPool                                                    intent_pool_;
         std::map<ActorId, std::uint64_t>                              committed_nonces_;
+        std::optional<AppliedCheckpoint>                              applied_checkpoint_;
         std::unique_ptr<PeerAuthenticator>                            authenticator_;
         std::optional<Proposal>                                       latest_proposal_;
         std::optional<QuorumCertificate>                              latest_certificate_;
@@ -163,6 +166,7 @@ namespace ExtraChain::Consensus {
         std::map<std::string, Proposal>                               pending_proposals_;
         std::shared_ptr<Core::DeadlineTask>                           timeout_task_;
         std::shared_ptr<Core::DeadlineTask>                           recovery_task_;
+        std::shared_ptr<Core::DeadlineTask>                           intent_batch_task_;
         std::vector<boost::signals2::scoped_connection>               connections_;
         Core::Event<const FinalizedCheckpoint&>                       finalized_event_;
         Core::Event<const ShadowBootstrapResponse&, std::string_view> bootstrap_event_;
