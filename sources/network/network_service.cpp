@@ -2894,13 +2894,21 @@ void NetworkService::socket_error(Network::SocketServiceError error,
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
-        || error == Network::SocketServiceError::VersionTooNew
-        || error == Network::SocketServiceError::PeerUnavailable) {
+        || error == Network::SocketServiceError::VersionTooNew) {
         reconn_.erase(ip);
         if (!Utils::vector_contains(first_nodes_, ip) && ip != first_node_) {
             failed_ips_.insert(ip);
         }
         connection_error_event_.publish(error, ip, identifier, error_data);
+        return;
+    }
+    if (error == Network::SocketServiceError::PeerUnavailable) {
+        // The peer is temporarily at its connection limit — a transient condition,
+        // not an incompatibility. Keep its reconn_ entry so the bounded exponential
+        // backoff keeps retrying, instead of quarantining the address forever after
+        // a single unlucky handshake.
+        connection_error_event_.publish(error, ip, identifier, error_data);
+        schedule_reconnection(5000);
         return;
     }
 
