@@ -419,14 +419,29 @@ namespace ExtraChain::Consensus {
         const SafetyState&                  state,
         const std::optional<FinalityProof>& proof) {
         std::lock_guard lock(mutex_);
-        if (!database_ || !database_->is_open() || certificate.header_hash != hash_header(proposal.header)
+        if (!database_ || !database_->is_open() || certificate.header_hash != hash_header(proposal.header)) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        const auto proposal_payload = encode(proposal);
+        const auto proposal_height  = std::to_string(proposal.header.height);
+        const auto stored_proposals =
+            database_->select("SELECT height, payload FROM consensus_proposals WHERE hash = ?",
+                              "consensus_proposals",
+                              { { "hash", certificate.header_hash } });
+        if (stored_proposals.size() > 1
+            || (!stored_proposals.empty()
+                && (!stored_proposals.front().contains("height")
+                    || stored_proposals.front().at("height") != proposal_height
+                    || !stored_proposals.front().contains("payload")
+                    || stored_proposals.front().at("payload") != proposal_payload))
             || !database_->query("BEGIN IMMEDIATE TRANSACTION")) {
             return std::unexpected(ConsensusError::StorageFailure);
         }
-        const bool proposal_stored    = database_->replace("consensus_proposals",
+        const bool proposal_stored = !stored_proposals.empty()
+                                     || database_->replace("consensus_proposals",
                                                            { { "hash", certificate.header_hash },
-                                                             { "height", std::to_string(proposal.header.height) },
-                                                             { "payload", encode(proposal) } });
+                                                             { "height", proposal_height },
+                                                             { "payload", proposal_payload } });
         const bool certificate_stored = proposal_stored
                                         && database_->replace("consensus_certificates",
                                                               { { "hash", hash_certificate(certificate) },

@@ -52,6 +52,7 @@ namespace ExtraChain::Consensus {
         std::expected<TimeoutVote, ConsensusError>    make_timeout_vote(std::uint64_t height, std::uint64_t round);
         std::expected<void, ConsensusError>           observe_proposal(const Proposal& proposal);
         std::expected<void, ConsensusError>           stage_batch(SectionBatchData batch);
+        std::expected<void, ConsensusError>           stage_batch_for_vote(SectionBatchData batch);
         std::expected<Vote, ConsensusError>           accept_proposal(const Proposal& proposal);
         std::expected<VoteAcceptance, ConsensusError> accept_vote(const Vote& vote);
         std::expected<TimeoutAcceptance, ConsensusError> accept_timeout_vote(const TimeoutVote& vote);
@@ -89,6 +90,7 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] std::optional<FinalizedCheckpoint> finalization_for(
             const QuorumCertificate& certificate) const;
         [[nodiscard]] std::optional<FinalityProof> finality_proof_for(const QuorumCertificate& certificate) const;
+        std::expected<void, ConsensusError>        stage_batch_unlocked(SectionBatchData batch, bool persist);
         void                                       prune_memory(std::uint64_t finalized_height);
 
         ValidatorSetView                                          validators_;

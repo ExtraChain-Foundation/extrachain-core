@@ -10,12 +10,15 @@
 
 #pragma once
 
+#include <compare>
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -25,6 +28,13 @@
 class DbConnector;
 
 namespace ExtraChain::Consensus {
+
+    struct AppliedCheckpoint {
+        std::uint64_t height = 0;
+        std::string   header_hash;
+
+        auto operator<=>(const AppliedCheckpoint&) const = default;
+    };
 
     class EXTRACHAIN_EXPORT IntentStore {
     public:
@@ -42,8 +52,10 @@ namespace ExtraChain::Consensus {
                                                    ConsensusError                  error);
         std::expected<std::vector<IntentEnvelope>, ConsensusError>      load_pending();
         std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> load_committed_nonces();
+        std::expected<std::optional<AppliedCheckpoint>, ConsensusError> load_applied_checkpoint();
         std::expected<void, ConsensusError>                             commit_finalized(
-                                        const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized);
+                                        const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized,
+                                        std::optional<AppliedCheckpoint>                             checkpoint = std::nullopt);
         std::expected<std::optional<IntentReceipt>, ConsensusError> receipt(std::string_view intent_hash);
 
     private:

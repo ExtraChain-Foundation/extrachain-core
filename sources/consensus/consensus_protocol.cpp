@@ -385,8 +385,10 @@ namespace ExtraChain::Consensus {
         }
 
         struct Candidate {
-            std::string  hash;
-            const Entry* entry = nullptr;
+            std::string   hash;
+            ActorId       sender;
+            std::uint64_t nonce = 0;
+            const Entry*  entry = nullptr;
         };
         const auto later = [](const Candidate& left, const Candidate& right) {
             return left.hash > right.hash;
@@ -397,8 +399,10 @@ namespace ExtraChain::Consensus {
             const auto next      = committed + 1;
             const auto found     = queue.find(next);
             if (found != queue.end()) {
-                candidates.push(
-                    Candidate { .hash = hash_intent(found->second->envelope.intent), .entry = found->second });
+                candidates.push(Candidate { .hash   = hash_intent(found->second->envelope.intent),
+                                            .sender = sender,
+                                            .nonce  = next,
+                                            .entry  = found->second });
             }
         }
 
@@ -427,6 +431,17 @@ namespace ExtraChain::Consensus {
                 contract_change_selected = true;
             }
             epoch_change_selected = epoch_change_selected || intent.operation == IntentOperation::EpochChange;
+            if (intent.operation == IntentOperation::Transfer
+                && candidate.nonce < std::numeric_limits<std::uint64_t>::max()) {
+                const auto& queue = by_sender.at(candidate.sender);
+                const auto  next  = queue.find(candidate.nonce + 1);
+                if (next != queue.end() && next->second->envelope.intent.operation == IntentOperation::Transfer) {
+                    candidates.push(Candidate { .hash   = hash_intent(next->second->envelope.intent),
+                                                .sender = candidate.sender,
+                                                .nonce  = candidate.nonce + 1,
+                                                .entry  = next->second });
+                }
+            }
         }
         return result;
     }

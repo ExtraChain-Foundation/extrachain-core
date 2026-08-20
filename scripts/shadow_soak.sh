@@ -212,6 +212,31 @@ while :; do
     sleep 5
 done
 
+# A receipt proves that the submitting node applied the checkpoint. Other nodes
+# can still be importing the same certified height. Keep the committee alive
+# until every node reports the seed node's finalized count, so the audits test a
+# converged snapshot instead of a shutdown race.
+if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
+    convergence_deadline=$(( $(date +%s) + 60 ))
+    while :; do
+        seed_finalized="$(grep 'committee node=' "$WORK/node-0.log" 2>/dev/null \
+            | tail -1 | sed -n 's/.*finalized=\([0-9]*\).*/\1/p')"
+        converged=1
+        [ -n "$seed_finalized" ] || converged=0
+        for index in $(seq 1 $((NODE_COUNT - 1))); do
+            node_finalized="$(grep 'committee node=' "$WORK/node-$index.log" 2>/dev/null \
+                | tail -1 | sed -n 's/.*finalized=\([0-9]*\).*/\1/p')"
+            [ -n "$node_finalized" ] && [ "$node_finalized" = "$seed_finalized" ] || converged=0
+        done
+        [ "$converged" -eq 1 ] && break
+        if [ "$(date +%s)" -ge "$convergence_deadline" ]; then
+            verdict="convergence"
+            break
+        fi
+        sleep 1
+    done
+fi
+
 # A stack from a live node is worth more than the same node killed — this is how
 # the ABBA deadlock was found. Take it before the processes go away.
 if [ "$verdict" != "pass" ] && [ "$verdict" != "pass-negative" ] && command -v sample >/dev/null 2>&1; then
@@ -262,4 +287,5 @@ case "$verdict" in
         # within their window. Say which one it was, they need different fixes.
         fail "nodes finished their ${RUN_SECONDS}s window with $done_nodes/$SENDERS senders finalized" ;;
     deadline) fail "harness deadline reached with $done_nodes/$SENDERS senders finalized" ;;
+    convergence) fail "committee did not converge on one finalized height within 60s" ;;
 esac

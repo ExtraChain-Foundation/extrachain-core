@@ -212,6 +212,12 @@ int main(int argc, char *argv[]) {
     TEST_REQUIRE(installed_control_20.has_value());
     TEST_REQUIRE_EQ(installed_control_20.value().control, control_20_before);
     TEST_REQUIRE(!invalidated_control_40.has_value());
+    const auto rebuilt_shadow_batch =
+        node->dag()->build_shadow_batch(SectionId(1), SectionId(20), shadow_batch.value().header_hash);
+    TEST_REQUIRE(rebuilt_shadow_batch.has_value());
+    TEST_REQUIRE_EQ(ExtraChain::Consensus::hash_batch_manifest(rebuilt_shadow_batch.value().manifest),
+                    shadow_proposal.header.batch_root);
+    TEST_REQUIRE_EQ(rebuilt_shadow_batch.value().sections, shadow_batch.value().sections);
     auto staged_funding = make_reward(SectionId(21), 4);
     staged_funding.set_amount(BigNumberFloat("1"));
     TEST_REQUIRE(staged_funding.sign(actor));

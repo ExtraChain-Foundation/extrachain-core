@@ -334,7 +334,7 @@ int main() {
     Proposal                           last_proposal;
     std::vector<Proposal>              chain_proposals;
     std::vector<QuorumCertificate>     chain_certificates;
-    for (std::uint64_t height = 1; height <= 3; ++height) {
+    for (std::uint64_t height = 1; height <= 4; ++height) {
         const auto  round         = height == 1 ? std::uint64_t(1) : std::uint64_t(0);
         const auto& leader_record = fixture.view.leader(height, round);
         const auto  leader_index  = identity_index(fixture, leader_record.validator_id);
@@ -387,7 +387,7 @@ int main() {
         for (auto& engine : engines) {
             const auto result = engine->accept_certificate(certificate.value());
             check("validator accepts quorum certificate", result.has_value());
-            if (result.has_value() && result.value().has_value()) {
+            if (!finalized.has_value() && result.has_value() && result.value().has_value()) {
                 finalized = result.value();
             }
         }
@@ -404,7 +404,7 @@ int main() {
         check("data-lagging engine observes proposal",
               lagging_engine->observe_proposal(chain_proposals[index]).has_value());
         const auto accepted = lagging_engine->accept_certificate(chain_certificates[index]);
-        if (index + 1 == chain_certificates.size()) {
+        if (index >= 2) {
             lagging_rejected_finality =
                 !accepted.has_value() && accepted.error() == ConsensusError::DataUnavailable;
         } else {
@@ -424,7 +424,7 @@ int main() {
     for (std::size_t index = 0; index < chain_proposals.size() && index < chain_certificates.size(); ++index) {
         check("certified observer sees proposal",
               certified_observer->observe_proposal(chain_proposals[index]).has_value());
-        if (index == 0) {
+        if (index <= 1) {
             check("certified observer stores finalized batch",
                   certified_observer
                       ->stage_batch(batch_data(chain_proposals[index].header.height,
@@ -446,11 +446,43 @@ int main() {
           observer_proofs.has_value() && observer_proofs.value().size() == 1);
     certified_observer.reset();
 
+    auto reordered_observer =
+        std::make_unique<ConsensusEngine>(fixture.view,
+                                          std::nullopt,
+                                          std::make_unique<SafetyStore>(root / "reordered-observer.sqlite"));
+    check("reordered observer initializes", reordered_observer->initialize().has_value());
+    for (const auto& proposal : chain_proposals) {
+        check("reordered observer sees proposal", reordered_observer->observe_proposal(proposal).has_value());
+    }
+    check("reordered observer accepts certificates before finality",
+          reordered_observer->accept_certificate(chain_certificates[0]).has_value()
+              && reordered_observer->accept_certificate(chain_certificates[1]).has_value());
+    check("reordered observer stores the second finalized batch",
+          reordered_observer
+              ->stage_batch(batch_data(chain_proposals[1].header.height, hash_header(chain_proposals[1].header)))
+              .has_value());
+    const auto skipped_finality = reordered_observer->accept_certificate(chain_certificates[3]);
+    check("out-of-order certificate cannot skip a finalized height",
+          !skipped_finality.has_value() && skipped_finality.error() == ConsensusError::DataUnavailable
+              && reordered_observer->safety_state().finalized_height == 0);
+    check("reordered observer stores the first finalized batch",
+          reordered_observer
+              ->stage_batch(batch_data(chain_proposals[0].header.height, hash_header(chain_proposals[0].header)))
+              .has_value());
+    const auto first_recovered  = reordered_observer->accept_certificate(chain_certificates[2]);
+    const auto second_recovered = reordered_observer->accept_certificate(chain_certificates[3]);
+    check("ordered certificate replay closes the finality gap",
+          first_recovered.has_value() && first_recovered.value().has_value()
+              && first_recovered.value().value().height == 1 && second_recovered.has_value()
+              && second_recovered.value().has_value() && second_recovered.value().value().height == 2
+              && reordered_observer->safety_state().finalized_height == 2);
+    reordered_observer.reset();
+
     check("finalized checkpoint keeps the DAG section",
           finalized.has_value() && finalized.value().dag_section == 20);
     const auto proofs = engines.front()->finality_proofs_after(0, 8);
     check("finality creates a portable three-chain proof",
-          proofs.has_value() && proofs.value().size() == 1
+          proofs.has_value() && proofs.value().size() == 2
               && engines.front()->verify_finality_proof(proofs.value().front()));
     const auto inclusion = engines.front()->transaction_inclusion_proof("transaction-1");
     check("finalized transaction has a Merkle inclusion proof",
@@ -503,6 +535,44 @@ int main() {
           restarted_validator->initialize().has_value()
               && restarted_validator->batch_for(observed_hash).has_value());
     restarted_validator.reset();
+
+    const auto vote_path             = root / "vote-path-validator.sqlite";
+    const auto vote_path_proposal    = chain_proposals.front();
+    const auto vote_path_header_hash = hash_header(vote_path_proposal.header);
+    auto       vote_path_validator   = std::make_unique<ConsensusEngine>(fixture.view,
+                                                                 validator_identity,
+                                                                 std::make_unique<SafetyStore>(vote_path));
+    check("vote-path validator initializes", vote_path_validator->initialize().has_value());
+    check("vote-path validator observes proposal",
+          vote_path_validator->observe_proposal(vote_path_proposal).has_value());
+    check("vote-path validator stages data without an early commit",
+          vote_path_validator
+              ->stage_batch_for_vote(batch_data(vote_path_proposal.header.height, vote_path_header_hash))
+              .has_value());
+    vote_path_validator.reset();
+    vote_path_validator = std::make_unique<ConsensusEngine>(fixture.view,
+                                                            validator_identity,
+                                                            std::make_unique<SafetyStore>(vote_path));
+    check("unvoted batch is not durable",
+          vote_path_validator->initialize().has_value()
+              && !vote_path_validator->batch_for(vote_path_header_hash).has_value());
+    check("vote-path validator observes proposal again",
+          vote_path_validator->observe_proposal(vote_path_proposal).has_value());
+    check("vote-path validator stages data again",
+          vote_path_validator
+              ->stage_batch_for_vote(batch_data(vote_path_proposal.header.height, vote_path_header_hash))
+              .has_value());
+    check("vote-path validator persists the complete vote state",
+          vote_path_validator->accept_proposal(vote_path_proposal).has_value());
+    vote_path_validator.reset();
+    vote_path_validator = std::make_unique<ConsensusEngine>(fixture.view,
+                                                            validator_identity,
+                                                            std::make_unique<SafetyStore>(vote_path));
+    check("voted batch survives restart",
+          vote_path_validator->initialize().has_value()
+              && vote_path_validator->batch_for(vote_path_header_hash).has_value()
+              && vote_path_validator->safety_state().last_voted_hash == vote_path_header_hash);
+    vote_path_validator.reset();
 
     const auto observer_path = root / "durable-observer.sqlite";
     auto       observer      = std::make_unique<ConsensusEngine>(fixture.view,
@@ -603,9 +673,10 @@ int main() {
           restarted->batch_for(finalized.value().header_hash).has_value());
     const auto restarted_proofs = restarted->finality_proofs_after(0, 8);
     check("restart restores the finality proof index",
-          restarted_proofs.has_value() && restarted_proofs.value().size() == 1
+          restarted_proofs.has_value() && restarted_proofs.value().size() == 2
               && restarted->verify_finality_proof(restarted_proofs.value().front()));
-    const auto restarted_timeout = restarted->make_timeout_vote(4, 0);
+    const auto restarted_timeout =
+        restarted->make_timeout_vote(restart_state.highest_certificate.value().height + 1, 0);
     check("restart restores the high certificate used by timeout votes",
           restarted_timeout.has_value() && restarted->accept_timeout_vote(restarted_timeout.value()).has_value());
 

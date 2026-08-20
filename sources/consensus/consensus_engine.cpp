@@ -417,7 +417,17 @@ namespace ExtraChain::Consensus {
 
     std::expected<void, ConsensusError> ConsensusEngine::stage_batch(SectionBatchData batch) {
         std::lock_guard lock(mutex_);
-        const auto      started = std::chrono::steady_clock::now();
+        return stage_batch_unlocked(std::move(batch), true);
+    }
+
+    std::expected<void, ConsensusError> ConsensusEngine::stage_batch_for_vote(SectionBatchData batch) {
+        std::lock_guard lock(mutex_);
+        return stage_batch_unlocked(std::move(batch), false);
+    }
+
+    std::expected<void, ConsensusError> ConsensusEngine::stage_batch_unlocked(SectionBatchData batch,
+                                                                              bool             persist) {
+        const auto started = std::chrono::steady_clock::now();
         if (!initialized_) {
             return std::unexpected(ConsensusError::NotReady);
         }
@@ -445,9 +455,11 @@ namespace ExtraChain::Consensus {
             || calculate_data_root(batch.sections) != batch.manifest.data_root) {
             return std::unexpected(ConsensusError::InvalidRoot);
         }
-        const auto stored = store_->persist_proposal_batch(proposal->second, batch);
-        if (!stored.has_value()) {
-            return std::unexpected(stored.error());
+        if (persist) {
+            const auto stored = store_->persist_proposal_batch(proposal->second, batch);
+            if (!stored.has_value()) {
+                return std::unexpected(stored.error());
+            }
         }
         batches_.insert_or_assign(batch.header_hash, std::move(batch));
         batches_staged_.fetch_add(1, std::memory_order_relaxed);
@@ -626,6 +638,15 @@ namespace ExtraChain::Consensus {
 
         auto finalized = finalization_for(certificate);
         if (finalized.has_value() && finalized.value().height > next_state.finalized_height) {
+            const bool first_epoch_checkpoint =
+                epoch_bootstrap_.has_value()
+                && next_state.finalized_height == epoch_bootstrap_.value().previous_finalized_height
+                && finalized.value().height == epoch_bootstrap_.value().activation_height;
+            if (!first_epoch_checkpoint
+                && (next_state.finalized_height == std::numeric_limits<std::uint64_t>::max()
+                    || finalized.value().height != next_state.finalized_height + 1)) {
+                return std::unexpected(ConsensusError::DataUnavailable);
+            }
             if (!batches_.contains(finalized.value().header_hash)) {
                 return std::unexpected(ConsensusError::DataUnavailable);
             }
