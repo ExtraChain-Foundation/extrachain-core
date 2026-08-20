@@ -96,14 +96,14 @@ ActorId &ActorId::operator=(ActorId &&other) noexcept {
 
 void ActorId::normalize() {
     if (m_id.size() > ChainConst::ACTOR_SIZE) {
-        eFatal("[ActorId] Not correct size: {} / '{}'", m_id.size(), m_id);
+        throw ActorIdException(
+            fmt::format("[ActorId] Not correct size: {} / '{}'", m_id.size(), m_id));
     }
 
     m_id = std::string(ChainConst::ACTOR_SIZE - m_id.length(), '0') + m_id;
 
     if (!Utils::is_hex_string_lower(m_id)) {
-        eFatal("[ActorId] Not correct hex: {}", m_id);
-        m_id = std::string(ChainConst::ACTOR_SIZE, '0');
+        throw ActorIdException(fmt::format("[ActorId] Not correct hex: {}", m_id));
     }
 }
 
