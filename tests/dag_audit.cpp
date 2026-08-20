@@ -3,7 +3,7 @@
  * on-disk chain is internally consistent — nothing lost or corrupted — without
  * comparing against any peer.
  *
- *   extrachain-dag-audit <home>
+ *   extrachain-dag-audit <home> [seed|joiner]
  *
  * Checks:
  *   1. Section continuity   — every section in [first..current] reads back.
@@ -12,6 +12,7 @@
  *                             compare to the stored control at each boundary.
  *   4. Control index        — Control.db matches section.control everywhere.
  *   5. Range file           — first/last consistent with what is on disk.
+ *   6. Balance cache        — rows match a DAG replay and both section markers.
  */
 #include <algorithm>
 #include <cstdio>
@@ -23,7 +24,9 @@
 #include "chain/transaction.h"
 #include "encryption/key_public.h"
 #include "core/extrachain_node.h"
+#include "utils/db_connector.h"
 #include "utils/exc_utils.h"
+#include "utils/file_io.h"
 
 namespace {
     const std::string LOGIN    = "gen-login";
@@ -46,11 +49,30 @@ namespace {
             acc += section_component(dag, i);
         return Utils::calculate_hash(acc);
     }
+
+    std::string cache_digest(const Balances &balances) {
+        std::string input;
+        for (const auto &[key, balance] : balances) {
+            input += key.first.to_string() + ':' + key.second.to_string() + ':' + balance.to_string() + '\n';
+        }
+        return Utils::calculate_hash(input);
+    }
+
+    void remove_zero_balances(Balances &balances) {
+        std::erase_if(balances, [](const auto &entry) {
+            return entry.second == 0;
+        });
+    }
 } // namespace
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        std::printf("usage: %s <home>\n", argv[0]);
+        std::printf("usage: %s <home> [seed|joiner]\n", argv[0]);
+        return 64;
+    }
+    const std::string role = argc > 2 ? argv[2] : "seed";
+    if (role != "seed" && role != "joiner") {
+        std::printf("invalid role %s\n", role.c_str());
         return 64;
     }
     std::error_code directory_error;
@@ -62,7 +84,10 @@ int main(int argc, char *argv[]) {
 
     auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 17600);
     node->process();
-    auto res = node->login(Utils::calculate_hash(LOGIN + PASSWORD));
+    const auto login_hash = role == "seed"
+                                ? Utils::calculate_hash(LOGIN + PASSWORD)
+                                : Utils::calculate_hash(std::filesystem::current_path().string() + ":joiner");
+    auto       res        = node->login(login_hash);
     if (!res.has_value()) {
         std::printf("login failed %d\n", (int)res.error());
         return 2;
@@ -200,6 +225,54 @@ int main(int argc, char *argv[]) {
                     past_ok ? "yes" : "NO");
         if (!tip_ok)
             total_fail++;
+    }
+
+    // 6. Balance snapshot and section markers --------------------------------
+    {
+        auto [cache_section, cached_balances] = dag->cache().read_cached_balances();
+        remove_zero_balances(cached_balances);
+
+        Balances replayed_balances;
+        if (cache_section >= SectionId(0)) {
+            for (SectionId section_id(0); section_id <= cache_section; section_id += SectionId(1)) {
+                const auto section = dag->read_section(section_id);
+                if (!section.has_value()) {
+                    continue;
+                }
+                for (const auto &transaction : section->transactions) {
+                    dag->cache().process_transaction(transaction, replayed_balances);
+                }
+            }
+        }
+        remove_zero_balances(replayed_balances);
+        const bool replay_ok = replayed_balances == cached_balances;
+
+        DbConnector cache_db(ChainConst::BALANCE_CACHE);
+        bool        metadata_ok = cache_db.open(false);
+        if (metadata_ok) {
+            const auto rows = cache_db.select("SELECT section FROM balance_cache_meta WHERE id = 1");
+            metadata_ok     = rows.size() == 1 && rows.front().contains("section")
+                          && rows.front().at("section") == cache_section.to_string();
+            static_cast<void>(cache_db.close());
+        }
+
+        bool       range_ok   = false;
+        const auto range_data = FileIo::read_all(ChainConst::DAG_RANGE_PATH);
+        if (range_data.has_value()) {
+            const auto range = Json::deserialize<SectionRange>(range_data.value());
+            range_ok         = range.has_value() && range->last_cached == cache_section.to_string();
+        }
+
+        std::printf("[6] balance cache: section=%s rows=%zu hash=%s replay=%s metadata=%s range=%s\n",
+                    cache_section.to_string().c_str(),
+                    cached_balances.size(),
+                    cache_digest(cached_balances).c_str(),
+                    replay_ok ? "yes" : "NO",
+                    metadata_ok ? "yes" : "NO",
+                    range_ok ? "yes" : "NO");
+        if (!replay_ok || !metadata_ok || !range_ok) {
+            total_fail++;
+        }
     }
 
     std::printf("\n=== AUDIT %s (failures=%lld) ===\n", total_fail == 0 ? "PASS" : "FAIL", total_fail);

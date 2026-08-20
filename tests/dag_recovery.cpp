@@ -1,4 +1,5 @@
 #include <atomic>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <thread>
@@ -12,6 +13,8 @@
 #include "managers/account_controller.h"
 #include "network/responder.h"
 #include "test_support.h"
+#include "utils/db_connector.h"
+#include "utils/file_io.h"
 
 namespace {
     class CapturingSender final : public ResponseSender {
@@ -33,8 +36,26 @@ namespace {
     };
 } // namespace
 
-int main() {
-    const auto original_path = std::filesystem::current_path();
+int main(int argc, char *argv[]) {
+    if (argc == 3 && std::string_view(argv[1]) == "--verify-cache-restart") {
+        std::filesystem::current_path(argv[2]);
+        auto recovered = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 0);
+        recovered->process();
+        TEST_REQUIRE_EQ(recovered->dag()->cache().section(), SectionId(-1));
+        const auto [recovered_section, recovered_balances] = recovered->dag()->cache().read_cached_balances();
+        TEST_REQUIRE_EQ(recovered_section, SectionId(-1));
+        TEST_REQUIRE(recovered_balances.empty());
+        const auto repaired_range_data = FileIo::read_all(ChainConst::DAG_RANGE_PATH);
+        TEST_REQUIRE(repaired_range_data.has_value());
+        const auto repaired_range = Json::deserialize<SectionRange>(repaired_range_data.value());
+        TEST_REQUIRE(repaired_range.has_value());
+        TEST_REQUIRE_EQ(repaired_range.value().last_cached, std::string("-1"));
+        recovered->cleanUp();
+        return 0;
+    }
+
+    const auto executable_path = std::filesystem::absolute(argv[0]);
+    const auto original_path   = std::filesystem::current_path();
     const auto test_path =
         std::filesystem::temp_directory_path() / ("extrachain-dag-recovery-" + Utils::generate_random_hex(8));
     std::filesystem::create_directories(test_path);
@@ -42,6 +63,8 @@ int main() {
 
     Actor<KeyPrivate> actor;
     actor.create(ActorType::User);
+    Actor<KeyPrivate> receiver;
+    receiver.create(ActorType::User);
     Transaction transaction;
     transaction.set_sender(actor.id());
     transaction.set_receiver(actor.id());
@@ -104,7 +127,7 @@ int main() {
 
     TEST_REQUIRE(node->dag()->save_transaction(make_reward(SectionId(1), 1)));
     TEST_REQUIRE(node->dag()->save_transaction(make_reward(SectionId(45), 2)));
-    node->dag()->cache().write_cached_balances({}, SectionId(40));
+    TEST_REQUIRE(node->dag()->cache().write_cached_balances({}, SectionId(40)));
     TEST_REQUIRE(node->dag()->generate_hash_from_section(SectionId(0), Force::Active, Force::None).has_value());
     const auto initial_control_20 = node->dag()->read_control(SectionId(20));
     const auto initial_control_40 = node->dag()->read_control(SectionId(40));
@@ -155,6 +178,7 @@ int main() {
     TEST_REQUIRE(speculative_empty_batch.value().manifest.transaction_hashes.empty());
     TEST_REQUIRE_EQ(speculative_empty_batch.value().manifest.previous_section_root, "speculative-parent-root");
     TEST_REQUIRE(node->dag()->shadow_batch_section_root(speculative_empty_batch.value()).has_value());
+
     auto corrupted_shadow_batch = shadow_batch.value();
     corrupted_shadow_batch.sections.front().second.push_back('x');
     TEST_REQUIRE(!node->dag()
@@ -188,9 +212,99 @@ int main() {
     TEST_REQUIRE(installed_control_20.has_value());
     TEST_REQUIRE_EQ(installed_control_20.value().control, control_20_before);
     TEST_REQUIRE(!invalidated_control_40.has_value());
+    auto staged_funding = make_reward(SectionId(21), 4);
+    staged_funding.set_amount(BigNumberFloat("1"));
+    TEST_REQUIRE(staged_funding.sign(actor));
+    TEST_REQUIRE(node->dag()->save_transaction(staged_funding));
 
-    node->dag()->cache().write_cached_balances({}, SectionId(123));
-    TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(123));
+    const auto &accounts         = node->account_controller()->accounts();
+    const auto  receiver_account = std::ranges::find_if(accounts, [&](const auto &account) {
+        return account.id() != actor.id();
+    });
+    TEST_REQUIRE(receiver_account != accounts.end());
+    const auto make_transfer =
+        [&](const SectionId &section, const BigNumberFloat &amount, std::uint64_t timestamp) {
+            Transaction transfer;
+            transfer.set_sender(actor.id());
+            transfer.set_receiver(receiver_account->id());
+            transfer.set_token(actor.id());
+            transfer.set_type(TransactionType::Regular);
+            transfer.set_amount(amount);
+            transfer.set_section(section);
+            transfer.set_timestamp(timestamp);
+            TEST_REQUIRE(transfer.sign(actor));
+            return transfer;
+        };
+    const auto make_single_transaction_batch = [&](const Transaction &transfer, const std::string &previous_root) {
+        using namespace ExtraChain::Consensus;
+        SectionBatchData batch;
+        const auto       section_value = transfer.section().to_int();
+        TEST_REQUIRE(section_value.has_value());
+        WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+        const auto        section_bytes = Json::serialize(
+            Section { .id = transfer.section(), .transactions = { transfer }, .control = std::nullopt });
+        batch.sections.emplace_back(static_cast<std::uint64_t>(section_value.value()), section_bytes);
+        batch.manifest.first_section         = static_cast<std::uint64_t>(section_value.value());
+        batch.manifest.last_section          = static_cast<std::uint64_t>(section_value.value());
+        batch.manifest.transaction_hashes    = { consensus_transaction_hash(transfer) };
+        batch.manifest.transaction_root      = calculate_transaction_root(batch.manifest.transaction_hashes);
+        batch.manifest.data_root             = calculate_data_root(batch.sections);
+        batch.manifest.previous_section_root = previous_root;
+        batch.manifest.payload_bytes         = section_bytes.size();
+        return batch;
+    };
+    const auto make_batch_proposal = [&](ExtraChain::Consensus::SectionBatchData &batch) {
+        using namespace ExtraChain::Consensus;
+        Proposal proposal {
+            .header =
+                ConsensusHeader {
+                    .dag_section      = batch.manifest.last_section,
+                    .transaction_root = batch.manifest.transaction_root,
+                    .batch_root       = hash_batch_manifest(batch.manifest),
+                },
+            .batch = batch.manifest,
+        };
+        const auto section_root = node->dag()->shadow_batch_section_root(batch);
+        TEST_REQUIRE(section_root.has_value());
+        proposal.header.section_root = section_root.value();
+        batch.header_hash            = hash_header(proposal.header);
+        return proposal;
+    };
+
+    const auto staged_transfer = make_transfer(SectionId(61), BigNumberFloat("0.6"), 61);
+    auto       staged_batch    = make_single_transaction_batch(staged_transfer, "canonical-parent-root");
+    auto       staged_proposal = make_batch_proposal(staged_batch);
+    TEST_REQUIRE(
+        node->dag()->validate_shadow_batch(staged_proposal, staged_batch, 16ULL * 1024ULL * 1024ULL).has_value());
+
+    const auto child_transfer = make_transfer(SectionId(62), BigNumberFloat("0.6"), 62);
+    auto       child_batch    = make_single_transaction_batch(child_transfer, staged_proposal.header.section_root);
+    auto       child_proposal = make_batch_proposal(child_batch);
+    TEST_REQUIRE(
+        node->dag()->validate_shadow_batch(child_proposal, child_batch, 16ULL * 1024ULL * 1024ULL).has_value());
+    TEST_REQUIRE(!node->dag()
+                      ->validate_shadow_batch(child_proposal,
+                                              child_batch,
+                                              16ULL * 1024ULL * 1024ULL,
+                                              std::set<Transaction> { staged_transfer })
+                      .has_value());
+
+    Balances first_snapshot {
+        { { actor.id(), actor.id() }, BigNumberFloat("123") },
+        { { receiver.id(), actor.id() }, BigNumberFloat("7") },
+    };
+    TEST_REQUIRE(node->dag()->cache().write_cached_balances(first_snapshot, SectionId(40)));
+    Balances replacement_snapshot {
+        { { actor.id(), actor.id() }, BigNumberFloat("321") },
+    };
+    TEST_REQUIRE(node->dag()->cache().write_cached_balances(replacement_snapshot, SectionId(41)));
+    const auto [snapshot_section, snapshot_balances] = node->dag()->cache().read_cached_balances();
+    TEST_REQUIRE_EQ(snapshot_section, SectionId(41));
+    TEST_REQUIRE_EQ(snapshot_balances.size(), std::size_t(1));
+    TEST_REQUIRE_EQ(snapshot_balances.at({ actor.id(), actor.id() }), BigNumberFloat("321"));
+    TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(41));
+    const auto historical_balances = node->dag()->calculate_actors_balance({ actor.id() }, SectionId(20));
+    TEST_REQUIRE_EQ(historical_balances.at({ actor.id(), actor.id() }), BigNumberFloat("0.01"));
     node->dag()->cache().reset_db();
     TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(-1));
 
@@ -204,7 +318,13 @@ int main() {
                     return;
                 }
                 const BigNumberFloat balance(std::to_string(worker * 100 + iteration + 1));
-                node->dag()->cache().write_cached_balance(actor.id(), actor.id(), balance);
+                const Balances       snapshot {
+                          { { actor.id(), actor.id() }, balance },
+                };
+                if (!node->dag()->cache().write_cached_balances(snapshot, SectionId(iteration))) {
+                    cache_stress_ok.store(false);
+                    return;
+                }
                 static_cast<void>(node->dag()->cache().read_cached_balance(actor.id(), actor.id()));
             }
         });
@@ -222,7 +342,7 @@ int main() {
         worker.join();
     }
     TEST_REQUIRE(cache_stress_ok.load());
-    node->dag()->cache().write_cached_balance(actor.id(), actor.id(), BigNumberFloat("321"));
+    TEST_REQUIRE(node->dag()->cache().write_cached_balances(replacement_snapshot, SectionId(41)));
     TEST_REQUIRE_EQ(node->dag()->cache().read_cached_balance(actor.id(), actor.id()), BigNumberFloat("321"));
 
     node->dag()->set_status(DagStatus::Ready);
@@ -272,8 +392,21 @@ int main() {
     TEST_REQUIRE_EQ(sender.responses, std::size_t(1));
     TEST_REQUIRE_EQ(sender.message_type, MessageType::DagControlRangeResponse);
 
+    TEST_REQUIRE(node->dag()->cache().write_cached_balances(replacement_snapshot, node->dag()->current_section()));
+    node->dag()->update_range(true);
     node->cleanUp();
     node.reset();
+
+    {
+        DbConnector legacy_cache(ChainConst::BALANCE_CACHE);
+        TEST_REQUIRE(legacy_cache.open());
+        TEST_REQUIRE(legacy_cache.drop_table("balance_cache_meta"));
+        TEST_REQUIRE(legacy_cache.close());
+    }
+
+    const auto restart_command =
+        '"' + executable_path.string() + "\" --verify-cache-restart \"" + test_path.string() + '"';
+    TEST_REQUIRE_EQ(std::system(restart_command.c_str()), 0);
     std::filesystem::current_path(original_path);
     std::filesystem::remove_all(test_path);
     return 0;

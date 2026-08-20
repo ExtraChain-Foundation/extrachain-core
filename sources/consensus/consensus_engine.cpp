@@ -445,11 +445,9 @@ namespace ExtraChain::Consensus {
             || calculate_data_root(batch.sections) != batch.manifest.data_root) {
             return std::unexpected(ConsensusError::InvalidRoot);
         }
-        if (!identity_.has_value()) {
-            const auto stored = store_->persist_proposal_batch(proposal->second, batch);
-            if (!stored.has_value()) {
-                return std::unexpected(stored.error());
-            }
+        const auto stored = store_->persist_proposal_batch(proposal->second, batch);
+        if (!stored.has_value()) {
+            return std::unexpected(stored.error());
         }
         batches_.insert_or_assign(batch.header_hash, std::move(batch));
         batches_staged_.fetch_add(1, std::memory_order_relaxed);
@@ -628,6 +626,9 @@ namespace ExtraChain::Consensus {
 
         auto finalized = finalization_for(certificate);
         if (finalized.has_value() && finalized.value().height > next_state.finalized_height) {
+            if (!batches_.contains(finalized.value().header_hash)) {
+                return std::unexpected(ConsensusError::DataUnavailable);
+            }
             next_state.finalized_height = finalized.value().height;
         } else {
             finalized.reset();

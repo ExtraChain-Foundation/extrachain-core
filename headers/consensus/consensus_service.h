@@ -126,6 +126,14 @@ namespace ExtraChain::Consensus {
             std::string_view         section_root,
             std::uint64_t            height,
             const QuorumCertificate& parent) const;
+        [[nodiscard]] std::expected<std::vector<Transaction>, ConsensusError> staged_ancestor_transactions(
+            const QuorumCertificate& parent,
+            std::uint64_t            first_section) const;
+        /// Ancestors as a set, ready for the DAG's balance proofs. An empty set means
+        /// the parent is already canonical; a broken ancestor chain is an error, not
+        /// an empty set, so a proposal is never accepted on a silently weaker check.
+        [[nodiscard]] std::expected<std::set<Transaction>, ConsensusError> staged_ancestors_for(
+            const Proposal& proposal) const;
         [[nodiscard]] bool                         has_unfinalized_intents() const;
         std::expected<std::string, ConsensusError> accept_intent(const IntentEnvelope& envelope, bool broadcast);
         [[nodiscard]] std::expected<std::vector<std::pair<IntentEnvelope, IntentReceipt>>, ConsensusError>

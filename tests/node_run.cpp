@@ -37,6 +37,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -133,7 +134,8 @@ int main(int argc, char* argv[]) {
         if (argc < 8) {
             std::printf(
                 "usage: %s committee <home> <seed|joiner> <index> <listen-port> "
-                "<first-port> <node-count> [intent-count] [run-seconds] [barrier-directory]\n",
+                "<first-port> <node-count> [intent-count] [run-seconds] [barrier-directory] "
+                "[first-intent-nonce] [stay-until-deadline]\n",
                 argv[0]);
             return 64;
         }
@@ -144,8 +146,13 @@ int main(int argc, char* argv[]) {
         const auto intent_count = static_cast<std::size_t>(argc > 8 ? std::strtoull(argv[8], nullptr, 10) : 128);
         const auto run_seconds  = static_cast<std::uint64_t>(argc > 9 ? std::strtoull(argv[9], nullptr, 10) : 90);
         const auto barrier_directory = argc > 10 ? std::filesystem::path(argv[10]) : std::filesystem::path {};
+        const auto first_intent_nonce =
+            static_cast<std::uint64_t>(argc > 11 ? std::strtoull(argv[11], nullptr, 10) : 1);
+        const bool stay_until_deadline = argc > 12 && std::atoi(argv[12]) != 0;
         if ((role != "seed" && role != "joiner") || node_count != ShadowCommitteeSize || node_index >= node_count
-            || run_seconds < 10) {
+            || run_seconds < 10 || first_intent_nonce == 0
+            || (intent_count > 0
+                && intent_count - 1 > std::numeric_limits<std::uint64_t>::max() - first_intent_nonce)) {
             std::printf("[node-run] invalid committee arguments\n");
             return 64;
         }
@@ -246,6 +253,7 @@ int main(int argc, char* argv[]) {
             submitted_hashes.reserve(intent_count);
             for (std::size_t index = 0; index < intent_count; ++index) {
                 const auto metadata = "shadow-live-intent-" + std::to_string(index);
+                const auto nonce    = first_intent_nonce + index;
                 const auto intent   = make_intent(
                     TransactionIntentV2 {
                           .network_id           = node->network_id(),
@@ -254,7 +262,7 @@ int main(int argc, char* argv[]) {
                           .token                = TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"),
                           .amount               = "0.0001",
                           .operation            = IntentOperation::Transfer,
-                          .account_nonce        = index + 1,
+                          .account_nonce        = nonce,
                           .valid_after_height   = 0,
                           .expires_after_height = 1'000'000,
                     },
@@ -283,8 +291,9 @@ int main(int argc, char* argv[]) {
             std::fflush(stdout);
         }
 
-        const auto run_deadline  = std::chrono::steady_clock::now() + std::chrono::seconds(run_seconds);
-        bool       all_finalized = submitted_hashes.empty();
+        const auto run_deadline          = std::chrono::steady_clock::now() + std::chrono::seconds(run_seconds);
+        bool       all_finalized         = submitted_hashes.empty();
+        bool       finalization_reported = false;
         while (stop_requested == 0 && std::chrono::steady_clock::now() < run_deadline) {
             const auto metrics = node->consensus()->metrics();
             const auto ready   = node->consensus()->ready_intents(10'000, 8ULL * 1024ULL * 1024ULL).size();
@@ -313,10 +322,13 @@ int main(int argc, char* argv[]) {
                         break;
                     }
                 }
-                if (all_finalized) {
+                if (all_finalized && !finalization_reported) {
                     std::printf("[node-run] finalized intents=%zu\n", submitted_hashes.size());
                     std::fflush(stdout);
-                    break;
+                    finalization_reported = true;
+                    if (!stay_until_deadline) {
+                        break;
+                    }
                 }
             }
             std::this_thread::sleep_for(std::chrono::seconds(1));

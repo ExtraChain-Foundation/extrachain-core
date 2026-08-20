@@ -30,6 +30,11 @@ namespace ExtraChain::Consensus {
     inline constexpr std::uint64_t MaximumShadowBatchBytes = 64ULL * 1024ULL * 1024ULL;
     inline constexpr std::uint64_t MaximumShadowSyncBytes  = 32ULL * 1024ULL * 1024ULL;
     inline constexpr std::size_t   MaximumShadowSyncProofs = 8;
+    /// How far back a staged (certified but not yet finalized) chain may be walked
+    /// when rebuilding the state a proposal starts from. Finalization keeps the real
+    /// chain far shorter than this; the bound only stops a malformed parent link
+    /// from turning the walk into an unbounded loop.
+    inline constexpr std::size_t MaximumStagedAncestors = 64;
 
     enum class ShadowMode : std::uint8_t {
         Observe,
