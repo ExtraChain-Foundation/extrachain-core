@@ -495,6 +495,24 @@ namespace ExtraChain::Consensus {
             || !authenticator_->is_authenticated(peer_identifier, proposal.proposer_id)) {
             return;
         }
+        // A proposal carries its parent quorum certificate. Applying it before
+        // judging the child lets a node that missed the certificate broadcast
+        // advance along the certified branch (and unlock from a competing one):
+        // the proposal channel is the one delivery path such a node demonstrably
+        // still has. apply_certificate validates quorum and signatures itself, so
+        // nothing is trusted beyond what the certificate proves.
+        {
+            const auto& state = consensus_->engine().safety_state();
+            if (proposal.parent_certificate.height > 0
+                && (!state.highest_certificate.has_value()
+                    || proposal.parent_certificate.height > state.highest_certificate.value().height)) {
+                eWarning("[Shadow] Proposal at height {} carries an unseen parent certificate at height {}; "
+                         "applying it first",
+                         proposal.header.height,
+                         proposal.parent_certificate.height);
+                apply_certificate(proposal.parent_certificate);
+            }
+        }
         const auto observed = consensus_->engine().observe_proposal(proposal);
         if (!observed.has_value()) {
             eWarning("[Shadow] Proposal {} at height {} was rejected with error {}",
@@ -562,6 +580,9 @@ namespace ExtraChain::Consensus {
         }
         if (peer_identifier != node_.node_identifier()
             && !authenticator_->authenticated_validator(peer_identifier).has_value()) {
+            eWarning("[Shadow] Certificate at height {} dropped: peer {} is not an authenticated validator",
+                     certificate.height,
+                     peer_identifier.substr(0, 12));
             return;
         }
         apply_certificate(certificate);
