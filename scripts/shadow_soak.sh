@@ -33,6 +33,7 @@ DEADLINE_S="${EXC_SHADOW_DEADLINE_S:-$((RUN_SECONDS + 120))}"
 NODE_COUNT=7
 
 WORK="${EXC_SHADOW_WORK:-$(mktemp -d /tmp/exc-shadow-soak-XXXXXX)}"
+mkdir -p "$WORK"
 SYNC_WORK="$WORK/bootstrap"
 NODE_RUN="$BUILD_DIR/extrachain-node-run"
 BUNDLE="$BUILD_DIR/extrachain-shadow-bundle"
