@@ -1329,7 +1329,9 @@ namespace ExtraChain::Consensus {
                                                   highest.value().height + 1,
                                                   highest.value());
         if (!state.has_value()) {
-            eWarning("[Shadow] Cannot build state commitment for section {}", section);
+            eWarning("[Shadow] Cannot build state commitment for section {}: {}",
+                     section,
+                     std::to_underlying(state.error()));
             return;
         }
         pending_checkpoints_.insert_or_assign(section,
@@ -1389,6 +1391,8 @@ namespace ExtraChain::Consensus {
                 const auto parent_batch = consensus_->engine().batch_for(highest.header_hash);
                 if (!parent.has_value() || !parent_batch.has_value() || parent_batch.value().sections.empty()
                     || parent_batch.value().sections.back().first != parent.value().batch.last_section) {
+                    eWarning("[Shadow] Voting halted: parent batch for height {} is unavailable or inconsistent",
+                             highest.height);
                     halt_voting();
                     return;
                 }
@@ -1419,7 +1423,8 @@ namespace ExtraChain::Consensus {
             const auto state =
                 build_state_commitment(batch.value(), section_root.value(), highest.height + 1, highest);
             if (!state.has_value()) {
-                eWarning("[Shadow] Leader could not calculate the state commitment");
+                eWarning("[Shadow] Leader could not calculate the state commitment: {}",
+                         std::to_underlying(state.error()));
                 return;
             }
             pending_checkpoints_.insert_or_assign(target,
