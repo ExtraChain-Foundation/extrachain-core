@@ -332,6 +332,8 @@ int main() {
 
     std::optional<FinalizedCheckpoint> finalized;
     Proposal                           last_proposal;
+    std::vector<Proposal>              chain_proposals;
+    std::vector<QuorumCertificate>     chain_certificates;
     for (std::uint64_t height = 1; height <= 3; ++height) {
         const auto  round         = height == 1 ? std::uint64_t(1) : std::uint64_t(0);
         const auto& leader_record = fixture.view.leader(height, round);
@@ -347,6 +349,7 @@ int main() {
             break;
         }
         last_proposal = proposal.value();
+        chain_proposals.push_back(proposal.value());
 
         const auto proposal_hash = hash_header(proposal.value().header);
         check("leader stores proposal data before voting",
@@ -380,6 +383,7 @@ int main() {
         if (!certificate.has_value()) {
             break;
         }
+        chain_certificates.push_back(certificate.value());
         for (auto& engine : engines) {
             const auto result = engine->accept_certificate(certificate.value());
             check("validator accepts quorum certificate", result.has_value());
@@ -390,6 +394,26 @@ int main() {
     }
     check("three certified links finalize the grandparent",
           finalized.has_value() && finalized.value().height == 1);
+    auto lagging_engine =
+        std::make_unique<ConsensusEngine>(fixture.view,
+                                          std::nullopt,
+                                          std::make_unique<SafetyStore>(root / "lagging.sqlite"));
+    check("data-lagging engine initializes", lagging_engine->initialize().has_value());
+    bool lagging_rejected_finality = false;
+    for (std::size_t index = 0; index < chain_proposals.size() && index < chain_certificates.size(); ++index) {
+        check("data-lagging engine observes proposal",
+              lagging_engine->observe_proposal(chain_proposals[index]).has_value());
+        const auto accepted = lagging_engine->accept_certificate(chain_certificates[index]);
+        if (index + 1 == chain_certificates.size()) {
+            lagging_rejected_finality =
+                !accepted.has_value() && accepted.error() == ConsensusError::DataUnavailable;
+        } else {
+            check("certificate before finality does not require batch data", accepted.has_value());
+        }
+    }
+    check("finality waits for the finalized batch", lagging_rejected_finality);
+    check("missing batch cannot advance finalized height", lagging_engine->safety_state().finalized_height == 0);
+    lagging_engine.reset();
     check("finalized checkpoint keeps the DAG section",
           finalized.has_value() && finalized.value().dag_section == 20);
     const auto proofs = engines.front()->finality_proofs_after(0, 8);
@@ -425,12 +449,34 @@ int main() {
           engines.front()->batch_for(finalized.value().header_hash).has_value());
     check("batch lookup treats a peer hash as data", !engines.front()->batch_for("' OR 1=1 --").has_value());
 
+    const auto validator_path  = root / "durable-validator.sqlite";
+    const auto validator_index = (identity_index(fixture, last_proposal.proposer_id) + 1) % fixture.keys.size();
+    const auto validator_identity =
+        ValidatorIdentity { .validator_id = validator_id_for(fixture.keys[validator_index].public_key()),
+                            .key          = fixture.keys[validator_index] };
+    auto restarted_validator = std::make_unique<ConsensusEngine>(fixture.view,
+                                                                 validator_identity,
+                                                                 std::make_unique<SafetyStore>(validator_path));
+    check("fresh validator engine initializes", restarted_validator->initialize().has_value());
+    const auto observed_hash = hash_header(last_proposal.header);
+    check("validator accepts a proposal from another leader",
+          restarted_validator->observe_proposal(last_proposal).has_value());
+    check("validator durably stages data before a vote",
+          restarted_validator->stage_batch(batch_data(last_proposal.header.height, observed_hash)).has_value());
+    restarted_validator.reset();
+    restarted_validator = std::make_unique<ConsensusEngine>(fixture.view,
+                                                            validator_identity,
+                                                            std::make_unique<SafetyStore>(validator_path));
+    check("validator restarts with staged proposal data",
+          restarted_validator->initialize().has_value()
+              && restarted_validator->batch_for(observed_hash).has_value());
+    restarted_validator.reset();
+
     const auto observer_path = root / "durable-observer.sqlite";
     auto       observer      = std::make_unique<ConsensusEngine>(fixture.view,
                                                       std::nullopt,
                                                       std::make_unique<SafetyStore>(observer_path));
     check("observer engine initializes", observer->initialize().has_value());
-    const auto observed_hash = hash_header(last_proposal.header);
     check("observer accepts a valid proposal", observer->observe_proposal(last_proposal).has_value());
     check("observer stores proposal and batch atomically",
           observer->stage_batch(batch_data(last_proposal.header.height, observed_hash)).has_value());

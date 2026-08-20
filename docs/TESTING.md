@@ -245,6 +245,14 @@ commit — clean profile first, then chaos. A change that only ran against a DAG
 DFS-only stand has not been tested: the failures worth catching live in the interaction
 between bulk transfer and consensus traffic.
 
+For Shadow Finality or balance-cache changes, run `tests/shadow_multi_process.sh` after
+the general combined stand. The default run uses seven real processes, 64 signed intents,
+300 seconds, and a DAG plus ExDFS bootstrap. The final audit must show the same logical
+balance snapshot on all nodes. For each node, replay the DAG to the cached section and
+compare the result with the sorted cache rows. The section in `balance_cache_meta` and
+`dag/range.last_cached` must also match that cached section. A matching SQLite file hash
+is not proof because valid SQLite files can have different physical bytes.
+
 Stand hacks live in the stand worktree and must never appear in a commit. The ritual for
 every commit: strip the hacks, commit, restore the hacks, rebuild the console. To split a
 mixed working tree into meaningful commits, temporarily revert the unrelated hunk, commit

@@ -128,15 +128,6 @@ BigNumber DagCache::section() const {
     return cached_section_;
 }
 
-void DagCache::set_section(const SectionId& section_id, Force force) {
-    std::lock_guard lock(mutex_);
-    if (force == Force::None && cached_section_ >= section_id) {
-        return;
-    }
-
-    cached_section_ = section_id;
-}
-
 std::pair<SectionId, Balances> DagCache::read_cached_balances() {
     std::lock_guard lock(mutex_);
     Balances        balances;
@@ -261,44 +252,33 @@ std::optional<Balances> DagCache::get_cached_balances_for_actors(const std::vect
     return balances;
 }
 
-void DagCache::write_cached_balances(const Balances& balances, const std::optional<SectionId>& section_id) {
+bool DagCache::write_cached_balances(const Balances& balances, const SectionId& section_id) {
     std::lock_guard lock(mutex_);
-    // Check if database is initialized
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for write_cached_balances");
-        return;
+        return false;
     }
 
-    // Start a transaction for efficiency
-    cache_db_->query("BEGIN TRANSACTION");
+    if (!cache_db_->query("BEGIN IMMEDIATE TRANSACTION") || !cache_db_->query("DELETE FROM balance_cache")) {
+        static_cast<void>(cache_db_->query("ROLLBACK"));
+        return false;
+    }
 
-    // Write each balance to the database
     for (const auto& [key, balance] : balances) {
-        const ActorId& actor_id = key.first;
-        const TokenId& token_id = key.second;
-
-        // Skip zero balances to save space (consistent with write_cached_balance)
-        // if (balance == BigNumberFloat(0)) {
-        //     DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
-        //     db_->delete_row("balance_cache", where);
-        // } else {
-        DbRow data = { { "actor_id", actor_id.to_string() },
-                       { "token_id", token_id.to_string() },
-                       { "balance", balance.to_string() } };
-        cache_db_->replace("balance_cache", data);
-        // }
+        if (!write_cached_balance(key.first, key.second, balance)) {
+            static_cast<void>(cache_db_->query("ROLLBACK"));
+            return false;
+        }
     }
 
-    // Commit transaction
-    cache_db_->query("COMMIT");
-
-    // Update cached section if provided
-    if (section_id.has_value()) {
-        set_section(section_id == BigNumber(0) ? BigNumber(-1) : section_id.value());
-        eLog("[DagCache] Updated cache section to {}", section_id.value());
+    if (!write_cache_section(section_id) || !cache_db_->query("COMMIT")) {
+        static_cast<void>(cache_db_->query("ROLLBACK"));
+        return false;
     }
 
+    cached_section_ = section_id;
     eLog("[DagCache] Wrote {} balances to cache", balances.size());
+    return true;
 }
 
 BigNumberFloat DagCache::read_cached_balance(const ActorId& actor_id, const TokenId& token_id) {
@@ -325,26 +305,37 @@ BigNumberFloat DagCache::read_cached_balance(const ActorId& actor_id, const Toke
     return BigNumberFloat(0);
 }
 
-void DagCache::write_cached_balance(const ActorId&        actor_id,
+bool DagCache::write_cached_balance(const ActorId&        actor_id,
                                     const TokenId&        token_id,
                                     const BigNumberFloat& balance) {
-    std::lock_guard lock(mutex_);
-    if (!init_db()) {
-        eLog("[DagCache] Failed to initialize db for write_cached_balance");
-        return;
+    if (balance == 0) {
+        return cache_db_ != nullptr
+               && cache_db_->delete_row("balance_cache",
+                                        { { "actor_id", actor_id.to_string() },
+                                          { "token_id", token_id.to_string() } });
     }
-
     DbRow data = { { "actor_id", actor_id.to_string() },
                    { "token_id", token_id.to_string() },
                    { "balance", balance.to_string() } };
+    return cache_db_ != nullptr && cache_db_->replace("balance_cache", data);
+}
 
-    // if (balance == BigNumberFloat(0)) {
-    //     // Remove zero balances to save space
-    //     DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
-    //     db_->delete_row("balance_cache", where);
-    // } else {
-    cache_db_->replace("balance_cache", data);
-    // }
+bool DagCache::write_cache_section(const SectionId& section_id) {
+    return cache_db_ != nullptr
+           && cache_db_->replace("balance_cache_meta", { { "id", "1" }, { "section", section_id.to_string() } });
+}
+
+bool DagCache::clear_balance_snapshot() {
+    if (cache_db_ == nullptr || !cache_db_->query("BEGIN IMMEDIATE TRANSACTION")
+        || !cache_db_->query("DELETE FROM balance_cache") || !cache_db_->query("DELETE FROM balance_cache_meta")
+        || !write_cache_section(SectionId(-1)) || !cache_db_->query("COMMIT")) {
+        if (cache_db_ != nullptr) {
+            static_cast<void>(cache_db_->query("ROLLBACK"));
+        }
+        return false;
+    }
+    cached_section_ = SectionId(-1);
+    return true;
 }
 
 BigNumber DagCache::calculate_genesis_section(const SectionId& section_id) const {
@@ -387,7 +378,14 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
     {
         std::lock_guard lock(mutex_);
         // Check if we have a valid cache that we can use
-        if (cached_section_ != BigNumber(-1)) {
+        // The cache holds balances as of cached_section_, so it can only seed a query
+        // that asks for that point or later. If it has already moved past
+        // target_section its balances include transactions the caller explicitly
+        // excluded, and the loop below only adds — it cannot take them back out.
+        // Two nodes whose caches sit at different sections would then answer the same
+        // historical query differently, which breaks anything comparing balances
+        // across nodes.
+        if (cached_section_ != BigNumber(-1) && cached_section_ <= target_section) {
             // We have some cache, which may be at an earlier point than the genesis_section
             balance_start_section = cached_section_ + 1;
 
@@ -499,8 +497,8 @@ void DagCache::invalidate_live_balances() {
 }
 
 CacheResult DagCache::check_and_update_cache(const SectionId& current_section) {
-    std::lock_guard update_lock(update_mutex_);
-    std::lock_guard cache_lock(mutex_);
+    std::lock_guard  update_lock(update_mutex_);
+    std::unique_lock cache_lock(mutex_);
 
     // Calculate safe section ID based on lag
     // We only want to cache sections that are at least CACHE_LAG_SECTIONS behind the current section
@@ -568,7 +566,7 @@ CacheResult DagCache::check_and_update_cache(const SectionId& current_section) {
                                                                    read_section_callback);
 
     if (result) {
-        // Update the section range to reflect new cache
+        cache_lock.unlock();
         dag->update_range();
         return CacheResult { .result = true, .from = start_section, .to = safe_genesis_section };
     }
@@ -697,13 +695,23 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
 
     auto hot_sections = dag->read_hot_sections(start_section, genesis_section);
 
-    std::set<std::pair<ActorId, TokenId>> actor_token_set;
+    if (!cache_db_->query("BEGIN IMMEDIATE TRANSACTION")) {
+        return { false, start_section };
+    }
 
-    // Start a transaction for efficiency
-    cache_db_->query("BEGIN TRANSACTION");
-
-    auto     cache_res = read_cached_balances();
-    Balances balances  = std::move(cache_res.second);
+    // The stored balances are only a valid starting point when the replay actually
+    // continues from where they left off. With no cache section we replay the whole
+    // chain from first_saved_section, so seeding from the table would count every
+    // one of those transactions twice — the table can still hold rows from an
+    // earlier run whose section marker did not survive.
+    Balances balances;
+    if (cached_section_ != BigNumber(-1)) {
+        auto cache_res = read_cached_balances();
+        balances       = std::move(cache_res.second);
+    } else if (!cache_db_->query("DELETE FROM balance_cache")) {
+        static_cast<void>(cache_db_->query("ROLLBACK"));
+        return { false, start_section };
+    }
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
@@ -719,15 +727,6 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
 
         // Process each transaction
         for (const auto& tx : section->transactions) {
-            actor_token_set.insert({ tx.sender(), tx.token() });
-            actor_token_set.insert({ tx.receiver(), tx.token() });
-            if (tx.type() == TransactionType::Conversion && tx.meta().has_value()) {
-                auto from_token = TokenId::create(tx.meta().value());
-                if (from_token.has_value()) {
-                    actor_token_set.insert({ tx.sender(), *from_token });
-                    actor_token_set.insert({ tx.receiver(), *from_token });
-                }
-            }
             process_transaction(tx, balances);
 
             if (tx.section() > SectionId(1) && tx.type() != TransactionType::Reward
@@ -749,29 +748,30 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         }
     }
 
-    // Store non-zero balances in the database
-    for (const auto& pair : actor_token_set) {
-        auto it = balances.find(pair);
-        if (it != balances.end() /*&& it->second != BigNumberFloat(0)*/) {
-            write_cached_balance(pair.first, pair.second, it->second);
+    for (const auto& [key, balance] : balances) {
+        if (!write_cached_balance(key.first, key.second, balance)) {
+            static_cast<void>(cache_db_->query("ROLLBACK"));
+            return { false, start_section };
         }
     }
 
-    // Commit transaction
-    cache_db_->query("COMMIT");
-    // Update cached section
-    // cached_section_ = genesis_section;
-    set_section(genesis_section);
-    // eLog("[DagCache] Cache updated to section {}", cached_section_);
-    dag->update_range();
+    if (!write_cache_section(genesis_section) || !cache_db_->query("COMMIT")) {
+        static_cast<void>(cache_db_->query("ROLLBACK"));
+        return { false, start_section };
+    }
+    cached_section_ = genesis_section;
     return { true, start_section };
 }
 
 std::optional<StateTransitionViolation> DagCache::validate_state_to(const SectionId& current_section) {
     std::lock_guard cache_lock(mutex_);
     auto            cache_res = read_cached_balances();
-    auto            balances  = std::move(cache_res.second);
-    auto            from = cache_res.first == SectionId(-1) ? dag->first_saved_section() : cache_res.first + 1;
+    // Same rule as the replay in update_to_genesis_section: the stored balances are
+    // a valid base only when we continue from the section they were taken at. When
+    // there is no cache section we walk the chain from the start, so seeding from
+    // the table would double every transaction it already accounts for.
+    auto balances = cache_res.first == SectionId(-1) ? Balances {} : std::move(cache_res.second);
+    auto from     = cache_res.first == SectionId(-1) ? dag->first_saved_section() : cache_res.first + 1;
     if (from < SectionId(0) || current_section < from) {
         return std::nullopt;
     }
@@ -873,7 +873,7 @@ bool DagCache::init_db() {
     }
 
     if (cache_db_ && cache_db_->is_open()) {
-        db_initialized_ = ensure_contract_catalog_schema();
+        db_initialized_ = ensure_balance_cache_schema() && ensure_contract_catalog_schema();
         return db_initialized_;
     }
 
@@ -891,7 +891,8 @@ bool DagCache::init_db() {
     }
 
     // Create table if it doesn't exist
-    bool success = cache_db_->query(Config::DataStorage::DagCacheCreate) && ensure_contract_catalog_schema();
+    bool success = cache_db_->query(Config::DataStorage::DagCacheCreate) && ensure_balance_cache_schema()
+                   && ensure_contract_catalog_schema();
 
     if (!success) {
         eLog("[DagCache] Failed to create cache table");
@@ -923,15 +924,47 @@ void DagCache::reset_db() {
     invalidate_live_balances();
     std::unique_lock<std::recursive_mutex> lock(mutex_);
     std::unique_lock<std::mutex>           catalog_lock(contract_catalog_mutex_);
-    db_initialized_ = false;
-    if (cache_db_) {
-        cache_db_->close();
-        std::error_code remove_error;
-        std::filesystem::remove(ChainConst::BALANCE_CACHE, remove_error);
+    if (!init_db() || !cache_db_->query("BEGIN IMMEDIATE TRANSACTION")
+        || !cache_db_->query("DELETE FROM balance_cache") || !cache_db_->query("DELETE FROM balance_cache_meta")
+        || !cache_db_->query("DELETE FROM contract_catalog") || !write_cache_section(SectionId(-1))
+        || !cache_db_->query("COMMIT")) {
+        if (cache_db_ != nullptr) {
+            static_cast<void>(cache_db_->query("ROLLBACK"));
+        }
+        eCritical("[DagCache] Failed to reset derived cache state");
+        return;
     }
-    cache_db_.reset();
     contract_catalog_scanned_ = false;
-    cached_section_           = BigNumber(-1);
+    cached_section_           = SectionId(-1);
+}
+
+bool DagCache::ensure_balance_cache_schema() {
+    if (cache_db_ == nullptr) {
+        return false;
+    }
+
+    const bool had_metadata = cache_db_->table_exists("balance_cache_meta");
+    if (!cache_db_->query(Config::DataStorage::DagCacheMetadataCreate)) {
+        return false;
+    }
+    if (!had_metadata) {
+        return clear_balance_snapshot();
+    }
+
+    const auto rows = cache_db_->select("SELECT section FROM balance_cache_meta WHERE id = 1");
+    if (rows.size() != 1 || !rows.front().contains("section")) {
+        return clear_balance_snapshot();
+    }
+    const auto section = SectionId::create(rows.front().at("section"));
+    if (!section.has_value() || section.value() < SectionId(-1)
+        || (dag != nullptr && section.value() > dag->current_section())) {
+        return clear_balance_snapshot();
+    }
+    if (section.value() == SectionId(-1)) {
+        return clear_balance_snapshot();
+    }
+    cached_section_ = section.value();
+    return true;
 }
 
 bool DagCache::ensure_contract_catalog_schema() {

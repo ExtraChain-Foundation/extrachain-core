@@ -11,6 +11,7 @@
 #include "consensus/consensus_service.h"
 
 #include <charconv>
+#include <ranges>
 
 #include "chain/actor_index.h"
 #include "chain/dag.h"
@@ -596,9 +597,17 @@ namespace ExtraChain::Consensus {
         if (proposal == pending_proposals_.end()) {
             return;
         }
+        const auto ancestors = staged_ancestors_for(proposal->second);
+        if (!ancestors.has_value()) {
+            eWarning("[Shadow] Batch {} has an unusable ancestor chain: {}",
+                     batch.header_hash,
+                     std::to_underlying(ancestors.error()));
+            return;
+        }
         const auto valid = node_.dag()->validate_shadow_batch(proposal->second,
                                                               batch,
-                                                              consensus_->configuration().maximum_batch_bytes);
+                                                              consensus_->configuration().maximum_batch_bytes,
+                                                              ancestors.value());
         if (!valid.has_value()) {
             eWarning("[Shadow] Batch {} from {} failed validation with error {}",
                      batch.header_hash,
@@ -703,9 +712,14 @@ namespace ExtraChain::Consensus {
                 eWarning("[Shadow] Finality proof {} has no batch data", finalized_hash);
                 return;
             }
-            const auto valid = node_.dag()->validate_shadow_batch(proof.finalized_proposal,
-                                                                  batch->second,
-                                                                  consensus_->configuration().maximum_batch_bytes);
+            const auto ancestors = staged_ancestors_for(proof.finalized_proposal);
+            const auto valid =
+                ancestors.has_value()
+                    ? node_.dag()->validate_shadow_batch(proof.finalized_proposal,
+                                                         batch->second,
+                                                         consensus_->configuration().maximum_batch_bytes,
+                                                         ancestors.value())
+                    : std::unexpected(ancestors.error());
             if (!valid.has_value() || !admit_batch_intents(proof.finalized_proposal, batch->second).has_value()
                 || !consensus_->engine().stage_batch(batch->second).has_value()) {
                 eWarning("[Shadow] Finality proof batch {} failed validation", finalized_hash);
@@ -1017,6 +1031,17 @@ namespace ExtraChain::Consensus {
                      hash_certificate(certificate),
                      certificate.height,
                      std::to_underlying(finalized.error()));
+            if (finalized.error() == ConsensusError::DataUnavailable) {
+                send_to_validators(
+                    ShadowSyncRequest {
+                        .protocol_version = ProtocolVersion,
+                        .network_id       = consensus_->engine().validators().document().network_id,
+                        .epoch            = consensus_->engine().validators().document().epoch,
+                        .finalized_height = consensus_->engine().safety_state().finalized_height,
+                    },
+                    MessageType::ConsensusSyncRequest,
+                    MessageStatus::Request);
+            }
             return false;
         }
         latest_certificate_ = certificate;
@@ -1460,9 +1485,14 @@ namespace ExtraChain::Consensus {
         }
         const auto valid = [&]() -> std::expected<void, ConsensusError> {
             try {
+                const auto ancestors = staged_ancestors_for(proposal_value);
+                if (!ancestors.has_value()) {
+                    return std::unexpected(ancestors.error());
+                }
                 return node_.dag()->validate_shadow_batch(proposal_value,
                                                           batch,
-                                                          consensus_->configuration().maximum_batch_bytes);
+                                                          consensus_->configuration().maximum_batch_bytes,
+                                                          ancestors.value());
             } catch (const std::exception& exception) {
                 eCritical("[Shadow] Leader batch validation failed with an exception: {}", exception.what());
                 return std::unexpected(ConsensusError::StorageFailure);
@@ -1601,6 +1631,110 @@ namespace ExtraChain::Consensus {
         }
     }
 
+    std::expected<std::vector<Transaction>, ConsensusError> ConsensusService::staged_ancestor_transactions(
+        const QuorumCertificate& parent,
+        std::uint64_t            first_section) const {
+        if (!consensus_) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+
+        std::vector<SectionBatchData> ancestors;
+        std::set<std::string>         seen;
+        auto                          certificate = parent;
+        auto                          frontier    = first_section;
+        const auto                    finalized   = consensus_->engine().safety_state().finalized_height;
+
+        while (certificate.phase != Phase::Genesis && certificate.height > finalized) {
+            if (certificate.header_hash.empty() || !seen.insert(certificate.header_hash).second
+                || ancestors.size() == MaximumStagedAncestors) {
+                return std::unexpected(ConsensusError::InvalidParent);
+            }
+
+            const auto staged   = consensus_->engine().batch_for(certificate.header_hash);
+            const auto proposal = consensus_->engine().proposal_for(certificate.header_hash);
+            if (!staged.has_value() || !proposal.has_value()
+                || hash_header(proposal.value().header) != certificate.header_hash
+                || proposal.value().header.height != certificate.height
+                || staged.value().header_hash != certificate.header_hash
+                || hash_batch_manifest(staged.value().manifest) != proposal.value().header.batch_root
+                || staged.value().manifest.first_section > staged.value().manifest.last_section
+                || staged.value().manifest.last_section == std::numeric_limits<std::uint64_t>::max()
+                || staged.value().manifest.last_section + 1 != frontier) {
+                return std::unexpected(ConsensusError::InvalidParent);
+            }
+
+            const auto& manifest = staged.value().manifest;
+            if (manifest.payload_bytes > consensus_->configuration().maximum_batch_bytes
+                || staged.value().sections.size() != manifest.last_section - manifest.first_section + 1
+                || calculate_data_root(staged.value().sections) != manifest.data_root) {
+                return std::unexpected(ConsensusError::InvalidParent);
+            }
+            std::uint64_t            expected_section = manifest.first_section;
+            std::uint64_t            payload_bytes    = 0;
+            std::vector<std::string> transaction_hashes;
+            WireFormat::Scope        canonical_scope(WireFormat::Mode::Canonical);
+            for (const auto& [section_value, bytes] : staged.value().sections) {
+                if (section_value != expected_section
+                    || bytes.size() > consensus_->configuration().maximum_batch_bytes - payload_bytes) {
+                    return std::unexpected(ConsensusError::InvalidParent);
+                }
+                payload_bytes += bytes.size();
+                auto section = Json::deserialize<Section>(bytes);
+                if (!section.has_value()) {
+                    return std::unexpected(ConsensusError::InvalidParent);
+                }
+                const auto section_id = SectionId(section_value);
+                section.value().id    = section_id;
+                section.value().control.reset();
+                if (Json::serialize(section.value()) != bytes
+                    || std::ranges::any_of(section.value().transactions, [&](const auto& transaction) {
+                           return transaction.section() != section_id;
+                       })) {
+                    return std::unexpected(ConsensusError::InvalidParent);
+                }
+                for (const auto& transaction : section.value().transactions) {
+                    transaction_hashes.push_back(consensus_transaction_hash(transaction));
+                }
+                ++expected_section;
+            }
+            if (payload_bytes != manifest.payload_bytes || transaction_hashes != manifest.transaction_hashes
+                || calculate_transaction_root(transaction_hashes) != manifest.transaction_root) {
+                return std::unexpected(ConsensusError::InvalidParent);
+            }
+
+            ancestors.push_back(staged.value());
+            frontier    = staged.value().manifest.first_section;
+            certificate = proposal.value().parent_certificate;
+        }
+
+        std::vector<Transaction> transactions;
+        for (const auto& ancestor : std::ranges::reverse_view(ancestors)) {
+            for (const auto& [section, bytes] : ancestor.sections) {
+                const auto decoded = Json::deserialize<Section>(bytes);
+                if (!decoded.has_value()) {
+                    return std::unexpected(ConsensusError::InvalidParent);
+                }
+                for (const auto& transaction : decoded.value().transactions) {
+                    transactions.push_back(transaction);
+                }
+            }
+        }
+        return transactions;
+    }
+
+    std::expected<std::set<Transaction>, ConsensusError> ConsensusService::staged_ancestors_for(
+        const Proposal& proposal) const {
+        if (!consensus_) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        const auto ancestry =
+            staged_ancestor_transactions(proposal.parent_certificate, proposal.batch.first_section);
+        if (!ancestry.has_value()) {
+            return std::unexpected(ancestry.error());
+        }
+        return std::set<Transaction> { ancestry.value().begin(), ancestry.value().end() };
+    }
+
     std::expected<StateCommitmentV2, ConsensusError> ConsensusService::build_state_commitment(
         const SectionBatchData&  batch,
         std::string_view         section_root,
@@ -1611,8 +1745,21 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidRoot);
         }
 
+        const auto ancestry = staged_ancestor_transactions(parent, batch.manifest.first_section);
+        if (!ancestry.has_value()) {
+            return std::unexpected(ancestry.error());
+        }
+
         std::vector<Transaction> transactions;
         std::vector<ActorId>     actors = node_.actor_index()->read_all_actors_ids();
+        for (const auto& transaction : ancestry.value()) {
+            if (!transaction.sender().is_zero()) {
+                actors.push_back(transaction.sender());
+            }
+            if (!transaction.receiver().is_zero()) {
+                actors.push_back(transaction.receiver());
+            }
+        }
         for (const auto& [section, bytes] : batch.sections) {
             const auto decoded = Json::deserialize<Section>(bytes);
             if (!decoded.has_value()) {
@@ -1639,6 +1786,12 @@ namespace ExtraChain::Consensus {
         Balances balances;
         if (batch.manifest.first_section != 0) {
             balances = node_.dag()->calculate_actors_balance(actors, SectionId(batch.manifest.first_section - 1));
+        }
+        // Replay the certified-but-unfinalized ancestors first: their spends are not
+        // in the canonical balances above, and our own batch is only valid relative
+        // to the state they produced.
+        for (const auto& transaction : ancestry.value()) {
+            node_.dag()->cache().process_transaction(transaction, balances);
         }
         for (const auto& transaction : transactions) {
             node_.dag()->cache().process_transaction(transaction, balances);
@@ -1761,9 +1914,14 @@ namespace ExtraChain::Consensus {
         }
         const auto stored = consensus_->engine().batch_for(hash_header(proposal.header));
         if (stored.has_value()) {
+            const auto ancestors = staged_ancestors_for(proposal);
+            if (!ancestors.has_value()) {
+                return std::unexpected(ancestors.error());
+            }
             const auto valid = node_.dag()->validate_shadow_batch(proposal,
                                                                   stored.value(),
-                                                                  consensus_->configuration().maximum_batch_bytes);
+                                                                  consensus_->configuration().maximum_batch_bytes,
+                                                                  ancestors.value());
             if (!valid.has_value()) {
                 return valid;
             }
@@ -1786,9 +1944,14 @@ namespace ExtraChain::Consensus {
         if (hash_batch_manifest(local.value().manifest) != proposal.header.batch_root) {
             return std::unexpected(ConsensusError::DataUnavailable);
         }
+        const auto ancestors = staged_ancestors_for(proposal);
+        if (!ancestors.has_value()) {
+            return std::unexpected(ancestors.error());
+        }
         const auto valid = node_.dag()->validate_shadow_batch(proposal,
                                                               local.value(),
-                                                              consensus_->configuration().maximum_batch_bytes);
+                                                              consensus_->configuration().maximum_batch_bytes,
+                                                              ancestors.value());
         if (!valid.has_value()) {
             return std::unexpected(valid.error());
         }

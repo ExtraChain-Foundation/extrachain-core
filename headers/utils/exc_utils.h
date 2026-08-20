@@ -79,6 +79,13 @@ CREATE TABLE IF NOT EXISTS balance_cache (
 );
 )";
 
+        constexpr char DagCacheMetadataCreate[] = R"(
+CREATE TABLE IF NOT EXISTS balance_cache_meta (
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    section TEXT NOT NULL
+);
+)";
+
         constexpr char ContractCatalogCreate[] = R"(
 CREATE TABLE IF NOT EXISTS contract_catalog (
     contract_id TEXT PRIMARY KEY NOT NULL,

@@ -84,13 +84,6 @@ public:
     BigNumber section() const;
 
     /**
-     * @brief Set the current section id of the cache
-     *
-     * @param section_id The new section id
-     */
-    void set_section(const SectionId& section_id, Force force = Force::None);
-
-    /**
      * @brief Read all cached balances from the database
      *
      * Retrieves all actor-token balances stored in the cache database.
@@ -110,12 +103,11 @@ public:
      * Stores multiple actor-token balances in the database.
      * Zero balances are removed from the database to save space.
      * Uses a database transaction for efficiency when writing multiple entries.
-     * If section_id is provided, updates the cached section to that value.
-     *      * @param balances Map of actor-token pairs to their balances
-     * @param section_id Optional section ID to update the cache section to
+     * The balances and their section are committed as one snapshot.
+     * @param balances Map of actor-token pairs to their balances
+     * @param section_id Section represented by the snapshot
      */
-    void write_cached_balances(const Balances&                 balances,
-                               const std::optional<SectionId>& section_id = std::nullopt);
+    bool write_cached_balances(const Balances& balances, const SectionId& section_id);
 
     /**
      * @brief Read the balance for a specific actor-token pair from cache
@@ -125,15 +117,6 @@ public:
      * @return BigNumberFloat The balance
      */
     BigNumberFloat read_cached_balance(const ActorId& actor_id, const TokenId& token_id);
-
-    /**
-     * @brief White the balance for a specific actor-token pair in cache
-     *
-     * @param actor_id The actor id
-     * @param token_id The token id
-     * @param balance The balance to set
-     */
-    void write_cached_balance(const ActorId& actor_id, const TokenId& token_id, const BigNumberFloat& balance);
 
     /**
      * @brief Calculate balances for actors using cache
@@ -234,19 +217,19 @@ public:
         const ExtraChain::Contracts::ContractCatalogFilter& filter = {});
 
 private:
-    ExtraChain::Core::ExtraChainNode* node;                              // Node reference
-    Dag*                         dag;                               // Dag reference
-    SectionId                    cached_section_ = SectionId(-1);   // Current cached section id (genesis point)
-    std::unique_ptr<DbConnector> cache_db_;                         // Database connection
-    bool                         db_initialized_           = false; // Whether DB is initialized
-    bool                         contract_catalog_scanned_ = false;
+    ExtraChain::Core::ExtraChainNode* node;                            // Node reference
+    Dag*                              dag;                             // Dag reference
+    SectionId                         cached_section_ = SectionId(-1); // Current cached section id (genesis point)
+    std::unique_ptr<DbConnector>      cache_db_;                       // Database connection
+    bool                              db_initialized_           = false; // Whether DB is initialized
+    bool                              contract_catalog_scanned_ = false;
     mutable std::recursive_mutex      mutex_;
-    std::mutex                   update_mutex_;
-    std::mutex                   contract_catalog_mutex_;
-    std::mutex                   live_balance_mutex_;
-    Balances                     live_balances_;
-    std::set<ActorId>            live_balance_actors_;
-    SectionId                    live_balance_section_ = SectionId(-1);
+    std::mutex                        update_mutex_;
+    std::mutex                        contract_catalog_mutex_;
+    std::mutex                        live_balance_mutex_;
+    Balances                          live_balances_;
+    std::set<ActorId>                 live_balance_actors_;
+    SectionId                         live_balance_section_ = SectionId(-1);
 
 public:
     /**
@@ -263,6 +246,10 @@ public:
     void process_transaction(const Transaction& transaction, Balances& balances);
 
 private:
+    bool write_cached_balance(const ActorId& actor_id, const TokenId& token_id, const BigNumberFloat& balance);
+    bool write_cache_section(const SectionId& section_id);
+    bool ensure_balance_cache_schema();
+    bool clear_balance_snapshot();
     bool ensure_contract_catalog_schema();
     bool rebuild_contract_catalog();
     friend Dag;

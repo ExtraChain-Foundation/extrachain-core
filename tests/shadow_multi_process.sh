@@ -8,12 +8,13 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 BUILD_DIR="${EXTRACHAIN_TEST_BUILD:-$SCRIPT_DIR/build}"
 SEED="${1:-/tmp/gen-shadow-seed}"
 BASE_PORT="${2:-17840}"
-INTENT_COUNT="${EXTRACHAIN_SHADOW_INTENTS:-128}"
-RUN_SECONDS="${EXTRACHAIN_SHADOW_RUN_SECONDS:-45}"
+INTENT_COUNT="${EXTRACHAIN_SHADOW_INTENTS:-64}"
+RUN_SECONDS="${EXTRACHAIN_SHADOW_RUN_SECONDS:-300}"
 WORK="$(mktemp -d /tmp/exc-shadow-seven-XXXXXX)"
 SYNC_WORK="$WORK/bootstrap"
 NODE_RUN="$BUILD_DIR/extrachain-node-run"
 BUNDLE="$BUILD_DIR/extrachain-shadow-bundle"
+DAG_AUDIT="$BUILD_DIR/extrachain-dag-audit"
 BARRIER="$WORK/barrier"
 PIDS=()
 
@@ -39,6 +40,7 @@ fail() {
 
 [ -x "$NODE_RUN" ] || fail "node runner is absent: $NODE_RUN"
 [ -x "$BUNDLE" ] || fail "Shadow bundle tool is absent: $BUNDLE"
+[ -x "$DAG_AUDIT" ] || fail "DAG audit tool is absent: $DAG_AUDIT"
 [ -d "$SEED/dag" ] || fail "seed DAG is absent: $SEED"
 
 printf '=== bootstrap seven independent nodes ===\n'
@@ -125,11 +127,30 @@ for index in $(seq 0 6); do
         || fail "node $index did not observe a finalized checkpoint"
 done
 
+printf '=== audit DAG and balance snapshots ===\n'
+CACHE_SNAPSHOT=""
+for index in $(seq 0 6); do
+    role="joiner"
+    [ "$index" -eq 0 ] && role="seed"
+    "$DAG_AUDIT" "${NODE_HOMES[$index]}" "$role" >"$WORK/audit-$index.log" 2>&1 \
+        || {
+            tail -60 "$WORK/audit-$index.log" >&2
+            fail "DAG or balance audit failed for node $index"
+        }
+    snapshot="$(sed -n 's/.*balance cache: section=\([^ ]*\).*hash=\([^ ]*\).*/\1:\2/p' "$WORK/audit-$index.log")"
+    [ -n "$snapshot" ] || fail "node $index did not report a balance snapshot"
+    if [ -z "$CACHE_SNAPSHOT" ]; then
+        CACHE_SNAPSHOT="$snapshot"
+    elif [ "$CACHE_SNAPSHOT" != "$snapshot" ]; then
+        fail "node $index has a different logical balance snapshot"
+    fi
+done
+
 printf '=== protocol failure, epoch, recovery, and light-client checks ===\n'
 "$BUILD_DIR/extrachain-consensus-network-tests" >"$WORK/network.log" 2>&1 \
     || fail "committee protocol checks failed"
 "$BUILD_DIR/extrachain-shadow-recovery-tests" >"$WORK/recovery.log" 2>&1 \
     || fail "recovery checks failed"
 
-printf 'PASS: seven processes finalized %s intents after DAG and ExDFS bootstrap\n' "$INTENT_COUNT"
+printf 'PASS: seven processes finalized %s intents with one audited balance snapshot\n' "$INTENT_COUNT"
 printf 'stand data: %s\n' "$WORK"
