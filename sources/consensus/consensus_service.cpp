@@ -503,9 +503,17 @@ namespace ExtraChain::Consensus {
         // nothing is trusted beyond what the certificate proves.
         {
             const auto& state = consensus_->engine().safety_state();
-            if (proposal.parent_certificate.height > 0
-                && (!state.highest_certificate.has_value()
-                    || proposal.parent_certificate.height > state.highest_certificate.value().height)) {
+            const bool  parent_is_news =
+                !state.highest_certificate.has_value()
+                || proposal.parent_certificate.height > state.highest_certificate.value().height
+                // Same height but a different header is a quorum on a competing
+                // branch — exactly the state a bootstrap round race locks a node
+                // into. The engine decides which certificate wins; we only make
+                // sure it gets to see it.
+                || (proposal.parent_certificate.height == state.highest_certificate.value().height
+                    && proposal.parent_certificate.header_hash
+                           != state.highest_certificate.value().header_hash);
+            if (proposal.parent_certificate.height > 0 && parent_is_news) {
                 eWarning("[Shadow] Proposal at height {} carries an unseen parent certificate at height {}; "
                          "applying it first",
                          proposal.header.height,
@@ -617,7 +625,34 @@ namespace ExtraChain::Consensus {
             || !authenticator_->authenticated_validator(peer_identifier).has_value()) {
             return;
         }
-        apply_timeout_certificate(certificate);
+        if (!apply_timeout_certificate(certificate)) {
+            const auto& state = consensus_->engine().safety_state();
+            if (state.highest_certificate.has_value()
+                && certificate.height <= state.highest_certificate.value().height) {
+                // A timeout certificate below our certified height means its whole
+                // quorum is stuck behind us (the F stall: endless TC rounds for a
+                // height the rest of the committee already passed). Hand the sender
+                // our verified tip — the same cheap push that unsticks a lagging
+                // proposer.
+                send_to_peer(state.highest_certificate.value(),
+                             MessageType::ConsensusCertificate,
+                             std::string(peer_identifier),
+                             MessageStatus::NoStatus);
+            } else if (!state.highest_certificate.has_value()
+                       || certificate.height > state.highest_certificate.value().height + 1) {
+                // A timeout certificate for a height we have not even certified
+                // means we are the ones behind.
+                send_to_validators(
+                    ShadowSyncRequest {
+                        .protocol_version = ProtocolVersion,
+                        .network_id       = consensus_->engine().validators().document().network_id,
+                        .epoch            = consensus_->engine().validators().document().epoch,
+                        .finalized_height = state.finalized_height,
+                    },
+                    MessageType::ConsensusSyncRequest,
+                    MessageStatus::Request);
+            }
+        }
     }
 
     void ConsensusService::receive_batch_request(const SectionBatchRequest& request,
