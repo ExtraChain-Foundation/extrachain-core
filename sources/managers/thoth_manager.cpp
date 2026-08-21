@@ -404,7 +404,7 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
         }
 
         auto username = this->read_username(actor_id);
-        this->send_to_service(el, username);
+        this->send_to_service(el, username, owner_id, file_id);
     }
 }
 
@@ -496,7 +496,10 @@ void ThothManager::remove_thoth_info(const std::string& id) {
     }
 }
 
-bool ThothManager::send_to_service(const ThothInfo& info, const std::string& username) {
+bool ThothManager::send_to_service(const ThothInfo&   info,
+                                   const std::string& username,
+                                   const ActorId&     chat_owner_id,
+                                   const std::string& chat_file_id) {
     auto platform = push_platform(info.os);
     if (!platform.has_value()) {
         eWarning("[Thoth] skip push for unsupported platform: {}", info.os);
@@ -512,13 +515,17 @@ bool ThothManager::send_to_service(const ThothInfo& info, const std::string& use
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setTransferTimeout(10000);
 
-    auto service_message =
+    const std::string owner_id = chat_owner_id.to_string();
+    auto service_message      =
         ThothServiceMessage { .version      = 1,
                               .platform     = platform.value(),
                               .device_token = info.token,
                               .title        = "Messenger",
                               .body         = username.empty() ? "Raccoon brings word from the shadows"
-                                                               : fmt::format("Message from @{}", username) };
+                                                               : fmt::format("Message from @{}", username),
+                              .data          = { { "openChatOwnerId", owner_id },
+                                                 { "openChatFileId", chat_file_id } },
+                              .collapse_key = chat_file_id };
 
     QByteArray     data  = QByteArray::fromStdString(Json::serialize(service_message));
     eLog("[Thoth] push request platform={} endpoint={}", platform.value(), url.toString().toStdString());
