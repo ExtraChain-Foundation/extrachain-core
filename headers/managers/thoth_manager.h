@@ -71,11 +71,13 @@ struct ThothCustom {
 BOOST_DESCRIBE_STRUCT(ThothCustom, (), (ignored));
 
 struct ThothServiceMessage {
+    int         version = 1;
+    std::string platform;
     std::string device_token;
     std::string title;
     std::string body;
 };
-BOOST_DESCRIBE_STRUCT(ThothServiceMessage, (), (device_token, title, body));
+BOOST_DESCRIBE_STRUCT(ThothServiceMessage, (), (version, platform, device_token, title, body));
 
 // Aggregated per-device view for the "My devices" UI.
 struct ThothDeviceInfo {
@@ -105,10 +107,6 @@ class ThothManager : public QObject {
 
 public:
     ThothManager(ExtraChainNode* node, QObject* parent = nullptr);
-
-    // Legacy provisioning: still called by extrachain-console-client to set up the network.
-    bool create_thoth_template();
-    bool create_thoth_vector();
 
     bool create_thoth_dictionary();
     bool read_all(bool is_my);
@@ -174,16 +172,6 @@ private:
     // One dictionary key per account: first 20 hex of a local "Thoth" actor derived from seed.
     std::string registry_key_;
     std::string registry_key();
-
-    // -----------------------------------------------------------------------
-    // Legacy "Thoth" vector compatibility (read-only). Remove this whole section
-    // once all clients migrated to ThothDevicesV2.
-    // -----------------------------------------------------------------------
-    std::string legacy_file_id_;
-    bool        legacy_read_all(bool is_my);
-    void        legacy_apply_thoth_row(const DbRow& row);
-    void        legacy_network_thoth_record(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
-    // -----------------------------------------------------------------------
 
 signals:
     void sendSuccess(const QString& response);
