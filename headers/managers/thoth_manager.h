@@ -22,6 +22,9 @@
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
 
+#include <map>
+#include <set>
+#include <string>
 #include <vector>
 
 class QNetworkAccessManager;
@@ -76,8 +79,12 @@ struct ThothServiceMessage {
     std::string device_token;
     std::string title;
     std::string body;
+    std::map<std::string, std::string> data;
+    std::string collapse_key;
 };
-BOOST_DESCRIBE_STRUCT(ThothServiceMessage, (), (version, platform, device_token, title, body));
+BOOST_DESCRIBE_STRUCT(ThothServiceMessage,
+                      (),
+                      (version, platform, device_token, title, body, data, collapse_key));
 
 // Aggregated per-device view for the "My devices" UI.
 struct ThothDeviceInfo {
@@ -123,7 +130,10 @@ public:
     bool add_thoth_record(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
     // bool remove_thoth_record(const ActorId& owner_id, const std::string& file_id)
 
-    bool send_to_service(const ThothInfo& info, const std::string& username);
+    bool send_to_service(const ThothInfo&   info,
+                         const std::string& username,
+                         const ActorId&     chat_owner_id,
+                         const std::string& chat_file_id);
 
     // Platform-neutral alias: stores the device push token (APNS on iOS, FCM on Android).
     void        set_device_token(const std::string& token);
