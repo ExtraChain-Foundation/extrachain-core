@@ -41,6 +41,20 @@
 
 namespace {
 constexpr std::string_view THOTH_DATABASE = "ThothDevicesV2";
+
+std::optional<std::string> push_platform(std::string_view os) {
+    if (os == "Android") {
+        return "android";
+    }
+    if (os == "iOS") {
+        return "ios";
+    }
+    return std::nullopt;
+}
+
+QUrl push_service_url() {
+    return QUrl(qEnvironmentVariable("EXTRACHAIN_PUSH_SERVICE_URL", "http://127.0.0.1:5425/send"));
+}
 }
 
 ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
@@ -59,9 +73,6 @@ ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
                              this->read_all(!enabled_);
                              this->flush_pending_records();
                              this->verify_self_registration();
-                         } else if (dir_row.name == "Thoth") {
-                             this->legacy_file_id_ = dir_row.file_id;
-                             this->legacy_read_all(!enabled_);
                          }
                      });
 
@@ -75,9 +86,6 @@ ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
             this->read_all(!enabled_);
             this->flush_pending_records();
             this->verify_self_registration();
-        } else if (dir_row.name == "Thoth") {
-            this->legacy_file_id_ = dir_row.file_id;
-            this->legacy_read_all(!enabled_);
         }
     });
 
@@ -89,7 +97,6 @@ void ThothManager::start() {
     if (this->read_all(false)) {
         this->flush_pending_records();
     }
-    this->legacy_read_all(false);
 }
 
 void ThothManager::stop() {
@@ -376,12 +383,6 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
         return;
     }
 
-    // Legacy "Thoth" vector realtime record (read-only compat).
-    if (node->network_id() == owner_id && !legacy_file_id_.empty() && file_id == legacy_file_id_) {
-        this->legacy_network_thoth_record(node->network_id(), legacy_file_id_, row);
-        return;
-    }
-
     auto status_it = row.find("status");
     if (status_it == row.end() || status_it->second != "1") {
         return;
@@ -496,27 +497,45 @@ void ThothManager::remove_thoth_info(const std::string& id) {
 }
 
 bool ThothManager::send_to_service(const ThothInfo& info, const std::string& username) {
-    QUrl            url("http://localhost:5425/send");
+    auto platform = push_platform(info.os);
+    if (!platform.has_value()) {
+        eWarning("[Thoth] skip push for unsupported platform: {}", info.os);
+        return false;
+    }
+
+    QUrl            url = push_service_url();
+    if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https")) {
+        eWarning("[Thoth] invalid push service URL");
+        return false;
+    }
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setTransferTimeout(10000);
 
     auto service_message =
-        ThothServiceMessage { .device_token = info.token,
+        ThothServiceMessage { .version      = 1,
+                              .platform     = platform.value(),
+                              .device_token = info.token,
                               .title        = "Messenger",
                               .body         = username.empty() ? "Raccoon brings word from the shadows"
                                                                : fmt::format("Message from @{}", username) };
 
     QByteArray     data  = QByteArray::fromStdString(Json::serialize(service_message));
-    eLog("Thoth local push POST {} token={} body={}", url.toString().toStdString(), info.token, service_message.body);
+    eLog("[Thoth] push request platform={} endpoint={}", platform.value(), url.toString().toStdString());
     QNetworkReply* reply = m_networkManager->post(request, data);
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        if (reply->error() == QNetworkReply::NoError) {
+        auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (reply->error() == QNetworkReply::NoError && status >= 200 && status < 300) {
             QByteArray response = reply->readAll();
 
             emit sendSuccess(QString::fromUtf8(response));
         } else {
-            emit sendFailed(reply->errorString());
+            eWarning("[Thoth] push request failed: network_error={} http_status={}",
+                     static_cast<int>(reply->error()), status);
+            emit sendFailed(QString("Push request failed: HTTP %1, network error %2")
+                                .arg(status)
+                                .arg(static_cast<int>(reply->error())));
         }
         reply->deleteLater();
     });
@@ -1041,151 +1060,4 @@ std::string ThothManager::read_username(const ActorId& actor_id) {
     }
 
     return row->at("name").c_str();
-}
-
-// ---------------------------------------------------------------------------
-// Legacy "Thoth" vector compatibility (read-only). Remove this whole section
-// once all clients migrated to ThothDevicesV2.
-// ---------------------------------------------------------------------------
-
-bool ThothManager::create_thoth_template() {
-    auto thoth_template = Dfs::CollectionTemplate::create("Thoth").value().use_id().add_fields(
-        { Dfs::Field::Blob("owner").not_null(),
-          Dfs::Field::Blob("file_id").not_null(),
-          Dfs::Field::Blob("os").not_null(),
-          Dfs::Field::Blob("token").not_null(),
-          Dfs::Field::Blob("custom") });
-
-    auto system_actor_id = node->account_controller()->system_actor().id();
-    auto template_res    = node->dfs()->store_template(system_actor_id, thoth_template);
-    if (!template_res.has_value()) {
-        eCritical("Can't create Thoth template, because {}", template_res.error());
-        return false;
-    }
-
-    return true;
-}
-
-bool ThothManager::create_thoth_vector() {
-    auto network_id = node->actor_index()->network_id();
-    if (network_id.is_zero()) {
-        return false;
-    }
-
-    auto search_result =
-        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
-                                                                          network_id,
-                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                          "Thoth");
-    if (!search_result.has_value()) {
-        return false;
-    }
-
-    auto store_res =
-        node->dfs()->store_vector(network_id, network_id, "Thoth", network_id, search_result->file_id);
-    if (!store_res.has_value()) {
-        eCritical("Can't create Thoth database, because {}", store_res.error());
-        return false;
-    }
-
-    return true;
-}
-
-// Read the legacy "Thoth" vector into infos_ so already-registered old clients keep pushes.
-bool ThothManager::legacy_read_all(bool is_my) {
-    auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
-    if (!file_row.has_value()) {
-        return false;
-    }
-
-    if (file_row->state != Dfs::FileState::Ready) {
-        node->dfs()->add_to_waiting_file(node->network_id(), file_row->file_id);
-        node->dfs()->request_file(node->network_id(), file_row->file_id);
-        return false;
-    }
-
-    auto network_id = node->actor_index()->network_id();
-    if (network_id.is_zero()) {
-        return false;
-    }
-
-    legacy_file_id_ = file_row->file_id;
-
-    auto security_key =
-        Dfs::DataSecurityActor { .sender_id = is_my ? node->account_controller()->system_actor().id() : ActorId(),
-                                 .receiver_id = node->network_id() };
-
-    auto where =
-        is_my ? fmt::format("where status = '1' AND actor = '{}'", node->account_controller()->system_actor().id())
-              : "where status = '1'";
-    auto rows = node->dfs()->read_vector_rows(node->network_id(), legacy_file_id_, where, security_key);
-    if (!rows.has_value()) {
-        return false;
-    }
-
-    for (const auto& row : *rows) {
-        legacy_apply_thoth_row(row);
-    }
-
-    return true;
-}
-
-// Legacy row layout: fields owner/file_id/os/token/custom read directly (id = row id).
-void ThothManager::legacy_apply_thoth_row(const DbRow& row) {
-    auto id_it     = row.find("id");
-    auto owner_it  = row.find("owner");
-    auto file_it   = row.find("file_id");
-    auto os_it     = row.find("os");
-    auto token_it  = row.find("token");
-    auto custom_it = row.find("custom");
-    if (id_it == row.end() || owner_it == row.end() || file_it == row.end() || token_it == row.end()) {
-        return;
-    }
-
-    remove_thoth_info(id_it->second);
-
-    auto file_link = Dfs::FileLink { .owner_id = ActorId(owner_it->second), .file_id = file_it->second };
-    std::set<ActorId> ignored;
-    if (custom_it != row.end()) {
-        auto custom = Json::deserialize<ThothCustom>(custom_it->second);
-        if (custom.has_value()) {
-            ignored = custom->ignored;
-        }
-    }
-    auto thoth_info = ThothInfo { .id      = id_it->second,
-                                  .os      = os_it == row.end() ? std::string {} : os_it->second,
-                                  .token   = token_it->second,
-                                  .ignored = std::move(ignored) };
-    infos_[file_link].insert(thoth_info);
-}
-
-void ThothManager::legacy_network_thoth_record(const ActorId&     owner_id,
-                                               const std::string& file_id,
-                                               const DbRow&       row) {
-    auto id_it = row.find("id");
-    if (id_it == row.end()) {
-        return;
-    }
-
-    auto status_it = row.find("status");
-    if (status_it != row.end() && status_it->second == "0") {
-        remove_thoth_info(id_it->second);
-        return;
-    }
-
-    auto security_key = Dfs::DataSecurityActor { .sender_id = ActorId(), .receiver_id = node->network_id() };
-    auto rows         = node->dfs()->read_vector_rows(owner_id,
-                                              file_id,
-                                              fmt::format("where status = '1' AND id = '{}'", id_it->second),
-                                              security_key);
-    if (!rows.has_value()) {
-        return;
-    }
-
-    if (rows->empty()) {
-        remove_thoth_info(id_it->second);
-        return;
-    }
-
-    legacy_apply_thoth_row(rows->at(0));
 }
