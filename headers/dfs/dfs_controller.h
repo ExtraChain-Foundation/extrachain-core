@@ -21,6 +21,7 @@
 
 #include <cstdlib>
 #include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <mutex>
 #include <string>
@@ -119,6 +120,9 @@ private:
     std::uint64_t m_totalDfsSize = 0;
 
     std::atomic_uint64_t staged_startup_response_count_ { 0 };
+    std::atomic_int64_t  full_sync_fallback_next_allowed_ms_ { 0 };
+
+    bool request_full_sync_fallback(const std::string &identifier, const char *source);
 
 public:
     explicit DfsController(ExtraChainNode *node);

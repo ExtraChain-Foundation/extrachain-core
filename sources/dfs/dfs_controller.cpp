@@ -2709,6 +2709,28 @@ std::vector<ActorId> DfsController::startup_sync_actors() const {
     return { actors.begin(), actors.end() };
 }
 
+bool DfsController::request_full_sync_fallback(const std::string &identifier, const char *source) {
+    using namespace std::chrono;
+
+    const auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+    auto next_allowed = full_sync_fallback_next_allowed_ms_.load(std::memory_order_relaxed);
+    constexpr auto fallback_cooldown_ms = 15000;
+
+    while (now >= next_allowed) {
+        if (full_sync_fallback_next_allowed_ms_.compare_exchange_weak(
+                next_allowed,
+                now + fallback_cooldown_ms,
+                std::memory_order_relaxed)) {
+            eWarning("[Dfs] {} fallback to full sync: identifier={}", source, identifier);
+            dirs_manager_.temp_sync_all(identifier);
+            return true;
+        }
+    }
+
+    eLog("[Dfs] {} fallback skipped: full sync cooldown is active", source);
+    return false;
+}
+
 void DfsController::sync(const std::string &identifier) {
     ThreadPoolBoost::instance_dfs()->post([this, identifier]() {
         // Not once-per-process: a file left in a non-final state (peer had it only
@@ -2740,8 +2762,7 @@ void DfsController::sync(const std::string &identifier) {
                     return;
                 }
 
-                eWarning("[Dfs] Staged startup sync fallback to full sync: identifier={}", identifier);
-                dirs_manager_.temp_sync_all(identifier);
+                request_full_sync_fallback(identifier, "Staged startup sync");
             });
         });
     });
@@ -2798,8 +2819,9 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
                 }
                 auto identifiers = node->network()->active_connection_identifiers();
                 for (const auto &identifier : identifiers) {
-                    eWarning("[Dfs] Targeted actor refresh fallback to full sync: identifier={}", identifier);
-                    dirs_manager_.temp_sync_all(identifier);
+                    if (request_full_sync_fallback(identifier, "Targeted actor refresh")) {
+                        break;
+                    }
                 }
             });
         });

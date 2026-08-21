@@ -1090,32 +1090,36 @@ std::string ThothManager::read_username(const ActorId& actor_id) {
     }
 
     const auto usernames_actor = ActorId(CHAT_SERVICE_ACTOR);
-    if (usernames_file_id_.empty()) {
-        auto search_result =
-            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
-                                                                              usernames_actor,
-                                                                              Dfs::Basic::TEMPLATE_VECTOR,
-                                                                              "Usernames");
-
-        if (!search_result.has_value()) {
-            return "";
-        }
-
-        if (search_result->state == Dfs::FileState::Ready) {
-            this->usernames_file_id_ = search_result->file_id;
-        } else {
-            return "";
-        }
-    }
-
-    auto row = node->dfs()->read_vector_row(usernames_actor, usernames_file_id_, actor_id.to_string());
-    if (!row.has_value()) {
+    const auto vectors = Dfs::Tables::DirsFile::ActorSpace::search_files_by_folder_and_name(
+        node->dfs()->get_db_instance(),
+        usernames_actor,
+        Dfs::Basic::TEMPLATE_VECTOR,
+        "Usernames");
+    if (!vectors.has_value()) {
         return "";
     }
 
-    if (row->find("name") == row->end()) {
-        return "";
-    }
+    std::string latestName;
+    std::uint64_t latestTimestamp = 0;
+    for (const auto &vector : vectors.value()) {
+        if (vector.state != Dfs::FileState::Ready) {
+            continue;
+        }
+        const auto row = node->dfs()->read_vector_row(usernames_actor, vector.file_id, actor_id.to_string());
+        if (!row.has_value() || !row->contains("name") || !row->contains("timestamp")
+            || !row->contains("status") || row->at("status") != "1") {
+            continue;
+        }
 
-    return row->at("name").c_str();
+        try {
+            const auto timestamp = std::stoull(row->at("timestamp"));
+            if (latestName.empty() || timestamp > latestTimestamp) {
+                latestTimestamp = timestamp;
+                latestName = row->at("name");
+            }
+        } catch (const std::exception &) {
+            continue;
+        }
+    }
+    return latestName;
 }
