@@ -72,11 +72,13 @@ struct ThothCustom {
 BOOST_DESCRIBE_STRUCT(ThothCustom, (), (ignored));
 
 struct ThothServiceMessage {
+    int         version = 1;
+    std::string platform;
     std::string device_token;
     std::string title;
     std::string body;
 };
-BOOST_DESCRIBE_STRUCT(ThothServiceMessage, (), (device_token, title, body));
+BOOST_DESCRIBE_STRUCT(ThothServiceMessage, (), (version, platform, device_token, title, body));
 
 // Aggregated per-device view for the "My devices" UI.
 struct ThothDeviceInfo {
