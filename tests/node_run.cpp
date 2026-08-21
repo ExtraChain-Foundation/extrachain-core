@@ -223,6 +223,25 @@ int main(int argc, char* argv[]) {
             node->cleanUp();
             return 4;
         }
+        // Raw connectivity is not consensus readiness: proposals that arrive
+        // before peer authentication completes are silently discarded by the
+        // handlers and deduplicated forever, so the committee must not start
+        // until every node sees the full shadow-capable mesh.
+        const auto shadow_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+        while (stop_requested == 0 && std::chrono::steady_clock::now() < shadow_deadline
+               && node->network()->active_full_peers_with_capability(SHADOW_CONSENSUS_CAPABILITY).size()
+                      < node_count - 1) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+        if (node->network()->active_full_peers_with_capability(SHADOW_CONSENSUS_CAPABILITY).size()
+            < node_count - 1) {
+            std::printf("[node-run] committee node=%zu shadow mesh incomplete\n", node_index);
+            node->cleanUp();
+            return 4;
+        }
+        // A short settle window lets the challenge/response authentication
+        // round-trips behind the capability flags finish too.
+        std::this_thread::sleep_for(std::chrono::seconds(2));
         if (!barrier_directory.empty()) {
             std::filesystem::create_directories(barrier_directory);
             const auto actor_marker =
