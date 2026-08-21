@@ -604,6 +604,19 @@ namespace ExtraChain::Consensus {
         }
         const auto accepted = consensus_->receive_timeout_vote(vote, peer_identifier);
         if (!accepted.has_value()) {
+            // A stale timeout vote is often the ONLY traffic a lagging validator
+            // still produces once the committee has finished its work and gone
+            // quiet: it missed the final certificates and nothing will ever
+            // arrive to reveal the gap. Answer with our verified tip - one
+            // focused certificate per received stale vote, no periodic traffic.
+            const auto& state = consensus_->engine().safety_state();
+            if (state.highest_certificate.has_value()
+                && vote.height <= state.highest_certificate.value().height) {
+                send_to_peer(state.highest_certificate.value(),
+                             MessageType::ConsensusCertificate,
+                             std::string(peer_identifier),
+                             MessageStatus::NoStatus);
+            }
             return;
         }
         if (accepted.value().equivocation.has_value()) {
