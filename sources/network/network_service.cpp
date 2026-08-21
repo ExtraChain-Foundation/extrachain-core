@@ -1328,6 +1328,21 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
             }
         }
     }
+    // Consensus liveness depends on these messages actually leaving the node;
+    // a silent skip here has produced week-long ghost hunts. Name the outcome
+    // whenever a consensus-class message misses anyone it should have reached.
+    if ((message_type == MessageType::ConsensusProposal || message_type == MessageType::ConsensusCertificate
+         || message_type == MessageType::ConsensusVote || message_type == MessageType::ConsensusTimeoutVote
+         || message_type == MessageType::ConsensusTimeoutCertificate)
+        && (sent_to == 0 || skipped_inactive > 0)) {
+        eWarning("[Network] {} delivery: sent_to={} skipped_inactive={} skipped_light={} mode={} receiver={}",
+                 message_type,
+                 sent_to,
+                 skipped_inactive,
+                 skipped_light,
+                 static_cast<int>(send_mode),
+                 receiver_identifier.empty() ? "-" : receiver_identifier.substr(0, 12));
+    }
 
     if (send_mode == SendMode::Focused && sent_to == 0) {
         eWarning("[Network] Focused {} reached no connected target", message_type);
