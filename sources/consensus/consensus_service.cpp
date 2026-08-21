@@ -1338,7 +1338,14 @@ namespace ExtraChain::Consensus {
         }
         latest_timeout_certificate_ = certificate;
         reset_timeout();
-        propose_checkpoint(certificate.round + 1);
+        // Propose with the engine's CURRENT round, not certificate.round + 1: a
+        // late or duplicate timeout certificate carries a stale round, and a
+        // proposal built with it arrives already behind every validator's
+        // current_round - each one honestly answers UnsafeProposal, a new
+        // timeout round starts, and the committee chases its own tail forever
+        // (measured: height 4 proposals at rounds 0..4 rejected against
+        // current_round 1..6 for a whole run, committee frozen at 3/1).
+        propose_checkpoint(consensus_->engine().safety_state().current_round);
         return true;
     }
 
@@ -1782,10 +1789,19 @@ namespace ExtraChain::Consensus {
                 eCritical("[Shadow] Rejected proposal batch could not be persisted");
                 halt_voting();
             }
-            eWarning("[Shadow] Proposal {} at height {} was not voted for: {}",
+            const auto& st = consensus_->engine().safety_state();
+            eWarning("[Shadow] Proposal {} at height {} round {} was not voted for: {} "
+                     "(my: last_voted h{} r{}, current_round {}, highest {}, locked {}, finalized {})",
                      hash_header(proposal.header),
                      proposal.header.height,
-                     std::to_underlying(vote.error()));
+                     proposal.header.round,
+                     std::to_underlying(vote.error()),
+                     st.last_voted_height,
+                     st.last_voted_round,
+                     st.current_round,
+                     st.highest_certificate.has_value() ? st.highest_certificate.value().height : 0,
+                     st.locked_certificate.has_value() ? st.locked_certificate.value().height : 0,
+                     st.finalized_height);
             return;
         }
         send_to_peer(vote.value(),
