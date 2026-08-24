@@ -219,6 +219,11 @@ void PrivateProfile::save(uint64_t modified_date) {
     file.close();
 }
 
+void PrivateProfile::reencrypt(const std::string &new_hash) {
+    hash_ = new_hash;
+    save();
+}
+
 std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const std::optional<KeyPass> &key) {
     std::ifstream file(path(), std::ios::binary);
     if (!file) {

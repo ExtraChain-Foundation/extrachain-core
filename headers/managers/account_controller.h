@@ -119,6 +119,15 @@ public:
     bool import_seed_hex(const std::string &login, const std::string &password, const std::string &seed_hex);
     bool import_seed(const std::string &login, const std::string &password, const MasterSeed &seed);
 
+    // Re-encrypts the current profile under a new login/password pair. Neither the
+    // seed nor any profile data changes — only the key they are stored under, which
+    // is why an exported phrase keeps working and an exported hex does not.
+    // The old pair is required: it is the only proof the caller may do this
+    bool change_credentials(const std::string &old_login,
+                            const std::string &old_password,
+                            const std::string &new_login,
+                            const std::string &new_password);
+
     void dogenerate();
 
 signals:

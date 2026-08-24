@@ -101,6 +101,10 @@ public:
     bool               loaded();
     const std::string &hash() const;
 
+    // Re-encrypts the profile file under a new hash. The contents are untouched:
+    // only the key guarding them changes
+    void reencrypt(const std::string &new_hash);
+
     std::unordered_map<ActorId, std::string> wallet_names() const;
 
     std::uint64_t creation_date() const {

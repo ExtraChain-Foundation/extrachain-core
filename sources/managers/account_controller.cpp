@@ -455,6 +455,42 @@ bool AccountController::import_seed(const std::string &login,
     return res.has_value();
 }
 
+bool AccountController::change_credentials(const std::string &old_login,
+                                          const std::string &old_password,
+                                          const std::string &new_login,
+                                          const std::string &new_password) {
+    if (!has_current_profile()) {
+        eWarning("[Account] No profile to change credentials for");
+        return false;
+    }
+
+    const auto old_hash = Utils::calculate_hash(old_login + old_password);
+    if (old_hash != current_profile().hash()) {
+        eWarning("[Account] Current credentials do not match");
+        return false;
+    }
+
+    const auto new_hash = Utils::calculate_hash(new_login + new_password);
+    if (new_hash == old_hash) {
+        return true; // nothing to do, and rewriting the file would risk it for nothing
+    }
+
+    // The seed profile holds the master seed; saving it under the new hash is what
+    // makes the next sign-in work. Old profiles have no seed, so this step is theirs
+    // to skip — their data lives entirely in the private profile below
+    if (profile_type_ == ProfileType::New) {
+        auto res = profile_seed.save(new_hash);
+        if (!res.has_value()) {
+            eWarning("[Account] Could not save the seed under the new credentials");
+            return false;
+        }
+    }
+
+    profile(current_profile_).reencrypt(new_hash);
+    eLog("[Account] Credentials changed");
+    return true;
+}
+
 void AccountController::dogenerate() {
     if (profile_type_ == ProfileType::Old) {
         return;
