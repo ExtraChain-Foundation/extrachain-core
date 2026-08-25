@@ -19,39 +19,44 @@
 
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
+#include "chain/actor_index.h"
+#include "chat/chat_manager.h"
+#include "dfs/dfs_controller.h"
 #include "encryption/encryption_tools.h"
 #include "utils/exc_logs.h"
 #include <QtTest/QtTest>
 #include <algorithm>
 #include <sstream>
 
-class Test : public QObject {
+class CoreTests : public QObject {
     Q_OBJECT
 
 public:
-    Test(QObject *parent = nullptr)
+    CoreTests(QObject *parent = nullptr)
         : QObject(parent) {
     }
 
 private:
-    ExtraChainNode *node;
+    std::unique_ptr<ExtraChainNodeWrapper> node_wrapper;
+    ExtraChainNode                        *node = nullptr;
 
 private slots:
     void actors() {
         Actor<KeyPrivate> actor1;
         Actor<KeyPrivate> actor2;
-        actor1.create(ActorType::Wallet);
-        actor2.create(ActorType::Wallet);
+        actor1.create(ActorType::User);
+        actor2.create(ActorType::User);
 
-        auto encrypted = actor1.key()->encrypt("hello", actor2.key()->publicKey());
-        auto decrypted = actor2.key()->decrypt(encrypted, actor1.key()->publicKey());
+        const auto plain     = ByteArray("hello").toBytes();
+        auto       encrypted = actor1.key().encrypt(plain, actor2.key().public_key());
+        QVERIFY(encrypted.has_value());
+        auto decrypted = actor2.key().decrypt(encrypted.value(), actor1.key().public_key());
+        QVERIFY(decrypted.has_value());
+        QCOMPARE(decrypted.value(), plain);
 
-        auto actor1Public = actor1.convertToPublic();
-
-        auto encrypted2 = actor1Public.key()->encrypt("hello", actor2.key()->secretKey());
-        auto decrypted2 = actor2.key()->decrypt(encrypted2, actor1.key()->publicKey());
-
-        QCOMPARE(decrypted, decrypted2);
+        auto actor1_public = actor1.to_public();
+        QCOMPARE(actor1_public.id(), actor1.id());
+        QCOMPARE(actor1_public.key().public_key(), actor1.key().public_key());
     }
 
     void mnemonicRoundTrip() {
@@ -162,20 +167,25 @@ private slots:
         QDir().mkdir("test-data");
         QDir::setCurrent("test-data");
         Utils::wipeDataFiles();
-        node           = new ExtraChainNode;
-        bool isCreated = node->createNewNetwork("login", "password", "Token", "1000", "#ffffff");
-        QVERIFY(isCreated);
+        node_wrapper = std::make_unique<ExtraChainNodeWrapper>(nullptr, true, true, 0);
+        node_wrapper->init(false);
+        node = node_wrapper->node;
+        QVERIFY(node != nullptr);
+        QVERIFY(node->create_new_network("test-login", "test-password"));
+        QVERIFY(!node->account_controller()->empty());
+        QVERIFY(!node->account_controller()->current_profile().system().id().is_zero());
+        QVERIFY(node->create_chat_templates());
     }
 
     void chatJsonRemainsBackwardCompatible() {
         Actor<KeyPrivate> owner;
         owner.create(ActorType::User);
 
-        Chat::Chat chat { .id       = "row-id",
-                          .owner_id = owner.id(),
-                          .file_id  = "chat-file" };
-        auto json = Json::serialize_value(chat).as_object();
+        Chat::Chat chat { .id = "row-id", .owner_id = owner.id(), .file_id = "chat-file" };
+        auto       json = Json::serialize_value(chat).as_object();
         json.erase("invite_pending");
+        json.erase("invite_file_id");
+        json.erase("sync_state");
 
         auto restored = Json::deserialize<Chat::Chat>(boost::json::serialize(json));
         QVERIFY(restored.has_value());
@@ -183,6 +193,8 @@ private slots:
         QCOMPARE(restored->owner_id, chat.owner_id);
         QCOMPARE(restored->file_id, chat.file_id);
         QVERIFY(!restored->invite_pending);
+        QVERIFY(!restored->invite_file_id.has_value());
+        QVERIFY(!restored->sync_state.has_value());
     }
 
     void chatCreationPersistsBeforeSuccess() {
@@ -193,6 +205,7 @@ private slots:
 
         Actor<KeyPrivate> peer;
         peer.create(ActorType::User);
+        node->actor_index()->store_new_actor(peer.to_public());
 
         auto created = node->chat_manager()->create_dialogue(peer.id());
         QVERIFY(created.has_value());
@@ -208,6 +221,32 @@ private slots:
         });
         QVERIFY(persisted != stored->cend());
         QCOMPARE(persisted->invite_pending, created->invite_pending);
+        QCOMPARE(node->chat_manager()->chat_sync_state(created->owner_id, created->file_id),
+                 Chat::SyncState::Ready);
+    }
+
+    void textSendReportsPersistedMessageId() {
+        QVERIFY(node != nullptr);
+
+        Actor<KeyPrivate> peer;
+        peer.create(ActorType::User);
+        node->actor_index()->store_new_actor(peer.to_public());
+        auto chat = node->chat_manager()->create_dialogue(peer.id());
+        QVERIFY(chat.has_value());
+
+        auto sent = node->chat_manager()->send_text_message(chat->owner_id,
+                                                            chat->file_id,
+                                                            Chat::MessageText { .text = "first message" });
+        QVERIFY(sent.has_value());
+        QVERIFY(sent->stored);
+        QVERIFY(!sent->message_id.empty());
+
+        auto messages = node->chat_manager()->read_chat_messages(chat->owner_id, chat->file_id);
+        QVERIFY(messages.has_value());
+        const auto stored = std::find_if(messages->cbegin(), messages->cend(), [&sent](const auto &message) {
+            return message.id == sent->message_id;
+        });
+        QVERIFY(stored != messages->cend());
     }
 
     void targetedActorRefreshReportsNoActivePeers() {
@@ -251,5 +290,5 @@ private slots:
     }
 };
 
-QTEST_MAIN(Test)
+QTEST_MAIN(CoreTests)
 #include "test.moc"

@@ -119,6 +119,20 @@ private:
     std::uint64_t m_totalDfsSize = 0;
 
     std::atomic_uint64_t staged_startup_response_count_ { 0 };
+    std::atomic_int64_t  full_sync_fallback_next_allowed_ms_ { 0 };
+    std::mutex           pending_vector_rows_mutex_;
+
+    bool request_full_sync_fallback(const std::string &identifier, const char *source);
+    std::expected<DfsVectorApplyResult, DfsVectorError> apply_network_vector_row(const ActorId     &owner_id,
+                                                                                 const std::string &file_id,
+                                                                                 const DbRow       &row);
+    void                                                initialize_pending_vector_rows();
+    void                                                store_pending_vector_row(const ActorId     &owner_id,
+                                                                                 const std::string &file_id,
+                                                                                 const DbRow       &row,
+                                                                                 DfsVectorError     reason);
+    void retry_pending_vector_rows(const std::optional<ActorId>       &actor_id  = std::nullopt,
+                                   const std::optional<Dfs::FileLink> &file_link = std::nullopt);
 
 public:
     explicit DfsController(ExtraChainNode *node);
@@ -127,24 +141,22 @@ public:
     // auto: + network id + local actors
     // raccoon stays in priority (its files are rank 1 in download order);
     // startup_metadata_actors_ additionally guarantees it participates in bootstrap sync.
-    std::set<ActorId>       priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
+    std::set<ActorId> priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
     // actor -> {vectors_rank, files_rank}; -1 = default classification for that kind
     std::map<ActorId, std::pair<int, int>> download_rank_overrides_;
     // (actor, file name) -> rank; overrides that win over per-actor ranks
     std::map<std::pair<ActorId, std::string>, int> download_rank_name_overrides_;
     // Some service actors are needed during bootstrap for metadata discovery,
     // but their entire content must not become an eager download dependency.
-    std::set<ActorId>       startup_metadata_actors_ = {
-        ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373")
-    };
+    std::set<ActorId>       startup_metadata_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
     std::set<Dfs::FileLink> priority_file_link_;
     // Actors whose dirs were explicitly requested via refresh_actors() (e.g. chat owner-actors
     // after read_chats). Feeds startup_sync_actors(): without it the Light filter in
     // network_response_dir_rows drops the response. Mutex-guarded: written from the node
     // thread, read from the DFS pool.
-    mutable std::mutex      requested_sync_actors_mutex_;
-    std::set<ActorId>       requested_sync_actors_;
-    DfsMode                 dfs_mode_ = DfsMode::Full;
+    mutable std::mutex requested_sync_actors_mutex_;
+    std::set<ActorId>  requested_sync_actors_;
+    DfsMode            dfs_mode_ = DfsMode::Full;
 
     std::shared_ptr<DbConnector> get_db_instance();
 
@@ -309,15 +321,14 @@ public:
     std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folders(const ActorId &owner_id);
 
     std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folder_contents(const ActorId     &owner_id,
-                                                                                const std::string &folder_file_id);
+                                                                               const std::string &folder_file_id);
 
     std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folder_path(const ActorId     &owner_id,
                                                                            const std::string &folder_file_id);
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> move_to_folder(
-        const ActorId                    &owner_id,
-        const std::string                &file_id,
-        const std::optional<std::string> &new_folder_id);
+    std::expected<Dfs::DirRow, Dfs::DfsError> move_to_folder(const ActorId                    &owner_id,
+                                                             const std::string                &file_id,
+                                                             const std::optional<std::string> &new_folder_id);
 
     // TODO
     std::expected<Dfs::DirRow, Dfs::DfsError> store_folder_dapp(const ActorId &owner_id,
@@ -395,14 +406,14 @@ public:
                            const std::string &primary_data,
                            const ActorId     &signer_id = ActorId());
 
-    std::optional<std::string> add_file_id(const ActorId&      network_id,
-                                           const ActorId&      vector_owner_id,
-                                           const std::string&  vector_file_id,
-                                           const ActorId&      owner_id,
-                                           const std::string&  file_id,
-                                           const ActorId&      signer_id,
-                                           int                 state     = 0,
-                                           Dfs::FileIdState    with_state = Dfs::FileIdState::Without);
+    std::optional<std::string> add_file_id(const ActorId     &network_id,
+                                           const ActorId     &vector_owner_id,
+                                           const std::string &vector_file_id,
+                                           const ActorId     &owner_id,
+                                           const std::string &file_id,
+                                           const ActorId     &signer_id,
+                                           int                state      = 0,
+                                           Dfs::FileIdState   with_state = Dfs::FileIdState::Without);
 
     std::expected<DbRow, DfsVectorError> read_vector_row(
         const ActorId               &owner_id,
@@ -426,21 +437,22 @@ public:
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     bool dictionary_set_value(const ActorId               &owner_id,
-                   const std::string           &file_id,
-                   const std::string           &key,
-                   const std::string           &value,
-                   const ActorId               &author_id,
-                   const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+                              const std::string           &file_id,
+                              const std::string           &key,
+                              const std::string           &value,
+                              const ActorId               &author_id,
+                              const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    std::optional<std::string> read_dictionary(const ActorId               &owner_id,
-                                                const std::string           &file_id,
-                                                const std::string           &key,
-                                                const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+    std::optional<std::string> read_dictionary(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        const std::string           &key,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     bool dictionary_remove_value(const ActorId     &owner_id,
-                      const std::string &file_id,
-                      const std::string &key,
-                      const ActorId     &author_id);
+                                 const std::string &file_id,
+                                 const std::string &key,
+                                 const ActorId     &author_id);
 
     std::optional<std::map<std::string, std::string>> read_dictionary_rows(
         const ActorId               &owner_id,
@@ -588,18 +600,17 @@ private:
     std::unordered_map<std::string, Dfs::DirRow> files_ready_status_;
     std::set<std::pair<ActorId, std::string>>    files_waiting_;
 
-    void check_all_files(std::string identifier);
+    void                 check_all_files(std::string identifier);
     std::vector<ActorId> startup_sync_actors() const;
 
     // for store_vector and store_dictionary
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_vector_impl(
-        const ActorId                 &owner_id,
-        const ActorId                 &author_id,
-        const std::string             &visual_name,
-        const Dfs::CollectionTemplate &collection_template,
-        Dfs::DataSecurity              data_security,
-        const Dfs::DataSecurityData   &security_data,
-        Dfs::FileType                  file_type);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_vector_impl(const ActorId                 &owner_id,
+                                                                const ActorId                 &author_id,
+                                                                const std::string             &visual_name,
+                                                                const Dfs::CollectionTemplate &collection_template,
+                                                                Dfs::DataSecurity              data_security,
+                                                                const Dfs::DataSecurityData   &security_data,
+                                                                Dfs::FileType                  file_type);
 
     ExpectedDirHistoricalRow universal_collection_row(const ActorId               &owner_id,
                                                       const std::string           &file_id,
