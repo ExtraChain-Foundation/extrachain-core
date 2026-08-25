@@ -1,0 +1,301 @@
+/*
+ * ExtraChain Core — C FFI WebAssembly Contracts
+ */
+
+#include "exc_internal.h"
+
+#include <span>
+#include <string_view>
+
+#include <boost/describe.hpp>
+
+#include <QStandardPaths>
+
+#include "contracts/contract_manager.h"
+#include "contracts/toolchain_registry.h"
+#include "managers/extrachain_node.h"
+#include "utils/exc_utils.h"
+
+using namespace exc_ffi;
+
+namespace {
+    struct ContractSummary {
+        std::string   contract_id;
+        std::string   owner_id;
+        std::string   kind;
+        std::uint32_t version;
+        std::uint64_t revision;
+        std::string   module_hash;
+        std::string   state_hash;
+        std::string   transaction_hash;
+        std::uint64_t checkpoint_revision;
+        std::uint64_t checkpoint_section;
+        std::string   checkpoint_state_hash;
+        std::string   checkpoint_transaction_hash;
+        std::uint64_t replay_depth;
+    };
+    BOOST_DESCRIBE_STRUCT(ContractSummary,
+                          (),
+                          (contract_id,
+                           owner_id,
+                           kind,
+                           version,
+                           revision,
+                           module_hash,
+                           state_hash,
+                           transaction_hash,
+                           checkpoint_revision,
+                           checkpoint_section,
+                           checkpoint_state_hash,
+                           checkpoint_transaction_hash,
+                           replay_depth))
+
+    ExcError contract_error(ExtraChain::Contracts::ContractError error) {
+        using ExtraChain::Contracts::ContractError;
+        switch (error) {
+        case ContractError::NotFound:
+            return EXC_ERR_CONTRACT_NOT_FOUND;
+        case ContractError::InvalidArguments:
+        case ContractError::InvalidOwner:
+        case ContractError::InvalidModule:
+        case ContractError::InvalidResponse:
+            return EXC_ERR_CONTRACT_INVALID_ARGUMENT;
+        case ContractError::Conflict:
+            return EXC_ERR_CONTRACT_CONFLICT;
+        case ContractError::StorageError:
+        case ContractError::AlreadyExists:
+            return EXC_ERR_CONTRACT_STORAGE;
+        case ContractError::UpgradeDenied:
+            return EXC_ERR_CONTRACT_UPGRADE_DENIED;
+        case ContractError::ExecutionFailed:
+        case ContractError::StateTooLarge:
+        case ContractError::TooManyEvents:
+        case ContractError::TooManyEffects:
+        case ContractError::TooManyProofs:
+        case ContractError::CallDepthExceeded:
+        case ContractError::CallCycle:
+        case ContractError::InvalidProof:
+            return EXC_ERR_CONTRACT_EXECUTION;
+        }
+        return EXC_ERR_UNKNOWN;
+    }
+
+    std::span<const std::uint8_t> bytes(const std::uint8_t* data, std::size_t size) {
+        return size == 0 ? std::span<const std::uint8_t>() : std::span(data, size);
+    }
+} // namespace
+
+extern "C" {
+
+EXC_API ExcError exc_contract_deploy(const char*    kind,
+                                     const uint8_t* module,
+                                     size_t         module_len,
+                                     const uint8_t* init_arguments,
+                                     size_t         init_arguments_len,
+                                     ExcHandle*     out_tx_handle) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(kind);
+    EXC_CHECK_NULL(module);
+    EXC_CHECK_NULL(out_tx_handle);
+    *out_tx_handle = EXC_INVALID_HANDLE;
+    if (module_len == 0 || (init_arguments_len > 0 && init_arguments == nullptr)) {
+        return EXC_ERR_INVALID_ARGUMENT;
+    }
+    ExcError result = EXC_OK;
+    bool     ok     = dispatch_sync([&]() {
+        auto submitted =
+            GlobalState::instance().node->submit_contract_deploy(kind,
+                                                                 bytes(module, module_len),
+                                                                 bytes(init_arguments, init_arguments_len));
+        if (!submitted.has_value()) {
+            result = contract_error(submitted.error().error);
+            return;
+        }
+        *out_tx_handle = HandleTable::instance().store(std::move(*submitted));
+    });
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_contract_call(const char*    contract_id,
+                                   const char*    method,
+                                   const uint8_t* arguments,
+                                   size_t         arguments_len,
+                                   ExcHandle*     out_tx_handle) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(contract_id);
+    EXC_CHECK_NULL(method);
+    EXC_CHECK_NULL(out_tx_handle);
+    *out_tx_handle = EXC_INVALID_HANDLE;
+    if (arguments_len > 0 && arguments == nullptr) {
+        return EXC_ERR_NULL_ARGUMENT;
+    }
+    auto id = ActorId::create(contract_id);
+    if (!id.has_value()) {
+        return EXC_ERR_INVALID_ARGUMENT;
+    }
+    ExcError result = EXC_OK;
+    bool     ok     = dispatch_sync([&]() {
+        auto submitted =
+            GlobalState::instance().node->submit_contract_call(*id, method, bytes(arguments, arguments_len));
+        if (!submitted.has_value()) {
+            result = contract_error(submitted.error().error);
+            return;
+        }
+        *out_tx_handle = HandleTable::instance().store(std::move(*submitted));
+    });
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_contract_query(const char*    contract_id,
+                                    const char*    method,
+                                    const uint8_t* arguments,
+                                    size_t         arguments_len,
+                                    char**         out_result_base64) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(contract_id);
+    EXC_CHECK_NULL(method);
+    EXC_CHECK_NULL(out_result_base64);
+    if (arguments_len > 0 && arguments == nullptr) {
+        return EXC_ERR_NULL_ARGUMENT;
+    }
+    auto id = ActorId::create(contract_id);
+    if (!id.has_value()) {
+        return EXC_ERR_INVALID_ARGUMENT;
+    }
+    *out_result_base64 = nullptr;
+    ExcError result    = EXC_OK;
+    bool     ok        = dispatch_sync([&]() {
+        auto receipt = GlobalState::instance().node->query_contract(*id, method, bytes(arguments, arguments_len));
+        if (!receipt.has_value()) {
+            result = contract_error(receipt.error().error);
+            return;
+        }
+        *out_result_base64 = exc_strdup(Utils::to_base64(receipt->data));
+    });
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_contract_upgrade(const char*    contract_id,
+                                      const uint8_t* module,
+                                      size_t         module_len,
+                                      const uint8_t* migration_arguments,
+                                      size_t         migration_arguments_len,
+                                      ExcHandle*     out_tx_handle) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(contract_id);
+    EXC_CHECK_NULL(module);
+    EXC_CHECK_NULL(out_tx_handle);
+    *out_tx_handle = EXC_INVALID_HANDLE;
+    if (module_len == 0 || (migration_arguments_len > 0 && migration_arguments == nullptr)) {
+        return EXC_ERR_INVALID_ARGUMENT;
+    }
+    auto id = ActorId::create(contract_id);
+    if (!id.has_value()) {
+        return EXC_ERR_INVALID_ARGUMENT;
+    }
+    ExcError result = EXC_OK;
+    bool     ok     = dispatch_sync([&]() {
+        auto submitted = GlobalState::instance().node->submit_contract_upgrade(*id,
+                                                                               bytes(module, module_len),
+                                                                               bytes(migration_arguments,
+                                                                                     migration_arguments_len));
+        if (!submitted.has_value()) {
+            result = contract_error(submitted.error().error);
+            return;
+        }
+        *out_tx_handle = HandleTable::instance().store(std::move(*submitted));
+    });
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_contract_inspect(const char* contract_id, char** out_json) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(contract_id);
+    EXC_CHECK_NULL(out_json);
+    auto id = ActorId::create(contract_id);
+    if (!id.has_value()) {
+        return EXC_ERR_INVALID_ARGUMENT;
+    }
+    *out_json       = nullptr;
+    ExcError result = EXC_OK;
+    bool     ok     = dispatch_sync([&]() {
+        auto record = GlobalState::instance().node->contract_manager()->inspect(id->to_string());
+        if (!record.has_value()) {
+            result = contract_error(record.error().error);
+            return;
+        }
+        const auto& version  = record->versions.at(record->active_version - 1);
+        const auto& revision = version.revisions.back();
+        auto        summary  = ContractSummary {
+                            .contract_id                 = record->contract_id,
+                            .owner_id                    = record->owner_id,
+                            .kind                        = record->kind,
+                            .version                     = version.version,
+                            .revision                    = revision.revision,
+                            .module_hash                 = version.module_hash,
+                            .state_hash                  = revision.state_hash,
+                            .transaction_hash            = revision.transaction_hash,
+                            .checkpoint_revision         = revision.checkpoint_revision,
+                            .checkpoint_section          = revision.checkpoint_block,
+                            .checkpoint_state_hash       = revision.checkpoint_hash,
+                            .checkpoint_transaction_hash = revision.checkpoint_transaction_hash,
+                            .replay_depth                = revision.revision - revision.checkpoint_revision,
+        };
+        *out_json = exc_strdup(Json::serialize(summary));
+    });
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_contract_components(char** out_json) {
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    (void)out_json;
+    return EXC_ERR_CONTRACT_DEVELOPMENT_UNAVAILABLE;
+#else
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(out_json);
+    *out_json = nullptr;
+    bool ok   = dispatch_sync([&]() {
+        const auto root =
+            QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/contract-toolchain";
+        const ExtraChain::Contracts::ToolchainInstaller installer(GlobalState::instance().node, root);
+        *out_json = exc_strdup(Json::serialize(installer.component_catalog()));
+    });
+    return ok && *out_json != nullptr ? EXC_OK : EXC_ERR_DISPATCH_FAILED;
+#endif
+}
+
+EXC_API ExcError exc_contract_compose(const char* project_name,
+                                      const char* component_ids_json,
+                                      char**      out_source) {
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    (void)project_name;
+    (void)component_ids_json;
+    (void)out_source;
+    return EXC_ERR_CONTRACT_DEVELOPMENT_UNAVAILABLE;
+#else
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(project_name);
+    EXC_CHECK_NULL(component_ids_json);
+    EXC_CHECK_NULL(out_source);
+    *out_source              = nullptr;
+    const auto component_ids = Json::deserialize<std::vector<std::string>>(std::string_view(component_ids_json));
+    if (!component_ids.has_value() || component_ids->empty()) {
+        return EXC_ERR_INVALID_ARGUMENT;
+    }
+    ExcError   result = EXC_OK;
+    const bool ok     = dispatch_sync([&]() {
+        const auto root =
+            QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/contract-toolchain";
+        const ExtraChain::Contracts::ToolchainInstaller installer(GlobalState::instance().node, root);
+        const auto source = installer.compose_contract(*component_ids, QString::fromUtf8(project_name));
+        if (!source.has_value()) {
+            result = EXC_ERR_CONTRACT_INVALID_ARGUMENT;
+            return;
+        }
+        *out_source = exc_strdup(source->toStdString());
+    });
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+#endif
+}
+
+} // extern "C"

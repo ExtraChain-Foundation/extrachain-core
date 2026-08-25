@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 
 if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
-    project(extrachain LANGUAGES CXX DESCRIPTION "ExtraChain Core")
+    project(extrachain LANGUAGES C CXX DESCRIPTION "ExtraChain Core")
     add_compile_definitions(EXTRACHAIN_LIBRARY_ACTIVATE)
 endif()
 
@@ -39,6 +39,7 @@ find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
 find_package(msgpack-cxx CONFIG REQUIRED)
 find_package(blake3 CONFIG REQUIRED)
+find_package(zstd CONFIG REQUIRED)
 
 set(EXTRACHAIN_CORE_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}
@@ -66,13 +67,16 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/dag.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/dag_cache.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/pack.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/pack_registry.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/dag_migration.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/chain_index.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/encryption_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_private.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_public.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/account_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/luminance_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_data_manager.h
@@ -86,6 +90,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/message_body.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/peer_meta.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/wire_format.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnector.h
@@ -108,9 +114,17 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/thread_pool_boost.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/compression.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_types.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_codec.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/dfs_contract_storage.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_transaction.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/wasm_runtime.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/toolchain_registry.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dirs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/load_manager.cpp
@@ -128,11 +142,14 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_cache.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack_registry.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_migration.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/chain_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_public.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/account_controller.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/luminance_manager.cpp
@@ -145,6 +162,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/wire_format.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnector.cpp
@@ -157,12 +175,21 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_iterator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/thread_pool_boost.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_runtime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_codec.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/dfs_contract_storage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/toolchain_registry.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/toolchain_installer.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/contracts/contracts.qrc
     )
+
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/ExtraChainWamr.cmake)
 
 # C FFI bindings (optional)
 option(EXTRACHAIN_BUILD_CBINDINGS "Build C FFI bindings (libextrachainc)" OFF)
@@ -211,14 +238,19 @@ set(bip3x_BUILD_C_BINDINGS OFF CACHE BOOL "")
 set(bip3x_BUILD_TESTS OFF CACHE BOOL "")
 set(bip3x_USE_OPENSSL_RANDOM OFF CACHE BOOL "")
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/bip3x ${CMAKE_CURRENT_BINARY_DIR}/bip3x)
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../extrachain-3rdparty/bip3x ${CMAKE_CURRENT_BINARY_DIR}/bip3x)
 
-target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/bip3x/include)
+target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_LIST_DIR}/../extrachain-3rdparty/bip3x/include)
 
 target_link_libraries(extrachain
     Qt6::Core Qt6::Network Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
-    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x)
+    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x
+    extrachain-wamr
+    $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+if(UNIX AND NOT APPLE)
+    target_link_options(extrachain PRIVATE "-Wl,-z,noexecstack")
+endif()
 # C FFI bindings
 if(EXTRACHAIN_BUILD_CBINDINGS)
     add_subdirectory(Cbindings)

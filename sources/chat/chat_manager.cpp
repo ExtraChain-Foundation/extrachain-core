@@ -191,8 +191,11 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_myself() {
         return std::unexpected(ChatError::Unknown);
     }
 
-    insert_chat_to_mychats(chat.value());
-    add_new_message_created(chat->owner_id, chat->file_id);
+    if (!insert_chat_to_mychats(chat.value()).has_value()
+        || !add_new_message_created(chat->owner_id, chat->file_id).has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
     return chat;
 }
 
@@ -208,10 +211,12 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
     }
 
     chat->chat.peer_id = with.to_string();
-    insert_chat_to_mychats(chat.value());
-    add_new_message_created(chat->owner_id, chat->file_id);
-    invite(chat.value());
-    add_new_message_invite(chat->owner_id, chat->file_id, with);
+    if (!insert_chat_to_mychats(chat.value()).has_value()
+        || !add_new_message_created(chat->owner_id, chat->file_id).has_value()
+        || !invite(chat.value()).has_value()
+        || !add_new_message_invite(chat->owner_id, chat->file_id, with).has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
 
     auto custom = ThothCustom { .ignored = { chat->owner_id } };
     node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id, Json::serialize(custom));
@@ -332,8 +337,10 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
     //     return std::unexpected(ChatError::Unknown);
     // }
 
-    insert_chat_to_mychats(chat);
-    add_new_message_created(chat.owner_id, chat.file_id);
+    if (!insert_chat_to_mychats(chat).has_value()
+        || !add_new_message_created(chat.owner_id, chat.file_id).has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
 
     return chat;
 }
@@ -912,9 +919,10 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return false;
     }
 
-    this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
-
-    add_new_message_joined(chat.owner_id, chat.file_id, main_actor.id());
+    if (!this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id).has_value()
+        || !add_new_message_joined(chat.owner_id, chat.file_id, main_actor.id()).has_value()) {
+        return false;
+    }
 
     auto custom = ThothCustom { .ignored = { main_actor.id() } };
     node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, Json::serialize(custom));

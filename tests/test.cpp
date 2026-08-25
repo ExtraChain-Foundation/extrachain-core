@@ -17,9 +17,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include "chain/pack.h"
+#include "chain/pack_registry.h"
 #include "managers/extrachain_node.h"
+#include "utils/compression.h"
 #include "utils/exc_logs.h"
 #include <QtTest/QtTest>
+#include <filesystem>
 
 class Test : public QObject {
     Q_OBJECT
@@ -88,40 +92,339 @@ private slots:
     //        eLog("{} ms", timer.elapsed());
     //    }
 
-    void bigNumberTest() {
-        //    BigNumber b(1);
-        //    b++;
-        //    b--;
-        //    --b;
-        //    ++b;
-        //    b = b + 7;
-        //    b = b - 4;
-        //    b += 4;
-        //    b -= 6;
-        //    b *= 4;
-        //    b = b * 4;
-        //    b /= 2;
-        //    b = b / 2;
+    void bigNumberDecimalRoundtrip() {
+        // Decimal string canonical form
+        QCOMPARE(BigNumber("12345").to_string(), std::string("12345"));
+        QCOMPARE(BigNumber(0).to_string(), std::string("0"));
+        QCOMPARE(BigNumber(-42).to_string(), std::string("-42"));
 
-        //    int i(1);
-        //    i++;
-        //    i--;
-        //    --i;
-        //    ++i;
-        //    i = i + 7;
-        //    i = i - 4;
-        //    i += 4;
-        //    i -= 6;
-        //    i *= 4;
-        //    i = i * 4;
-        //    i /= 2;
-        //    i = i / 2;
+        // Large numbers that don't fit in 64-bit
+        BigNumber big("123456789012345678901234567890");
+        QCOMPARE(big.to_string(), std::string("123456789012345678901234567890"));
 
-        //    eLog("{} {}", b.toByteArray(10).toInt(), i);
-        //    eLog("{}", (b - 5 == i - 5));
-
-        //    return 0;
+        // Leading zeros stripped
+        QCOMPARE(BigNumber("00042").to_string(), std::string("42"));
+        QCOMPARE(BigNumber("-00042").to_string(), std::string("-42"));
     }
+
+    void bigNumberHexFallback() {
+        // Hex strings auto-detected (backward compat with pre-decimal chain)
+        QVERIFY(BigNumber::is_hex_string("abc123"));
+        QVERIFY(BigNumber::is_hex_string("FFFF"));
+        QVERIFY(!BigNumber::is_hex_string("12345"));
+        QVERIFY(!BigNumber::is_hex_string(""));
+        QVERIFY(!BigNumber::is_hex_string("-"));
+
+        // from_hex explicit — hex is decoded only when asked for explicitly.
+        QCOMPARE(BigNumber::from_hex("ff").to_string(), std::string("255"));
+        QCOMPARE(BigNumber::from_hex("100").to_string(), std::string("256"));
+        QCOMPARE(BigNumber::from_hex("-ff").to_string(), std::string("-255"));
+
+        // The string constructor is strict decimal — it never sniffs hex (that
+        // was ambiguous: "100" is both a decimal and a hex value). So an all-digit
+        // string is always decimal, and "100" stays 100.
+        QCOMPARE(BigNumber("100").to_string(), std::string("100"));
+        QCOMPARE(BigNumber("255").to_string(), std::string("255"));
+    }
+
+    void bigNumberHexWriteRead() {
+        // to_hex_string / from_hex round trip
+        BigNumber a(255);
+        QCOMPARE(a.to_hex_string(), std::string("ff"));
+        QCOMPARE(BigNumber::from_hex(a.to_hex_string()).to_string(), a.to_string());
+
+        BigNumber b("999999999999999");
+        auto hex = b.to_hex_string();
+        QCOMPARE(BigNumber::from_hex(hex).to_string(), b.to_string());
+    }
+
+    void bigNumberFloatDecimal() {
+        QCOMPARE(BigNumberFloat("1.5").to_string(), std::string("1.5"));
+        QCOMPARE(BigNumberFloat("0.0011").to_string(), std::string("0.0011"));
+        QCOMPARE(BigNumberFloat("1000000000000").to_string(), std::string("1000000000000"));
+
+        BigNumberFloat a("1.5");
+        BigNumberFloat b("2.5");
+        QCOMPARE((a + b).to_string(), std::string("4"));
+        QCOMPARE((b - a).to_string(), std::string("1"));
+    }
+
+    void compressionRoundtrip() {
+        std::string data = "the quick brown fox jumps over the lazy dog "
+                           "the quick brown fox jumps over the lazy dog "
+                           "the quick brown fox jumps over the lazy dog";
+        auto compressed = Compression::compress(data);
+        QVERIFY(compressed.has_value());
+        QVERIFY(compressed->size() < data.size());
+
+        auto back = Compression::decompress(*compressed);
+        QVERIFY(back.has_value());
+        QCOMPARE(*back, data);
+    }
+
+    void compressionWithDict() {
+        std::string dict = R"({"section":"","type":0,"sender":"","receiver":"","token":"","amount":"","timestamp":0,"prev_hashs":[],"hash":"","signature":""})";
+        std::string data = R"({"section":"42","type":0,"sender":"29c35573f5ff57b956de44a942f579bbc9843b13","receiver":"29c35573f5ff57b956de44a942f579bbc9843b13","token":"0000000000000000000000000000000000000000","amount":"100","timestamp":1774951775152,"prev_hashs":[],"hash":"b1abb1f1","signature":"xZg"})";
+
+        auto no_dict = Compression::compress(data);
+        QVERIFY(no_dict.has_value());
+
+        auto with_dict = Compression::compress(data, dict);
+        QVERIFY(with_dict.has_value());
+        // Dictionary should improve ratio on small structured payloads
+        QVERIFY(with_dict->size() <= no_dict->size());
+
+        auto back = Compression::decompress(*with_dict, dict);
+        QVERIFY(back.has_value());
+        QCOMPARE(*back, data);
+    }
+
+    void compressionContextReuse() {
+        std::string dict = R"({"section":"","type":0,"sender":"","receiver":""})";
+        Compression::Context ctx(dict);
+
+        for (int i = 0; i < 10; i++) {
+            std::string data = R"({"section":")" + std::to_string(i) + R"(","type":0,"sender":"abc","receiver":"def"})";
+            auto compressed = ctx.compress_frame(data);
+            QVERIFY(compressed.has_value());
+
+            auto back = ctx.decompress_frame(*compressed);
+            QVERIFY(back.has_value());
+            QCOMPARE(*back, data);
+        }
+    }
+
+    void compressionEmptyInput() {
+        auto compressed = Compression::compress("");
+        QVERIFY(compressed.has_value());
+        auto back = Compression::decompress(*compressed);
+        QVERIFY(back.has_value());
+        QCOMPARE(*back, std::string(""));
+    }
+
+    void compressionInvalidData() {
+        std::string garbage = "this is not zstd data";
+        auto result = Compression::decompress(garbage);
+        QVERIFY(!result.has_value());
+    }
+
+    void packRoundTrip100() {
+        std::filesystem::path p = std::filesystem::temp_directory_path() / "exc_pack_rt.pack";
+        std::filesystem::remove(p);
+
+        std::map<SectionId, std::string> input;
+        for (int i = 0; i < 100; i++) {
+            input.emplace(SectionId(i), R"({"section":")" + std::to_string(i)
+                + R"(","type":0,"sender":"29c35573f5ff57b956de44a942f579bbc9843b13","amount":")"
+                + std::to_string(i * 100) + R"("})");
+        }
+
+        auto w = Pack::write(p, 0, input);
+        QVERIFY2(w.has_value(), "Pack::write failed");
+
+        auto r = Pack::Reader::open(p);
+        QVERIFY2(r.has_value(), "Pack::Reader::open failed");
+
+        QCOMPARE(r->count(), static_cast<std::size_t>(100));
+        QCOMPARE(r->first_section(), SectionId(0));
+        QCOMPARE(r->last_section(), SectionId(99));
+
+        for (int i = 0; i < 100; i++) {
+            auto got = r->read(SectionId(i));
+            QVERIFY2(got.has_value(), qPrintable(QString("read %1").arg(i)));
+            QCOMPARE(*got, input[SectionId(i)]);
+        }
+
+        std::filesystem::remove(p);
+    }
+
+    void packRandomAccess() {
+        std::filesystem::path p = std::filesystem::temp_directory_path() / "exc_pack_rand.pack";
+        std::filesystem::remove(p);
+
+        std::map<SectionId, std::string> input;
+        for (int i = 50; i < 250; i++) {
+            input.emplace(SectionId(i), std::string("payload-") + std::to_string(i));
+        }
+
+        auto w = Pack::write(p, 42, input);
+        QVERIFY(w.has_value());
+
+        auto r = Pack::Reader::open(p);
+        QVERIFY(r.has_value());
+
+        QCOMPARE(r->id(), static_cast<Pack::PackId>(42));
+        QCOMPARE(r->first_section(), SectionId(50));
+        QCOMPARE(r->last_section(), SectionId(249));
+
+        // Out of range
+        QVERIFY(!r->read(SectionId(49)).has_value());
+        QVERIFY(!r->read(SectionId(250)).has_value());
+
+        // Random sample
+        for (int id : {50, 100, 199, 249, 75}) {
+            auto got = r->read(SectionId(id));
+            QVERIFY(got.has_value());
+            QCOMPARE(*got, std::string("payload-") + std::to_string(id));
+        }
+
+        std::filesystem::remove(p);
+    }
+
+    void packReadRange() {
+        std::filesystem::path p = std::filesystem::temp_directory_path() / "exc_pack_range.pack";
+        std::filesystem::remove(p);
+
+        std::map<SectionId, std::string> input;
+        for (int i = 0; i < 200; i++) {
+            input.emplace(SectionId(i), std::string("item_") + std::to_string(i));
+        }
+
+        auto w = Pack::write(p, 0, input);
+        QVERIFY(w.has_value());
+
+        auto r = Pack::Reader::open(p);
+        QVERIFY(r.has_value());
+
+        auto rng = r->read_range(SectionId(75), SectionId(125));
+        QCOMPARE(rng.size(), static_cast<std::size_t>(51));
+        for (std::size_t i = 0; i < rng.size(); i++) {
+            int id = 75 + static_cast<int>(i);
+            QCOMPARE(rng[i].first, SectionId(id));
+            QCOMPARE(rng[i].second, std::string("item_") + std::to_string(id));
+        }
+
+        std::filesystem::remove(p);
+    }
+
+    void packNonConsecutive() {
+        std::filesystem::path p = std::filesystem::temp_directory_path() / "exc_pack_nc.pack";
+        std::filesystem::remove(p);
+
+        std::map<SectionId, std::string> input;
+        input.emplace(SectionId(0), "a");
+        input.emplace(SectionId(2), "c"); // gap
+        input.emplace(SectionId(3), "d");
+
+        auto w = Pack::write(p, 0, input);
+        QVERIFY(!w.has_value());
+        QCOMPARE(w.error(), Pack::Error::NonConsecutiveSections);
+
+        std::filesystem::remove(p);
+    }
+
+    void packCorruption() {
+        std::filesystem::path p = std::filesystem::temp_directory_path() / "exc_pack_corrupt.pack";
+        std::filesystem::remove(p);
+
+        std::map<SectionId, std::string> input;
+        input.emplace(SectionId(0), "hello");
+        auto w = Pack::write(p, 0, input);
+        QVERIFY(w.has_value());
+
+        // Corrupt the file middle
+        {
+            std::fstream f(p, std::ios::binary | std::ios::in | std::ios::out);
+            f.seekp(120);
+            char bad = '\xFF';
+            f.write(&bad, 1);
+        }
+
+        auto r = Pack::Reader::open(p);
+        QVERIFY(!r.has_value());
+
+        std::filesystem::remove(p);
+    }
+
+    void packEmpty() {
+        std::filesystem::path p = std::filesystem::temp_directory_path() / "exc_pack_empty.pack";
+        std::map<SectionId, std::string> input;
+        auto w = Pack::write(p, 0, input);
+        QVERIFY(!w.has_value());
+        QCOMPARE(w.error(), Pack::Error::EmptyInput);
+    }
+
+    void packRegistryMultiPack() {
+        auto dir = std::filesystem::temp_directory_path() / "exc_registry_test";
+        std::filesystem::remove_all(dir);
+
+        Pack::Registry reg(dir, 4);
+
+        // Create 3 packs: [0-99], [100-199], [200-299]
+        for (int p = 0; p < 3; p++) {
+            std::map<SectionId, std::string> input;
+            for (int i = 0; i < 100; i++) {
+                int sid = p * 100 + i;
+                input.emplace(SectionId(sid), "sec-" + std::to_string(sid));
+            }
+            auto w = reg.create_pack(p, input);
+            QVERIFY2(w.has_value(), qPrintable(QString("pack %1").arg(p)));
+        }
+
+        // Read from each pack
+        auto s0 = reg.read_section(SectionId(5));
+        QVERIFY(s0.has_value());
+        QCOMPARE(*s0, std::string("sec-5"));
+
+        auto s1 = reg.read_section(SectionId(150));
+        QVERIFY(s1.has_value());
+        QCOMPARE(*s1, std::string("sec-150"));
+
+        auto s2 = reg.read_section(SectionId(299));
+        QVERIFY(s2.has_value());
+        QCOMPARE(*s2, std::string("sec-299"));
+
+        // Outside range
+        QVERIFY(!reg.read_section(SectionId(300)).has_value());
+
+        // Range that spans packs
+        auto range = reg.read_sections(SectionId(95), SectionId(105));
+        QCOMPARE(range.size(), static_cast<std::size_t>(11));
+        QCOMPARE(range.front().first, SectionId(95));
+        QCOMPARE(range.back().first, SectionId(105));
+
+        // Coverage
+        auto cov = reg.coverage();
+        QVERIFY(cov.has_value());
+        QCOMPARE(cov->first, SectionId(0));
+        QCOMPARE(cov->last, SectionId(299));
+
+        // Rescan preserves state
+        reg.rescan();
+        auto s3 = reg.read_section(SectionId(123));
+        QVERIFY(s3.has_value());
+        QCOMPARE(*s3, std::string("sec-123"));
+
+        std::filesystem::remove_all(dir);
+    }
+
+    void packRegistryLazyOpen() {
+        auto dir = std::filesystem::temp_directory_path() / "exc_registry_lazy";
+        std::filesystem::remove_all(dir);
+
+        Pack::Registry reg(dir, 2); // small LRU
+
+        // Create 5 packs
+        for (int p = 0; p < 5; p++) {
+            std::map<SectionId, std::string> input;
+            for (int i = 0; i < 10; i++) {
+                int sid = p * 10 + i;
+                input.emplace(SectionId(sid), "v" + std::to_string(sid));
+            }
+            auto w = reg.create_pack(p, input);
+            QVERIFY(w.has_value());
+        }
+
+        // Touch all, LRU should keep most recent 2 open
+        for (int sid : {5, 15, 25, 35, 45, 5}) {
+            auto s = reg.read_section(SectionId(sid));
+            QVERIFY(s.has_value());
+            QCOMPARE(*s, "v" + std::to_string(sid));
+        }
+
+        std::filesystem::remove_all(dir);
+    }
+
 
     void createNetwork() {
         reset_qt_log_handler();

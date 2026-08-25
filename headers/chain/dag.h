@@ -19,7 +19,11 @@
 
 #pragma once
 
+#include <atomic>
+#include <memory>
+#include <mutex>
 #include <shared_mutex>
+#include <unordered_map>
 
 #include <boost/describe.hpp>
 #include <QTimer>
@@ -28,24 +32,41 @@
 #include "chain/transaction.h"
 #include "chain/transaction_cache.h"
 #include "chain/dag_cache.h"
+#include "chain/chain_index.h"
+#include "chain/pack_registry.h"
 
 #include "3rdparty/rustex.h"
 
 class ExtraChainNode;
 class Responder;
 
+// Control hashes live on every CONTROL_INTERVAL-th section (section_id % 20 == 0).
+// They anchor the chain so peers can verify long histories without replaying every tx.
 static const SectionId CONTROL_INTERVAL      = SectionId(20);
 static const int       CONTROL_INTERVAL_MOD  = 20;
 static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
+
+// Sections this far behind the tip are still kept hot (one file each) before
+// being sealed into an immutable pack. Covers Light client's 15-section cache
+// lag, control-search backoff (~37), and a buffer for late-arriving sync data
+// or modest reorgs. 200 == 10 control intervals — cheap on disk (~400KB).
+static constexpr int HOT_PACK_LAG = 200;
+
+// find_last_control() walks backwards from the current tip; these caps stop the walk
+// once enough evidence accumulates that no control is ever coming:
+//   - CONTROL_SEARCH_SKIP_LIMIT: sections scanned without finding a control. 37
+//     is deliberately > 20 so we always cross at least one expected control slot.
+//   - CONTROL_SEARCH_MISS_LIMIT: control-aligned sections that were missing
+//     entirely (slot at % 20 == 0 but no section file). Hints at a broken chain.
+static constexpr int CONTROL_SEARCH_SKIP_LIMIT = 37;
+static constexpr int CONTROL_SEARCH_MISS_LIMIT = 10;
 
 // helpers
 static inline bool is_aligned20(const SectionId &s) {
     return (s % CONTROL_INTERVAL) == 0;
 }
 static inline SectionId align_down20(const SectionId &s) {
-    eLog("align_down20 {}", s);
-    SectionId m;
-    m = s % CONTROL_INTERVAL;
+    SectionId m = s % CONTROL_INTERVAL;
     return m == 0 ? s : (s - m);
 }
 static inline SectionId max_sid(const SectionId &a, const SectionId &b) {
@@ -163,6 +184,48 @@ struct HashInterval {
     std::string hash;
 };
 BOOST_DESCRIBE_STRUCT(HashInterval, (), (from, to, hash))
+
+// Pack-sync messages (between dag_version >= 100 peers).
+struct PackInfo {
+    std::uint64_t pack_id;
+    SectionId     first_section;
+    SectionId     last_section;
+};
+BOOST_DESCRIBE_STRUCT(PackInfo, (), (pack_id, first_section, last_section))
+
+struct PackList {
+    std::vector<PackInfo> packs;
+};
+BOOST_DESCRIBE_STRUCT(PackList, (), (packs))
+
+struct PackRequest {
+    std::uint64_t pack_id;
+    std::uint64_t offset = 0; // byte offset of the requested chunk
+};
+BOOST_DESCRIBE_STRUCT(PackRequest, (), (pack_id, offset))
+
+struct PackData {
+    std::uint64_t pack_id;
+    std::uint64_t offset     = 0; // byte offset of this chunk in the pack
+    std::uint64_t total_size = 0; // full pack size, so the receiver knows the end
+    std::string   bytes;          // one chunk of the .pack file
+};
+BOOST_DESCRIBE_STRUCT(PackData, (), (pack_id, offset, total_size, bytes))
+
+// Prebuilt balance cache handed over whole so the receiver skips replaying cold
+// history. Trusted in the single-creator topology (same source as the packs).
+struct CacheBalanceRow {
+    std::string actor_id;
+    std::string token_id;
+    std::string balance;
+};
+BOOST_DESCRIBE_STRUCT(CacheBalanceRow, (), (actor_id, token_id, balance))
+
+struct CacheSnapshot {
+    SectionId                    section; // cached_section the balances are valid at
+    std::vector<CacheBalanceRow> balances;
+};
+BOOST_DESCRIBE_STRUCT(CacheSnapshot, (), (section, balances))
 
 /**
  * @brief Enumeration of chain synchronization states
@@ -317,6 +380,14 @@ public:
     DagCache &cache();
 
     /**
+     * @brief Persistent transaction index used for wallet/explorer queries
+     *        and fast duplicate hash checks.
+     */
+    ChainIndex *chain_index();
+    const ChainIndex *chain_index() const;
+    bool chain_index_enabled() const;
+
+    /**
      * @brief Get the ID of the first saved section
      *
      * @return SectionId The first saved section ID
@@ -423,17 +494,20 @@ public:
      *
      * Updates the persistent storage with the current first section,
      * last section, and last cached section IDs.
+     * @param allow_lower_first Permit a lower `first` than on disk (e.g. installing cold packs extends history backwards).
      */
-    void update_range();
+    void update_range(bool allow_lower_first = false);
 
     /**
      * @brief Search for a transaction by its hash
      *
-     * @param hash The hash to search for
-     * @param deep The maximum number of sections to search back (default: 100)
+     * @param section Section the tx lives in. Required because Transaction::calculate_hash
+     *                mixes section_id into the hash, so each section has its own hash space.
+     * @param hash    Hash within that section.
      * @return std::optional<Transaction> The transaction if found, or nullopt
      */
-    std::optional<Transaction> search_duplicate_by_hash(const std::string &hash, int deep = 100) const;
+    std::optional<Transaction>
+    find_transaction(const SectionId &section, const std::string &hash) const;
 
     std::optional<std::pair<SectionId, std::string>> search_duplicate_by_sender(const ActorId &actor_id,
                                                                                 std::uint64_t  latest_timestamp,
@@ -505,6 +579,26 @@ public:
     void network_request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder);
     void network_file_sections_response(const std::string &compressed, const Responder &responder);
 
+    // Pack-level sync (peers with dag_version >= 100 only).
+    // Server side: respond to peer's queries about our packs.
+    void network_pack_list_request(const Responder &responder);
+    void network_pack_request(const PackRequest &req, const Responder &responder);
+    // Client side: peer told us what packs it has / sent a pack we asked for.
+    void network_pack_list_response(const PackList &list, const Responder &responder);
+    void network_pack_data_response(const PackData &data, const Responder &responder);
+
+    // Initiate pack-level sync against a single peer (the same one currently
+    // selected by the existing sync flow). No-op for legacy peers.
+    void start_pack_sync(const Responder &responder);
+
+    // Balance-cache snapshot transfer (peers with dag_version >= 100 only).
+    // Server side: hand over our prebuilt balance cache.
+    void network_cache_snapshot_request(const Responder &responder);
+    // Client side: install a received snapshot instead of rebuilding locally.
+    void network_cache_snapshot_response(const std::string &compressed, const Responder &responder);
+    // Ask the sync peer for its cache snapshot (called once file-sync completes).
+    void request_cache_snapshot(const Responder &responder);
+
     /**
      * @brief Request light mode data from the network
      *
@@ -545,6 +639,8 @@ public:
      * was synchronizing with the network.
      */
     void process_cached_transactions(bool not_ready = false);
+    void retry_contract_transactions();
+    void request_contract_section(const SectionId &section_id);
 
     std::unordered_map<std::string, Transaction> sended_transactions() {
         return sended_transactions_;
@@ -558,6 +654,28 @@ public:
     size_t failed_transactions_size() const { return failed_transactions_.size(); }
     size_t last_txs_size() const { return last_txs_.size(); }
     size_t cached_txs_size() { auto g = cached_txs_.lock(); return g->size(); }
+
+    /**
+     * @brief Begin accepting sync and network messages; start sync timers.
+     *        Idempotent — calling twice is a no-op.
+     *        Call after construction (and after any migration) so the caller
+     *        can decide when the node is ready to join the network.
+     */
+    void start();
+
+    /**
+     * @brief Stop accepting network messages, halt timers, finish in-flight work.
+     *        Storage stays openable — a later start() resumes from where we stopped.
+     *        Safe to call before destruction, before mode change, or before wipe.
+     */
+    void stop();
+
+    /**
+     * @brief Whether the Dag is currently accepting incoming network messages.
+     *        Network handlers should consult this and drop messages when false
+     *        to avoid racing against shutdown.
+     */
+    bool is_accepting_messages() const;
 
 private:
     ExtraChainNode                              *node;                 // Parent node reference
@@ -587,9 +705,48 @@ private:
     bool                                         light_requested_             = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
+    static constexpr std::size_t                 MaxDeferredContractTransactions = 1024;
+    std::mutex                                   deferred_contracts_mutex_;
+    std::unordered_map<std::string, Transaction> deferred_contracts_;
+
+    // Immutable packed storage for cold sections (10k per pack)
+    std::unique_ptr<Pack::Registry> pack_registry_;
+
+    // Persistent tx index (by hash / sender / receiver / token / time).
+    // Full mode: every tx. Light mode: only tx involving local wallets.
+    std::unique_ptr<ChainIndex> chain_index_;
+    bool                        chain_index_enabled_ = false;
+
+    // Lifecycle flags:
+    //   started_ — set by start(), cleared by stop(). Guards double-start.
+    //   accepting_messages_ — true between start() and stop(); network
+    //   handlers must check this to drop inbound traffic during shutdown.
+    std::atomic<bool> started_{false};
+    std::atomic<bool> accepting_messages_{false};
 
     //
     void add_to_cached_tx(const Transaction &transaction);
+
+    // Pack hot sections into an immutable pack when enough have accumulated.
+    // Called from write_section when the hot range crosses a pack boundary.
+    void try_pack_hot();
+
+    // Pack-sync state: peer's known packs queue. Filled by network_pack_list_response,
+    // drained by issuing DagPackRequest one at a time. Mutex guards the list and
+    // the in_flight flag together because both fields move whenever we ask the
+    // peer for the next pack.
+    std::mutex                pack_sync_mutex_;
+    std::vector<Pack::PackId> pack_sync_pending_;
+    bool                      pack_sync_in_flight_ = false;
+    bool                      pack_sync_installed_any_ = false;
+    // Chunked transfer of the pack currently being pulled: which pack and the
+    // next byte offset to request, so memory stays bounded to one chunk.
+    Pack::PackId              pack_sync_current_id_ = 0;
+    std::uint64_t             pack_sync_offset_     = 0;
+
+    // Pull next pack from pack_sync_pending_ and send DagPackRequest.
+    // Called after each pack is received (or after PackList arrives).
+    void issue_next_pack_request(const Responder &responder);
 
     /**
      * @brief Request sections from the network

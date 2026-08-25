@@ -48,8 +48,13 @@ struct LoadInfo {
     size_t           amount_fragments;
     std::set<size_t> fragments_left;
     std::chrono::system_clock::time_point last_fragment_received {};
+    std::chrono::system_clock::time_point queued {};
 
     bool notify_neighbours;
+    bool forced { false };
+    // Count of full source-exhaustion restarts: give up after 3 cycles (file re-enters the
+    // queue via request_file/next sync) — otherwise an unreachable file retries forever.
+    int source_refresh_cycles { 0 };
 
     std::set<std::string>                         identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
@@ -109,11 +114,27 @@ public:
 
 private:
     void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
+    // "Vectors before files" gate state; a full scan of both pools, so callers cache it.
+    bool compute_vectors_waiting();
+    // Instant (coalesced) scheduler wakeup — without it new queue items waited for the next
+    // 5-second timer tick.
+    void kick();
+
+    std::atomic_bool kick_pending_ { false };
 
     ExtraChainNode* node;
 
     static constexpr int  MAX_ATTEMPTS             = 10;
-    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 5;
+    // Desktop: 16 x 250KB = 4MB in flight keeps a fast pipe busy. Phones get
+    // half the window — still 8x the old depth, but bounds memory and the
+    // radio burst on mobile links.
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 8;
+    static constexpr int  MAX_FORCED_DOWNLOADS     = 4;
+#else
+    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 16;
+    static constexpr int  MAX_FORCED_DOWNLOADS     = 8;
+#endif
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
     PullMode pull_mode = PullMode::All;
@@ -132,6 +153,10 @@ private:
 
     SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;
     std::mutex                                              m_write_file_mutex;
+
+    // Files that already finished downloading this session: their re-downloads (vector
+    // hash-mismatch cycle) don't hold the "vectors before files" gate.
+    SafePtr<std::set<Dfs::FileLink>> m_completed_once;
 
     QTimer* m_timer;
 };

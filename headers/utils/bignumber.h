@@ -25,21 +25,15 @@
 #include "boost/multiprecision/cpp_int.hpp"
 #include "msgpack.hpp"
 
+#include "network/wire_format.h"
 #include "utils/exc_magic.h"
 #include "extrachain_global.h"
 
 #ifdef QT_DEBUG
-    #define UPDATE_DEBUG()                                                                                        \
-        qdata    = to_string(NumeralBase::Hex);                                                                   \
-        qdataDec = to_string(NumeralBase::Dec);
+    #define UPDATE_DEBUG() qdata = to_string();
 #else
     #define UPDATE_DEBUG()
 #endif
-
-enum class NumeralBase {
-    Dec = 10,
-    Hex = 16
-};
 
 enum class BigNumberError {
     NoError,
@@ -48,13 +42,13 @@ enum class BigNumberError {
 };
 
 /**
- * Data type for big hex numbers for addresses
- * example: ab11405c92a05c91c48
+ * Arbitrary-precision integer. Canonical string form is decimal.
+ * Hex parsing retained for backward compatibility with pre-decimal chain data.
  */
 class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
-    explicit BigNumber(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
+    explicit BigNumber(const std::string &bigNumber);
     BigNumber(const BigNumber &other);
     BigNumber(BigNumber &&other) noexcept;
     explicit BigNumber(const boost::multiprecision::cpp_int &number);
@@ -72,7 +66,6 @@ private:
 
 #ifdef QT_DEBUG
     std::string qdata;
-    std::string qdataDec;
 #endif
 
 public:
@@ -111,16 +104,19 @@ public:
     const boost::multiprecision::cpp_int &data() const;
 
     bool               is_empty() const;
-    std::string        to_string(NumeralBase numSystem = NumeralBase::Hex) const;
+    std::string        to_string() const;
+    std::string        to_hex_string() const;
     std::string        to_printable_string() const;
     std::optional<int> to_int() const;
 
     BigNumber pow(unsigned long number);
-    // BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;
 
-    static std::expected<BigNumber, BigNumberError> create(const std::string &bigNumber,
-                                                           NumeralBase        base = NumeralBase::Hex);
+    static std::expected<BigNumber, BigNumberError> create(const std::string &bigNumber);
+
+    // Legacy hex helpers — used by migration and by peers running pre-decimal protocol.
+    static bool      is_hex_string(const std::string &str);
+    static BigNumber from_hex(const std::string &hex);
 
     std::strong_ordering operator<=>(const BigNumber &other) const;
     std::strong_ordering operator<=>(const int &other) const;
@@ -130,14 +126,18 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string num = to_string();
+        std::string num = (WireFormat::get_mode() == WireFormat::Mode::Legacy)
+                              ? to_hex_string()
+                              : to_string();
         msgpack_pk.pack_str(num.size());
         msgpack_pk.pack_str_body(num.data(), num.size());
     }
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string num = msgpack_o.as<std::string>();
-        *this           = BigNumber(num);
+        // Mirror msgpack_pack: the active WireFormat scope decides the encoding,
+        // never the content. Legacy peers send hex; canonical peers send decimal.
+        *this = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? from_hex(num) : BigNumber(num);
     }
 };
 

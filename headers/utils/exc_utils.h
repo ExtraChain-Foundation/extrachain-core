@@ -78,13 +78,30 @@ enum class Force {
     Active
 };
 
-struct ExtraChainSettings {
-    std::optional<std::string> first_node;
-    std::optional<DagMode>     dag_mode;
-    std::optional<DfsMode>     dfs_mode;
-    std::optional<std::string> node_identifier;
+// Storage schema versions. Bump when on-disk layout or canonical string formats change
+// so nodes can detect legacy data and trigger migration.
+// 100 = first decimal-first + packed DAG release.
+constexpr int CURRENT_DAG_VERSION = 100;
+constexpr int CURRENT_DFS_VERSION = 100;
+
+enum class ChainIndexMode {
+    Disabled,
+    Enabled
 };
-BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (), (first_node, dag_mode, dfs_mode, node_identifier))
+
+struct ExtraChainSettings {
+    std::optional<std::string>    first_node;
+    std::optional<DagMode>        dag_mode;
+    std::optional<DfsMode>        dfs_mode;
+    std::optional<std::string>    node_identifier;
+    std::optional<int>            dag_version;
+    std::optional<int>            dfs_version;
+    std::optional<ChainIndexMode> chain_index_mode;
+};
+BOOST_DESCRIBE_STRUCT(
+    ExtraChainSettings,
+    (),
+    (first_node, dag_mode, dfs_mode, node_identifier, dag_version, dfs_version, chain_index_mode))
 
 class ByteArray {
 public:
@@ -279,6 +296,30 @@ CREATE TABLE IF NOT EXISTS balance_cache (
     balance TEXT NOT NULL,
     PRIMARY KEY(actor_id, token_id)
 );
+)";
+
+        constexpr char ContractCatalogCreate[] = R"(
+CREATE TABLE IF NOT EXISTS contract_catalog (
+    contract_id TEXT PRIMARY KEY NOT NULL,
+    owner_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    revision INTEGER NOT NULL,
+    module_hash TEXT NOT NULL,
+    state_hash TEXT NOT NULL,
+    transaction_hash TEXT NOT NULL,
+    section INTEGER NOT NULL,
+    deploy_transaction_hash TEXT NOT NULL,
+    deploy_section INTEGER NOT NULL,
+    checkpoint_revision INTEGER NOT NULL,
+    checkpoint_section INTEGER NOT NULL,
+    checkpoint_state_hash TEXT NOT NULL,
+    checkpoint_transaction_hash TEXT NOT NULL,
+    replay_depth INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS contract_catalog_owner_idx ON contract_catalog(owner_id);
+CREATE INDEX IF NOT EXISTS contract_catalog_kind_idx ON contract_catalog(kind);
+CREATE INDEX IF NOT EXISTS contract_catalog_section_idx ON contract_catalog(section DESC, contract_id);
 )";
 
         static const std::string LUMINANCE_TABLE = "luminance";
@@ -920,6 +961,11 @@ namespace ChainConst {
     static const std::string DAG_RANGE      = "range";
     static const std::string DAG_RANGE_PATH = DAG_FOLDER + "/" + DAG_RANGE;
 
+    // Hot sections: one file per not-yet-packed section
+    static const std::string DAG_HOT_FOLDER = DAG_FOLDER + "/hot";
+    // Packed sections: immutable .pack files, each covering SECTION_SIZE sections
+    static const std::string DAG_PACKS_FOLDER = DAG_FOLDER + "/packs";
+
     // Cache
     static const std::string DAG_CACHE_FOLDER  = DAG_FOLDER + "/cache";
     static const std::string TRANSACTION_CACHE = DAG_CACHE_FOLDER + "/SelfTransactions.db";
@@ -932,7 +978,7 @@ namespace ChainConst {
         Universal,
     };
 
-    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000", NumeralBase::Dec);
+    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000");
 } // namespace ChainConst
 MSGPACK_ADD_ENUM(ChainConst::DataRowType)
 

@@ -695,7 +695,7 @@ void Utils::benchmark(std::function<void()> func, int count) {
 }
 
 std::string Utils::extrachainVersion() {
-    return extrachain_version;
+    return extrachain_node_version;
 }
 
 std::string Utils::sodium_version() {

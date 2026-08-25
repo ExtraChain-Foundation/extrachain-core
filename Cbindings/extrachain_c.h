@@ -205,8 +205,10 @@ EXC_API ExcError exc_dag_set_mode(ExcDagMode mode);
 /* Read a section by ID. Returns JSON string. Caller frees via exc_string_free. */
 EXC_API ExcError exc_dag_read_section(const char* section_id, char** out_json);
 
-/* Search for a transaction by hash. Returns a Transaction handle. */
-EXC_API ExcError exc_dag_search_transaction(const char* hash, ExcHandle* out_tx);
+/* Look up a transaction by (section_id, hash). Returns a Transaction handle. */
+EXC_API ExcError exc_dag_find_transaction(const char* section_id,
+                                          const char* hash,
+                                          ExcHandle*  out_tx);
 
 /* Free a section handle (from exc_dag_read_section if handle-based). */
 EXC_API void exc_section_free(ExcHandle section);
@@ -433,15 +435,61 @@ EXC_API ExcError exc_janus_place_bid(const char* item_owner_id,
  * color: hex color string (e.g. "#FF0000").
  * On success, out_token_json is JSON-encoded TokenData.
  */
-EXC_API ExcError exc_token_create(const char* name, const char* ticker,
-                                  const char* amount, const char* color,
-                                  char** out_token_json);
+EXC_API ExcError exc_token_create(const char* name,
+                                  const char* ticker,
+                                  const char* amount,
+                                  uint8_t     decimals,
+                                  const char* color,
+                                  char**      out_token_json);
 
 /* Check if a token with given name and ticker exists. */
 EXC_API ExcError exc_token_exists(const char* name, const char* ticker, bool* out_exists);
 
 /* Read all known tokens. Returns JSON object {token_id: name, ...}. */
 EXC_API ExcError exc_token_list(char** out_json);
+
+/* ════════════════════════════════════════════════════════════════════
+ *  WebAssembly contracts
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* Deploy a module. init_arguments contains MessagePack data. */
+EXC_API ExcError exc_contract_deploy(const char*    kind,
+                                     const uint8_t* module,
+                                     size_t         module_len,
+                                     const uint8_t* init_arguments,
+                                     size_t         init_arguments_len,
+                                     ExcHandle*     out_tx_handle);
+
+/* Submit a state-changing call. arguments contains MessagePack data. */
+EXC_API ExcError exc_contract_call(const char*    contract_id,
+                                   const char*    method,
+                                   const uint8_t* arguments,
+                                   size_t         arguments_len,
+                                   ExcHandle*     out_tx_handle);
+
+/* Run a read-only method and return its MessagePack result as URL-safe Base64. */
+EXC_API ExcError exc_contract_query(const char*    contract_id,
+                                    const char*    method,
+                                    const uint8_t* arguments,
+                                    size_t         arguments_len,
+                                    char**         out_result_base64);
+
+/* Submit an owner-approved immutable module upgrade. */
+EXC_API ExcError exc_contract_upgrade(const char*    contract_id,
+                                      const uint8_t* module,
+                                      size_t         module_len,
+                                      const uint8_t* migration_arguments,
+                                      size_t         migration_arguments_len,
+                                      ExcHandle*     out_tx_handle);
+
+/* Return identity, version, revision, and current hashes as JSON. */
+EXC_API ExcError exc_contract_inspect(const char* contract_id, char** out_json);
+
+/* Return the trusted contract component catalog as JSON. Desktop use only. */
+EXC_API ExcError exc_contract_components(char** out_json);
+
+/* Generate Rust source from a JSON array of component IDs. Desktop use only. */
+EXC_API ExcError exc_contract_compose(const char* project_name, const char* component_ids_json, char** out_source);
 
 /* ════════════════════════════════════════════════════════════════════
  *  Callbacks (event registration)

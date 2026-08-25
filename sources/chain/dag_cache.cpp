@@ -19,6 +19,7 @@
 
 #include "chain/dag_cache.h"
 #include "chain/dag.h"
+#include "contracts/contract_transaction.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 #include "utils/db_connector.h"
@@ -27,6 +28,89 @@
 #include <QFile>
 
 #include "utils/thread_pool_boost.h"
+
+#include <msgpack.hpp>
+
+namespace {
+    using ContractDelta = std::pair<ActorId, BigNumberFloat>;
+
+    std::vector<ContractDelta> fungible_contract_deltas(const Transaction& transaction) {
+        if (!is_contract_transaction(transaction.type()) || !transaction.meta().has_value()) {
+            return {};
+        }
+        auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
+        if (!metadata.has_value() || metadata->kind != "fungible-token") {
+            return {};
+        }
+        auto decoded = Utils::from_base64<std::vector<std::uint8_t>>(metadata->arguments_base64);
+        if (!decoded.has_value()) {
+            return {};
+        }
+
+        auto amount = [](std::uint64_t value, bool positive) {
+            auto result = BigNumberFloat(std::to_string(value));
+            return positive ? result : -result;
+        };
+        auto actor = [](std::string value) -> std::optional<ActorId> {
+            auto result = ActorId::create(std::move(value));
+            if (!result.has_value()) {
+                return std::nullopt;
+            }
+            return *result;
+        };
+
+        try {
+            auto handle = msgpack::unpack(reinterpret_cast<const char*>(decoded->data()), decoded->size());
+            auto object = handle.get();
+            if (transaction.type() == TransactionType::ContractDeploy && metadata->method == "init") {
+                std::tuple<std::string, std::string, std::uint8_t, std::uint64_t> init;
+                object.convert(init);
+                return { { transaction.sender(), amount(std::get<3>(init), true) } };
+            }
+            if (transaction.type() != TransactionType::ContractCall) {
+                return {};
+            }
+            if (metadata->method == "transfer" || metadata->method == "mint") {
+                std::tuple<std::string, std::uint64_t> arguments;
+                object.convert(arguments);
+                auto receiver = actor(std::get<0>(arguments));
+                if (!receiver.has_value()) {
+                    return {};
+                }
+                auto value = std::get<1>(arguments);
+                if (metadata->method == "mint") {
+                    return { { *receiver, amount(value, true) } };
+                }
+                return { { transaction.sender(), amount(value, false) }, { *receiver, amount(value, true) } };
+            }
+            if (metadata->method == "transfer_from") {
+                std::tuple<std::string, std::string, std::uint64_t> arguments;
+                object.convert(arguments);
+                auto owner    = actor(std::get<0>(arguments));
+                auto receiver = actor(std::get<1>(arguments));
+                if (!owner.has_value() || !receiver.has_value()) {
+                    return {};
+                }
+                auto value = std::get<2>(arguments);
+                return { { *owner, amount(value, false) }, { *receiver, amount(value, true) } };
+            }
+            if (metadata->method == "burn") {
+                std::uint64_t value = 0;
+                object.convert(value);
+                return { { transaction.sender(), amount(value, false) } };
+            }
+        } catch (const std::exception&) {
+            return {};
+        }
+        return {};
+    }
+
+    void apply_contract_deltas(const Transaction& transaction, Balances& balances, bool reverse) {
+        for (auto& [actor_id, delta] : fungible_contract_deltas(transaction)) {
+            balances[{ actor_id, transaction.receiver() }] += reverse ? -delta : delta;
+        }
+    }
+} // namespace
 
 DagCache::DagCache(ExtraChainNode* node, Dag* dag)
     : node(node)
@@ -524,7 +608,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         }
 
         if (i % BigNumber(20000) == 0) {
-            eLog("update_to_genesis_section scan on 0x{} / {}", i, i.to_printable_string());
+            eLog("update_to_genesis_section scan on {}", i.to_printable_string());
         }
 
         for (const auto& tx : section->transactions) {
@@ -607,6 +691,10 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
     if (tx.type() == TransactionType::Unknown) {
         return;
     }
+    if (is_contract_transaction(tx.type())) {
+        apply_contract_deltas(tx, balances, false);
+        return;
+    }
 
     // Minting transactions (creates from nothing, adds to receiver)
     if (tx.type() == TransactionType::Minting && !tx.receiver().is_zero() && !tx.token().is_zero()) {
@@ -668,8 +756,8 @@ bool DagCache::init_db() {
     }
 
     if (cache_db_ && cache_db_->is_open()) {
-        db_initialized_ = true;
-        return true;
+        db_initialized_ = ensure_contract_catalog_schema();
+        return db_initialized_;
     }
 
     std::unique_lock<std::mutex> lock(mutex_);
@@ -689,7 +777,7 @@ bool DagCache::init_db() {
     }
 
     // Create table if it doesn't exist
-    bool success = cache_db_->query(Config::DataStorage::DagCacheCreate);
+    bool success = cache_db_->query(Config::DataStorage::DagCacheCreate) && ensure_contract_catalog_schema();
 
     if (!success) {
         eLog("[DagCache] Failed to create cache table");
@@ -718,18 +806,205 @@ bool DagCache::init_db() {
 }
 
 void DagCache::reset_db() {
+    std::unique_lock<std::mutex> catalog_lock(contract_catalog_mutex_);
     std::unique_lock<std::mutex> lock(mutex_);
-    db_initialized_ = false;
-    if (db_initialized_) {
+    const bool                   was_initialized = db_initialized_;
+    db_initialized_                              = false;
+    if (was_initialized && cache_db_) {
         cache_db_->close();
         QFile::remove(ChainConst::BALANCE_CACHE.c_str());
     }
     cache_db_.reset();
+    contract_catalog_scanned_ = false;
+}
+
+bool DagCache::ensure_contract_catalog_schema() {
+    if (cache_db_ == nullptr) {
+        return false;
+    }
+    if (cache_db_->table_exists("contract_catalog")) {
+        const auto columns        = cache_db_->table_columns("contract_catalog");
+        const auto has_schema_two = std::ranges::any_of(columns, [](const DBColumn& column) {
+            return column.name == "checkpoint_revision";
+        });
+        if (!has_schema_two && !cache_db_->drop_table("contract_catalog")) {
+            return false;
+        }
+    }
+    return cache_db_->query(Config::DataStorage::ContractCatalogCreate);
+}
+
+void DagCache::index_contract_transaction(const Transaction& transaction) {
+    if (!is_contract_transaction(transaction.type()) || !transaction.meta().has_value() || !init_db()) {
+        return;
+    }
+
+    const auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
+    const auto section  = transaction.section().to_int();
+    if (!metadata.has_value() || !section.has_value() || metadata->schema != 3 || metadata->kind.empty()
+        || metadata->version == 0 || metadata->revision == 0) {
+        return;
+    }
+
+    const auto contract_id = transaction.receiver().to_string();
+    auto       existing    = cache_db_->select("SELECT * FROM contract_catalog WHERE contract_id = ?",
+                                      "contract_catalog",
+                                               { { "contract_id", contract_id } });
+
+    ExtraChain::Contracts::ContractSummary summary;
+    if (transaction.type() == TransactionType::ContractDeploy) {
+        if (!existing.empty()) {
+            return;
+        }
+        summary.contract_id             = contract_id;
+        summary.owner_id                = transaction.sender().to_string();
+        summary.deploy_transaction_hash = transaction.hash();
+        summary.deploy_section          = static_cast<std::uint64_t>(*section);
+    } else {
+        if (existing.empty()) {
+            return;
+        }
+        const auto parsed = Utils::from_dbrow<ExtraChain::Contracts::ContractSummary>(existing.front());
+        if (!parsed.has_value() || parsed->owner_id.empty() || metadata->revision <= parsed->revision) {
+            return;
+        }
+        summary = *parsed;
+        if (transaction.type() == TransactionType::ContractUpgrade
+            && transaction.sender().to_string() != summary.owner_id) {
+            return;
+        }
+    }
+
+    summary.kind             = metadata->kind;
+    summary.version          = metadata->version;
+    summary.revision         = metadata->revision;
+    summary.module_hash      = metadata->module_hash;
+    summary.state_hash       = metadata->state_hash;
+    summary.transaction_hash = transaction.hash();
+    summary.section          = static_cast<std::uint64_t>(*section);
+    if (metadata->checkpoint) {
+        summary.checkpoint_revision         = metadata->revision;
+        summary.checkpoint_section          = summary.section;
+        summary.checkpoint_state_hash       = metadata->state_hash;
+        summary.checkpoint_transaction_hash = transaction.hash();
+    }
+    summary.replay_depth = summary.revision - summary.checkpoint_revision;
+    cache_db_->replace("contract_catalog", Utils::to_dbrow(summary));
+
+    for (const auto& transition : metadata->transitions) {
+        auto rows = cache_db_->select("SELECT * FROM contract_catalog WHERE contract_id = ?",
+                                      "contract_catalog",
+                                      { { "contract_id", transition.contract_id } });
+        if (rows.empty()) {
+            continue;
+        }
+        auto nested = Utils::from_dbrow<ExtraChain::Contracts::ContractSummary>(rows.front());
+        if (!nested.has_value() || transition.revision <= nested->revision
+            || transition.previous_state_hash != nested->state_hash) {
+            continue;
+        }
+        nested->kind             = transition.kind;
+        nested->version          = transition.version;
+        nested->revision         = transition.revision;
+        nested->module_hash      = transition.module_hash;
+        nested->state_hash       = transition.state_hash;
+        nested->transaction_hash = transaction.hash();
+        nested->section          = static_cast<std::uint64_t>(*section);
+        if (transition.checkpoint) {
+            nested->checkpoint_revision         = transition.revision;
+            nested->checkpoint_section          = nested->section;
+            nested->checkpoint_state_hash       = transition.state_hash;
+            nested->checkpoint_transaction_hash = transaction.hash();
+        }
+        nested->replay_depth = nested->revision - nested->checkpoint_revision;
+        cache_db_->replace("contract_catalog", Utils::to_dbrow(*nested));
+    }
+}
+
+ExtraChain::Contracts::ContractCatalogPage DagCache::list_contracts(
+    const ExtraChain::Contracts::ContractCatalogFilter& filter) {
+    ExtraChain::Contracts::ContractCatalogPage page;
+    if (!init_db()) {
+        return page;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(contract_catalog_mutex_);
+        if (!contract_catalog_scanned_) {
+            if (cache_db_->count("contract_catalog") == 0) {
+                rebuild_contract_catalog();
+            }
+            contract_catalog_scanned_ = true;
+        }
+    }
+
+    auto                                                rows = cache_db_->select_all("contract_catalog");
+    std::vector<ExtraChain::Contracts::ContractSummary> matches;
+    matches.reserve(rows.size());
+    for (const auto& row : rows) {
+        auto summary = Utils::from_dbrow<ExtraChain::Contracts::ContractSummary>(row);
+        if (!summary.has_value()) {
+            continue;
+        }
+        if (filter.owner_id.has_value() && summary->owner_id != *filter.owner_id) {
+            continue;
+        }
+        if (filter.kind.has_value() && summary->kind != *filter.kind) {
+            continue;
+        }
+        matches.push_back(std::move(*summary));
+    }
+    std::ranges::sort(matches, [](const auto& left, const auto& right) {
+        return std::tie(right.section, right.transaction_hash) < std::tie(left.section, left.transaction_hash);
+    });
+
+    std::size_t offset = 0;
+    if (filter.cursor.has_value()) {
+        const auto iterator =
+            std::ranges::find(matches, *filter.cursor, &ExtraChain::Contracts::ContractSummary::transaction_hash);
+        if (iterator != matches.end()) {
+            offset = static_cast<std::size_t>(std::distance(matches.begin(), iterator)) + 1;
+        }
+    }
+    const auto limit = std::clamp<std::size_t>(filter.limit, 1, 100);
+    const auto end   = std::min(matches.size(), offset + limit);
+    page.items.insert(page.items.end(),
+                      matches.begin() + static_cast<std::ptrdiff_t>(offset),
+                      matches.begin() + static_cast<std::ptrdiff_t>(end));
+    if (end < matches.size() && !page.items.empty()) {
+        page.next_cursor = page.items.back().transaction_hash;
+    }
+    return page;
+}
+
+bool DagCache::rebuild_contract_catalog() {
+    if (!init_db() || dag == nullptr || !cache_db_->query("DELETE FROM contract_catalog")) {
+        return false;
+    }
+    const auto first = dag->first_saved_section();
+    const auto last  = dag->current_section();
+    if (first < SectionId(0) || last < first) {
+        return true;
+    }
+    for (SectionId section_id = first; section_id <= last; ++section_id) {
+        const auto section = dag->read_section(section_id);
+        if (!section.has_value()) {
+            continue;
+        }
+        for (const auto& transaction : section->transactions) {
+            index_contract_transaction(transaction);
+        }
+    }
+    return true;
 }
 
 void reverse_transaction(const Transaction& tx, Balances& balances) {
     // Skip if transaction doesn't affect balances
     if (tx.type() == TransactionType::Unknown) {
+        return;
+    }
+    if (is_contract_transaction(tx.type())) {
+        apply_contract_deltas(tx, balances, true);
         return;
     }
 
@@ -804,7 +1079,8 @@ std::set<ActorId> DagCache::local_clear_less_balances(const SectionId& from, con
             //     eLog("{}\n", tx1);
             // }
 
-            if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::Conversion) {
+            if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::Conversion
+                || is_contract_transaction(tx.type())) {
                 continue;
             }
 
@@ -834,252 +1110,4 @@ std::set<ActorId> DagCache::local_clear_less_balances(const SectionId& from, con
         eLog("[Dag] Removed for actors: {}", actors);
     }
     return actors;
-}
-
-void DagCache::ensure_index_db_initialized() const {
-    std::call_once(init_flag_, [this]() {
-        QDir("dag/cache").mkpath(".");
-        index_db_ = std::make_unique<DbConnector>("dag/cache/Index.db");
-
-        if (!index_db_->open()) {
-            throw std::runtime_error("Failed to open DAG cache database");
-        }
-
-        std::string create_actors_query = R"(
-                CREATE TABLE IF NOT EXISTS actors (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    actor_id TEXT UNIQUE NOT NULL
-                )
-            )";
-
-        if (!index_db_->create_table(create_actors_query)) {
-            throw std::runtime_error("Failed to create actors table");
-        }
-
-        std::string create_sections_query = R"(
-                CREATE TABLE IF NOT EXISTS actor_sections (
-                    actor_pk INTEGER NOT NULL,
-                    section_id TEXT NOT NULL,
-                    timestamp_ms INTEGER NOT NULL,
-                    PRIMARY KEY (actor_pk, section_id),
-                    FOREIGN KEY (actor_pk) REFERENCES actors(id)
-                )
-            )";
-
-        if (!index_db_->create_table(create_sections_query)) {
-            throw std::runtime_error("Failed to create actor_sections table");
-        }
-
-        index_db_->query("CREATE UNIQUE INDEX IF NOT EXISTS idx_actor_id ON actors(actor_id)");
-        index_db_->query("CREATE INDEX IF NOT EXISTS idx_actor_pk ON actor_sections(actor_pk)");
-        index_db_->query("CREATE INDEX IF NOT EXISTS idx_timestamp ON actor_sections(timestamp_ms)");
-        index_db_->query("CREATE INDEX IF NOT EXISTS idx_section_id ON actor_sections(section_id)");
-    });
-}
-
-std::int64_t DagCache::get_or_create_actor_pk(const std::string& actor_id) const {
-    std::string select_query = "SELECT id FROM actors WHERE actor_id = ?";
-    DbRow       binds        = { { "actor_id", actor_id } };
-    auto        results      = index_db_->select(select_query, "actors", binds);
-
-    if (!results.empty()) {
-        return std::stoll(results[0].at("id"));
-    }
-
-    DbRow actor_data = { { "actor_id", actor_id } };
-    if (!index_db_->insert("actors", actor_data)) {
-        throw std::runtime_error("Failed to insert actor: " + actor_id);
-    }
-
-    auto new_results = index_db_->select(select_query, "actors", binds);
-    if (new_results.empty()) {
-        throw std::runtime_error("Failed to get actor id after insert");
-    }
-
-    return std::stoll(new_results[0].at("id"));
-}
-
-void DagCache::write_index(const ActorId&   sender,
-                           const ActorId&   receiver,
-                           const SectionId& section_id,
-                           std::uint64_t    timestamp_ms) {
-    ensure_index_db_initialized();
-
-    std::string section_str   = section_id.to_string();
-    std::string sender_str    = sender.to_string();
-    std::string receiver_str  = receiver.to_string();
-    std::string timestamp_str = std::to_string(timestamp_ms);
-
-    auto sender_pk = get_or_create_actor_pk(sender_str);
-
-    DbRow sender_data = { { "actor_pk", std::to_string(sender_pk) },
-                          { "section_id", section_str },
-                          { "timestamp_ms", timestamp_str } };
-    index_db_->replace("actor_sections", sender_data);
-
-    if (sender_str != receiver_str) {
-        auto  receiver_pk   = get_or_create_actor_pk(receiver_str);
-        DbRow receiver_data = { { "actor_pk", std::to_string(receiver_pk) },
-                                { "section_id", section_str },
-                                { "timestamp_ms", timestamp_str } };
-        index_db_->replace("actor_sections", receiver_data);
-    }
-}
-
-std::vector<SectionId> DagCache::read_index(const ActorId& actor) {
-    ensure_index_db_initialized();
-
-    std::vector<BigNumber> sections;
-    std::string            actor_str = actor.to_string();
-
-    std::string query = R"(
-            SELECT s.section_id
-            FROM actor_sections s
-            JOIN actors a ON s.actor_pk = a.id
-            WHERE a.actor_id = ?
-            ORDER BY s.timestamp_ms
-        )";
-
-    DbRow binds   = { { "actor_id", actor_str } };
-    auto  results = index_db_->select(query, "actor_sections", binds);
-
-    sections.reserve(results.size());
-    for (const auto& row : results) {
-        auto it = row.find("section_id");
-        if (it != row.end() && !it->second.empty()) {
-            sections.emplace_back(it->second);
-        }
-    }
-
-    return sections;
-}
-
-bool DagCache::has_section(const ActorId& actor, const SectionId& section_id) const {
-    ensure_index_db_initialized();
-
-    std::string query = R"(
-            SELECT 1
-            FROM actor_sections s
-            JOIN actors a ON s.actor_pk = a.id
-            WHERE a.actor_id = ? AND s.section_id = ?
-            LIMIT 1
-        )";
-
-    DbRow binds = { { "actor_id", actor.to_string() }, { "section_id", section_id.to_string() } };
-
-    auto results = index_db_->select(query, "actor_sections", binds);
-    return !results.empty();
-}
-
-std::uint64_t DagCache::count_sections(const ActorId& actor) const {
-    ensure_index_db_initialized();
-
-    std::string query = R"(
-            SELECT COUNT(*) as count
-            FROM actor_sections s
-            JOIN actors a ON s.actor_pk = a.id
-            WHERE a.actor_id = ?
-        )";
-
-    DbRow binds   = { { "actor_id", actor.to_string() } };
-    auto  results = index_db_->select(query, "actor_sections", binds);
-
-    if (!results.empty()) {
-        return std::stoull(results[0].at("count"));
-    }
-    return 0;
-}
-
-std::vector<ActorId> DagCache::get_actors_with_section(const SectionId& section_id) const {
-    ensure_index_db_initialized();
-
-    std::vector<ActorId> actors;
-
-    std::string query = R"(
-            SELECT DISTINCT a.actor_id
-            FROM actor_sections s
-            JOIN actors a ON s.actor_pk = a.id
-            WHERE s.section_id = ?
-        )";
-
-    DbRow binds   = { { "section_id", section_id.to_string() } };
-    auto  results = index_db_->select(query, "actor_sections", binds);
-
-    actors.reserve(results.size());
-    for (const auto& row : results) {
-        auto it = row.find("actor_id");
-        if (it != row.end() && !it->second.empty()) {
-            actors.emplace_back(it->second);
-        }
-    }
-
-    return actors;
-}
-
-bool DagCache::has_daily_activity(const ActorId& actor, const std::string& time_period) const {
-    auto parse_result = Utils::parse_time_string(time_period);
-    if (!parse_result.has_value()) {
-        return false;
-    }
-
-    return has_daily_activity_ms(actor, parse_result.value());
-}
-
-bool DagCache::has_daily_activity_ms(const ActorId& actor, std::uint64_t period_ms) const {
-    ensure_index_db_initialized();
-
-    auto now_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count();
-
-    auto start_time_ms = static_cast<std::uint64_t>(now_ms) - period_ms;
-
-    constexpr std::uint64_t ms_per_day     = 24ULL * 60 * 60 * 1000;
-    std::uint64_t           days_in_period = period_ms / ms_per_day;
-
-    if (days_in_period == 0) {
-        std::string query = R"(
-                SELECT COUNT(*) as count
-                FROM actor_sections s
-                JOIN actors a ON s.actor_pk = a.id
-                WHERE a.actor_id = ? AND s.timestamp_ms >= ?
-            )";
-
-        DbRow binds = { { "actor_id", actor.to_string() }, { "start_time", std::to_string(start_time_ms) } };
-
-        auto results = index_db_->select(query, "actor_sections", binds);
-
-        if (!results.empty()) {
-            return std::stoull(results[0].at("count")) > 0;
-        }
-
-        return false;
-    }
-
-    for (std::uint64_t day = 0; day < days_in_period; ++day) {
-        auto day_start = start_time_ms + (day * ms_per_day);
-        auto day_end   = day_start + ms_per_day;
-
-        std::string query = R"(
-                SELECT COUNT(*) as count
-                FROM actor_sections s
-                JOIN actors a ON s.actor_pk = a.id
-                WHERE a.actor_id = ?
-                AND s.timestamp_ms >= ?
-                AND s.timestamp_ms < ?
-                LIMIT 1
-            )";
-
-        DbRow binds = { { "actor_id", actor.to_string() },
-                        { "day_start", std::to_string(day_start) },
-                        { "day_end", std::to_string(day_end) } };
-
-        auto results = index_db_->select(query, "actor_sections", binds);
-
-        if (results.empty() || std::stoull(results[0].at("count")) == 0) {
-            return false;
-        }
-    }
-
-    return true;
 }

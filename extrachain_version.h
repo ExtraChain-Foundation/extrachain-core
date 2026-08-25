@@ -21,5 +21,10 @@
 
 #include <string>
 
-// Release: 0.25.0
+// Frozen handshake protocol-compat anchor: kept at 0.25.0 so the strict
+// handshake version check still matches pre-0.26 peers. Do NOT bump — the real
+// release version lives in extrachain_node_version below.
 static const std::string extrachain_version = "0.25.0";
+
+// Release: 0.26.0
+static const std::string extrachain_node_version = "0.26.0";

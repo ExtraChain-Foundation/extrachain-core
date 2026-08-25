@@ -19,8 +19,11 @@
 
 #pragma once
 
+#include <cstring>
 #include <filesystem>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "chain/actor.h"
@@ -45,10 +48,13 @@ namespace Tools {
     }
 
     template <typename T>
-    T byteArrayToType(std::vector<unsigned char> value) {
-        T* res;
-        res = reinterpret_cast<T*>(value.data());
-        return *res;
+    std::optional<T> byteArrayToType(const std::vector<unsigned char>& value) {
+        if (value.size() < sizeof(T)) {
+            return std::nullopt;
+        }
+        T result;
+        std::memcpy(&result, value.data(), sizeof(T));
+        return result;
     }
 
     template <typename T>
@@ -61,10 +67,13 @@ namespace Tools {
     }
 
     template <typename T>
-    T stdStringBytesToType(std::string value) {
-        T* res;
-        res = reinterpret_cast<T*>(value.data());
-        return *res;
+    std::optional<T> stdStringBytesToType(std::string_view value) {
+        if (value.size() < sizeof(T)) {
+            return std::nullopt;
+        }
+        T result;
+        std::memcpy(&result, value.data(), sizeof(T));
+        return result;
     }
 } // namespace Tools
 
@@ -97,6 +106,7 @@ namespace Dfs {
         static const std::string TEMPLATE_DICTIONARY          = ":Dictionary";
         static const std::string TEMPLATE_VECTOR              = ":Vector";
         static const std::string TEMPLATE_CONTRACTS           = ":Contracts";
+        static const std::string TEMPLATE_CONTRACT_TOOLCHAIN  = ":ContractToolchain";
         static const std::string TEMPLATE_CHAT                = ":Chat";
         static const std::string TEMPLATE_JANUS               = ":Janus";
     } // namespace Basic
@@ -447,7 +457,7 @@ namespace Dfs {
 
             ReferenceData(std::string _key, std::string _access)
                 : key(_key)
-                , access(_access) { };
+                , access(_access) {};
 
             std::string toString() const {
                 return std::string(fmt::format("[\"key\":\"{}\",\"access\":\"{}\"]", key, access));
@@ -480,9 +490,14 @@ namespace Dfs {
                 return Tools::typeToStdStringBytes<std::uint64_t>(pos) + data;
             }
 
-            void fromStdString(std::string string) {
-                pos  = Tools::stdStringBytesToType<std::uint64_t>(string.substr(0, 8));
-                data = string.substr(8);
+            bool fromStdString(std::string_view value) {
+                auto parsed_position = Tools::stdStringBytesToType<std::uint64_t>(value);
+                if (!parsed_position.has_value()) {
+                    return false;
+                }
+                pos  = *parsed_position;
+                data = value.substr(sizeof(std::uint64_t));
+                return true;
             }
         };
 
@@ -703,11 +718,10 @@ namespace Dfs {
                                                              const ActorId&                     owner_id,
                                                              const std::string&                 file_id);
 
-                std::expected<bool, Dfs::DfsError> validate_folder_hierarchy(
-                    const std::shared_ptr<DbConnector> db,
-                    const ActorId&                     owner_id,
-                    const std::string&                 folder_file_id,
-                    const std::string&                 new_parent_id);
+                std::expected<bool, Dfs::DfsError> validate_folder_hierarchy(const std::shared_ptr<DbConnector> db,
+                                                                             const ActorId&     owner_id,
+                                                                             const std::string& folder_file_id,
+                                                                             const std::string& new_parent_id);
             } // namespace ActorSpace
         } // namespace DirsFile
 

@@ -19,6 +19,35 @@
 
 #include "chain/transaction.h"
 
+namespace {
+
+    void append_field(std::string &target, std::string_view value) {
+        auto size = static_cast<std::uint32_t>(value.size());
+        for (int shift = 24; shift >= 0; shift -= 8) {
+            target.push_back(static_cast<char>(size >> shift));
+        }
+        target.append(value);
+    }
+
+    std::string contract_hash_data(const Transaction &transaction) {
+        std::string result = "EXTRACHAIN:CONTRACT-TRANSACTION:2";
+        append_field(result, transaction.section().to_string());
+        append_field(result, std::to_string(std::to_underlying(transaction.type())));
+        append_field(result, transaction.sender().to_string());
+        append_field(result, transaction.receiver().to_string());
+        append_field(result, transaction.token().to_string());
+        append_field(result, transaction.amount().to_string());
+        append_field(result, std::to_string(transaction.timestamp()));
+        append_field(result, transaction.meta().value_or(""));
+        append_field(result, std::to_string(transaction.prev_hashs().size()));
+        for (const auto &previous_hash : transaction.prev_hashs()) {
+            append_field(result, previous_hash);
+        }
+        return result;
+    }
+
+} // namespace
+
 Transaction::Transaction() {
     this->sender_    = ActorId();
     this->receiver_  = ActorId();
@@ -94,10 +123,13 @@ void Transaction::set_token(const ActorId &value) {
 }
 
 std::string Transaction::calculate_hash() const {
+    if (is_contract_transaction(type_)) {
+        return Utils::calculate_hash(contract_hash_data(*this));
+    }
+
     auto hashData =
         section_.to_string() + std::to_string(std::to_underlying(type_)) + sender_.to_string()
-        + receiver_.to_string() + token_.to_string() + amount_.to_string(NumeralBase::Hex)
-        + std::to_string(timestamp_)
+        + receiver_.to_string() + token_.to_string() + amount_.to_string() + std::to_string(timestamp_)
         + (meta_.has_value() ? meta_.value() : ""); // TODO: + amount.size() meta.size() + prev_hashs_.size()
                                                     // TODO: meta max 255 in prove + section size?
 
@@ -105,8 +137,19 @@ std::string Transaction::calculate_hash() const {
         hashData += prev_hash;
     }
 
-    std::string resultHash = Utils::calculate_hash(hashData);
-    return resultHash;
+    return Utils::calculate_hash(hashData);
+}
+
+std::string Transaction::calculate_hash_hex() const {
+    auto hashData = section_.to_hex_string() + std::to_string(std::to_underlying(type_)) + sender_.to_string()
+                    + receiver_.to_string() + token_.to_string() + amount_.to_hex_string()
+                    + std::to_string(timestamp_) + (meta_.has_value() ? meta_.value() : "");
+
+    for (const auto &prev_hash : prev_hashs_) {
+        hashData += prev_hash;
+    }
+
+    return Utils::calculate_hash(hashData);
 }
 
 void Transaction::update_hash() {
@@ -135,8 +178,14 @@ bool Transaction::sign(const Actor<KeyPrivate> &actor) {
         return false;
     }
 
-    update_hash();
-    auto sign = actor.key().sign(hash_);
+    // Sign with the LEGACY hex-form hash for wire compatibility: pre-decimal
+    // peers re-derive the hash in hex and expect the signature to match that.
+    // New peers always accept either hex or decimal in verify(), so we don't
+    // lose anything on the new side.
+    //
+    // Once we stop talking to legacy peers, switch back to calculate_hash().
+    this->hash_ = calculate_hash_hex();
+    auto sign   = actor.key().sign(hash_);
     if (!sign.has_value()) {
         return false;
     }
@@ -149,14 +198,19 @@ bool Transaction::verify(const Actor<KeyPublic> &actor) const {
         return false;
     }
 
-    std::string actual_hash = calculate_hash();
-
-    auto verify = actor.key().verify(actual_hash, signature_);
-    if (!verify.has_value()) {
-        return false;
+    // New signatures are computed over the decimal form. Transactions signed before
+    // the hex → decimal migration still validate against the legacy hex form.
+    auto verify_primary = actor.key().verify(calculate_hash(), signature_);
+    if (verify_primary.has_value() && verify_primary.value()) {
+        return true;
     }
 
-    return verify.value();
+    auto verify_legacy = actor.key().verify(calculate_hash_hex(), signature_);
+    if (verify_legacy.has_value() && verify_legacy.value()) {
+        return true;
+    }
+
+    return false;
 }
 
 void Transaction::set_section(const BigNumber &value) {
