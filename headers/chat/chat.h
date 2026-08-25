@@ -53,6 +53,13 @@ namespace Chat {
         Bot
     };
 
+    enum class SyncState {
+        LoadingHistory,
+        Joining,
+        Ready,
+        Error
+    };
+
     struct ChatData {
         std::optional<ChatType> chat_type;
         std::optional<ActorId>  peer_id;
@@ -61,16 +68,18 @@ namespace Chat {
     BOOST_DESCRIBE_STRUCT(ChatData, (), (peer_id, chat_type))
 
     struct Chat {
-        std::string                       id;
-        ActorId                           owner_id;
-        std::string                       file_id;
-        ChatData                          chat;
-        std::optional<KeyBytes>           chat_key;
-        std::optional<ActorId>            my_per_chat_id;
-        std::optional<ActorId>            peer_chat_main_id;
-        std::optional<Actor<KeyPublic>>   peer_per_chat;
-        std::optional<Signature>          peer_bind_signature;
-        bool                              invite_pending = false;
+        std::string                     id;
+        ActorId                         owner_id;
+        std::string                     file_id;
+        ChatData                        chat;
+        std::optional<KeyBytes>         chat_key;
+        std::optional<ActorId>          my_per_chat_id;
+        std::optional<ActorId>          peer_chat_main_id;
+        std::optional<Actor<KeyPublic>> peer_per_chat;
+        std::optional<Signature>        peer_bind_signature;
+        bool                            invite_pending = false;
+        std::optional<std::string>      invite_file_id;
+        std::optional<SyncState>        sync_state;
     };
     BOOST_DESCRIBE_STRUCT(Chat,
                           (),
@@ -83,7 +92,15 @@ namespace Chat {
                            peer_chat_main_id,
                            peer_per_chat,
                            peer_bind_signature,
-                           invite_pending))
+                           invite_pending,
+                           invite_file_id,
+                           sync_state))
+
+    struct SendResult {
+        std::string message_id;
+        bool        stored = false;
+    };
+    BOOST_DESCRIBE_STRUCT(SendResult, (), (message_id, stored))
 
     struct ChatInvite {
         ActorId                 owner_id;
@@ -94,9 +111,10 @@ namespace Chat {
         Actor<KeyPublic>        sender_per_chat;
         Signature               bind_signature;
     };
-    BOOST_DESCRIBE_STRUCT(ChatInvite,
-                          (),
-                          (owner_id, file_id, chat_type, chat_key, sender_chat_main_id, sender_per_chat, bind_signature))
+    BOOST_DESCRIBE_STRUCT(
+        ChatInvite,
+        (),
+        (owner_id, file_id, chat_type, chat_key, sender_chat_main_id, sender_per_chat, bind_signature))
 
     struct MessageJoinData {
         Actor<KeyPublic> per_chat;
@@ -120,19 +138,19 @@ namespace Chat {
     BOOST_DESCRIBE_STRUCT(ChatProfileAvatar, (), (full_id, mini_id, blur_hash))
 
     struct ChatFolder {
-        std::string                                id;
-        std::string                                name;
-        std::optional<std::string>                 emoji;
-        std::vector<std::string>                   chat_ids;
-        std::vector<std::string>                   pinned_chat_ids;
-        std::optional<std::vector<ActorId>>        include_chat_main_ids;
-        std::optional<std::vector<ChatType>>       include_types;
+        std::string                          id;
+        std::string                          name;
+        std::optional<std::string>           emoji;
+        std::vector<std::string>             chat_ids;
+        std::vector<std::string>             pinned_chat_ids;
+        std::optional<std::vector<ActorId>>  include_chat_main_ids;
+        std::optional<std::vector<ChatType>> include_types;
         // Chat keys excluded from the folder; override include_types and chat_ids.
-        std::vector<std::string>                   excluded_chat_ids;
-        std::optional<bool>                        unread_only;
-        std::optional<bool>                        muted;
-        std::optional<std::string>                 color;
-        int                                        order = 0;
+        std::vector<std::string>   excluded_chat_ids;
+        std::optional<bool>        unread_only;
+        std::optional<bool>        muted;
+        std::optional<std::string> color;
+        int                        order = 0;
     };
     BOOST_DESCRIBE_STRUCT(ChatFolder,
                           (),

@@ -31,7 +31,16 @@ enum class DfsVectorError {
     Adding,
     Updating,
     Deleting,
-    IncorrectEncryption
+    IncorrectEncryption,
+    MissingActor,
+    InvalidRow,
+    InvalidSignature,
+    StorageFailure
+};
+
+enum class DfsVectorApplyResult {
+    Applied,
+    Unchanged
 };
 
 class DfsVector {
@@ -107,9 +116,9 @@ public:
 
     bool handle_package(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
-    bool                 store_add(DbRow& row);
-    bool                 local_add(const DbRow& row, bool check);
-    std::optional<DbRow> remove(const std::string& primary_data);
+    bool                                                store_add(DbRow& row);
+    std::expected<DfsVectorApplyResult, DfsVectorError> local_add(const DbRow& row, bool check);
+    std::optional<DbRow>                                remove(const std::string& primary_data);
 
     std::pair<std::string, bool> calculate_hash(const DbRow& row);
 
@@ -117,7 +126,7 @@ public:
 
     std::optional<std::pair<std::string, uint64_t>> data_hash_size();
 
-    bool verify(const DbRow& row);
+    std::expected<void, DfsVectorError> verify(const DbRow& row);
 
     std::expected<DbRow, DfsVectorError> encrypt_data(const DbRow&                 row,
                                                       const Dfs::DataSecurityData& security_data);

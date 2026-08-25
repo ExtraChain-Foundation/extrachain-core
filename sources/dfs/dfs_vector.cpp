@@ -29,12 +29,12 @@ DfsVector::DfsVector(ExtraChainNode              *node,
                      Dfs::DataSecurity            data_security,
                      const Dfs::DataSecurityData &security_data,
                      Dfs::FileType                file_type) {
-    this->node           = node;
-    this->file_path_     = Dfs::Path::file_path(file_actor_id, file_id).value();
-    this->file_type_     = file_type;
+    this->node       = node;
+    this->file_path_ = Dfs::Path::file_path(file_actor_id, file_id).value();
+    this->file_type_ = file_type;
 
-    const std::string &extension = (file_type == Dfs::FileType::Dictionary) ? Dfs::Basic::DICTIONARY_FILE
-                                                                            : Dfs::Basic::VECTOR_FILE;
+    const std::string &extension =
+        (file_type == Dfs::FileType::Dictionary) ? Dfs::Basic::DICTIONARY_FILE : Dfs::Basic::VECTOR_FILE;
     this->vector_path_ = FsPath::create(this->file_path_.native().string() + extension).value();
 
     this->actor_         = actor;
@@ -354,7 +354,7 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
                                                    .vector_template = vector_template.value(),
                                                    .vector_file     = vector_file_content,
                                                    .content =
-                                                       rows.has_value() ? rows.value() : std::vector<DbRow> {} };
+                                                       rows.has_value() ? rows.value() : std::vector<DbRow> { } };
 }
 
 bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
@@ -438,39 +438,46 @@ bool DfsVector::store_add(DbRow &row) {
     row["actor"] = actor_.id().to_string();
     row["sign"]  = ByteArray(sign.value()).toString();
     auto res     = local_add(row, false);
-    return res;
+    return res.has_value();
 }
 
-bool DfsVector::local_add(const DbRow &row, bool check) {
-    bool verify = this->verify(row);
-    if (!verify) {
-        return false;
+std::expected<DfsVectorApplyResult, DfsVectorError> DfsVector::local_add(const DbRow &row, bool check) {
+    auto verification = verify(row);
+    if (!verification.has_value()) {
+        return std::unexpected(verification.error());
     }
 
-    if (check) {
-        std::string field = "actor";
-        if (collection_template_.primary.has_value()) {
-            field = collection_template_.primary.value().name();
-        }
+    try {
+        if (check) {
+            std::string field = "actor";
+            if (collection_template_.primary.has_value()) {
+                field = collection_template_.primary.value().name();
+            }
 
-        auto exrow = read_row(row.at(field));
-        if (exrow.has_value()) {
-            auto extimestamp = std::stoull(exrow->at("timestamp"));
-            auto timestamp   = std::stoull(row.at("timestamp"));
-            if (extimestamp > timestamp) {
-                return true;
+            auto exrow = read_row(row.at(field));
+            if (exrow.has_value()) {
+                auto extimestamp = std::stoull(exrow->at("timestamp"));
+                auto timestamp   = std::stoull(row.at("timestamp"));
+                if (extimestamp > timestamp) {
+                    return DfsVectorApplyResult::Unchanged;
+                }
             }
         }
+    } catch (const std::exception &) {
+        return std::unexpected(DfsVectorError::InvalidRow);
     }
 
     DbConnector db(file_path_);
     if (!db.open()) {
-        return false;
+        return std::unexpected(DfsVectorError::StorageFailure);
     }
 
     bool res = db.replace("Vector", row);
     db.close();
-    return res;
+    if (!res) {
+        return std::unexpected(DfsVectorError::StorageFailure);
+    }
+    return DfsVectorApplyResult::Applied;
 }
 
 std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
@@ -573,22 +580,39 @@ std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
     return hash_size;
 }
 
-bool DfsVector::verify(const DbRow &row) {
-    auto      actor_id = ActorId(row.at("actor"));
-    auto      actor    = node->actor_index()->read_actor_old(actor_id);
-    Signature sign     = ByteArray(row.at("sign")).toArray<crypto_sign_BYTES>();
+std::expected<void, DfsVectorError> DfsVector::verify(const DbRow &row) {
+    if (!row.contains("actor") || !row.contains("sign") || !row.contains("timestamp") || !row.contains("status")) {
+        return std::unexpected(DfsVectorError::InvalidRow);
+    }
+
+    ActorId actor_id;
+    try {
+        actor_id = ActorId(row.at("actor"));
+    } catch (const std::exception &) {
+        return std::unexpected(DfsVectorError::InvalidRow);
+    }
+
+    auto actor = node->actor_index()->read_actor(actor_id);
+    if (!actor.has_value()) {
+        return std::unexpected(DfsVectorError::MissingActor);
+    }
+
+    Signature sign = ByteArray(row.at("sign")).toArray<crypto_sign_BYTES>();
 
     auto [hash, all_empty] = calculate_hash(row);
     if (hash.empty() || all_empty) {
-        return false;
+        return std::unexpected(DfsVectorError::InvalidRow);
     }
 
-    auto verify = actor.key().verify(hash, sign);
+    auto verify = actor->key().verify(hash, sign);
     if (!verify.has_value()) {
-        return false;
+        return std::unexpected(DfsVectorError::InvalidSignature);
     }
 
-    return verify.value();
+    if (!verify.value()) {
+        return std::unexpected(DfsVectorError::InvalidSignature);
+    }
+    return { };
 }
 
 std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow                 &row,
@@ -617,7 +641,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow        
     }
 
     if (!encryptor) {
-        return DbRow {};
+        return DbRow { };
     }
 
     DbRow encrypted_row;
@@ -682,7 +706,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::decrypt_data(const DbRow        
     }
 
     if (!decryptor) {
-        return DbRow {};
+        return DbRow { };
     }
 
     DbRow decrypted_row;
