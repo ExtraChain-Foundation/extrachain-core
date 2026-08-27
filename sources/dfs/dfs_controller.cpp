@@ -59,7 +59,10 @@ DfsController::DfsController(ExtraChainNode *node)
         }
     });
 
-#ifdef IS_APP_UI_CLIENT
+#if defined(IS_APP_UI_CLIENT) || defined(RACCOON_OPENWRT)
+    // OpenWrt routers default to Light DFS — small disk, no point
+    // storing the full file system.  Mirrors the DAG default in
+    // Dag::Dag().
     set_mode(DfsMode::Light);
 #endif
 
