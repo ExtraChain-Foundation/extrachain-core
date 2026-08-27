@@ -26,6 +26,7 @@
 #endif
 
 #include <QJsonObject>
+#include <QThread>
 #include <sodium/core.h>
 
 #include "chain/dag.h"
