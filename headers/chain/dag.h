@@ -38,6 +38,10 @@ static const SectionId CONTROL_INTERVAL      = SectionId(20);
 static const int       CONTROL_INTERVAL_MOD  = 20;
 static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 
+// a control search with no answer must not block sync forever; a live one can
+// legitimately take a minute, so the watchdog has to sit well above that
+static const std::uint64_t CONTROL_SEARCH_TIMEOUT_MS = 120000;
+
 // helpers
 static inline bool is_aligned20(const SectionId &s) {
     return (s % CONTROL_INTERVAL) == 0;
@@ -584,6 +588,7 @@ private:
     QTimer                                      *timer_sync_; // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
     bool                                         search_control_              = false;
+    std::uint64_t                                timestamp_control_search_start_ = 0;
     bool                                         light_requested_             = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
@@ -798,6 +803,17 @@ public:
      * @param responder
      */
     void request_control_section(const SectionId &from_top, const Responder &responder);
+
+    /**
+     * @brief milliseconds since the running control search was requested
+     * @return CONTROL_SEARCH_TIMEOUT_MS when no search is running or the stamp was lost
+     */
+    std::uint64_t control_search_elapsed() const;
+
+    /**
+     * @brief drop the control search latch and disarm its watchdog
+     */
+    void clear_control_search();
 
     /**
      * @brief network_request_control_section
