@@ -57,12 +57,19 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
     auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) -> bool {
         if (!active_downloads->empty() && m_amount_file_fragments_requests->size() <= MAX_CONCURRENT_DOWNLOADS) {
             auto active_downloads_locked = *active_downloads;
-            for (auto& it : *active_downloads_locked) {
+            // Explicit iterator loop: the no-connections branch below erases
+            // the current entry, and erasing inside a range-for invalidates
+            // its hidden iterator — the next ++ walked freed memory.  That
+            // was a reproducible segfault whenever the network dropped
+            // offline with downloads queued (every identifier vanishes →
+            // erase → boom on the following iteration).
+            for (auto map_it = active_downloads_locked->begin();
+                 map_it != active_downloads_locked->end();) {
                 if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
                     return false;
 
-                auto& load_info      = it.second;
-                bool  ignore_timeout = file_link_to_proceed == it.first;
+                auto& load_info      = map_it->second;
+                bool  ignore_timeout = file_link_to_proceed == map_it->first;
                 bool  is_requested   = false;
 
                 // Remove disconnected identifiers from the list
@@ -77,7 +84,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 // If no identifiers left, try to find new peers who have this file
                 if (load_info.identifier_list.empty()) {
                     eLog("[LoadManager] No active identifiers for file {}, asking neighbours",
-                         it.first.file_id);
+                         map_it->first.file_id);
                     load_info.identifier_storage_checker.clear();
 
                     // Add all active connections as potential sources
@@ -94,11 +101,13 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                         }
                     }
 
-                    // If still no identifiers, remove from queue
+                    // If still no identifiers, remove from queue.  erase()
+                    // returns the next valid iterator — the range-for it
+                    // replaced kept walking a dead one.
                     if (load_info.identifier_list.empty()) {
                         eLog("[LoadManager] No connections available for file {}, removing from queue",
-                             it.first.file_id);
-                        active_downloads_locked->erase(it.first);
+                             map_it->first.file_id);
+                        map_it = active_downloads_locked->erase(map_it);
                         continue;
                     }
                 }
@@ -121,7 +130,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     else if (identifier.second.counter == 0
                              || (duration > std::chrono::seconds(10) || ignore_timeout)) {
                         if (identifier.second.counter == 1 && load_info.identifier_list.size() == 1) {
-                            this->node->network()->send_message(it.first,
+                            this->node->network()->send_message(map_it->first,
                                                                 MessageType::DfsFileRequestContinueUpload,
                                                                 SendMode::Neighbours,
                                                                 MessageStatus::Request);
@@ -134,12 +143,12 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                         responder.add_identifier(identifier.first);
 
                         Dfs::FileLinkFragment output;
-                        output.file_link = it.first;
+                        output.file_link = map_it->first;
 
                         bool is_setted = false;
 
-                        if (it.second.amount_fragments > 0) {
-                            for (auto number : it.second.fragments_left) {
+                        if (map_it->second.amount_fragments > 0) {
+                            for (auto number : map_it->second.fragments_left) {
                                 if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
                                     break;
                                 output.fragment_numbers.emplace(number);
@@ -177,6 +186,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     // eCritical("LoadManager::timer_runner, cannot download file. No response from identifiers.
                     // Identifiers list size: {}", identifier_list_size);
                 }
+                ++map_it;
             }
             return true;
         }
