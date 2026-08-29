@@ -2619,11 +2619,25 @@ std::set<ActorId> Dag::last_month() {
     auto now       = Utils::current_date_ms();
     auto month_ago = now - (30LL * 24 * 60 * 60 * 1000);
 
+    // Same shape as the find_last_control wedge: the only exit is finding
+    // a transaction older than the window, so on a chain with no local
+    // sections (right after clear_dag(), say) this walks every section
+    // from current down to 0 — millions of iterations, on the caller's
+    // thread.  Bound the run of consecutive missing sections; nothing
+    // useful can follow a long enough gap.
+    constexpr int kMissingSectionLimit = 4096;
+    int           missing              = 0;
+
     for (SectionId i = current_section_; i >= SectionId(0); i--) {
         auto section = read_section(i);
         if (!section.has_value()) {
+            if (++missing > kMissingSectionLimit) {
+                eLog("[Dag] last_month: {} missing sections in a row, stopping the scan", missing);
+                break;
+            }
             continue;
         }
+        missing = 0;
 
         bool found_older = false;
 
