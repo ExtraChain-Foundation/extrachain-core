@@ -2681,6 +2681,15 @@ BigNumberFloat Dag::sum_all_rewards() {
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
     int j  = 0;
     int jj = 0;
+    // Missing-section budgets: see the !has_value() branch below.
+    // kMissingLogLimit caps the log flood; kMissingScanLimit caps how far
+    // the disable_break ("scan everything") path keeps walking absent
+    // sections before admitting there is nothing to find.  4096 control
+    // intervals is far more history than any real recontrol needs, and
+    // still bounded enough to stay off the main thread's back.
+    constexpr int kMissingLogLimit  = 8;
+    constexpr int kMissingScanLimit = 4096;
+    int           missing           = 0;
     // eTemp("[Dag] find_last_control: search from {}, current section: {}",
     //       from < 0 ? current_section_ : from,
     //       current_section_);
@@ -2704,9 +2713,41 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
         auto section = this->read_section(i);
         if (!section.has_value()) {
             if (i % CONTROL_INTERVAL_MOD == 0) {
-                eLog("[Dag] No section: {}", i);
-                j = 0;
-                // jj++;
+                // Count missing control sections towards the same budget
+                // as present-but-controlless ones.  Resetting j here (as
+                // this used to) means a chain with no local sections at
+                // all — e.g. right after clear_dag() from a mining-mode
+                // toggle — never reaches the break, so this walks every
+                // section from current (13.8M) down to 0 on the MAIN
+                // thread, logging one line per control interval.
+                // Observed on a device: 3.3M "No section" lines, 441k in
+                // a single minute, main thread starved, the whole Crow
+                // API (health, vpn/locations) intermittently dead and
+                // VPN unusable until restart.
+                ++j;
+                ++missing;
+                // Keep the first few for diagnosis, then stop the flood:
+                // beyond that the message says nothing new and the log
+                // write itself is what starves the thread.
+                if (missing <= kMissingLogLimit) {
+                    eLog("[Dag] No section: {}{}", i,
+                         missing == kMissingLogLimit ? " (further ones suppressed)" : "");
+                }
+            }
+            if (!disable_break && (j > 37 || jj > 10)) {
+                break;
+            }
+            // Even the "search everything" path needs a floor.  With an
+            // empty local chain there is nothing to find below, and the
+            // caller (sync with need_recontrol) handles nullopt: it logs
+            // "Sync fatal error" and returns, which is a recoverable
+            // state, whereas walking millions of absent sections on the
+            // main thread is not.
+            if (disable_break && missing > kMissingScanLimit) {
+                eCritical("[Dag] find_last_control: {} missing control sections in a row, "
+                          "giving up the full scan (chain is empty or far behind)",
+                          missing);
+                return std::nullopt;
             }
             continue;
         }
