@@ -19,6 +19,8 @@
 
 #include "chain/dag.h"
 
+#include <chrono>
+
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -2622,22 +2624,24 @@ std::set<ActorId> Dag::last_month() {
     // Same shape as the find_last_control wedge: the only exit is finding
     // a transaction older than the window, so on a chain with no local
     // sections (right after clear_dag(), say) this walks every section
-    // from current down to 0 — millions of iterations, on the caller's
-    // thread.  Bound the run of consecutive missing sections; nothing
-    // useful can follow a long enough gap.
-    constexpr int kMissingSectionLimit = 4096;
-    int           missing              = 0;
+    // from current down to 0 — millions of iterations on the caller's
+    // thread.  Missing sections are legal and gaps may be arbitrarily
+    // wide, so bound the TIME spent, not the size of the gap.
+    constexpr auto kScanTimeBudget = std::chrono::seconds(3);
+    const auto     scan_started    = std::chrono::steady_clock::now();
+    std::uint64_t  scanned         = 0;
 
     for (SectionId i = current_section_; i >= SectionId(0); i--) {
+        if ((++scanned & 0x3FF) == 0
+            && std::chrono::steady_clock::now() - scan_started > kScanTimeBudget) {
+            eLog("[Dag] last_month: scan exceeded its time budget at section {}, stopping", i);
+            break;
+        }
+
         auto section = read_section(i);
         if (!section.has_value()) {
-            if (++missing > kMissingSectionLimit) {
-                eLog("[Dag] last_month: {} missing sections in a row, stopping the scan", missing);
-                break;
-            }
             continue;
         }
-        missing = 0;
 
         bool found_older = false;
 
@@ -2702,15 +2706,19 @@ BigNumberFloat Dag::sum_all_rewards() {
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
     int j  = 0;
     int jj = 0;
-    // Missing-section budgets: see the !has_value() branch below.
-    // kMissingLogLimit caps the log flood; kMissingScanLimit caps how far
-    // the disable_break ("scan everything") path keeps walking absent
-    // sections before admitting there is nothing to find.  4096 control
-    // intervals is far more history than any real recontrol needs, and
-    // still bounded enough to stay off the main thread's back.
-    constexpr int kMissingLogLimit  = 8;
-    constexpr int kMissingScanLimit = 4096;
-    int           missing           = 0;
+    // Missing sections are LEGITIMATE — a node need not hold a contiguous
+    // chain — so the scan must not give up merely because it crossed a
+    // gap, however wide.  What it must not do is monopolise the calling
+    // (main) thread: the pathological case is an empty local chain, where
+    // every one of millions of sections is absent.
+    //
+    // So bound the WORK, not the gap: cap wall-clock time for the
+    // disable_break scan, and cap the log lines separately (the logging
+    // itself was most of the cost — ~5900 lines/s measured on a device).
+    constexpr int  kMissingLogLimit = 8;
+    constexpr auto kScanTimeBudget  = std::chrono::seconds(3);
+    const auto     scan_started     = std::chrono::steady_clock::now();
+    int            missing          = 0;
     // eTemp("[Dag] find_last_control: search from {}, current section: {}",
     //       from < 0 ? current_section_ : from,
     //       current_section_);
@@ -2758,16 +2766,17 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
             if (!disable_break && (j > 37 || jj > 10)) {
                 break;
             }
-            // Even the "search everything" path needs a floor.  With an
-            // empty local chain there is nothing to find below, and the
-            // caller (sync with need_recontrol) handles nullopt: it logs
-            // "Sync fatal error" and returns, which is a recoverable
-            // state, whereas walking millions of absent sections on the
-            // main thread is not.
-            if (disable_break && missing > kMissingScanLimit) {
-                eCritical("[Dag] find_last_control: {} missing control sections in a row, "
-                          "giving up the full scan (chain is empty or far behind)",
-                          missing);
+            // Time budget for the "scan everything" path.  Gaps are legal
+            // and may be arbitrarily wide, so we never stop because of
+            // how MANY sections are missing — only because the scan has
+            // held this thread too long.  The caller handles nullopt
+            // (falls through to a plain sync), which is recoverable;
+            // starving the main thread for minutes is not.
+            if (disable_break && (missing & 0x3FF) == 0
+                && std::chrono::steady_clock::now() - scan_started > kScanTimeBudget) {
+                eCritical("[Dag] find_last_control: scan exceeded its time budget at section {} "
+                          "({} control sections missing so far) — giving up",
+                          i, missing);
                 return std::nullopt;
             }
             continue;
