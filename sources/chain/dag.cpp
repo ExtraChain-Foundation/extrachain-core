@@ -2131,9 +2131,16 @@ void Dag::handle_sync_request() {
                 eCritical("[Dag] Sync fatal error");
                 return;
             }
-        }
-
-        if (current_section_ != SectionId(-1)) {
+            // current_section_ == -1 with no control found: nothing local
+            // to re-control against, so fall through to a plain sync.
+            // NOTE: this used to fall into the branch below and
+            // dereference an empty optional — only survived because
+            // find_last_control() practically never returned nullopt
+            // here (it scanned the entire chain instead, which is the
+            // wedge this whole change is about).  Now that the scan is
+            // bounded, nullopt is reachable and must be handled.
+            need_sync = true;
+        } else if (current_section_ != SectionId(-1)) {
             this->request_control_section(last_control->section_id, responder);
             return;
         } else {
