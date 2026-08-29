@@ -63,6 +63,9 @@ class Logger {
     const std::string logs_directory         = "logs";
     std::thread::id   main_thread_id;
     std::string       file_name;
+    // Roll the log over at this size — see write_to_file().
+    static constexpr std::uintmax_t kMaxLogFileBytes = 64ull * 1024 * 1024;
+    std::uintmax_t                  current_log_bytes = 0;
 
     FileFilter file_filter;
     bool       filter_enabled = false;
@@ -130,6 +133,11 @@ class Logger {
         cleanup_old_logs();
         current_log_filename = logs_directory + "/" + create_log_filename();
         log_file.open(current_log_filename, std::ios::out | std::ios::app);
+        // Opened with app: an existing file of the same name keeps its
+        // contents, so start the rollover budget from its real size.
+        std::error_code size_ec;
+        auto            existing = std::filesystem::file_size(current_log_filename, size_ec);
+        current_log_bytes        = size_ec ? 0 : existing;
     }
 
 public:
@@ -245,6 +253,20 @@ public:
             return false;
         log_file.write(message.data(), message.size());
         log_file.flush();
+
+        // Size cap.  cleanup_old_logs() only prunes by AGE, which is no
+        // help against a runaway logger: one stuck loop wrote a 1.08 GB
+        // file in two hours on a device.  On a small-rootfs target that
+        // fills the disk and takes the node down with it.  Roll over to a
+        // fresh file instead; age-based cleanup reclaims the old ones.
+        current_log_bytes += message.size();
+        if (current_log_bytes >= kMaxLogFileBytes) {
+            log_file.close();
+            cleanup_old_logs();
+            current_log_filename = logs_directory + "/" + create_log_filename();
+            log_file.open(current_log_filename, std::ios::out | std::ios::app);
+            current_log_bytes = 0;
+        }
         return true;
     }
 
