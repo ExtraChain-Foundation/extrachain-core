@@ -222,8 +222,14 @@ namespace Network {
     Q_NAMESPACE
 
     static bool    isStartedServer = true;
+    // Client nodes keep a handful of peers; only servers fan out to 1000.
+    // The headless client (IS_APP_CLIENT without the UI) used to fall into
+    // the server branch and hold ~46 live sockets on a router — every VPN
+    // handshake then broadcast across all of them, and the box carried
+    // peer traffic it has no business carrying.  Both client kinds now
+    // share the same small budget.
     static quint16 maxConnections =
-#ifdef IS_APP_UI_CLIENT
+#if defined(IS_APP_UI_CLIENT) || defined(IS_APP_CLIENT)
     #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
         4
     #else
