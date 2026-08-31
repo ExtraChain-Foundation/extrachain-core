@@ -90,25 +90,51 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
         m_failedPongs = 0;
     });
 
+    // WebSocket-level keepalive.  This is a PROTOCOL frame, not an
+    // application message: the peer's Qt answers a ping with a pong on its
+    // own, so enabling this needs no change on the other side and works
+    // against nodes running older builds.
+    //
+    // It was written but never started (the start call sat commented out),
+    // which cost us a real outage on 2026-08-31: a router swap silently
+    // killed every connection, nothing noticed, and the node kept sending
+    // into dead sockets for two hours while reporting "5 live socket(s)".
+    // The chain layer limped on because it writes constantly and sees write
+    // errors; the VPN layer only sends and waits, so silence was
+    // indistinguishable from "no answer yet".  Only a restart fixed it.
+    //
+    // 10s (the original 3s was needlessly chatty): this runs on a
+    // mains-powered router talking to peers over its WAN link, so the cost
+    // is one tiny frame per connection per 10s — nothing.  10s x 3 misses
+    // detects a dead link in ~30s.
     if (!m_pingTimer) {
         m_pingTimer = new QTimer(this);
         connect(m_pingTimer, &QTimer::timeout, this, [this]() {
             if (m_ws && m_ws->isValid() && activated_) {
                 m_ws->ping();
-                // eLog("[WS] Ping {}", ip());
                 m_failedPongs++;
 
                 if (m_failedPongs > 3) {
                     eLog("[WS] {} Connection lost (no pong) from {}", direction_, ip_);
-                    emit error(Network::SocketServiceError::PongLost,
-                               "No pong response",
-                               ip_.toStdString(),
-                               identifier_.toStdString(),
-                               direction_);
+                    // Deliberately NOT emit error(PongLost): the receiving end,
+                    // NetworkManager::socket_error, resolves the socket through
+                    // QObject::sender().  Emitted from THIS timer slot the
+                    // sender is the QTimer, not the service, so the cast yields
+                    // null and the teardown walks a bad pointer — that is the
+                    // libQt6Core segfault we chased on 2026-08-31, once every
+                    // ~40s, with and without a close of our own.
+                    //
+                    // closeSocketSig is the path every other failure here uses
+                    // and it is sender-independent: it runs closeSocket(),
+                    // which emits close() from the service itself, so the
+                    // manager unregisters exactly as it does for any other
+                    // dropped connection.
+                    m_pingTimer->stop();
+                    emit closeSocketSig();
                 }
             }
         });
-        // m_pingTimer->start(3000);
+        m_pingTimer->start(10000);
     }
 }
 
