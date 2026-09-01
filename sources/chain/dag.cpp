@@ -3279,16 +3279,19 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         return;
     }
 
-    // A peer answered, so the control path is alive after all — forget any
-    // earlier silence rather than letting stale failures push us onto the
-    // fallback later on.
-    control_search_failures_ = 0;
-
     // the latch stays set here on purpose; the timeout is what retries
     if (responder.luminance() < 2) {
         eLog("[Dag] Control response discarded, luminance: {}", responder.luminance());
         return;
     }
+
+    // Only a response we can actually USE counts as the control path working.
+    // Clearing the counter above this gate instead (as the first version of
+    // this did) means a peer whose every answer is discarded here still looks
+    // like a live control path: the counter is reset each round, never reaches
+    // the threshold, and the fallback never arms.  Measured on the field
+    // device: two rounds in a row both logged "unanswered rounds: 1".
+    control_search_failures_ = 0;
 
     SectionId sync_from  = SectionId(-1);
     bool      force_next = false;
