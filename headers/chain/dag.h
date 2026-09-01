@@ -42,6 +42,12 @@ static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 // legitimately take a minute, so the watchdog has to sit well above that
 static const std::uint64_t CONTROL_SEARCH_TIMEOUT_MS = 120000;
 
+// Control-range rounds allowed to go unanswered before we stop waiting for
+// them and pull sections directly.  Two rounds is four minutes of silence —
+// long enough that a merely slow peer is not written off, short enough that a
+// node does not sit out the chain for hours.
+static const int CONTROL_SEARCH_MAX_ATTEMPTS = 2;
+
 // helpers
 static inline bool is_aligned20(const SectionId &s) {
     return (s % CONTROL_INTERVAL) == 0;
@@ -587,6 +593,21 @@ private:
     std::unordered_map<std::string, DagLastInfo> last_info_;  // Last chain info from peers
     QTimer                                      *timer_sync_; // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
+
+    // Last time we re-armed a sync because a transaction arrived from ahead of
+    // us.  Deliberately NOT timestamp_bigger_sync_start_: that one is cleared
+    // by process_cached_transactions(), which then replays cached transactions
+    // through network_transaction() — the throttle would be disarmed exactly
+    // when the replay needs it most.
+    std::uint64_t                                timestamp_behind_resync_     = 0;
+
+    // How many control-range requests in a row went unanswered.  The
+    // control-based sync (see 9608d71b) is the preferred path, but it has no
+    // way of giving up: a node whose peers never answer re-enters it every
+    // timeout forever and never asks for a single section.  After
+    // CONTROL_SEARCH_MAX_ATTEMPTS fruitless rounds we fall back to plain section
+    // sync for one pass, then let the control path try again.
+    int                                          control_search_failures_     = 0;
     bool                                         search_control_              = false;
     std::uint64_t                                timestamp_control_search_start_ = 0;
     bool                                         light_requested_             = false;

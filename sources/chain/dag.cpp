@@ -313,9 +313,14 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         }
 
         if (status_ != DagStatus::Ready) {
-            // Update sync target if transaction section is ahead but within reasonable range
-            if (transaction.section() > sync_last_index_
-                && transaction.section() <= sync_last_index_ + 15) {
+            // Move the sync target up to whatever the network is actually on.
+            // This used to be capped at sync_last_index_ + 15, which quietly
+            // put a ceiling on how far a node could ever catch up: once it fell
+            // further behind than that, the target stopped tracking the chain
+            // and the progress reported to the UI was measured against a stale
+            // finish line.  The target is a goalpost, not a fetch size — the
+            // window that bounds an actual request lives in request_sections.
+            if (transaction.section() > sync_last_index_) {
                 sync_last_index_ = transaction.section();
                 emit node->dagSyncStart(current_section_, sync_last_index_);
             }
@@ -363,8 +368,42 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
                  transaction.section().to_string(NumeralBase::Dec),
                  transaction.section());
 
-            if (tx.section() < this->current_section()) {
-                // need sync?
+            // A transaction from AHEAD of us means we silently fell behind the
+            // chain: we declared Final on a stale section, so we no longer ask
+            // for sections, and everything arriving is rejected for being too
+            // far ahead.  Nothing breaks that loop on its own — observed in the
+            // field as a node that looked perfectly healthy (API up, peers
+            // connected, DFS downloading) while its DAG had not advanced for
+            // 14 hours.  Drop back to Sync and pull the gap.
+            //
+            // The reverse case (tx older than us) needs no action: the peer is
+            // behind and will catch up on its own.
+            if (transaction.section() > this->current_section()) {
+                auto now = Utils::current_date_ms();
+
+                // Re-arm at most once a minute.  A stale node is told it is
+                // behind by every peer at once, and each resync request would
+                // otherwise restart the one before it.
+                if (timestamp_behind_resync_ == 0 || (now - timestamp_behind_resync_) > 60000) {
+                    timestamp_behind_resync_ = now;
+
+                    eLog("[Dag] Behind the chain: current {}, seen {} — resyncing",
+                         this->current_section().to_string(NumeralBase::Dec),
+                         transaction.section().to_string(NumeralBase::Dec));
+
+                    this->set_status(DagStatus::Sync);
+                    sync_last_index_ = transaction.section();
+                    emit node->dagSyncStart(current_section_, sync_last_index_);
+
+                    // Bounded window: the gap can be thousands of sections and
+                    // one peer must not be asked for all of them at once.  The
+                    // sections that arrive move current_section_ forward, and
+                    // the next transaction from ahead re-enters here for the
+                    // following window.
+                    this->request_sections(current_section_,
+                                           std::min(sync_last_index_, current_section_ + 100),
+                                           responder);
+                }
             }
         }
     } else {
@@ -710,7 +749,9 @@ void Dag::timer_tick() {
         }
 
         // without this the latch survives the tick and blocks every later sync
-        eLog("[Dag] Timer tick clears a stuck control search");
+        ++control_search_failures_;
+        eLog("[Dag] Timer tick clears a stuck control search (unanswered rounds: {})",
+             control_search_failures_);
         this->clear_control_search();
     }
 
@@ -2124,6 +2165,20 @@ void Dag::handle_sync_request() {
     auto sync_index  = last_block.has_value() ? last_block->id + 1 : SectionId(0);
     sync_last_index_ = nodes_by_block.front().second;
 
+    // The control path is preferred, but it must not be the only path.  A node
+    // whose peers never answer DagControlRangeRequest re-enters recontrol on
+    // every timeout and never requests a single section — observed in the
+    // field as a device that sat 14 h at the same section with six healthy
+    // peers, DFS downloading, and no error in the log.  After enough silent
+    // rounds, fall through to a plain section sync for this pass; a later
+    // answer resets the counter and the control path resumes.
+    if (need_recontrol && control_search_failures_ >= CONTROL_SEARCH_MAX_ATTEMPTS) {
+        eLog("[Dag] Control sync unanswered {} rounds — falling back to section sync",
+             control_search_failures_);
+        need_recontrol = false;
+        need_sync      = true;
+    }
+
     if (need_recontrol && mode_ == DagMode::Full) {
         if (!last_control.has_value()) {
             last_control = this->find_last_control(current_section_, true);
@@ -3223,6 +3278,11 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         this->clear_control_search();
         return;
     }
+
+    // A peer answered, so the control path is alive after all — forget any
+    // earlier silence rather than letting stale failures push us onto the
+    // fallback later on.
+    control_search_failures_ = 0;
 
     // the latch stays set here on purpose; the timeout is what retries
     if (responder.luminance() < 2) {
