@@ -208,15 +208,33 @@ void PrivateProfile::save(uint64_t modified_date) {
         eFatal("Incorrect private profile save");
     }
 
-    std::ofstream file(path(), std::ios::binary);
-    if (!file) {
-        eFatal("Can't open file for writing");
+    // Renamed over the target rather than written into it: opening it directly
+    // truncates it first, so a crash mid-write left an empty profile
+    const auto target = path();
+    auto       temp   = target;
+    temp += ".tmp";
+
+    {
+        std::ofstream file(temp, std::ios::binary);
+        if (!file) {
+            eFatal("Can't open file for writing");
+        }
+
+        if (!file.write(reinterpret_cast<const char *>(encrypted->data()), encrypted->size())) {
+            eFatal("Can't write");
+        }
+        file.close();
+        if (!file) {
+            eFatal("Can't flush the profile");
+        }
     }
 
-    if (!file.write(reinterpret_cast<const char *>(encrypted->data()), encrypted->size())) {
-        eFatal("Can't write");
+    std::error_code ec;
+    std::filesystem::rename(temp, target, ec);
+    if (ec) {
+        std::filesystem::remove(temp, ec);
+        eFatal("Can't replace the profile");
     }
-    file.close();
 }
 
 void PrivateProfile::reencrypt(const std::string &new_hash) {
@@ -326,15 +344,31 @@ std::expected<void, bool> SeedProfile::save(const std::string &hash) {
 
     filename_ = fmt::format("{}/{}{}", Profiles::folder, actors_.front().id(), Profiles::format);
 
-    std::ofstream file(filename_, std::ios::binary);
-    if (!file) {
-        eFatal("Can't open file for writing");
+    // Same file and same reason as PrivateProfile::save: a truncated target
+    // between the seed write and the re-encrypt would cost the profile
+    const auto temp = filename_ + ".tmp";
+
+    {
+        std::ofstream file(temp, std::ios::binary);
+        if (!file) {
+            eFatal("Can't open file for writing");
+        }
+
+        if (!file.write(base64.c_str(), base64.size())) {
+            eFatal("Can't write");
+        }
+        file.close();
+        if (!file) {
+            eFatal("Can't flush the seed profile");
+        }
     }
 
-    if (!file.write(base64.c_str(), base64.size())) {
-        eFatal("Can't write");
+    std::error_code ec;
+    std::filesystem::rename(temp, filename_, ec);
+    if (ec) {
+        std::filesystem::remove(temp, ec);
+        eFatal("Can't replace the seed profile");
     }
-    file.close();
 
     return {};
 }

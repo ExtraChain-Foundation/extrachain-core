@@ -491,6 +491,45 @@ bool AccountController::change_credentials(const std::string &old_login,
     return true;
 }
 
+bool AccountController::delete_current_profile() {
+    if (!has_current_profile()) {
+        eWarning("[Account] No profile to delete");
+        return false;
+    }
+
+    const auto victim = current_profile_;
+
+    // File first: a stale list entry is recoverable, a file off the list is not
+    const auto file_name =
+        Profiles::folder + Utils::platformDelimeter() + victim.to_string() + Profiles::format;
+    std::error_code ec;
+    std::filesystem::remove(file_name, ec);
+    if (ec) {
+        eWarning("[Account] Could not remove the profile file: {}", ec.message());
+        return false;
+    }
+
+    auto profiles = profiles_list();
+    profiles.erase(victim);
+    QJsonArray array;
+    for (const auto &id : profiles) {
+        array.push_back(id.toQString());
+    }
+
+    const QString list_path =
+        QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles);
+    QFile list(list_path);
+    if (!list.open(QFile::WriteOnly)) {
+        eWarning("[Account] Could not rewrite the profiles list: {}", list.errorString());
+        return false;
+    }
+    list.write(QJsonDocument(array).toJson(QJsonDocument::Compact));
+    list.close();
+
+    eLog("[Account] Deleted profile {}", victim.to_string());
+    return true;
+}
+
 void AccountController::dogenerate() {
     if (profile_type_ == ProfileType::Old) {
         return;

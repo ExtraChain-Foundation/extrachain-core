@@ -128,6 +128,10 @@ public:
                             const std::string &new_login,
                             const std::string &new_password);
 
+    // Removes this profile's file and its list entry; other profiles, the dag,
+    // the dfs and the actors stay untouched
+    bool delete_current_profile();
+
     void dogenerate();
 
 signals:
