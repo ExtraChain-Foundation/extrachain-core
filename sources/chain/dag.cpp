@@ -420,6 +420,14 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
 
         this->set_current_section(transaction.section());
         this->update_range();
+
+        // Real progress — the chain moved.  This, not the arrival of a control
+        // response, is what proves the sync path works: a luminance peer
+        // answers every round and its answer clears the latch, but if the
+        // controls simply match, nothing is fetched and the node stays exactly
+        // where it was.  Counting answers instead of progress is what made the
+        // first two versions of this fallback never arm.
+        control_search_failures_ = 0;
     }
 
     // send broadcast to network with tx result
@@ -3284,14 +3292,6 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         eLog("[Dag] Control response discarded, luminance: {}", responder.luminance());
         return;
     }
-
-    // Only a response we can actually USE counts as the control path working.
-    // Clearing the counter above this gate instead (as the first version of
-    // this did) means a peer whose every answer is discarded here still looks
-    // like a live control path: the counter is reset each round, never reaches
-    // the threshold, and the fallback never arms.  Measured on the field
-    // device: two rounds in a row both logged "unanswered rounds: 1".
-    control_search_failures_ = 0;
 
     SectionId sync_from  = SectionId(-1);
     bool      force_next = false;
