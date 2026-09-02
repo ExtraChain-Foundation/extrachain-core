@@ -641,7 +641,8 @@ namespace ExtraChain::Consensus {
             next_state.locked_certificate = proposal->second.parent_certificate;
         }
 
-        auto finalized = finalization_for(certificate);
+        bool deferred_finalization = false;
+        auto finalized             = finalization_for(certificate);
         if (finalized.has_value() && finalized.value().height > next_state.finalized_height) {
             const bool first_epoch_checkpoint =
                 epoch_bootstrap_.has_value()
@@ -653,10 +654,12 @@ namespace ExtraChain::Consensus {
                     && finalized.value().height == next_state.finalized_height + 1);
             // Finalizing out of order, or without the payload, is not allowed — but
             // that is a reason to defer this checkpoint, not to forget a certificate
-            // a quorum already signed. Dropping it here cost us the certificate as
-            // well: nothing re-sends it, so a node that missed one height stayed
-            // behind for the rest of the run.
+            // a quorum already signed. We still report DataUnavailable so the caller
+            // starts a sync; what changed is that the certificate is kept first, so
+            // the deferred checkpoint can complete once the gap is filled instead of
+            // leaving the node behind for the rest of the run.
             if (!contiguous || !batches_.contains(finalized.value().header_hash)) {
+                deferred_finalization = true;
                 finalized.reset();
             } else {
                 next_state.finalized_height = finalized.value().height;
@@ -686,6 +689,9 @@ namespace ExtraChain::Consensus {
             checkpoints_finalized_.fetch_add(1, std::memory_order_relaxed);
         }
         prune_memory(safety_state_.finalized_height);
+        if (deferred_finalization) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
         return finalized;
     }
 
