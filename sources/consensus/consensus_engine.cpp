@@ -620,7 +620,12 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidCertificate);
         }
         const auto proposal = proposals_.find(certificate.header_hash);
-        if (certificate.phase != Phase::Genesis && proposal == proposals_.end()) {
+        // No proposal is ever stored for the genesis header, and the state we would
+        // persist below dereferences this iterator unconditionally. A genesis
+        // certificate is verifiable by anyone, so accepting one off the wire used to
+        // walk straight into an end() dereference; there is nothing to learn from it
+        // either, since initialize() already installs it.
+        if (proposal == proposals_.end()) {
             return std::unexpected(ConsensusError::InvalidParent);
         }
         auto next_state = safety_state_;
