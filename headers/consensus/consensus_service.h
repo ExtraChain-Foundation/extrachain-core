@@ -112,6 +112,10 @@ namespace ExtraChain::Consensus {
         bool                                apply_timeout_certificate(const TimeoutCertificate& certificate);
         void                                propose_checkpoint(std::uint64_t round);
         void request_batch(const Proposal& proposal, std::string_view peer_identifier);
+        /// Stop voting over a failure that may pass — a write that did not land, a
+        /// checkpoint we could not apply yet. Unlike halt_voting() the pacemaker
+        /// keeps running, so the node retries instead of needing a restart.
+        void pause_voting(std::string_view reason);
         /// Apply one finalized checkpoint: reconcile it with the DAG in finality
         /// mode, publish it otherwise. Returns false when the checkpoint could not
         /// be applied and voting had to stop.
@@ -186,6 +190,9 @@ namespace ExtraChain::Consensus {
         Core::Event<const FinalizedCheckpoint&>                       finalized_event_;
         Core::Event<const ShadowBootstrapResponse&, std::string_view> bootstrap_event_;
         bool                                                          voting_enabled_ = false;
+        /// Set when voting stopped over a transient failure; cleared once the
+        /// pacemaker manages to resume. Never set for a deliberate halt.
+        bool                                                          voting_paused_ { false };
         mutable std::recursive_mutex                                  mutex_;
     };
 

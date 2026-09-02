@@ -229,6 +229,7 @@ namespace ExtraChain::Consensus {
                                                              consensus_->engine().identity());
         voting_enabled_ =
             consensus_->engine().identity().has_value() && !consensus_->pending_recovery().has_value();
+        voting_paused_ = false;
         timeout_task_      = Core::DeadlineTask::create(node_.runtime_executor(), [this] {
             timeout_elapsed();
         });
@@ -298,6 +299,7 @@ namespace ExtraChain::Consensus {
         pending_batches_.clear();
         pending_proposals_.clear();
         voting_enabled_ = false;
+        voting_paused_  = false;
     }
 
     void ConsensusService::receive_network_message(MessageType        type,
@@ -892,7 +894,7 @@ namespace ExtraChain::Consensus {
         if (!reconciled.has_value()) {
             eCritical("[Shadow] Synchronized finality could not be applied: {}",
                       std::to_underlying(reconciled.error()));
-            halt_voting();
+            pause_voting("synchronized finality could not be applied");
             return;
         }
         reset_timeout();
@@ -1130,6 +1132,7 @@ namespace ExtraChain::Consensus {
         pending_batches_.clear();
         pending_proposals_.clear();
         voting_enabled_ = consensus_->engine().identity().has_value();
+        voting_paused_  = false;
         reset_timeout();
         queue_next_checkpoint();
         return true;
@@ -1202,6 +1205,10 @@ namespace ExtraChain::Consensus {
                      certificate.height,
                      std::to_underlying(finalized.error()));
             if (finalized.error() == ConsensusError::DataUnavailable) {
+                // The certificate itself may well have been kept, with only its
+                // checkpoint deferred for a gap below it — so try to close that gap
+                // locally before asking the committee for a replay.
+                catch_up_deferred_finalization();
                 send_to_validators(
                     ShadowSyncRequest {
                         .protocol_version = ProtocolVersion,
@@ -1236,7 +1243,7 @@ namespace ExtraChain::Consensus {
                 eCritical("[Shadow] Finalized checkpoint {} could not be applied: {}",
                           checkpoint.header_hash,
                           std::to_underlying(reconciled.error()));
-                halt_voting();
+                pause_voting("a finalized checkpoint could not be applied");
                 return false;
             }
             return true;
@@ -1650,8 +1657,7 @@ namespace ExtraChain::Consensus {
                 }
                 if (parent_batch.value().sections.empty()
                     || parent_batch.value().sections.back().first != parent.batch.last_section) {
-                    eWarning("[Shadow] Voting halted: parent batch for height {} is inconsistent", highest.height);
-                    halt_voting();
+                    pause_voting("the parent batch of our highest certificate is inconsistent");
                     return;
                 }
                 previous_section_bytes = parent_batch.value().sections.back().second;
@@ -1850,7 +1856,7 @@ namespace ExtraChain::Consensus {
             const auto batch = consensus_->engine().batch_for(hash_header(proposal.header));
             if (batch.has_value() && !consensus_->engine().stage_batch(batch.value()).has_value()) {
                 eCritical("[Shadow] Rejected proposal batch could not be persisted");
-                halt_voting();
+                pause_voting("a rejected proposal batch could not be persisted");
             }
             const auto& st = consensus_->engine().safety_state();
             eWarning("[Shadow] Proposal {} at height {} round {} was not voted for: {} "
@@ -1888,6 +1894,21 @@ namespace ExtraChain::Consensus {
 
     void ConsensusService::timeout_elapsed() {
         std::lock_guard lock(mutex_);
+        if (voting_paused_ && consensus_ && consensus_->engine().identity().has_value()) {
+            // Retry whatever we could not finish, and only rejoin the vote if it
+            // now goes through.
+            catch_up_deferred_finalization();
+            if (consensus_->configuration().mode != ShadowMode::Finality
+                || reconcile_finalized_checkpoint().has_value()) {
+                eInfo("[Shadow] Voting resumed after a transient failure");
+                voting_enabled_ = true;
+                voting_paused_  = false;
+            } else if (timeout_task_) {
+                timeout_task_->schedule_after(
+                    std::chrono::milliseconds(consensus_->configuration().proposal_timeout_ms));
+                return;
+            }
+        }
         if (!consensus_ || !voting_enabled_ || !consensus_->engine().identity().has_value()
             || !consensus_->engine().safety_state().highest_certificate.has_value()) {
             return;
@@ -1927,8 +1948,24 @@ namespace ExtraChain::Consensus {
 
     void ConsensusService::halt_voting() {
         voting_enabled_ = false;
+        voting_paused_  = false;
         if (timeout_task_) {
             timeout_task_->cancel();
+        }
+    }
+
+    void ConsensusService::pause_voting(std::string_view reason) {
+        if (!voting_enabled_ && !voting_paused_) {
+            return;
+        }
+        eWarning("[Shadow] Voting paused: {}", reason);
+        voting_enabled_ = false;
+        voting_paused_  = true;
+        if (timeout_task_) {
+            // Deliberately not cancelled: the pacemaker is what gets us back, and it
+            // also drives peer re-authentication, which a halted node loses too.
+            timeout_task_->schedule_after(
+                std::chrono::milliseconds(consensus_ ? consensus_->configuration().proposal_timeout_ms : 4000));
         }
     }
 
@@ -2498,6 +2535,7 @@ namespace ExtraChain::Consensus {
         authenticator_  = std::make_unique<PeerAuthenticator>(consensus_->engine().validators(),
                                                              consensus_->engine().identity());
         voting_enabled_ = consensus_->engine().identity().has_value();
+        voting_paused_  = false;
         latest_proposal_.reset();
         latest_certificate_.reset();
         latest_timeout_certificate_.reset();
