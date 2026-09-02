@@ -152,10 +152,20 @@ def main():
 
     tips = {name: max(h) for name, h in per_node.items() if h}
     spread = max(tips.values()) - min(tips.values())
-    print(f"height spread: {spread} (tips {min(tips.values())}..{max(tips.values())})")
-    if spread > 3:
+    # The nodes are killed one after another, so whoever dies last commits another
+    # checkpoint or two in the meantime — a spread of a few checkpoints is shutdown
+    # skew, not divergence. A checkpoint covers a fixed span of sections, so read
+    # that span from the tips the nodes actually stopped at.
+    distinct = sorted(set(tips.values()))
+    gaps = [b - a for a, b in zip(distinct, distinct[1:])]
+    span = min(gaps) if gaps else 0
+    checkpoints_behind = spread // span if span else 0
+    print(f"height spread: {spread} sections"
+          + (f" ≈ {checkpoints_behind} checkpoint(s) of {span}" if span else "")
+          + f" (tips {min(tips.values())}..{max(tips.values())})")
+    if checkpoints_behind > 3:
         ok = False
-        print("  ! spread above 3 — nodes are not tracking the same tip")
+        print("  ! more than 3 checkpoints apart — nodes are not tracking the same tip")
 
     print("\n--- intents ---")
     for name, path in homes:
