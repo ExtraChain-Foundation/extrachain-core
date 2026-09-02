@@ -112,6 +112,8 @@ namespace ExtraChain::Consensus {
         bool                                apply_timeout_certificate(const TimeoutCertificate& certificate);
         void                                propose_checkpoint(std::uint64_t round);
         void request_batch(const Proposal& proposal, std::string_view peer_identifier);
+        /// Ask every validator for a specific ancestor payload we are missing.
+        void request_ancestor_batch(const std::string& header_hash);
         void vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier);
         void timeout_elapsed();
         void reset_timeout();
@@ -122,20 +124,27 @@ namespace ExtraChain::Consensus {
                           MessageStatus      status);
         void send_to_validators(const auto& payload, MessageType message_type);
         void send_to_validators(const auto& payload, MessageType message_type, MessageStatus status);
-        [[nodiscard]] std::expected<void, ConsensusError>              validate_proposal(const Proposal& proposal);
+        [[nodiscard]] std::expected<void, ConsensusError>              validate_proposal(
+            const Proposal& proposal,
+            std::string*    missing_ancestor = nullptr);
         [[nodiscard]] std::expected<StateCommitmentV2, ConsensusError> build_state_commitment(
             const SectionBatchData&  batch,
             std::string_view         section_root,
             std::uint64_t            height,
             const QuorumCertificate& parent) const;
+        /// \p missing_ancestor, when given, receives the header hash of the first
+        /// ancestor whose batch we simply do not hold yet. Absent data and corrupt
+        /// data both break the walk, but only the former is worth another request.
         [[nodiscard]] std::expected<std::vector<Transaction>, ConsensusError> staged_ancestor_transactions(
             const QuorumCertificate& parent,
-            std::uint64_t            first_section) const;
+            std::uint64_t            first_section,
+            std::string*             missing_ancestor = nullptr) const;
         /// Ancestors as a set, ready for the DAG's balance proofs. An empty set means
         /// the parent is already canonical; a broken ancestor chain is an error, not
         /// an empty set, so a proposal is never accepted on a silently weaker check.
         [[nodiscard]] std::expected<std::set<Transaction>, ConsensusError> staged_ancestors_for(
-            const Proposal& proposal) const;
+            const Proposal& proposal,
+            std::string*    missing_ancestor = nullptr) const;
         [[nodiscard]] bool                         has_unfinalized_intents() const;
         std::expected<std::string, ConsensusError> accept_intent(const IntentEnvelope& envelope, bool broadcast);
         [[nodiscard]] std::expected<std::vector<std::pair<IntentEnvelope, IntentReceipt>>, ConsensusError>

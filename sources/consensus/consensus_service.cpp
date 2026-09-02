@@ -544,10 +544,17 @@ namespace ExtraChain::Consensus {
             return;
         }
         pending_proposals_.insert_or_assign(hash_header(proposal.header), proposal);
-        const auto available = validate_proposal(proposal);
+        std::string missing_ancestor;
+        const auto  available = validate_proposal(proposal, &missing_ancestor);
         if (!available.has_value()) {
             if (available.error() == ConsensusError::DataUnavailable) {
-                request_batch(proposal, peer_identifier);
+                // Distinguish the two gaps: our own payload is fetched from the peer
+                // that proposed it, an ancestor's from whoever still holds it.
+                if (missing_ancestor.empty()) {
+                    request_batch(proposal, peer_identifier);
+                } else {
+                    request_ancestor_batch(missing_ancestor);
+                }
             } else {
                 eWarning("[Shadow] Proposal {} contains invalid batch data", hash_header(proposal.header));
             }
@@ -707,8 +714,16 @@ namespace ExtraChain::Consensus {
             return;
         }
         eDebug("[Shadow] Resuming validation for batch {}", batch.header_hash.substr(0, 12));
-        const auto ancestors = staged_ancestors_for(proposal->second);
+        std::string missing_ancestor;
+        const auto  ancestors = staged_ancestors_for(proposal->second, &missing_ancestor);
         if (!ancestors.has_value()) {
+            if (ancestors.error() == ConsensusError::DataUnavailable && !missing_ancestor.empty()) {
+                // The branch is sound, we are simply a batch short of it. Batch
+                // replies race each other, so a payload can land before its own
+                // parent's and leave a hole no other path ever asks about again.
+                request_ancestor_batch(missing_ancestor);
+                return;
+            }
             eWarning("[Shadow] Batch {} has an unusable ancestor chain: {}",
                      batch.header_hash,
                      std::to_underlying(ancestors.error()));
@@ -1765,6 +1780,28 @@ namespace ExtraChain::Consensus {
         reset_timeout();
     }
 
+    void ConsensusService::request_ancestor_batch(const std::string& header_hash) {
+        if (!consensus_ || header_hash.empty()) {
+            return;
+        }
+        const auto proposal = consensus_->engine().proposal_for(header_hash);
+        if (proposal.has_value()) {
+            pending_proposals_.insert_or_assign(header_hash, proposal.value());
+        }
+        eWarning("[Shadow] Ancestor batch {} is missing; requesting it", header_hash.substr(0, 12));
+        // Ask the whole committee: the peer that answered for the child is not
+        // necessarily the one still holding the parent's payload.
+        send_to_validators(
+            SectionBatchRequest {
+                .protocol_version = ProtocolVersion,
+                .network_id       = consensus_->engine().validators().document().network_id,
+                .epoch            = consensus_->engine().validators().document().epoch,
+                .header_hash      = header_hash,
+            },
+            MessageType::ConsensusBatchRequest,
+            MessageStatus::Request);
+    }
+
     void ConsensusService::request_batch(const Proposal& proposal, std::string_view peer_identifier) {
         SectionBatchRequest request {
             .protocol_version = ProtocolVersion,
@@ -1882,7 +1919,8 @@ namespace ExtraChain::Consensus {
 
     std::expected<std::vector<Transaction>, ConsensusError> ConsensusService::staged_ancestor_transactions(
         const QuorumCertificate& parent,
-        std::uint64_t            first_section) const {
+        std::uint64_t            first_section,
+        std::string*             missing_ancestor) const {
         if (!consensus_) {
             return std::unexpected(ConsensusError::NotReady);
         }
@@ -1901,8 +1939,16 @@ namespace ExtraChain::Consensus {
 
             const auto staged   = consensus_->engine().batch_for(certificate.header_hash);
             const auto proposal = consensus_->engine().proposal_for(certificate.header_hash);
-            if (!staged.has_value() || !proposal.has_value()
-                || hash_header(proposal.value().header) != certificate.header_hash
+            // Not holding an ancestor's payload yet is a fetchable gap, not a broken
+            // chain: report it as such so the caller can ask for that batch instead
+            // of abandoning the whole branch.
+            if (!staged.has_value() || !proposal.has_value()) {
+                if (missing_ancestor != nullptr) {
+                    *missing_ancestor = certificate.header_hash;
+                }
+                return std::unexpected(ConsensusError::DataUnavailable);
+            }
+            if (hash_header(proposal.value().header) != certificate.header_hash
                 || proposal.value().header.height != certificate.height
                 || staged.value().header_hash != certificate.header_hash
                 || hash_batch_manifest(staged.value().manifest) != proposal.value().header.batch_root
@@ -1972,12 +2018,15 @@ namespace ExtraChain::Consensus {
     }
 
     std::expected<std::set<Transaction>, ConsensusError> ConsensusService::staged_ancestors_for(
-        const Proposal& proposal) const {
+        const Proposal& proposal,
+        std::string*    missing_ancestor) const {
         if (!consensus_) {
             return std::unexpected(ConsensusError::NotReady);
         }
         const auto ancestry =
-            staged_ancestor_transactions(proposal.parent_certificate, proposal.batch.first_section);
+            staged_ancestor_transactions(proposal.parent_certificate,
+                                         proposal.batch.first_section,
+                                         missing_ancestor);
         if (!ancestry.has_value()) {
             return std::unexpected(ancestry.error());
         }
@@ -2157,13 +2206,14 @@ namespace ExtraChain::Consensus {
         };
     }
 
-    std::expected<void, ConsensusError> ConsensusService::validate_proposal(const Proposal& proposal) {
+    std::expected<void, ConsensusError> ConsensusService::validate_proposal(const Proposal& proposal,
+                                                                           std::string* missing_ancestor) {
         if (!consensus_ || proposal.batch.payload_bytes > consensus_->configuration().maximum_batch_bytes) {
             return std::unexpected(ConsensusError::DataTooLarge);
         }
         const auto stored = consensus_->engine().batch_for(hash_header(proposal.header));
         if (stored.has_value()) {
-            const auto ancestors = staged_ancestors_for(proposal);
+            const auto ancestors = staged_ancestors_for(proposal, missing_ancestor);
             if (!ancestors.has_value()) {
                 return std::unexpected(ancestors.error());
             }
@@ -2193,7 +2243,7 @@ namespace ExtraChain::Consensus {
         if (hash_batch_manifest(local.value().manifest) != proposal.header.batch_root) {
             return std::unexpected(ConsensusError::DataUnavailable);
         }
-        const auto ancestors = staged_ancestors_for(proposal);
+        const auto ancestors = staged_ancestors_for(proposal, missing_ancestor);
         if (!ancestors.has_value()) {
             return std::unexpected(ancestors.error());
         }
