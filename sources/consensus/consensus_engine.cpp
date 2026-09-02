@@ -729,6 +729,11 @@ namespace ExtraChain::Consensus {
         return caught_up;
     }
 
+    bool ConsensusEngine::certified(const std::string& header_hash) const {
+        std::lock_guard lock(mutex_);
+        return certified_headers_.contains(header_hash);
+    }
+
     bool ConsensusEngine::verify_certificate(const QuorumCertificate& certificate) const {
         std::lock_guard lock(mutex_);
         if (certificate.protocol_version != ProtocolVersion

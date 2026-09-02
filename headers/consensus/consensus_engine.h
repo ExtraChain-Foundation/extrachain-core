@@ -64,6 +64,8 @@ namespace ExtraChain::Consensus {
         /// there is nothing left to catch up on.
         std::vector<FinalizedCheckpoint> resume_deferred_finalization();
 
+        /// True once a quorum has certified this header — voting on it is settled.
+        [[nodiscard]] bool certified(const std::string& header_hash) const;
         [[nodiscard]] bool verify_certificate(const QuorumCertificate& certificate) const;
         [[nodiscard]] bool verify_timeout_certificate(const TimeoutCertificate& certificate) const;
         [[nodiscard]] bool verify_finality_proof(const FinalityProof& proof) const;
