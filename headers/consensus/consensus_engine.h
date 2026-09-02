@@ -59,6 +59,10 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError> accept_timeout_certificate(const TimeoutCertificate& certificate);
         std::expected<std::optional<FinalizedCheckpoint>, ConsensusError> accept_certificate(
             const QuorumCertificate& certificate);
+        /// Finalize checkpoints that were held back earlier because their payload or
+        /// a lower height was still missing. Returns them oldest first; empty when
+        /// there is nothing left to catch up on.
+        std::vector<FinalizedCheckpoint> resume_deferred_finalization();
 
         [[nodiscard]] bool verify_certificate(const QuorumCertificate& certificate) const;
         [[nodiscard]] bool verify_timeout_certificate(const TimeoutCertificate& certificate) const;

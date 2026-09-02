@@ -112,6 +112,12 @@ namespace ExtraChain::Consensus {
         bool                                apply_timeout_certificate(const TimeoutCertificate& certificate);
         void                                propose_checkpoint(std::uint64_t round);
         void request_batch(const Proposal& proposal, std::string_view peer_identifier);
+        /// Apply one finalized checkpoint: reconcile it with the DAG in finality
+        /// mode, publish it otherwise. Returns false when the checkpoint could not
+        /// be applied and voting had to stop.
+        bool apply_finalized_checkpoint(const FinalizedCheckpoint& checkpoint);
+        /// Drive checkpoints that were deferred for missing data to completion.
+        void catch_up_deferred_finalization();
         /// Ask every validator for a specific ancestor payload we are missing.
         void request_ancestor_batch(const std::string& header_hash);
         void vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier);

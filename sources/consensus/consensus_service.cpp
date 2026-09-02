@@ -756,6 +756,8 @@ namespace ExtraChain::Consensus {
             eWarning("[Shadow] Batch {} could not be staged", batch.header_hash);
             return;
         }
+        // This payload may be exactly what an earlier certificate was waiting for.
+        catch_up_deferred_finalization();
         if (already_certified) {
             pending_proposals_.erase(proposal);
             queue_next_checkpoint();
@@ -1219,24 +1221,41 @@ namespace ExtraChain::Consensus {
             pending_checkpoints_.erase(latest_proposal_.value().batch.last_section);
         }
         reset_timeout();
-        if (finalized.value().has_value()) {
-            const auto& checkpoint = finalized.value().value();
-            if (consensus_->configuration().mode == ShadowMode::Finality) {
-                const auto reconciled = reconcile_finalized_checkpoint();
-                if (!reconciled.has_value()) {
-                    eCritical("[Shadow] Finalized checkpoint {} could not be applied: {}",
-                              checkpoint.header_hash,
-                              std::to_underlying(reconciled.error()));
-                    halt_voting();
-                    return false;
-                }
-            } else {
-                finalized_event_.publish(checkpoint);
-                eInfo("[Shadow] Finalized height {} at Dag section {}", checkpoint.height, checkpoint.dag_section);
-            }
+        if (finalized.value().has_value() && !apply_finalized_checkpoint(finalized.value().value())) {
+            return false;
         }
+        catch_up_deferred_finalization();
         queue_next_checkpoint();
         return true;
+    }
+
+    bool ConsensusService::apply_finalized_checkpoint(const FinalizedCheckpoint& checkpoint) {
+        if (consensus_->configuration().mode == ShadowMode::Finality) {
+            const auto reconciled = reconcile_finalized_checkpoint();
+            if (!reconciled.has_value()) {
+                eCritical("[Shadow] Finalized checkpoint {} could not be applied: {}",
+                          checkpoint.header_hash,
+                          std::to_underlying(reconciled.error()));
+                halt_voting();
+                return false;
+            }
+            return true;
+        }
+        finalized_event_.publish(checkpoint);
+        eInfo("[Shadow] Finalized height {} at Dag section {}", checkpoint.height, checkpoint.dag_section);
+        return true;
+    }
+
+    void ConsensusService::catch_up_deferred_finalization() {
+        if (!consensus_) {
+            return;
+        }
+        for (const auto& checkpoint : consensus_->engine().resume_deferred_finalization()) {
+            eInfo("[Shadow] Deferred checkpoint at height {} is finalizable now", checkpoint.height);
+            if (!apply_finalized_checkpoint(checkpoint)) {
+                return;
+            }
+        }
     }
 
     std::expected<void, ConsensusError> ConsensusService::apply_finality_proof(const FinalityProof& proof) {

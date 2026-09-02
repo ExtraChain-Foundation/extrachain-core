@@ -642,15 +642,20 @@ namespace ExtraChain::Consensus {
                 epoch_bootstrap_.has_value()
                 && next_state.finalized_height == epoch_bootstrap_.value().previous_finalized_height
                 && finalized.value().height == epoch_bootstrap_.value().activation_height;
-            if (!first_epoch_checkpoint
-                && (next_state.finalized_height == std::numeric_limits<std::uint64_t>::max()
-                    || finalized.value().height != next_state.finalized_height + 1)) {
-                return std::unexpected(ConsensusError::DataUnavailable);
+            const bool contiguous =
+                first_epoch_checkpoint
+                || (next_state.finalized_height != std::numeric_limits<std::uint64_t>::max()
+                    && finalized.value().height == next_state.finalized_height + 1);
+            // Finalizing out of order, or without the payload, is not allowed — but
+            // that is a reason to defer this checkpoint, not to forget a certificate
+            // a quorum already signed. Dropping it here cost us the certificate as
+            // well: nothing re-sends it, so a node that missed one height stayed
+            // behind for the rest of the run.
+            if (!contiguous || !batches_.contains(finalized.value().header_hash)) {
+                finalized.reset();
+            } else {
+                next_state.finalized_height = finalized.value().height;
             }
-            if (!batches_.contains(finalized.value().header_hash)) {
-                return std::unexpected(ConsensusError::DataUnavailable);
-            }
-            next_state.finalized_height = finalized.value().height;
         } else {
             finalized.reset();
         }
@@ -677,6 +682,51 @@ namespace ExtraChain::Consensus {
         }
         prune_memory(safety_state_.finalized_height);
         return finalized;
+    }
+
+    std::vector<FinalizedCheckpoint> ConsensusEngine::resume_deferred_finalization() {
+        std::lock_guard                  lock(mutex_);
+        std::vector<FinalizedCheckpoint> caught_up;
+        if (!initialized_) {
+            return caught_up;
+        }
+        // Walk forward one height at a time: a certificate we already hold may have
+        // been unfinalizable only because the height below it was, so every success
+        // can unlock the next one.
+        for (bool progressed = true; progressed;) {
+            progressed = false;
+            for (const auto& [_, certificate] : certificates_) {
+                const auto finalized = finalization_for(certificate);
+                if (!finalized.has_value() || finalized.value().height != safety_state_.finalized_height + 1
+                    || !batches_.contains(finalized.value().header_hash)) {
+                    continue;
+                }
+                const auto proof = finality_proof_for(certificate);
+                if (!proof.has_value()) {
+                    continue;
+                }
+                const auto proposal = proposals_.find(certificate.header_hash);
+                if (proposal == proposals_.end()) {
+                    continue;
+                }
+                auto next_state            = safety_state_;
+                next_state.finalized_height = finalized.value().height;
+                if (!store_->persist_certificate_state(certificate, proposal->second, next_state, proof)
+                         .has_value()) {
+                    continue;
+                }
+                safety_state_ = std::move(next_state);
+                finality_proofs_.insert_or_assign(finalized.value().height, proof.value());
+                checkpoints_finalized_.fetch_add(1, std::memory_order_relaxed);
+                caught_up.push_back(finalized.value());
+                progressed = true;
+                break;
+            }
+        }
+        if (!caught_up.empty()) {
+            prune_memory(safety_state_.finalized_height);
+        }
+        return caught_up;
     }
 
     bool ConsensusEngine::verify_certificate(const QuorumCertificate& certificate) const {
