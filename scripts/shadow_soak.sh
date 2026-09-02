@@ -70,6 +70,20 @@ fail() {
     exit 1
 }
 
+# How far a node actually got. The periodic counter sample stops the moment a
+# node hangs or shuts down, so its last line under-reports; the engine's own
+# "Finalized height N" log is written per finalization and never goes stale.
+# Take whichever of the two is further along.
+finalized_height() {
+    local log="$WORK/node-$1.log"
+    [ -f "$log" ] || return 0
+    local sampled logged
+    sampled="$(grep 'committee node=' "$log" 2>/dev/null \
+        | tail -1 | sed -n 's/.*finalized=\([0-9]*\).*/\1/p')"
+    logged="$(sed -n 's/.*\[Shadow\] Finalized height \([0-9]*\) .*/\1/p' "$log" 2>/dev/null | tail -1)"
+    printf '%s\n' "$sampled" "$logged" | grep -E '^[0-9]+$' | sort -n | tail -1
+}
+
 # Per-node picture of the last reported counters — the first thing worth seeing
 # whether the run passed or failed.
 summary() {
@@ -91,7 +105,7 @@ summary() {
             "$(sed -n 's/.*votes=\([0-9]*\).*/\1/p'          <<<"$line")" \
             "$(sed -n 's/.*timeouts=\([0-9]*\).*/\1/p'       <<<"$line")" \
             "$(sed -n 's/.*certificates=\([0-9]*\).*/\1/p'   <<<"$line")" \
-            "$(sed -n 's/.*finalized=\([0-9]*\).*/\1/p'      <<<"$line")"
+            "$(finalized_height "$index")"
     done
     printf '\n'
     local roots
@@ -219,13 +233,11 @@ done
 if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     convergence_deadline=$(( $(date +%s) + 60 ))
     while :; do
-        seed_finalized="$(grep 'committee node=' "$WORK/node-0.log" 2>/dev/null \
-            | tail -1 | sed -n 's/.*finalized=\([0-9]*\).*/\1/p')"
+        seed_finalized="$(finalized_height 0)"
         converged=1
         [ -n "$seed_finalized" ] || converged=0
         for index in $(seq 1 $((NODE_COUNT - 1))); do
-            node_finalized="$(grep 'committee node=' "$WORK/node-$index.log" 2>/dev/null \
-                | tail -1 | sed -n 's/.*finalized=\([0-9]*\).*/\1/p')"
+            node_finalized="$(finalized_height "$index")"
             [ -n "$node_finalized" ] && [ "$node_finalized" = "$seed_finalized" ] || converged=0
         done
         [ "$converged" -eq 1 ] && break
@@ -239,11 +251,21 @@ fi
 
 # A stack from a live node is worth more than the same node killed — this is how
 # the ABBA deadlock was found. Take it before the processes go away.
-if [ "$verdict" != "pass" ] && [ "$verdict" != "pass-negative" ] && command -v sample >/dev/null 2>&1; then
-    for pid in "${PIDS[@]}"; do
-        kill -0 "$pid" 2>/dev/null && sample "$pid" 3 -f "$WORK/sample-$pid.txt" >/dev/null 2>&1 &
-    done
-    wait
+if [ "$verdict" != "pass" ] && [ "$verdict" != "pass-negative" ]; then
+    if command -v sample >/dev/null 2>&1; then
+        for pid in "${PIDS[@]}"; do
+            kill -0 "$pid" 2>/dev/null && sample "$pid" 3 -f "$WORK/sample-$pid.txt" >/dev/null 2>&1 &
+        done
+        wait
+    elif command -v gdb >/dev/null 2>&1; then
+        for pid in "${PIDS[@]}"; do
+            kill -0 "$pid" 2>/dev/null \
+                && gdb -batch -p "$pid" -ex "thread apply all bt" > "$WORK/sample-$pid.txt" 2>&1 &
+        done
+        wait
+    else
+        printf 'no stack sampler (sample/gdb) on this host: %s\n' "$WORK" >&2
+    fi
 fi
 cleanup
 
