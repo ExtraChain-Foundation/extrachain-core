@@ -830,6 +830,13 @@ namespace ExtraChain::Consensus {
 
         auto expected_height = consensus_->engine().safety_state().finalized_height + 1;
         for (const auto& proof : response.proofs) {
+            // A reply answers the height we had when we asked. By the time it is
+            // processed we may have moved on, so proofs we no longer need are the
+            // normal case, not a malformed answer: skip that prefix and keep the
+            // rest instead of discarding a response that carries what we still lack.
+            if (proof.finalized_proposal.header.height < expected_height) {
+                continue;
+            }
             if (proof.finalized_proposal.header.height != expected_height) {
                 eWarning("[Shadow] Non-contiguous finality proof from {}", peer_identifier);
                 return;
@@ -1839,6 +1846,13 @@ namespace ExtraChain::Consensus {
                      st.highest_certificate.has_value() ? st.highest_certificate.value().height : 0,
                      st.locked_certificate.has_value() ? st.locked_certificate.value().height : 0,
                      st.finalized_height);
+            // A proposal at or below the height we already finalized will never earn
+            // our vote. Keeping it pending only means every duplicate batch reply
+            // re-runs a full validation for a branch that is settled, which is how a
+            // lagging node ends up spending minutes on payloads it cannot use.
+            if (proposal.header.height <= st.finalized_height) {
+                pending_proposals_.erase(hash_header(proposal.header));
+            }
             return;
         }
         send_to_peer(vote.value(),
