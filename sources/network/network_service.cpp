@@ -389,6 +389,12 @@ void NetworkService::add_all_services_identifiers_to_message(MessageBody &msg) {
 
     const auto connections = connection_snapshot();
     for (const auto &service : connections) {
+        // Only peers we can actually reach. The send loop skips inactive sockets,
+        // so listing one here would tell every relay that this peer is already
+        // served — and the message would reach it neither directly nor forwarded.
+        if (!service->is_active())
+            continue;
+
         std::string ident = service->identifier();
 
         if (!ident.empty())
@@ -606,7 +612,11 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
 
             if (activated->mode() == SocketMode::Full && activated->ip() != first_node()
                 && activated->direction() == SocketDirection::Outgoing) {
-                reconn_.insert({ activated->ip(), {} });
+                // Assign, not insert: a link that came back has earned a clean slate.
+                // Leaving the old attempt count in place made the backoff one-way, so
+                // a peer that flapped a few times stayed on the maximum delay for the
+                // rest of the process's life.
+                reconn_[activated->ip()] = {};
             }
         });
     };
