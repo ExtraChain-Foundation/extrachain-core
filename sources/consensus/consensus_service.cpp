@@ -710,6 +710,22 @@ namespace ExtraChain::Consensus {
             || !authenticator_->authenticated_validator(peer_identifier).has_value()) {
             return;
         }
+        // Batch requests go to the whole committee, so one payload comes back from
+        // every validator that holds it. Staging the same bytes again changes
+        // nothing, but each copy still pays a full deserialize-and-validate pass
+        // under the mutex — hundreds of milliseconds for a batch this size, and a
+        // lagging node receives them by the dozen exactly when it can least afford
+        // the delay.
+        if (consensus_->engine().batch_for(batch.header_hash).has_value()) {
+            eDebug("[Shadow] Dropped a duplicate copy of batch {}", batch.header_hash.substr(0, 12));
+            const auto pending = pending_proposals_.find(batch.header_hash);
+            if (pending != pending_proposals_.end()) {
+                // The payload is already ours; retry the vote itself, which is cheap,
+                // rather than the validation that produced it.
+                vote_for_proposal(pending->second, peer_identifier);
+            }
+            return;
+        }
         const auto proposal = pending_proposals_.find(batch.header_hash);
         if (proposal == pending_proposals_.end()) {
             eDebug("[Shadow] Dropped batch {} without a pending proposal", batch.header_hash.substr(0, 12));
