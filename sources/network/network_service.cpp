@@ -538,10 +538,12 @@ void NetworkService::reconnection() {
         el->close_connection();
     }
 
-    if (!skip_first_node) {
-        // Dial the seed, then carry on: the other peers in reconn_ need their turn
-        // in the same pass. Returning here meant that a node which had lost its
-        // uplink stopped re-dialling everyone else as well.
+    // The seed now lives in reconn_ like any other peer, so let the loop below
+    // dial it on its own backoff. connect_network() is only for the case where we
+    // have never reached it and have nothing to back off from — calling it as well
+    // would give the seed two dials per pass from every node at once, which is a
+    // stampede rather than a recovery.
+    if (!skip_first_node && !reconn_.contains(first_node_)) {
         this->connect_network();
     }
 
@@ -564,8 +566,13 @@ void NetworkService::reconnection() {
 #else
         constexpr int max_delay_ms = 300'000;
 #endif
-        const int delay       = std::min(5000 * (1 << entry.attempts), max_delay_ms);
-        entry.next_attempt_ms = now + delay;
+        // Spread the retries out. Every peer that lost the same link wakes on the
+        // same schedule, so without a per-node offset they all dial the survivor in
+        // the same instant — six simultaneous handshakes are what the node can
+        // least afford while it is already recovering.
+        const int  delay  = std::min(5000 * (1 << entry.attempts), max_delay_ms);
+        const auto jitter = static_cast<int>(std::hash<std::string> {}(node->node_identifier() + ip) % 2000);
+        entry.next_attempt_ms = now + delay + jitter;
     }
 
     int next_delay_ms = node->runtime_activity() == RuntimeActivity::Background ? 60000 : 30000;
