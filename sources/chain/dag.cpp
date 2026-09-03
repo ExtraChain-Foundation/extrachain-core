@@ -2538,9 +2538,16 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
         control_index_->put(last, proposal.header.section_root);
     }
     if (recovery_incidents.empty() && first <= cache_.section()) {
+        // Rebuilding the cache walks the controls, which takes
+        // controls_generation_mutex_ and then save_mutex_. Holding save_mutex_
+        // across that call inverts the order against every control generation
+        // running concurrently, and the two sides deadlock. The sections are
+        // already written at this point, so the lock has done its job.
+        save_lock.unlock();
         cache_.reset_db();
         cache_.init_db();
         cache_.check_and_update_cache_thread(current_section_);
+        save_lock.lock();
     }
     if (chain_index_enabled_ && chain_index_) {
         for (const auto &[_, bytes] : sections) {
@@ -2561,6 +2568,8 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
         return std::unexpected(ConsensusError::StorageFailure);
     }
     if (recovery_incidents.empty() && first > cache_.section()) {
+        // Same lock-order inversion as above.
+        save_lock.unlock();
         cache_.check_and_update_cache_thread(current_section_);
     }
     update_range(true);
