@@ -1564,15 +1564,25 @@ namespace ExtraChain::Consensus {
         if (!consensus_) {
             return;
         }
+        const auto& highest = consensus_->engine().safety_state().highest_certificate;
+        if (!highest.has_value()) {
+            return;
+        }
+        // A control is also committed behind every finalized Shadow batch, so this
+        // fires for sections the chain has certified already. Re-reading and
+        // re-committing them costs a batch build on every node and can only end in
+        // InvalidParent against a parent that covers them; leave early instead.
+        if (highest.value().phase != Phase::Genesis) {
+            const auto certified = consensus_->engine().proposal_for(highest.value().header_hash);
+            if (certified.has_value() && certified.value().batch.last_section >= section) {
+                return;
+            }
+        }
         const auto control = node_.dag()->read_control(SectionId(section));
         const auto first   = section == 0 ? SectionId(0) : SectionId(section) - CONTROL_INTERVAL_DIFF;
         const auto batch   = node_.dag()->build_shadow_batch(first, SectionId(section), {});
         if (!control.has_value() || !batch.has_value()
             || batch.value().manifest.payload_bytes > consensus_->configuration().maximum_batch_bytes) {
-            return;
-        }
-        const auto& highest = consensus_->engine().safety_state().highest_certificate;
-        if (!highest.has_value()) {
             return;
         }
         const auto state = build_state_commitment(batch.value(),
