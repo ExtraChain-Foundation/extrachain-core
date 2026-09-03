@@ -539,9 +539,10 @@ void NetworkService::reconnection() {
     }
 
     if (!skip_first_node) {
+        // Dial the seed, then carry on: the other peers in reconn_ need their turn
+        // in the same pass. Returning here meant that a node which had lost its
+        // uplink stopped re-dialling everyone else as well.
         this->connect_network();
-        schedule_reconnection(10000);
-        return;
     }
 
     const std::int64_t now = Utils::current_date_ms();
@@ -610,11 +611,14 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
             socket_activated_event_.publish(activated->ip(), activated->identifier());
             socket_ready_event_.publish();
 
-            if (activated->mode() == SocketMode::Full && activated->ip() != first_node()) {
-                // Remember the peer whichever way the link was made. Tracking only
-                // outgoing links left the accepting side with no way back: when its
-                // incoming sockets died it sat at conns=0 for the rest of the run,
-                // because nothing on either side redials. The dialer still goes first
+            if (activated->mode() == SocketMode::Full) {
+                // Remember the peer whichever way the link was made, first_node
+                // included. Tracking only outgoing links left the accepting side with
+                // no way back: when its incoming sockets died it sat at conns=0 for
+                // the rest of the run, because nothing on either side redials. And
+                // excluding first_node left it to connect_network(), which only runs
+                // while no socket for it exists at all — once one died mid-run,
+                // nothing dialled the seed again either. The dialer still goes first
                 // — an accepted peer waits one backoff step before calling back, so
                 // the two sides do not race into a pair of duplicate sockets.
                 //
