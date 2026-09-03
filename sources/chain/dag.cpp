@@ -1144,6 +1144,13 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
                     section->id = section_id;
                     return section.value();
                 }
+                // Bytes that will not parse are corruption, not absence, and the
+                // callers below cannot tell the two apart: save_transaction would
+                // build a fresh section over this row and lose whatever was in it.
+                // Say so, so the audit has something to find.
+                eWarning("[Dag] Section {} is stored but does not parse ({} bytes)",
+                         section_id,
+                         content->size());
             }
         }
 
@@ -5307,8 +5314,28 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
         SectionId  pack_first = pack_idx * section_size;
 
         if (pack_registry_->find_pack_for_section(pack_first).has_value()) {
-            if (hot_section_store_)
-                hot_section_store_->erase_range(pack_first, pack_first + section_size - 1);
+            if (hot_section_store_) {
+                const SectionId packed_last = pack_first + section_size - 1;
+                // A hot row over an already-packed range is usually a leftover copy,
+                // but it can also be a repair that landed after packing. Dropping it
+                // wholesale rolls that repair back to the stale pack contents, so
+                // only discard rows the pack already agrees with.
+                auto hot = hot_section_store_->read_range(pack_first, packed_last);
+                if (!hot.empty()) {
+                    std::map<SectionId, std::string> packed;
+                    for (auto &[section, bytes] : pack_registry_->read_sections(pack_first, packed_last)) {
+                        packed.emplace(section, std::move(bytes));
+                    }
+                    for (const auto &[section, bytes] : hot) {
+                        const auto stored = packed.find(section);
+                        if (stored != packed.end() && stored->second == bytes) {
+                            hot_section_store_->erase_range(section, section);
+                        } else {
+                            eWarning("[Dag] Hot section {} differs from its pack; keeping the hot copy", section);
+                        }
+                    }
+                }
+            }
             next_pack_index_ += 1;
             continue;
         }
