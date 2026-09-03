@@ -3853,6 +3853,11 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
 
         if (!received_sections.empty() && hot_section_store_ && hot_section_store_->is_open()) {
+            // Whole sections go in here, so this has to serialize against
+            // save_transaction the same way write_section_diff does: that path
+            // read-modify-writes a section, and a sync write landing in between
+            // silently drops whichever side wrote second.
+            std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
             const auto received_first  = received_sections.begin()->first;
             const auto received_last   = received_sections.rbegin()->first;
             const auto committed_first = first_saved_section_ < SectionId(0)
