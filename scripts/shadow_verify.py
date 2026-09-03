@@ -117,12 +117,17 @@ def main():
     )
 
     # Missing is only meaningful inside the range everybody has started, so take
-    # the highest lower bound across nodes as the floor.
+    # the highest lower bound across nodes as the floor. Within that range, compare
+    # against what some node actually holds: hot storage only keeps recent sections,
+    # older ones live in packs, and a node that has not packed yet drags the floor
+    # down to zero — every section below the others' hot window then looks "missing"
+    # on all seven at once, which is nobody diverging from anybody.
     floor = max(min(h) for h in per_node.values() if h)
     ceiling = min(max(h) for h in per_node.values() if h)
+    held_by_someone = {s for h in per_node.values() for s in h if floor <= s <= ceiling}
     missing = defaultdict(list)
     for name, hashes in per_node.items():
-        for section in range(floor, ceiling + 1):
+        for section in sorted(held_by_someone):
             if section not in hashes:
                 missing[name].append(section)
 
