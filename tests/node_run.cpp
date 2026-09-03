@@ -120,8 +120,15 @@ int main(int argc, char* argv[]) {
 
     const char* bind_ip = std::getenv("EXC_BIND_IP");
     if (mode == "committee" && bind_ip != nullptr) {
-        auto settings       = Utils::read_settings();
-        settings.first_node = bind_ip;
+        auto settings = Utils::read_settings();
+        // Point every joiner at node 0 rather than at itself. Self as first_node
+        // does suppress the automatic dial — the committee wires its own mesh
+        // below — but it also makes reconnection() bail out on its first guard
+        // ("do not dial ourselves"), which switches re-dial off for every peer.
+        // A committee that loses a link then never gets it back, and that is the
+        // one behaviour a chaos run most needs to exercise.
+        const bool is_seed_node = argc > 4 && std::strtoull(argv[4], nullptr, 10) == 0;
+        settings.first_node     = is_seed_node ? std::string(bind_ip) : "127.0.0.1";
         Utils::write_settings(settings);
     }
     auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false,
