@@ -1785,15 +1785,21 @@ void Dag::schedule_section_repair(const SectionId &section_id) {
     std::uint64_t section_value = 0;
     const auto    parsed =
         std::from_chars(section_text.data(), section_text.data() + section_text.size(), section_value);
-    if (parsed.ec == std::errc {} && parsed.ptr == section_text.data() + section_text.size()
-        && node->consensus() != nullptr && node->consensus()->controls_section(section_value)) {
-        boost::asio::dispatch(node->serial_executor(), [this, section_value] {
-            static_cast<void>(node->consensus()->repair_section(section_value));
-        });
-        return;
-    }
+    const bool section_parsed =
+        parsed.ec == std::errc {} && parsed.ptr == section_text.data() + section_text.size();
 
-    boost::asio::dispatch(node->serial_executor(), [this, section_id] {
+    // post, not dispatch: this runs from the cache rebuild, which holds the cache
+    // locks, and dispatch executes the handler inline when the caller is already on
+    // the strand. Asking consensus anything from there — even whether it owns the
+    // section — takes its mutex in the opposite order from repair_section, which
+    // walks back into the DAG. Both the question and the answer belong to a later
+    // turn, with the peer request as the fallback when consensus cannot help.
+    boost::asio::post(node->serial_executor(), [this, section_id, section_value, section_parsed] {
+        if (section_parsed && node->consensus() != nullptr
+            && node->consensus()->controls_section(section_value)) {
+            static_cast<void>(node->consensus()->repair_section(section_value));
+            return;
+        }
         const auto  from        = section_id > CONTROL_INTERVAL ? section_id - CONTROL_INTERVAL : SectionId(0);
         const auto  to          = std::min(current_section_, section_id + CONTROL_INTERVAL);
         std::size_t requested   = 0;
@@ -2563,9 +2569,13 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     if (!contracts_committed.has_value()) {
         return std::unexpected(contracts_committed.error());
     }
-    if (!recovery_incidents.empty()
-        && !replay_repaired_state(first, last, proposal.header.section_root, proof_hash)) {
-        return std::unexpected(ConsensusError::StorageFailure);
+    if (!recovery_incidents.empty()) {
+        // Replaying repaired state ends up rebuilding the cache too, so it needs the
+        // same lock order as the branches below: controls first, save second.
+        save_lock.unlock();
+        if (!replay_repaired_state(first, last, proposal.header.section_root, proof_hash)) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
     }
     if (recovery_incidents.empty() && first > cache_.section()) {
         // Same lock-order inversion as above.
