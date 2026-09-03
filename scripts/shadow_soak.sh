@@ -15,6 +15,7 @@
 #        EXC_SHADOW_PER_SENDER   intents per submitting node        (default 32)
 #        EXC_SHADOW_RUN_SECONDS  per-node run window                (default 240)
 #        EXC_SHADOW_DEADLINE_S   harness deadline for the committee (default 300)
+#        EXC_SHADOW_HOLD_S       keep a passed committee alive this long (default 0)
 
 set -u
 
@@ -247,6 +248,14 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
         fi
         sleep 1
     done
+fi
+
+# Optional hold: keep the converged committee serving for a while so an outside
+# node can join it live (see shadow_live_join.sh). On a fast host the whole load
+# finalizes in seconds, so without this there is nothing left to join.
+if [ "$verdict" = "pass" ] && [ "${EXC_SHADOW_HOLD_S:-0}" -gt 0 ]; then
+    log "holding the committee for ${EXC_SHADOW_HOLD_S}s"
+    sleep "$EXC_SHADOW_HOLD_S"
 fi
 
 # A stack from a live node is worth more than the same node killed — this is how
