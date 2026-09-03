@@ -27,6 +27,7 @@
 #include "utils/compression.h"
 #include "utils/exc_logs.h"
 #include "utils/exc_utils.h"
+#include "utils/file_io.h"
 
 namespace Pack {
 
@@ -514,18 +515,10 @@ std::expected<void, Error> write(const std::filesystem::path            &path,
     std::uint32_t footer_magic = MAGIC;
     out.append(reinterpret_cast<const char *>(&footer_magic), 4);
 
-    std::filesystem::path tmp = path;
-    tmp += ".tmp";
-    {
-        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-        if (!f) return std::unexpected(Error::WriteFailed);
-        f.write(out.data(), static_cast<std::streamsize>(out.size()));
-        if (!f) return std::unexpected(Error::WriteFailed);
-    }
-    std::error_code ec;
-    std::filesystem::rename(tmp, path, ec);
-    if (ec) {
-        std::filesystem::remove(tmp, ec);
+    // The hot rows for these sections are deleted as soon as this returns, so the
+    // pack has to be on the disk by then — not merely handed to the page cache.
+    // write_atomic fsyncs the file and the directory before and after the rename.
+    if (!FileIo::write_atomic(path, out).has_value()) {
         return std::unexpected(Error::WriteFailed);
     }
 
