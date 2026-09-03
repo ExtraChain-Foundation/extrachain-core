@@ -610,13 +610,21 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
             socket_activated_event_.publish(activated->ip(), activated->identifier());
             socket_ready_event_.publish();
 
-            if (activated->mode() == SocketMode::Full && activated->ip() != first_node()
-                && activated->direction() == SocketDirection::Outgoing) {
+            if (activated->mode() == SocketMode::Full && activated->ip() != first_node()) {
+                // Remember the peer whichever way the link was made. Tracking only
+                // outgoing links left the accepting side with no way back: when its
+                // incoming sockets died it sat at conns=0 for the rest of the run,
+                // because nothing on either side redials. The dialer still goes first
+                // — an accepted peer waits one backoff step before calling back, so
+                // the two sides do not race into a pair of duplicate sockets.
+                //
                 // Assign, not insert: a link that came back has earned a clean slate.
                 // Leaving the old attempt count in place made the backoff one-way, so
                 // a peer that flapped a few times stayed on the maximum delay for the
                 // rest of the process's life.
-                reconn_[activated->ip()] = {};
+                const bool dialled_by_us = activated->direction() == SocketDirection::Outgoing;
+                reconn_[activated->ip()] =
+                    ReconnEntry { .attempts = dialled_by_us ? 0ULL : 1ULL, .next_attempt_ms = 0 };
             }
         });
     };
