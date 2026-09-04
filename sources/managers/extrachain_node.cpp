@@ -63,8 +63,12 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     node_enabled.store(false);
     eLog("Set node_enabled to {}", node_enabled);
 
+    // Posted tasks capture node-owned managers and database connections. Stop
+    // and join them while the node is still alive, including synchronous
+    // console nodes which do not have m_thread.
+    ThreadPoolBoost::terminate();
+
     if (m_thread) {
-        ThreadPoolBoost::terminate();
         m_thread->quit();
         m_thread->wait();
         node->deleteLater();
