@@ -656,7 +656,23 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
                     return;
                 }
 
-                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
+                if (last_hash.value() != control_hash.value().control) {
+                // generate_hash_from_section returns the last control it produced in
+                // this pass, and that is not the control at res.to whenever the pass
+                // stops short: a cache rebuilt from genesis (legacy sync resets it)
+                // gets here before the chain is closed up to the tip, so the pass
+                // ends at the genesis control. Announcing that value under `to` made
+                // every peer see a mismatch at a boundary they all agree on and start
+                // a repair from section 0. Peers compare the claim against their
+                // stored control at `to`, so that is what must go out.
+                eWarning("[DagCache] Control pass from {} ended at {} but the control at {} is {}; announcing the stored one",
+                         res.from,
+                         last_hash.value().substr(0, 8),
+                         res.to,
+                         control_hash.value().control.substr(0, 8));
+            }
+            auto hash_interval =
+                HashInterval { .from = res.from, .to = res.to, .hash = control_hash.value().control };
                 eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
                 // eLog("[Dag] Send {}", hash_interval);
                 node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
@@ -674,7 +690,23 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
                 return;
             }
 
-            auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
+            if (last_hash.value() != control_hash.value().control) {
+                // generate_hash_from_section returns the last control it produced in
+                // this pass, and that is not the control at res.to whenever the pass
+                // stops short: a cache rebuilt from genesis (legacy sync resets it)
+                // gets here before the chain is closed up to the tip, so the pass
+                // ends at the genesis control. Announcing that value under `to` made
+                // every peer see a mismatch at a boundary they all agree on and start
+                // a repair from section 0. Peers compare the claim against their
+                // stored control at `to`, so that is what must go out.
+                eWarning("[DagCache] Control pass from {} ended at {} but the control at {} is {}; announcing the stored one",
+                         res.from,
+                         last_hash.value().substr(0, 8),
+                         res.to,
+                         control_hash.value().control.substr(0, 8));
+            }
+            auto hash_interval =
+                HashInterval { .from = res.from, .to = res.to, .hash = control_hash.value().control };
             eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
             // eLog("[Dag] Send {}", hash_interval);
             node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
