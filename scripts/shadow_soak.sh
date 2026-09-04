@@ -42,6 +42,10 @@ ALLOWED_DEAD="${EXC_SHADOW_ALLOWED_DEAD:-0}"
 # Nodes found dead when the watch loop ends (chaos kills); set once, before cleanup.
 DEAD_NODES=""
 is_dead() { case " $DEAD_NODES " in *" $1 "*) return 0 ;; esac; return 1; }
+# A node restarted by the chaos agent in the same home writes its new pid to
+# barrier/pid-<index>; that process is the node from then on.
+node_pid() { if [ -f "$BARRIER/pid-$1" ]; then cat "$BARRIER/pid-$1"; else echo "${PIDS[$1]}"; fi; }
+restarted() { [ -f "$BARRIER/pid-$1" ]; }
 
 sha256_of() {
     if command -v sha256sum >/dev/null 2>&1; then sha256sum < "$1" | cut -d' ' -f1
@@ -110,6 +114,7 @@ PIDS=()
 
 cleanup() {
     [ "${#PIDS[@]}" -eq 0 ] && return 0
+    for f in "$BARRIER"/pid-*; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; done
     for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
     local deadline=$(( $(date +%s) + 15 ))
     local alive=1
@@ -120,6 +125,7 @@ cleanup() {
         done
         [ "$alive" -eq 1 ] && sleep 1
     done
+    for f in "$BARRIER"/pid-*; do [ -f "$f" ] && kill -9 "$(cat "$f")" 2>/dev/null; done
     for pid in "${PIDS[@]}"; do
         kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
     done
@@ -276,7 +282,11 @@ verdict=""
 while :; do
     done_nodes=0
     for index in $(seq 0 $((SENDERS - 1))); do
-        grep -q "finalized intents=$PER_SENDER" "$WORK/node-$index.log" 2>/dev/null && done_nodes=$((done_nodes + 1))
+        # A restarted sender lost its submission list with the old process and
+        # can never report its own receipts; it is judged by convergence instead.
+        if grep -q "finalized intents=$PER_SENDER" "$WORK/node-$index.log" 2>/dev/null || restarted "$index"; then
+            done_nodes=$((done_nodes + 1))
+        fi
     done
     if [ "$done_nodes" -eq "$SENDERS" ]; then verdict="pass"; break; fi
     # Chaos kills: a run passes on the survivors when every sender that has not
@@ -285,7 +295,7 @@ while :; do
         dead_senders=0; unfinished_alive=0
         for index in $(seq 0 $((SENDERS - 1))); do
             grep -q "finalized intents=$PER_SENDER" "$WORK/node-$index.log" 2>/dev/null && continue
-            if kill -0 "${PIDS[$index]}" 2>/dev/null; then unfinished_alive=1; else dead_senders=$((dead_senders + 1)); fi
+            if kill -0 "$(node_pid "$index")" 2>/dev/null; then unfinished_alive=1; else dead_senders=$((dead_senders + 1)); fi
         done
         if [ "$unfinished_alive" -eq 0 ] && [ "$dead_senders" -le "$ALLOWED_DEAD" ]; then verdict="pass"; break; fi
     fi
@@ -305,15 +315,18 @@ while :; do
                | awk '{s+=$1} END {print s+0}')"
     if [ "$rejects" -ge 50 ]; then verdict="invalid-root"; break; fi
     alive=0
-    for pid in "${PIDS[@]}"; do kill -0 "$pid" 2>/dev/null && alive=$((alive + 1)); done
+    for index in $(seq 0 $((NODE_COUNT - 1))); do kill -0 "$(node_pid "$index")" 2>/dev/null && alive=$((alive + 1)); done
     if [ "$alive" -eq 0 ]; then verdict="exited"; break; fi
     if [ "$(date +%s)" -ge "$deadline" ]; then verdict="deadline"; break; fi
     sleep 5
 done
 
+RESTARTED_NODES=""
 for index in $(seq 0 $((NODE_COUNT - 1))); do
-    kill -0 "${PIDS[$index]}" 2>/dev/null || DEAD_NODES="$DEAD_NODES$index "
+    restarted "$index" && RESTARTED_NODES="$RESTARTED_NODES$index "
+    kill -0 "$(node_pid "$index")" 2>/dev/null || DEAD_NODES="$DEAD_NODES$index "
 done
+[ -n "$RESTARTED_NODES" ] && log "note: node(s) $RESTARTED_NODES were restarted during the run and are audited as members"
 if [ -n "$DEAD_NODES" ]; then
     if [ "$(printf '%s' "$DEAD_NODES" | wc -w)" -le "$ALLOWED_DEAD" ]; then
         log "note: node(s) $DEAD_NODES died during the run (allowed); the survivors are audited"
