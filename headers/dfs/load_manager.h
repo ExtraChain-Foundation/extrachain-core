@@ -72,6 +72,8 @@ struct LoadInfo {
 
     std::set<std::string>                         identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
+    // The peer the last fragment request went to: only its refusal frees the window.
+    std::string                                   last_source {};
     // std::chrono::system_clock::time_point last_segment_time {}; // Time of last received segment
     // Dfs::FileState                        state { Dfs::FileState::Known };
     // std::unordered_set<std::string> tried_neighbors;
@@ -98,6 +100,10 @@ public:
     void stop();
 
     bool add_node_identifier(const Dfs::FileLink& file_link, std::string identifier);
+    /// A peer answered Ready for this file: ask it first, ahead of the guessed sources.
+    void prefer_source(const Dfs::FileLink& file_link, const std::string& identifier);
+    /// A peer told us it cannot serve this file: forget it and free the request window.
+    void drop_source(const Dfs::FileLink& file_link, const std::string& identifier);
     void remove_active_download(const Dfs::FileLinkFragment& file_link_fragment);
     void add_to_queue(const ActorId&     owner_id,
                       const Dfs::DirRow& dir_row,

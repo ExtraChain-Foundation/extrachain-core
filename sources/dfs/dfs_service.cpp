@@ -2151,18 +2151,23 @@ void DfsService::network_response_file_state(const Dfs::Packets::FileState &data
 
     eLog("[Dfs] File state response: {}/{} state={}", data.owner_id, data.file_id, data.state);
 
+    const auto file_link = Dfs::FileLink { .owner_id = data.owner_id, .file_id = data.file_id };
+    const auto source    = *responder.identifiers().begin();
+    if (data.state != Dfs::FileState::Ready) {
+        // Not a holder (or not a whole one): stop asking it for this file.
+        load_manager_.drop_source(file_link, source);
+        return;
+    }
+
     if (!dir_row.has_value()) {
         return;
     }
 
-    if (data.state == Dfs::FileState::Ready) {
-        dir_row->state = data.state;
-        dir_row->hash  = data.hash;
-        load_manager_.add_to_queue(data.owner_id,
-                                   dir_row.value(),
-                                   *responder.identifiers().begin(),
-                                   data.notify_neighbours);
-    }
+    dir_row->state = data.state;
+    dir_row->hash  = data.hash;
+    load_manager_.add_to_queue(data.owner_id, dir_row.value(), source, data.notify_neighbours);
+    // Confirmed holder: ahead of the sources guessed from the connection list.
+    load_manager_.prefer_source(file_link, source);
 }
 
 void DfsService::network_file_exist_notification(const Dfs::Packets::FileState &data, const Responder &responder) {
