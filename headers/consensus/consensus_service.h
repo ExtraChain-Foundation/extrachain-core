@@ -63,6 +63,7 @@ namespace ExtraChain::Consensus {
         void receive_batch_request(const SectionBatchRequest& request,
                                    const Responder&           responder,
                                    std::string_view           peer_identifier);
+        void remember_rejected_batch(const std::string& header_hash, std::uint64_t finalized);
         void receive_batch_data(const SectionBatchData& batch, std::string_view peer_identifier);
         void receive_sync_request(const ShadowSyncRequest& request,
                                   const Responder&         responder,
@@ -183,6 +184,9 @@ namespace ExtraChain::Consensus {
         std::map<std::uint64_t, ShadowCheckpoint>                     pending_checkpoints_;
         std::map<std::uint64_t, SectionBatchData>                     pending_batches_;
         std::map<std::string, Proposal>                               pending_proposals_;
+        /// Batches that failed validation or admission, keyed by header hash, with
+        /// the finalized height they failed at. Copies are dropped until it moves.
+        std::map<std::string, std::uint64_t>                          rejected_batches_;
         std::shared_ptr<Core::DeadlineTask>                           timeout_task_;
         std::shared_ptr<Core::DeadlineTask>                           recovery_task_;
         std::shared_ptr<Core::DeadlineTask>                           intent_batch_task_;
