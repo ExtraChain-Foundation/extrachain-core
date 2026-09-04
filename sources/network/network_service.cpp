@@ -1798,6 +1798,94 @@ bool NetworkService::check_message_count(const std::string &msg) {
     return flag_result;
 }
 
+std::optional<Actor<KeyPublic>> NetworkService::envelope_actor(const ActorId &actor_id) {
+    const auto key = actor_id.to_string();
+    {
+        std::lock_guard lock(envelope_actors_mutex_);
+        if (const auto cached = envelope_actors_.find(key); cached != envelope_actors_.end()) {
+            return cached->second;
+        }
+        // A miss is remembered briefly too: an origin whose actor has not arrived
+        // yet would otherwise cost a store lookup on every one of its messages.
+        if (const auto missed = envelope_actor_misses_.find(key);
+            missed != envelope_actor_misses_.end() && Utils::current_date_ms() - missed->second < 5'000) {
+            return std::nullopt;
+        }
+    }
+    auto actor = node->actor_index()->read_actor(actor_id, ActorGetType::NoRequest);
+    std::lock_guard lock(envelope_actors_mutex_);
+    if (!actor.has_value()) {
+        envelope_actor_misses_[key] = Utils::current_date_ms();
+        if (envelope_actor_misses_.size() > 1024) {
+            envelope_actor_misses_.clear();
+        }
+        return std::nullopt;
+    }
+    if (envelope_actors_.size() > 4096) {
+        envelope_actors_.clear();
+    }
+    envelope_actors_.emplace(key, actor.value());
+    return actor.value();
+}
+
+bool NetworkService::verify_envelope(const MessageBody &message_body,
+                                     std::string_view   sign,
+                                     const std::string &identifier) {
+    std::optional<Actor<KeyPublic>> origin;
+    if (message_body.message_type == MessageType::NewActor || message_body.message_type == MessageType::Actor) {
+        // These carry the actor they are signed with; the id has to match the origin.
+        auto carried = MessagePack::deserialize<Actor<KeyPublic>>(message_body.data);
+        if (carried.has_value() && carried->id() == message_body.init_sender_id) {
+            origin = carried.value();
+        }
+    }
+    if (!origin.has_value()) {
+        origin = envelope_actor(message_body.init_sender_id);
+    }
+    if (!origin.has_value()) {
+        // Ask for the actor, at most once per 30s per origin, and let the message
+        // through: see the note at the call site.
+        const auto key = message_body.init_sender_id.to_string();
+        bool       ask = false;
+        {
+            std::lock_guard lock(envelope_actors_mutex_);
+            const auto now = Utils::current_date_ms();
+            if (auto it = envelope_actor_requests_.find(key);
+                it == envelope_actor_requests_.end() || now - it->second > 30'000) {
+                envelope_actor_requests_[key] = now;
+                ask                           = true;
+            }
+            if (envelope_actor_requests_.size() > 1024) {
+                envelope_actor_requests_.clear();
+            }
+        }
+        if (ask) {
+            eDebug("[Network] Envelope from an unknown actor {} ({}) via {}; requesting the actor",
+                   message_body.init_sender_id,
+                   message_body.message_type,
+                   identifier.substr(0, 8));
+            static_cast<void>(node->actor_index()->read_actor(message_body.init_sender_id, ActorGetType::Request));
+        }
+        return true;
+    }
+    if (sign.size() != crypto_sign_BYTES) {
+        eWarning("[Network] Dropped a {} envelope with a malformed signature from {}",
+                 message_body.message_type,
+                 identifier.substr(0, 8));
+        return false;
+    }
+    const auto verified = origin->key().verify(ByteArray(message_body.calculate_hash()).toBytes(),
+                                               ByteArray(sign).toArray<crypto_sign_BYTES>());
+    if (!verified.has_value() || !verified.value()) {
+        eWarning("[Network] Dropped a {} envelope with an invalid signature: origin {} via {}",
+                 message_body.message_type,
+                 message_body.init_sender_id,
+                 identifier.substr(0, 8));
+        return false;
+    }
+    return true;
+}
+
 void NetworkService::message_received(const std::string &message,
                                       const std::string &ip,
                                       const std::string &identifier) {
@@ -1824,36 +1912,18 @@ void NetworkService::message_received(const std::string &message,
     const auto  node_id =
         NodeId { .actor_id = message_body.init_sender_id, .node_identifier = message_body.init_sender_identifier };
 
-    /*
-    auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id, ActorGetType::NoRequest);
-    if (!sign_actor.has_value()
-        && (message_body.message_type == MessageType::NewActor
-            || message_body.message_type == MessageType::Actor)) {
-        auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(message_body.data);
-        if (!actor_result.has_value()) {
-            return;
-        }
-        sign_actor = actor_result.value();
+    // Envelope signature. The origin signs calculate_hash() — type, status,
+    // message id, origin actor and payload — with its system actor, and relays
+    // forward the origin's signature untouched, so the check holds across hops.
+    // It runs whenever the origin's actor is known here. An unknown origin is let
+    // through and its actor requested: the first exchanges of a fresh link arrive
+    // before Actors have been synced, and dropping them there never let a link get
+    // past its handshake, which is why the check had been commented out wholesale.
+    // Consensus traffic carries its own validator authentication on top of this.
+    if (!verify_envelope(message_body, sign, identifier)) {
+        return;
     }
 
-     if (sign_actor.has_value()) {
-         auto verify = sign_actor.value().key().verify(ByteArray(message_body.calculate_hash()).toBytes(),
-                                                       ByteArray(sign.data()).toArray<crypto_sign_BYTES>());
-         if (!verify.has_value()) {
-             eWarning("[Network] Can't verify message");
-             return;
-         }
-         if (!verify) {
-             eWarning("[Network] Sign package is invalid!");
-             return;
-         }
-
-      } else {
-          // if (message_body.message_type != MessageType::NewActor) {
-          return;
-          // }
-      }
-      */
 
     const MessageType   type         = message_body.message_type;
     const MessageStatus status       = message_body.status;

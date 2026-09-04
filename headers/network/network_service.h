@@ -179,6 +179,12 @@ private:
         };
 #endif
     std::string first_node_;
+    // Envelope verification: actors of message origins, misses and pending
+    // actor requests, all keyed by actor id (see verify_envelope).
+    std::mutex                              envelope_actors_mutex_;
+    std::map<std::string, Actor<KeyPublic>> envelope_actors_;
+    std::map<std::string, std::int64_t>     envelope_actor_misses_;
+    std::map<std::string, std::int64_t>     envelope_actor_requests_;
 
 public:
     explicit NetworkService(ExtraChain::Core::ExtraChainNode* node,
@@ -329,6 +335,10 @@ public:
     std::vector<std::string> active_full_peer_identifiers() const;
     std::vector<std::string> active_full_peers_with_capability(std::string_view capability) const;
     std::int64_t             connection_pending_bytes(const std::string& identifier) const;
+
+    std::optional<Actor<KeyPublic>> envelope_actor(const ActorId &actor_id);
+
+    bool verify_envelope(const MessageBody &message_body, std::string_view sign, const std::string &identifier);
 
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
 
