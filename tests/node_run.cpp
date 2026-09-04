@@ -398,6 +398,37 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // Optional ExDFS load: every committee node publishes one file of
+        // EXC_DFS_BYTES bytes while consensus runs, so the harness can check that
+        // content replicates across the whole mesh — through chaos included. The
+        // payload is deterministic per node, so a corrupt copy is told from a
+        // missing one.
+        if (const char* dfs_bytes_env = std::getenv("EXC_DFS_BYTES");
+            dfs_bytes_env != nullptr && std::strtoull(dfs_bytes_env, nullptr, 10) > 0) {
+            const auto dfs_bytes = static_cast<std::size_t>(std::strtoull(dfs_bytes_env, nullptr, 10));
+            std::vector<std::uint8_t> payload(dfs_bytes);
+            for (std::size_t index = 0; index < payload.size(); ++index) {
+                payload[index] =
+                    static_cast<std::uint8_t>((index * (131U + node_index) + 17U + node_index * 7U) & 0xffU);
+            }
+            const auto& owner = node->account_controller()->system_actor().id();
+            const auto  row   = node->dfs()->store_data_as_file(owner,
+                                                             owner,
+                                                             std::move(payload),
+                                                             "soak",
+                                                             "node-" + std::to_string(node_index) + ".bin");
+            if (!row.has_value()) {
+                std::printf("[node-run] DFS store failed (error %d)\n", static_cast<int>(row.error()));
+                node->cleanUp();
+                return 5;
+            }
+            std::printf("[node-run] DFS stored owner=%s file_id=%s size=%zu\n",
+                        owner.to_string().c_str(),
+                        row->file_id.c_str(),
+                        row->size);
+            std::fflush(stdout);
+        }
+
         std::vector<std::string> submitted_hashes;
         if (intent_count > 0) {
             const auto&              sender   = node->account_controller()->system_actor();
