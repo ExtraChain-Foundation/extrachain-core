@@ -422,7 +422,11 @@ case "$verdict" in
     pass)
         summary
         [ "$DFS_BYTES" -gt 0 ] && dfs_audit 1
-        log "PASS: $SENDERS senders finalized $PER_SENDER intents each ($TOTAL_INTENTS total)"
+        if [ -n "$DEAD_NODES" ]; then
+            log "PASS (survivors): $done_nodes/$SENDERS senders finalized $PER_SENDER intents each; node(s) $DEAD_NODES died"
+        else
+            log "PASS: $SENDERS senders finalized $PER_SENDER intents each ($TOTAL_INTENTS total)"
+        fi
         printf 'stand data: %s\n' "$WORK"
         ;;
     pass-negative)
