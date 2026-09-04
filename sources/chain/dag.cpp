@@ -3859,19 +3859,49 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             }
         }
 
-        if (!received_sections.empty() && hot_section_store_ && hot_section_store_->is_open()) {
+        // A repair round writes only what actually differs. Over a range we already
+        // hold byte for byte (the mismatch was in a peer's claim, not in the
+        // sections) it used to copy every packed section into the hot store, where
+        // the copies then shadowed the pack on every node that took part.
+        std::map<SectionId, std::string> changed_sections;
+        if (repair_response) {
+            for (const auto &[section_id, bytes] : received_sections) {
+                const auto local = read_section(section_id);
+                bool       same  = false;
+                if (local.has_value()) {
+                    WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+                    auto              copy = local.value();
+                    copy.id                = section_id;
+                    copy.control.reset();
+                    same = Json::serialize(copy) == bytes;
+                }
+                if (!same) {
+                    changed_sections.emplace(section_id, bytes);
+                }
+            }
+            if (changed_sections.empty() && recovery_incidents.empty()) {
+                eLog("[Dag] Repair range {}..{} matches the local sections; nothing to rewrite",
+                     expected_range->first,
+                     expected_range->second);
+                start_control(Force::Active);
+                return;
+            }
+        }
+        const auto &sections_to_store = repair_response ? changed_sections : received_sections;
+
+        if (!sections_to_store.empty() && hot_section_store_ && hot_section_store_->is_open()) {
             // Whole sections go in here, so this has to serialize against
             // save_transaction the same way write_section_diff does: that path
             // read-modify-writes a section, and a sync write landing in between
             // silently drops whichever side wrote second.
             std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
-            const auto received_first  = received_sections.begin()->first;
-            const auto received_last   = received_sections.rbegin()->first;
+            const auto received_first  = sections_to_store.begin()->first;
+            const auto received_last   = sections_to_store.rbegin()->first;
             const auto committed_first = first_saved_section_ < SectionId(0)
                                              ? received_first
                                              : std::min(first_saved_section_, received_first);
             const auto committed_last  = std::max(current_section_, received_last);
-            if (!hot_section_store_->commit_batch(received_sections,
+            if (!hot_section_store_->commit_batch(sections_to_store,
                                                   std::pair { committed_first, committed_last })) {
                 eWarning("[Dag] Failed to store a section sync batch");
                 return;
@@ -4280,7 +4310,14 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         }
 
         reset_progressive_audit();
-        schedule_section_repair(hash_interval.from);
+        // Start at the interval the mismatching control closes, whatever range the
+        // peer named. A claim built over a wider span (a cache rebuilt from genesis
+        // announces 0..tip) sent the repair back to section 0, and every node then
+        // walked the chain from there in 20-section steps. The control-range search
+        // that follows still finds an earlier divergence when there is one.
+        const auto interval_start =
+            hash_interval.to < CONTROL_INTERVAL ? SectionId(0) : hash_interval.to - CONTROL_INTERVAL_DIFF;
+        schedule_section_repair(max_sid(hash_interval.from, interval_start));
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
     }
