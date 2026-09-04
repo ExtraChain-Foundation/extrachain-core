@@ -295,7 +295,6 @@ done
 # converged snapshot instead of a shutdown race.
 if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     convergence_deadline=$(( $(date +%s) + 60 ))
-    dfs_pending=0
     while :; do
         seed_finalized="$(finalized_height 0)"
         converged=1
@@ -308,11 +307,11 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
             # Heights agree; the ExDFS mesh has to be complete as well before the
             # audits read a snapshot.
             dfs_audit 0 && break
-            dfs_pending=1
         fi
         if [ "$(date +%s)" -ge "$convergence_deadline" ]; then
+            # Name the thing that is actually still missing at the deadline.
             verdict="convergence"
-            [ "$dfs_pending" -eq 1 ] && verdict="dfs-incomplete"
+            [ "$converged" -eq 1 ] && verdict="dfs-incomplete"
             break
         fi
         sleep 1
@@ -329,7 +328,10 @@ fi
 
 # A stack from a live node is worth more than the same node killed — this is how
 # the ABBA deadlock was found. Take it before the processes go away.
-if [ "$verdict" != "pass" ] && [ "$verdict" != "pass-negative" ]; then
+# Not for dfs-incomplete: the committee is healthy there, and attaching gdb to
+# seven nodes stops them for minutes — the counters then show a stall that the
+# sampler itself caused.
+if [ "$verdict" != "pass" ] && [ "$verdict" != "pass-negative" ] && [ "$verdict" != "dfs-incomplete" ]; then
     if command -v sample >/dev/null 2>&1; then
         for pid in "${PIDS[@]}"; do
             kill -0 "$pid" 2>/dev/null && sample "$pid" 3 -f "$WORK/sample-$pid.txt" >/dev/null 2>&1 &
