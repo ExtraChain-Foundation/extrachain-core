@@ -51,6 +51,10 @@ namespace ExtraChain::Consensus {
                                                                     std::uint64_t        round = 0);
         std::expected<TimeoutVote, ConsensusError>    make_timeout_vote(std::uint64_t height, std::uint64_t round);
         std::expected<void, ConsensusError>           observe_proposal(const Proposal& proposal);
+        /// A proposal carried by a verified finality proof: checked structurally and
+        /// stored, without the live-proposal validator (its batch is validated by the
+        /// sync path itself, and its certificates were verified with the proof).
+        std::expected<void, ConsensusError>           observe_certified_proposal(const Proposal& proposal);
         std::expected<void, ConsensusError>           stage_batch(SectionBatchData batch);
         std::expected<void, ConsensusError>           stage_batch_for_vote(SectionBatchData batch);
         std::expected<Vote, ConsensusError>           accept_proposal(const Proposal& proposal);

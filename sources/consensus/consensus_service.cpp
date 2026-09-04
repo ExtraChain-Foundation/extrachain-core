@@ -555,7 +555,7 @@ namespace ExtraChain::Consensus {
                 if (missing_ancestor.empty()) {
                     request_batch(proposal, peer_identifier);
                 } else {
-                    request_ancestor_batch(missing_ancestor);
+                    request_ancestor_batch(missing_ancestor, peer_identifier);
                 }
             } else {
                 eWarning("[Shadow] Proposal {} contains invalid batch data", hash_header(proposal.header));
@@ -758,7 +758,7 @@ namespace ExtraChain::Consensus {
                 // The branch is sound, we are simply a batch short of it. Batch
                 // replies race each other, so a payload can land before its own
                 // parent's and leave a hole no other path ever asks about again.
-                request_ancestor_batch(missing_ancestor);
+                request_ancestor_batch(missing_ancestor, peer_identifier);
                 return;
             }
             eWarning("[Shadow] Batch {} has an unusable ancestor chain: {}",
@@ -888,9 +888,17 @@ namespace ExtraChain::Consensus {
             }
             for (const auto* proposal :
                  { &proof.finalized_proposal, &proof.child_proposal, &proof.grandchild_proposal }) {
-                const auto observed = consensus_->engine().observe_proposal(*proposal);
+                // The live validator ran these proposals through the same checks as
+                // a fresh proposal, which a node that is behind cannot pass: it
+                // lacks the sections and the staged ancestors those checks need.
+                // The proof already verified the certificates over these headers;
+                // store them, and let the batch validation below judge the payload.
+                const auto observed = consensus_->engine().observe_certified_proposal(*proposal);
                 if (!observed.has_value()) {
-                    eWarning("[Shadow] Invalid proposal in a finality proof from {}", peer_identifier);
+                    eWarning("[Shadow] Invalid proposal at height {} in a finality proof from {}: {}",
+                             proposal->header.height,
+                             peer_identifier,
+                             std::to_underlying(observed.error()));
                     return;
                 }
             }
@@ -1859,18 +1867,63 @@ namespace ExtraChain::Consensus {
         reset_timeout();
     }
 
-    void ConsensusService::request_ancestor_batch(const std::string& header_hash) {
+    void ConsensusService::request_sync_from(std::string_view peer_identifier) {
+        if (!consensus_) {
+            return;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_sync_request_ < std::chrono::seconds(2)) {
+            return;
+        }
+        last_sync_request_ = now;
+        eWarning("[Shadow] Requesting finality sync from {} at finalized height {}",
+                 peer_identifier,
+                 consensus_->engine().safety_state().finalized_height);
+        send_to_peer(
+            ShadowSyncRequest {
+                .protocol_version = ProtocolVersion,
+                .network_id       = consensus_->engine().validators().document().network_id,
+                .epoch            = consensus_->engine().validators().document().epoch,
+                .finalized_height = consensus_->engine().safety_state().finalized_height,
+            },
+            MessageType::ConsensusSyncRequest,
+            std::string(peer_identifier),
+            MessageStatus::Request);
+    }
+
+    void ConsensusService::request_ancestor_batch(const std::string& header_hash, std::string_view peer_identifier) {
         if (!consensus_ || header_hash.empty()) {
             return;
         }
         const auto proposal = consensus_->engine().proposal_for(header_hash);
-        if (proposal.has_value()) {
-            pending_proposals_.insert_or_assign(header_hash, proposal.value());
+        if (!proposal.has_value()) {
+            // We never saw the ancestor's proposal (cut off from the committee while
+            // it was made), so its payload alone could not be validated or staged
+            // and every copy of it would be dropped. Only a finality sync carries
+            // the proposal together with the proof; ask for that instead.
+            request_sync_from(peer_identifier);
+            return;
         }
-        eWarning("[Shadow] Ancestor batch {} is missing; requesting it", header_hash.substr(0, 12));
-        // Ask the whole committee: the peer that answered for the child is not
-        // necessarily the one still holding the parent's payload.
-        send_to_validators(
+        pending_proposals_.insert_or_assign(header_hash, proposal.value());
+        // Once per ancestor per two seconds, from the peer that served the child.
+        // Asking the whole committee on every reply multiplied by six at every
+        // level of the ancestor chain: a node two heights behind got its peers to
+        // serve the same two batches tens of thousands of times a minute and
+        // never caught up. The peer that has the child almost always has the
+        // parent; the timer path retries elsewhere if it does not.
+        const auto now  = std::chrono::steady_clock::now();
+        const auto last = ancestor_requests_.find(header_hash);
+        if (last != ancestor_requests_.end() && now - last->second < std::chrono::seconds(2)) {
+            return;
+        }
+        std::erase_if(ancestor_requests_, [now](const auto& entry) {
+            return now - entry.second > std::chrono::minutes(5);
+        });
+        ancestor_requests_[header_hash] = now;
+        eWarning("[Shadow] Ancestor batch {} is missing; requesting it from {}",
+                 header_hash.substr(0, 12),
+                 peer_identifier);
+        send_to_peer(
             SectionBatchRequest {
                 .protocol_version = ProtocolVersion,
                 .network_id       = consensus_->engine().validators().document().network_id,
@@ -1878,6 +1931,7 @@ namespace ExtraChain::Consensus {
                 .header_hash      = header_hash,
             },
             MessageType::ConsensusBatchRequest,
+            std::string(peer_identifier),
             MessageStatus::Request);
     }
 

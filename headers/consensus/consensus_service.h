@@ -12,6 +12,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <chrono>
 #include <map>
 #include <mutex>
 #include <string_view>
@@ -124,7 +125,8 @@ namespace ExtraChain::Consensus {
         /// Drive checkpoints that were deferred for missing data to completion.
         void catch_up_deferred_finalization();
         /// Ask every validator for a specific ancestor payload we are missing.
-        void request_ancestor_batch(const std::string& header_hash);
+        void request_ancestor_batch(const std::string& header_hash, std::string_view peer_identifier);
+        void request_sync_from(std::string_view peer_identifier);
         void vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier);
         void timeout_elapsed();
         void reset_timeout();
@@ -187,6 +189,10 @@ namespace ExtraChain::Consensus {
         /// Batches that failed validation or admission, keyed by header hash, with
         /// the finalized height they failed at. Copies are dropped until it moves.
         std::map<std::string, std::uint64_t>                          rejected_batches_;
+        /// Last time an ancestor batch was asked for, by header hash, and the last
+        /// sync request: a lagging node used to re-ask on every reply it got.
+        std::map<std::string, std::chrono::steady_clock::time_point>  ancestor_requests_;
+        std::chrono::steady_clock::time_point                         last_sync_request_ {};
         std::shared_ptr<Core::DeadlineTask>                           timeout_task_;
         std::shared_ptr<Core::DeadlineTask>                           recovery_task_;
         std::shared_ptr<Core::DeadlineTask>                           intent_batch_task_;

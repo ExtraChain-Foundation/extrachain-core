@@ -415,6 +415,18 @@ namespace ExtraChain::Consensus {
         return {};
     }
 
+    std::expected<void, ConsensusError> ConsensusEngine::observe_certified_proposal(const Proposal& proposal) {
+        std::lock_guard lock(mutex_);
+        if (!initialized_) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        if (!verify_proposal(proposal)) {
+            return std::unexpected(ConsensusError::InvalidSignature);
+        }
+        proposals_.insert_or_assign(hash_header(proposal.header), proposal);
+        return {};
+    }
+
     std::expected<void, ConsensusError> ConsensusEngine::stage_batch(SectionBatchData batch) {
         std::lock_guard lock(mutex_);
         return stage_batch_unlocked(std::move(batch), true);
