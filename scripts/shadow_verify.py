@@ -23,7 +23,9 @@ def node_dirs(work):
     homes = [("node-0", os.path.join(boot, "server", "data"))]
     for index in range(1, 7):
         homes.append((f"node-{index}", os.path.join(boot, f"client{index}", "data")))
-    return [(name, path) for name, path in homes if os.path.isdir(path)]
+    # Nodes the harness saw die (chaos kills) are behind by design; skip them.
+    skipped = {f"node-{index}" for index in os.environ.get("EXC_VERIFY_SKIP", "").split()}
+    return [(name, path) for name, path in homes if os.path.isdir(path) and name not in skipped]
 
 
 def section_hashes(data_dir):

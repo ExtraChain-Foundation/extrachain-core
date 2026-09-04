@@ -16,6 +16,8 @@
 #        EXC_SHADOW_RUN_SECONDS  per-node run window                (default 240)
 #        EXC_SHADOW_DEADLINE_S   harness deadline for the committee (default 300)
 #        EXC_SHADOW_HOLD_S       keep a passed committee alive this long (default 0)
+#        EXC_SHADOW_ALLOWED_DEAD this many committee nodes may die (chaos kills) and the
+#                                run still passes on the survivors (default 0)
 #        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
 #                                the run passes only if it reaches every node (default 0)
 
@@ -36,6 +38,10 @@ DEADLINE_S="${EXC_SHADOW_DEADLINE_S:-$((RUN_SECONDS + 120))}"
 NODE_COUNT=7
 DFS_BYTES="${EXC_SHADOW_DFS_BYTES:-0}"
 export EXC_DFS_BYTES="$DFS_BYTES"
+ALLOWED_DEAD="${EXC_SHADOW_ALLOWED_DEAD:-0}"
+# Nodes found dead when the watch loop ends (chaos kills); set once, before cleanup.
+DEAD_NODES=""
+is_dead() { case " $DEAD_NODES " in *" $1 "*) return 0 ;; esac; return 1; }
 
 sha256_of() {
     if command -v sha256sum >/dev/null 2>&1; then sha256sum < "$1" | cut -d' ' -f1
@@ -45,6 +51,8 @@ sha256_of() {
 # One line per published file: "<publisher index> <owner> <file id> <size>".
 dfs_published() {
     for index in $(seq 0 $((NODE_COUNT - 1))); do
+        # A file whose publisher died may never have reached anyone: not required.
+        is_dead "$index" && continue
         sed -n "s/^\[node-run\] DFS stored owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\) size=\([0-9]*\).*/$index \1 \2 \3/p" \
             "$WORK/node-$index.log" 2>/dev/null
     done
@@ -64,6 +72,10 @@ dfs_audit() {
         return 1
     fi
     for index in $(seq 0 $((NODE_COUNT - 1))); do
+        if is_dead "$index"; then
+            [ "$report" = 1 ] && printf 'dfs: node %s died during the run; not audited\n' "$index"
+            continue
+        fi
         local have=0 corrupt=0 publisher owner file_id size src dst
         while read -r publisher owner file_id size; do
             [ -n "$file_id" ] || continue
@@ -267,6 +279,16 @@ while :; do
         grep -q "finalized intents=$PER_SENDER" "$WORK/node-$index.log" 2>/dev/null && done_nodes=$((done_nodes + 1))
     done
     if [ "$done_nodes" -eq "$SENDERS" ]; then verdict="pass"; break; fi
+    # Chaos kills: a run passes on the survivors when every sender that has not
+    # finalized is dead and no more than ALLOWED_DEAD of them died.
+    if [ "$ALLOWED_DEAD" -gt 0 ]; then
+        dead_senders=0; unfinished_alive=0
+        for index in $(seq 0 $((SENDERS - 1))); do
+            grep -q "finalized intents=$PER_SENDER" "$WORK/node-$index.log" 2>/dev/null && continue
+            if kill -0 "${PIDS[$index]}" 2>/dev/null; then unfinished_alive=1; else dead_senders=$((dead_senders + 1)); fi
+        done
+        if [ "$unfinished_alive" -eq 0 ] && [ "$dead_senders" -le "$ALLOWED_DEAD" ]; then verdict="pass"; break; fi
+    fi
     # Negative mode: unfunded senders can never finalize; the pass condition is
     # that node 0 finishes its load anyway and the poison intents were evicted.
     if [ "${EXC_SHADOW_FUND:-1}" != "1" ] && [ "$SENDERS" -gt 1 ]; then
@@ -289,6 +311,17 @@ while :; do
     sleep 5
 done
 
+for index in $(seq 0 $((NODE_COUNT - 1))); do
+    kill -0 "${PIDS[$index]}" 2>/dev/null || DEAD_NODES="$DEAD_NODES$index "
+done
+if [ -n "$DEAD_NODES" ]; then
+    if [ "$(printf '%s' "$DEAD_NODES" | wc -w)" -le "$ALLOWED_DEAD" ]; then
+        log "note: node(s) $DEAD_NODES died during the run (allowed); the survivors are audited"
+    else
+        log "node(s) $DEAD_NODES died during the run"
+    fi
+fi
+
 # A receipt proves that the submitting node applied the checkpoint. Other nodes
 # can still be importing the same certified height. Keep the committee alive
 # until every node reports the seed node's finalized count, so the audits test a
@@ -296,13 +329,18 @@ done
 if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     convergence_deadline=$(( $(date +%s) + 60 ))
     while :; do
-        seed_finalized="$(finalized_height 0)"
+        # Every surviving node has to report one finalized count; the first
+        # survivor (the seed, unless it died) is the reference.
+        reference=""
         converged=1
-        [ -n "$seed_finalized" ] || converged=0
-        for index in $(seq 1 $((NODE_COUNT - 1))); do
+        for index in $(seq 0 $((NODE_COUNT - 1))); do
+            is_dead "$index" && continue
             node_finalized="$(finalized_height "$index")"
-            [ -n "$node_finalized" ] && [ "$node_finalized" = "$seed_finalized" ] || converged=0
+            [ -n "$node_finalized" ] || { converged=0; continue; }
+            [ -n "$reference" ] || reference="$node_finalized"
+            [ "$node_finalized" = "$reference" ] || converged=0
         done
+        [ -n "$reference" ] || converged=0
         if [ "$converged" -eq 1 ]; then
             # Heights agree; the ExDFS mesh has to be complete as well before the
             # audits read a snapshot.
@@ -376,7 +414,7 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     if [ "${#SNAPSHOT_HASH[@]}" -gt 1 ]; then
         log "note: nodes stopped at ${#SNAPSHOT_HASH[@]} different snapshot sections (shutdown skew, not a mismatch)"
     fi
-    python3 "$SHADOW_VERIFY" "$WORK" >"$WORK/cross-node.log" 2>&1 \
+    EXC_VERIFY_SKIP="$DEAD_NODES" python3 "$SHADOW_VERIFY" "$WORK" >"$WORK/cross-node.log" 2>&1 \
         || { tail -80 "$WORK/cross-node.log" >&2; fail "cross-node content verification failed"; }
 fi
 
