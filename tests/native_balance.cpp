@@ -45,10 +45,19 @@ int main(int argc, char* argv[]) {
     cache.apply_transaction_delta(burn, balances);
 
     const bool burned = balances[receiver_key] == BigNumberFloat("1");
-    std::printf("native transfer=%s burn=%s sender=%s receiver=%s\n",
+
+    // Undoing the same three transactions in reverse order must land back on zero:
+    // calculate_balances rewinds a cache with exactly this walk.
+    cache.apply_transaction(burn, balances, true);
+    cache.apply_transaction(transfer, balances, true);
+    cache.apply_transaction(reward, balances, true);
+    const bool reversed = balances[sender_key] == BigNumberFloat("0") && balances[receiver_key] == BigNumberFloat("0");
+
+    std::printf("native transfer=%s burn=%s reverse=%s sender=%s receiver=%s\n",
                 transferred ? "PASS" : "FAIL",
                 burned ? "PASS" : "FAIL",
+                reversed ? "PASS" : "FAIL",
                 balances[sender_key].to_string().c_str(),
                 balances[receiver_key].to_string().c_str());
-    return transferred && burned ? 0 : 1;
+    return transferred && burned && reversed ? 0 : 1;
 }

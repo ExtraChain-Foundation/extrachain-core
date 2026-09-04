@@ -319,6 +319,31 @@ int main(int argc, char *argv[]) {
     node->dag()->cache().reset_db();
     TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(-1));
 
+    // A consistent cache that sits past the queried section must answer without
+    // replaying the chain from genesis, and the rewound answer has to match the
+    // replay exactly — at a section the rewind crosses a transaction (44: the
+    // reward at 45 is undone), at one it crosses nothing, and at one far enough
+    // back that the forward replay is the shorter walk (20).
+    const auto balance_key = std::pair { actor.id(), actor.id() };
+    const auto replay_at   = [&](const SectionId &section) {
+        return node->dag()->calculate_actors_balance({ actor.id() }, section).at(balance_key);
+    };
+    const auto cache_tip = SectionId(45);
+    TEST_REQUIRE(node->dag()->current_section() >= cache_tip);
+    const auto fresh_tip = node->dag()->calculate_actors_balance({ actor.id() }, cache_tip);
+    const auto fresh_44  = replay_at(SectionId(44));
+    const auto fresh_30  = replay_at(SectionId(30));
+    const auto fresh_20  = replay_at(SectionId(20));
+    TEST_REQUIRE(fresh_44 != fresh_tip.at(balance_key));
+    TEST_REQUIRE(node->dag()->cache().write_cached_balances(fresh_tip, cache_tip));
+    TEST_REQUIRE_EQ(node->dag()->cache().section(), cache_tip);
+    TEST_REQUIRE_EQ(replay_at(SectionId(44)), fresh_44);
+    TEST_REQUIRE_EQ(replay_at(SectionId(30)), fresh_30);
+    TEST_REQUIRE_EQ(replay_at(SectionId(20)), fresh_20);
+    TEST_REQUIRE_EQ(replay_at(cache_tip), fresh_tip.at(balance_key));
+    node->dag()->cache().reset_db();
+    TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(-1));
+
     std::atomic<bool>        cache_stress_ok = true;
     std::vector<std::thread> cache_workers;
     for (std::uint64_t worker = 0; worker < 3; ++worker) {

@@ -244,6 +244,7 @@ public:
      * @param balances Map of actor-token balances to update
      */
     void process_transaction(const Transaction& transaction, Balances& balances);
+    void apply_transaction(const Transaction& transaction, Balances& balances, bool reverse);
 
 private:
     bool write_cached_balance(const ActorId& actor_id, const TokenId& token_id, const BigNumberFloat& balance);

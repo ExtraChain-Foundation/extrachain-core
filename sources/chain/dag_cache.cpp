@@ -373,7 +373,8 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         }
     }
 
-    BigNumber balance_start_section;
+    BigNumber                balance_start_section;
+    std::optional<BigNumber> rewind_from; // cache sits past the target: undo (target, cache]
 
     {
         std::lock_guard lock(mutex_);
@@ -393,13 +394,51 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
             if (cached_balances_opt.has_value()) {
                 balances = cached_balances_opt.value();
             }
+        } else if (cached_section_ != BigNumber(-1)
+                   && cached_section_ - target_section < target_section - first_saved_section) {
+            // The cache has moved past the target. Replaying from first_saved_section
+            // instead walks the whole chain — minutes on a long DAG, and
+            // validate_shadow_batch asks for this under the consensus mutex, which
+            // froze a validator for the rest of a run. Every delta is additive, so
+            // seeding from the cache and undoing the sections past the target gives
+            // the same answer the forward replay would, at the cost of the distance.
+            auto cached_balances_opt = get_cached_balances_for_actors(actor_ids);
+            if (cached_balances_opt.has_value()) {
+                balances    = cached_balances_opt.value();
+                rewind_from = cached_section_;
+            } else {
+                balance_start_section = first_saved_section;
+            }
         } else {
             balance_start_section = first_saved_section;
         }
     }
 
+    const auto affects_actors = [&actor_ids](const Transaction& tx) {
+        for (const auto& actor_id : actor_ids) {
+            if (tx.sender() == actor_id || tx.receiver() == actor_id) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     // Process transactions after the balance_start_section up to current_section
     auto to = to_section.has_value() ? to_section.value() : current_section;
+    if (rewind_from.has_value()) {
+        for (BigNumber i = rewind_from.value(); i > to; i = i - BigNumber(1)) {
+            auto section = dag->read_section(i);
+            if (!section.has_value() || section->transactions.empty() || section->id < 0) {
+                continue;
+            }
+            for (auto tx = section->transactions.rbegin(); tx != section->transactions.rend(); ++tx) {
+                if (affects_actors(*tx)) {
+                    apply_transaction(*tx, balances, true);
+                }
+            }
+        }
+        balance_start_section = to + 1; // nothing left to replay forward
+    }
     for (BigNumber i = balance_start_section; i <= to; i++) {
         auto section = dag->read_section(i);
         if (!section.has_value()) {
@@ -803,49 +842,59 @@ std::optional<StateTransitionViolation> DagCache::validate_state_to(const Sectio
 }
 
 void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
+    apply_transaction(tx, balances, false);
+}
+
+void DagCache::apply_transaction(const Transaction& tx, Balances& balances, bool reverse) {
+    // Every balance effect below is additive, so undoing a transaction is the
+    // same walk with the signs flipped. calculate_balances relies on that to
+    // rewind a cache that sits past the section it was asked about.
+    const auto credit = [&](const std::pair<ActorId, TokenId>& key, const BigNumberFloat& amount) {
+        if (reverse) {
+            balances[key] -= amount;
+        } else {
+            balances[key] += amount;
+        }
+    };
+    const auto debit = [&](const std::pair<ActorId, TokenId>& key, const BigNumberFloat& amount) {
+        if (reverse) {
+            balances[key] += amount;
+        } else {
+            balances[key] -= amount;
+        }
+    };
+
     // Skip if transaction doesn't affect balances
     if (tx.type() == TransactionType::Unknown) {
         return;
     }
     if (is_contract_transaction(tx.type())) {
-        apply_contract_deltas(tx, balances, false);
+        apply_contract_deltas(tx, balances, reverse);
         return;
     }
 
     // Minting transactions (creates from nothing, adds to receiver)
     if (tx.type() == TransactionType::Minting && !tx.receiver().is_zero() && !tx.token().is_zero()) {
-        auto key = std::make_pair(tx.receiver(), tx.token());
-
-        balances[key] += tx.amount();
+        credit(std::make_pair(tx.receiver(), tx.token()), tx.amount());
         return;
     }
 
     // Reward transactions
     if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
-        auto key = std::make_pair(tx.sender(), tx.token());
-
-        balances[key] += tx.amount();
+        credit(std::make_pair(tx.sender(), tx.token()), tx.amount());
     }
     // Contract initialization
     else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
-        auto key = std::make_pair(tx.sender(), tx.token());
-
-        balances[key] += tx.amount();
+        credit(std::make_pair(tx.sender(), tx.token()), tx.amount());
     }
     // Token conversion
     else if (tx.type() == TransactionType::Conversion && !tx.sender().is_zero()) {
         if (tx.meta().has_value()) {
             auto from_token = TokenId::create(tx.meta().value());
             if (from_token.has_value()) {
-                // Deduct from source token
-                auto from_key = std::make_pair(tx.sender(), from_token.value());
-
-                balances[from_key] -= tx.amount();
-
-                // Add to destination token
-                auto to_key = std::make_pair(tx.sender(), tx.token());
-
-                balances[to_key] += tx.amount();
+                // Deduct from source token, add to destination token
+                debit(std::make_pair(tx.sender(), from_token.value()), tx.amount());
+                credit(std::make_pair(tx.sender(), tx.token()), tx.amount());
             }
         }
     }
@@ -853,15 +902,11 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
     else {
         // If receiver is valid, add funds
         if (!tx.receiver().is_zero()) {
-            auto key = std::make_pair(tx.receiver(), tx.token());
-
-            balances[key] += tx.amount();
+            credit(std::make_pair(tx.receiver(), tx.token()), tx.amount());
         }
         // If sender is valid, deduct funds
         if (!tx.sender().is_zero()) {
-            auto key = std::make_pair(tx.sender(), tx.token());
-
-            balances[key] -= tx.amount();
+            debit(std::make_pair(tx.sender(), tx.token()), tx.amount());
         }
     }
 }
