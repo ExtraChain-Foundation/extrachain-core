@@ -113,6 +113,7 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError> reconcile_finalized_checkpoint();
         bool                                apply_timeout_certificate(const TimeoutCertificate& certificate);
         void                                propose_checkpoint(std::uint64_t round);
+        void                                discard_stale_checkpoints(std::uint64_t next_section);
         void request_batch(const Proposal& proposal, std::string_view peer_identifier);
         /// Stop voting over a failure that may pass — a write that did not land, a
         /// checkpoint we could not apply yet. Unlike halt_voting() the pacemaker
@@ -203,6 +204,8 @@ namespace ExtraChain::Consensus {
         /// Set when voting stopped over a transient failure; cleared once the
         /// pacemaker manages to resume. Never set for a deliberate halt.
         bool                                                          voting_paused_ { false };
+        /// Guards discard_stale_checkpoints against re-entering itself.
+        bool                                                          rebuilding_checkpoints_ { false };
         mutable std::recursive_mutex                                  mutex_;
     };
 

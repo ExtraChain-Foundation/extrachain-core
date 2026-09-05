@@ -1760,6 +1760,24 @@ namespace ExtraChain::Consensus {
         }
     }
 
+    void ConsensusService::discard_stale_checkpoints(std::uint64_t next_section) {
+        // Drop every prepared checkpoint that does not start where our parent ends,
+        // then build a fresh one. Guarded against recursion: queue_next_checkpoint
+        // calls propose_checkpoint, which is what brought us here.
+        if (rebuilding_checkpoints_) {
+            return;
+        }
+        std::erase_if(pending_checkpoints_, [next_section](const auto& entry) {
+            return entry.second.batch.first_section != next_section;
+        });
+        std::erase_if(pending_batches_, [this](const auto& entry) {
+            return !pending_checkpoints_.contains(entry.first);
+        });
+        rebuilding_checkpoints_ = true;
+        queue_next_checkpoint();
+        rebuilding_checkpoints_ = false;
+    }
+
     void ConsensusService::propose_checkpoint(std::uint64_t round) {
         if (!consensus_ || !voting_enabled_ || pending_checkpoints_.empty()) {
             return;
@@ -1786,10 +1804,15 @@ namespace ExtraChain::Consensus {
             return;
         }
         if (next_section != 0 && pending_checkpoints_.begin()->second.batch.first_section != next_section) {
-            eWarning("[Shadow] Pending checkpoint {}..{} does not start at expected section {}; not proposing",
+            // The pending checkpoint was built against a certificate we have since
+            // moved past. Keeping it means proposing a batch that no longer extends
+            // our parent, which every future round rejects the same way, so drop it
+            // and let the rebuild below produce one for the current parent.
+            eWarning("[Shadow] Pending checkpoint {}..{} does not start at expected section {}; rebuilding",
                      pending_checkpoints_.begin()->second.batch.first_section,
                      pending_checkpoints_.begin()->second.batch.last_section,
                      next_section);
+            discard_stale_checkpoints(next_section);
             return;
         }
         const auto proposal = consensus_->make_checkpoint_proposal(pending_checkpoints_.begin()->second, round);
@@ -1797,6 +1820,14 @@ namespace ExtraChain::Consensus {
             eWarning("[Shadow] Cannot create proposal for round {}: {}",
                      round,
                      std::to_underlying(proposal.error()));
+            // InvalidParent means this checkpoint cannot extend our highest
+            // certificate at all: a leader that keeps it proposes nothing for the
+            // rest of the run while the pacemaker burns rounds (measured: a whole
+            // committee frozen at height 3 for seven minutes after its leader was
+            // killed mid-proposal). Rebuild against the parent we actually hold.
+            if (proposal.error() == ConsensusError::InvalidParent) {
+                discard_stale_checkpoints(next_section);
+            }
             return;
         }
         if (!proposal.value().has_value()) {
