@@ -21,6 +21,7 @@ namespace ExtraChain::Contracts::Internal {
         FloatingPoint
     };
 
-    [[nodiscard]] WasmPolicyResult validate_wasm_policy(std::span<const std::uint8_t> module);
+    [[nodiscard]] WasmPolicyResult validate_wasm_policy(std::span<const std::uint8_t> module,
+                                                        std::uint32_t                 maximum_memory_pages);
 
 } // namespace ExtraChain::Contracts::Internal

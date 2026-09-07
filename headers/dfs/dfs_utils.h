@@ -591,6 +591,8 @@ namespace Dfs {
                     const std::shared_ptr<DbConnector> db,
                     std::uint64_t                      last_modified);
 
+                void update_from_files(const std::shared_ptr<DbConnector> db, const ActorId& actor_id);
+
                 bool insert(const std::shared_ptr<DbConnector> db, const DirsRow& dirs_row);
                 void insert_vector(const std::shared_ptr<DbConnector> db, const std::vector<DirsRow>& dirs_rows);
             } // namespace DirsSpace

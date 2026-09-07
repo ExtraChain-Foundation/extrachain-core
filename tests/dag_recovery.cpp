@@ -283,6 +283,102 @@ int main(int argc, char *argv[]) {
     TEST_REQUIRE(
         node->dag()->validate_shadow_batch(staged_proposal, staged_batch, 16ULL * 1024ULL * 1024ULL).has_value());
 
+    const auto check_transaction_proof = [&](const Transaction &item, bool expected_valid) {
+        auto       batch    = make_single_transaction_batch(item, "canonical-parent-root");
+        const auto proposal = make_batch_proposal(batch);
+        TEST_REQUIRE_EQ(node->dag()->validate_shadow_batch(proposal, batch, 16ULL * 1024ULL * 1024ULL).has_value(),
+                        expected_valid);
+    };
+    {
+        auto       wire           = boost::json::parse(Json::serialize(staged_transfer)).as_object();
+        const auto legacy_hash    = staged_transfer.calculate_hash_hex();
+        const auto canonical_hash = staged_transfer.calculate_hash();
+        TEST_REQUIRE(legacy_hash != canonical_hash);
+        const auto signature = actor.key().sign(legacy_hash);
+        TEST_REQUIRE(signature.has_value());
+        wire["hash"]      = legacy_hash;
+        wire["signature"] = boost::json::parse(Json::serialize(signature.value()));
+        const auto legacy = Json::deserialize<Transaction>(boost::json::serialize(wire));
+        TEST_REQUIRE(legacy.has_value());
+        check_transaction_proof(legacy.value(), true);
+
+        wire["hash"]          = canonical_hash;
+        const auto mismatched = Json::deserialize<Transaction>(boost::json::serialize(wire));
+        TEST_REQUIRE(mismatched.has_value());
+        check_transaction_proof(mismatched.value(), false);
+
+        const auto wrong_signature = receiver.key().sign(canonical_hash);
+        TEST_REQUIRE(wrong_signature.has_value());
+        wire["signature"]       = boost::json::parse(Json::serialize(wrong_signature.value()));
+        const auto wrong_signer = Json::deserialize<Transaction>(boost::json::serialize(wire));
+        TEST_REQUIRE(wrong_signer.has_value());
+        check_transaction_proof(wrong_signer.value(), false);
+        const auto canonical_signature = actor.key().sign(canonical_hash);
+        TEST_REQUIRE(canonical_signature.has_value());
+        wire["signature"]    = boost::json::parse(Json::serialize(canonical_signature.value()));
+        const auto canonical = Json::deserialize<Transaction>(boost::json::serialize(wire));
+        TEST_REQUIRE(canonical.has_value());
+        check_transaction_proof(canonical.value(), true);
+        check_transaction_proof(staged_transfer, true);
+    }
+    {
+        using namespace ExtraChain::Consensus;
+        const auto signed_intent = make_intent(
+            TransactionIntentV2 {
+                .network_id           = actor.id(),
+                .sender               = actor.id(),
+                .receiver             = receiver_account->id(),
+                .token                = actor.id(),
+                .amount               = "0.6",
+                .operation            = IntentOperation::Transfer,
+                .account_nonce        = 1,
+                .valid_after_height   = 1,
+                .expires_after_height = 100,
+            },
+            "proof-facts",
+            actor);
+        TEST_REQUIRE(signed_intent.has_value());
+        IntentEnvelope envelope { .intent = signed_intent.value(), .metadata = "proof-facts" };
+        const auto     materialized = materialize_intent(envelope, 61, 61, {});
+        TEST_REQUIRE(materialized.has_value());
+        check_transaction_proof(materialized.value(), true);
+        envelope.metadata  = "changed";
+        const auto changed = materialize_intent(envelope, 61, 61, {});
+        TEST_REQUIRE(changed.has_value());
+        check_transaction_proof(changed.value(), false);
+        check_transaction_proof(materialized.value(), true);
+    }
+
+    auto altered_transfer = staged_transfer;
+    altered_transfer.set_amount(BigNumberFloat("0.5"));
+    auto       altered_batch    = make_single_transaction_batch(altered_transfer, "canonical-parent-root");
+    const auto altered_proposal = make_batch_proposal(altered_batch);
+    TEST_REQUIRE(!node->dag()
+                      ->validate_shadow_batch(altered_proposal, altered_batch, 16ULL * 1024ULL * 1024ULL)
+                      .has_value());
+    auto noncanonical_batch = staged_batch;
+    noncanonical_batch.sections.front().second.push_back(' ');
+    ++noncanonical_batch.manifest.payload_bytes;
+    noncanonical_batch.manifest.data_root =
+        ExtraChain::Consensus::calculate_data_root(noncanonical_batch.sections);
+    const auto noncanonical_proposal = make_batch_proposal(noncanonical_batch);
+    TEST_REQUIRE(!node->dag()
+                      ->validate_shadow_batch(noncanonical_proposal, noncanonical_batch, 16ULL * 1024ULL * 1024ULL)
+                      .has_value());
+    auto wrong_root_proposal                = staged_proposal;
+    wrong_root_proposal.header.section_root = "wrong-section-root";
+    auto wrong_root_batch                   = staged_batch;
+    wrong_root_batch.header_hash            = ExtraChain::Consensus::hash_header(wrong_root_proposal.header);
+    TEST_REQUIRE(!node->dag()
+                      ->validate_shadow_batch(wrong_root_proposal, wrong_root_batch, 16ULL * 1024ULL * 1024ULL)
+                      .has_value());
+    TEST_REQUIRE(!node->dag()
+                      ->validate_shadow_batch(staged_proposal,
+                                              staged_batch,
+                                              16ULL * 1024ULL * 1024ULL,
+                                              std::set<Transaction> { staged_transfer })
+                      .has_value());
+
     const auto child_transfer = make_transfer(SectionId(62), BigNumberFloat("0.6"), 62);
     auto       child_batch    = make_single_transaction_batch(child_transfer, staged_proposal.header.section_root);
     auto       child_proposal = make_batch_proposal(child_batch);
@@ -316,6 +412,31 @@ int main(int argc, char *argv[]) {
     TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(41));
     const auto historical_balances = node->dag()->calculate_actors_balance({ actor.id() }, SectionId(20));
     TEST_REQUIRE_EQ(historical_balances.at({ actor.id(), actor.id() }), BigNumberFloat("0.01"));
+    node->dag()->cache().reset_db();
+    TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(-1));
+
+    // A consistent cache that sits past the queried section must answer without
+    // replaying the chain from genesis, and the rewound answer has to match the
+    // replay exactly — at a section the rewind crosses a transaction (44: the
+    // reward at 45 is undone), at one it crosses nothing, and at one far enough
+    // back that the forward replay is the shorter walk (20).
+    const auto balance_key = std::pair { actor.id(), actor.id() };
+    const auto replay_at   = [&](const SectionId &section) {
+        return node->dag()->calculate_actors_balance({ actor.id() }, section).at(balance_key);
+    };
+    const auto cache_tip = SectionId(45);
+    TEST_REQUIRE(node->dag()->current_section() >= cache_tip);
+    const auto fresh_tip = node->dag()->calculate_actors_balance({ actor.id() }, cache_tip);
+    const auto fresh_44  = replay_at(SectionId(44));
+    const auto fresh_30  = replay_at(SectionId(30));
+    const auto fresh_20  = replay_at(SectionId(20));
+    TEST_REQUIRE(fresh_44 != fresh_tip.at(balance_key));
+    TEST_REQUIRE(node->dag()->cache().write_cached_balances(fresh_tip, cache_tip));
+    TEST_REQUIRE_EQ(node->dag()->cache().section(), cache_tip);
+    TEST_REQUIRE_EQ(replay_at(SectionId(44)), fresh_44);
+    TEST_REQUIRE_EQ(replay_at(SectionId(30)), fresh_30);
+    TEST_REQUIRE_EQ(replay_at(SectionId(20)), fresh_20);
+    TEST_REQUIRE_EQ(replay_at(cache_tip), fresh_tip.at(balance_key));
     node->dag()->cache().reset_db();
     TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(-1));
 

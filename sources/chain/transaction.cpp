@@ -54,50 +54,41 @@ namespace {
 
 } // namespace
 
-Transaction::Transaction() {
-    this->sender_           = ActorId();
-    this->receiver_         = ActorId();
-    this->token_            = ActorId();
-    this->amount_           = BigNumberFloat(0);
-    this->timestamp_        = 0;
-    this->meta_             = std::nullopt;
-    this->consensus_intent_ = std::nullopt;
-    this->section_          = BigNumber(0);
-    this->hash_             = "";
-    this->signature_        = Signature();
-    this->type_             = TransactionType::Regular;
+Transaction::Transaction()
+    : signature_ {}
+    , type_(TransactionType::Regular)
+    , timestamp_(0) {
     update_hash();
 }
 
-Transaction::Transaction(const Transaction &other) {
-    this->sender_           = other.sender_;
-    this->receiver_         = other.receiver_;
-    this->amount_           = other.amount_;
-    this->timestamp_        = other.timestamp_;
-    this->meta_             = other.meta_;
-    this->consensus_intent_ = other.consensus_intent_;
-    this->token_            = other.token_;
-    this->section_          = other.section_;
-    this->hash_             = other.hash_;
-    this->signature_        = other.signature_;
-    this->type_             = other.type_;
-    this->prev_hashs_       = other.prev_hashs_;
+Transaction::Transaction(const Transaction &other)
+    : sender_(other.sender_)
+    , receiver_(other.receiver_)
+    , amount_(other.amount_)
+    , meta_(other.meta_)
+    , consensus_intent_(other.consensus_intent_)
+    , token_(other.token_)
+    , section_(other.section_)
+    , hash_(other.hash_)
+    , signature_(other.signature_)
+    , type_(other.type_)
+    , timestamp_(other.timestamp_)
+    , prev_hashs_(other.prev_hashs_) {
 }
 
-Transaction::Transaction(Transaction &&other) noexcept {
-    sender_           = std::move(other.sender_);
-    receiver_         = std::move(other.receiver_);
-    amount_           = std::move(other.amount_);
-    timestamp_        = other.timestamp_;
-    meta_             = std::move(other.meta_);
-    consensus_intent_ = std::move(other.consensus_intent_);
-    token_            = std::move(other.token_);
-    section_          = std::move(other.section_);
-    hash_             = std::move(other.hash_);
-    signature_        = std::move(other.signature_);
-    type_             = std::move(other.type_);
-    prev_hashs_       = std::move(other.prev_hashs_);
-
+Transaction::Transaction(Transaction &&other) noexcept
+    : sender_(std::move(other.sender_))
+    , receiver_(std::move(other.receiver_))
+    , amount_(std::move(other.amount_))
+    , meta_(std::move(other.meta_))
+    , consensus_intent_(std::move(other.consensus_intent_))
+    , token_(std::move(other.token_))
+    , section_(std::move(other.section_))
+    , hash_(std::move(other.hash_))
+    , signature_(other.signature_)
+    , type_(other.type_)
+    , timestamp_(other.timestamp_)
+    , prev_hashs_(std::move(other.prev_hashs_)) {
     other.hash_ = "";
 }
 

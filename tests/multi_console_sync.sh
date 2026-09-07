@@ -42,6 +42,7 @@ range_last() { [ -f "$1/dag/range" ] && sed -n 's/.*"last":"\([0-9]*\)".*/\1/p' 
 count_packs() { ls "$1/dag/packs" 2>/dev/null | grep -c '\.pack$'; }
 
 [ -x "$NODE_RUN" ] || { echo "FAIL: node-run binary not found at $NODE_RUN"; exit 1; }
+[ -x "$SYNC_CHECK" ] || { echo "FAIL: sync-check binary not found at $SYNC_CHECK"; exit 1; }
 [ -d "$SEED/dag" ] || { echo "FAIL: seed dir $SEED has no dag/"; exit 1; }
 
 SERVER_LAST="$(range_last "$SEED")"
@@ -129,9 +130,12 @@ for c in $(seq 1 "$N"); do
     echo "client$c: range.last=$last packs=$packs hot=$hot dfs=$dfs_ready -> $status"
 done
 
-if [ -x "$SYNC_CHECK" ] && [ "$(count_packs "$WORK/client1/data")" -gt 0 ]; then
-    echo "=== bytewise check: client1 packs vs seed ==="
-    "$SYNC_CHECK" "$WORK/client1/data" 2>/dev/null | sed 's/^/  /'
+if [ "$SERVER_PACKS" -gt 0 ]; then
+    echo "=== bytewise check: client1 pack transfer ==="
+    if ! "$SYNC_CHECK" "$WORK/client1/data" "$WORK/pack-sync-check" >"$WORK/pack-sync-check.log" 2>&1; then
+        rc=1
+    fi
+    sed 's/^/  /' "$WORK/pack-sync-check.log"
 fi
 
 echo "=== result: $([ $rc -eq 0 ] && echo PASS || echo FAIL) ==="

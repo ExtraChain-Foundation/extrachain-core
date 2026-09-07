@@ -608,7 +608,12 @@ public:
      * @return std::optional<Section> The section if found, or nullopt
      */
     std::optional<Section> read_section(const SectionId &section_id) const;
-    std::expected<SectionId, ExtraChain::Consensus::ConsensusError> prepare_shadow_activation();
+    // Changes when stored history changes, including repair and backfill.
+    [[nodiscard]] std::uint64_t history_revision() const noexcept {
+        return history_revision_.load(std::memory_order_acquire);
+    }
+    std::expected<SectionId, ExtraChain::Consensus::ConsensusError> prepare_shadow_activation(
+        std::optional<SectionId> requested_boundary = std::nullopt);
     std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError>
     build_shadow_batch(const SectionId &first_section, const SectionId &last_section, std::string header_hash);
     std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError>
@@ -627,7 +632,7 @@ public:
         const ExtraChain::Consensus::Proposal         &proposal,
         const ExtraChain::Consensus::SectionBatchData &batch,
         std::uint64_t                                  maximum_batch_bytes,
-        const std::set<Transaction>                   &staged_ancestors = {});
+        std::set<Transaction>                          staged_ancestors = {});
     std::expected<void, ExtraChain::Consensus::ConsensusError> install_shadow_batch(
         const ExtraChain::Consensus::Proposal         &proposal,
         const ExtraChain::Consensus::SectionBatchData &batch,
@@ -910,6 +915,7 @@ private:
     std::condition_variable                        pack_hot_completion_;
     std::atomic_bool                               pack_hot_running_    = false;
     std::atomic_uint64_t                           pack_hot_generation_ = 0;
+    std::atomic_uint64_t                           history_revision_    = 0;
     std::map<SectionId, std::string>               pack_hot_cache_;
     std::mutex                                     file_sync_response_mutex_;
     std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;

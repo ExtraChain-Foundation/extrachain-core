@@ -673,7 +673,11 @@ namespace {
                     && mismatched.error().error == ExtraChain::Contracts::ExecutionError::InvalidModule,
                 "Runtime accepted bytes that do not match the trusted module hash");
 
-        require(runtime.invoke(module, module_hash, {}).has_value(), "Runtime could not cache a trusted module");
+        const auto cached_execution = runtime.invoke(module, module_hash, {});
+        require(cached_execution.has_value(),
+                cached_execution.has_value()
+                    ? ""
+                    : "Runtime could not cache a trusted module: " + cached_execution.error().detail);
         const auto cached_mismatch = runtime.invoke(changed_module, module_hash, {});
         require(!cached_mismatch.has_value()
                     && cached_mismatch.error().error == ExtraChain::Contracts::ExecutionError::InvalidModule,
@@ -684,6 +688,31 @@ namespace {
                                                       { 0x00, 0x05, 0x00, 0x43, 0x44, 0x7c, 0x7d });
         require(runtime.invoke(module_with_float_bytes_in_custom_data, {}).has_value(),
                 "Runtime treated custom data as contract instructions");
+
+        for (const Bytes &memory : std::vector<Bytes> {
+                 { 0x05, 0x04, 0x01, 0x00, 0x81, 0x04 },
+                 { 0x05, 0x05, 0x01, 0x01, 0x01, 0x81, 0x04 },
+                 { 0x05, 0x04, 0x01, 0x03, 0x01, 0x02 },
+                 { 0x05, 0x05, 0x02, 0x00, 0x01, 0x00, 0x01 },
+             }) {
+            Bytes oversized_memory { 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 };
+            oversized_memory.insert(oversized_memory.end(), memory.begin(), memory.end());
+            const auto rejected = runtime.invoke(oversized_memory, {});
+            require(!rejected.has_value()
+                        && rejected.error().error == ExtraChain::Contracts::ExecutionError::InvalidModule,
+                    "Runtime accepted an unsafe memory declaration");
+        }
+
+        ExtraChain::Contracts::ExecutionLimits small_limits;
+        small_limits.linear_memory_bytes = 64 * 1024;
+        ExtraChain::Contracts::WasmRuntime small_runtime(small_limits);
+        const auto                         smaller_limit = small_runtime.invoke(module, module_hash, {});
+        require(!smaller_limit.has_value()
+                    && smaller_limit.error().error == ExtraChain::Contracts::ExecutionError::InvalidModule,
+                "A cached module bypassed a smaller runtime memory limit");
+        const auto restored_limit = runtime.invoke(module, module_hash, {});
+        require(restored_limit.has_value() && restored_limit.value().output == cached_execution.value().output,
+                "A rejected smaller limit changed a later execution with the original limit");
 
         const Bytes endless_module {
             0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0b, 0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01,

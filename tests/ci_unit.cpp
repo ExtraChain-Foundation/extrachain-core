@@ -1,10 +1,13 @@
 // Tiny unit check for ControlIndex put/get/last/erase, no full node.
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string_view>
 #include <thread>
 #include <vector>
+#include <sqlite3.h>
 
 #include "chain/control_index.h"
 #include "utils/db_connector.h"
@@ -12,6 +15,23 @@
 #include "utils/exc_utils_base64.h"
 #include "utils/file_io.h"
 #include "utils/legacy_compression.h"
+
+class CheckedDatabase : public DbConnector {
+public:
+    using DbConnector::DbConnector;
+
+    bool insert_row(const std::string &key) {
+        std::lock_guard lock(m_database_mutex);
+        const auto      result = insert("concurrent_rows", { { "row_id", key }, { "payload", "stored" } });
+        if (!result) {
+            std::printf("SQLite insert %s failed: code=%d message=%s\n",
+                        key.c_str(),
+                        sqlite3_extended_errcode(db),
+                        sqlite3_errmsg(db));
+        }
+        return result;
+    }
+};
 
 int main(int argc, char *argv[]) {
     (void)argc;
@@ -72,6 +92,31 @@ int main(int argc, char *argv[]) {
     const auto empty_base64 = Utils::from_base64("");
     check("base64 empty value round-trip", empty_base64.has_value() && empty_base64.value().empty());
     check("base64 invalid padding rejected", !Utils::from_base64("A===").has_value());
+    const auto nonzero_trailing_bits = Utils::from_base64("AB");
+    check("base64 nonzero trailing bits keep the decoding error",
+          !nonzero_trailing_bits.has_value() && nonzero_trailing_bits.error() == Base64Error::DecodingError);
+    const auto invalid_alphabet = Utils::from_base64("A!");
+    check("base64 invalid alphabet keeps the input error",
+          !invalid_alphabet.has_value() && invalid_alphabet.error() == Base64Error::InvalidInput);
+    const auto invalid_padding = Utils::from_base64("AA=");
+    check("base64 invalid padding keeps the padding error",
+          !invalid_padding.has_value() && invalid_padding.error() == Base64Error::InvalidPadding);
+    const auto byte_vector = Utils::from_base64<std::vector<unsigned char>>(base64_encoded);
+    const auto char_vector = Utils::from_base64<std::vector<char>>(base64_encoded);
+    check("base64 byte container preserves binary data",
+          byte_vector.has_value()
+              && std::string(byte_vector.value().begin(), byte_vector.value().end()) == base64_binary);
+    check("base64 character container preserves binary data",
+          char_vector.has_value()
+              && std::string(char_vector.value().begin(), char_vector.value().end()) == base64_binary);
+    using FixedBytes       = std::array<std::uint8_t, 4>;
+    const auto fixed_bytes = Json::deserialize<FixedBytes>(std::string_view(R"("AAH7_w")"));
+    check("JSON fixed byte array round-trip",
+          fixed_bytes.has_value() && fixed_bytes.value() == FixedBytes { 0, 1, 251, 255 });
+    for (const auto text : { R"("AAH7_w\u0000junk")", R"("AAH7_w\u0000")", R"("AAH7/w==\u0000junk")" }) {
+        check("JSON fixed byte array rejects embedded NUL",
+              !Json::deserialize<FixedBytes>(std::string_view(text)).has_value());
+    }
     check("file name whitespace normalization", Utils::fix_file_name("  alpha   beta  ") == "alpha beta");
     check("file name invalid run replacement", Utils::fix_file_name("a+%b") == "a_b");
     check("file name quote replacement", Utils::fix_file_name("a«b»c") == "a_b_c");
@@ -111,23 +156,27 @@ int main(int argc, char *argv[]) {
     check("atomic file read", atomic_data.has_value() && atomic_data.value() == "second");
 
     const auto  database_path = test_path / "concurrent.sqlite";
-    DbConnector first_database(database_path);
-    DbConnector second_database(database_path);
+    CheckedDatabase first_database(database_path);
+    CheckedDatabase second_database(database_path);
     check("open first concurrent database", first_database.open());
     check("create concurrent table",
           first_database.query("CREATE TABLE concurrent_rows (row_id TEXT PRIMARY KEY, payload TEXT NOT NULL)"));
     check("open second concurrent database", second_database.open());
     std::vector<std::jthread> database_workers;
+    std::atomic_size_t        failed_inserts = 0;
     for (std::size_t worker = 0; worker < 4; ++worker) {
         database_workers.emplace_back([&, worker] {
             auto &database = worker % 2 == 0 ? first_database : second_database;
             for (std::size_t row = 0; row < 100; ++row) {
                 const auto key = std::to_string(worker) + '-' + std::to_string(row);
-                database.insert("concurrent_rows", { { "row_id", key }, { "payload", "stored" } });
+                if (!database.insert_row(key)) {
+                    ++failed_inserts;
+                }
             }
         });
     }
     database_workers.clear();
+    check("concurrent SQLite writes report success", failed_inserts == 0);
     check("concurrent SQLite connections retain all rows", first_database.count("concurrent_rows") == 400);
     check("close second concurrent database", second_database.close());
     check("close first concurrent database", first_database.close());

@@ -388,9 +388,10 @@ namespace ExtraChain::Contracts {
             && ((language_ == ToolchainLanguage::Rust && installed->schema == 2)
                 || (installed->schema == 3 && installed->language == toolchain_language_name(language_)));
         const bool compiler_matches =
-            language_ == ToolchainLanguage::Rust
-                ? !installed->rust_version.empty()
-                : !installed->compiler_version.empty() && !installed->runtime_version.empty();
+            installed.has_value()
+            && (language_ == ToolchainLanguage::Rust
+                    ? !installed.value().rust_version.empty()
+                    : !installed.value().compiler_version.empty() && !installed.value().runtime_version.empty());
         if (!manifest_matches || installed->channel != "stable" || installed->release_sequence != sequence
             || !compiler_matches || installed->sdk_version.empty() || installed->components_version.empty()
             || installed->catalog_version.empty() || installed->template_version.empty()

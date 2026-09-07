@@ -74,7 +74,9 @@ const std::string &ActorId::to_string() const {
 }
 
 bool ActorId::is_zero() const {
-    return m_id == std::string(SIZE, '0') || m_id.empty();
+    static constexpr std::string_view zero_id = "0000000000000000000000000000000000000000";
+    static_assert(zero_id.size() == SIZE);
+    return m_id.empty() || m_id == zero_id;
 }
 
 ActorId &ActorId::operator=(const std::string &actorId) {
@@ -106,7 +108,9 @@ void ActorId::normalize() {
         return;
     }
 
-    m_id = std::string(SIZE - m_id.length(), '0') + m_id;
+    if (m_id.size() < SIZE) {
+        m_id.insert(0, SIZE - m_id.size(), '0');
+    }
 
     if (!is_lower_hex(m_id)) {
         eWarning("[ActorId] Incorrect hexadecimal value: {}", m_id);

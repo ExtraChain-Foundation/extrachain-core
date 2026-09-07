@@ -14,6 +14,7 @@
 
 #include "utils/exc_magic.h"
 #include "utils/exc_msgpack_describe.h"
+#include "utils/msgpack_limits.h"
 
 namespace MessagePack {
     template <class T>
@@ -37,7 +38,9 @@ namespace MessagePack {
         }
 
         try {
-            return msgpack::unpack(data.data(), input_size).get().template as<T>();
+            return msgpack::unpack(data.data(), input_size, nullptr, nullptr, unpack_limits(input_size))
+                .get()
+                .template as<T>();
         } catch (const std::exception &) {
             return std::unexpected(DeserializeError::DeserializationFailed);
         }

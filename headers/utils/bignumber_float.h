@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <stdexcept>
 #include <string>
 
 #include "boost/multiprecision/cpp_dec_float.hpp"
@@ -116,7 +117,14 @@ public:
         std::string num = msgpack_o.as<std::string>();
         // Mirror msgpack_pack: the active WireFormat scope decides the encoding,
         // never the content. Legacy peers send hex; canonical peers send decimal.
-        *this = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? from_hex(num) : BigNumberFloat(num);
+        const auto value =
+            BigNumberFloat::create(num,
+                                   WireFormat::get_mode() == WireFormat::Mode::Legacy ? NumeralBase::Hex
+                                                                                      : NumeralBase::Dec);
+        if (!value.has_value()) {
+            throw std::invalid_argument("Invalid BigNumberFloat wire value");
+        }
+        *this = value.value();
     }
 };
 

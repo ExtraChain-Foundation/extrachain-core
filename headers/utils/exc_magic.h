@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <stdexcept>
 #include <boost/describe.hpp>
 #include <boost/mp11.hpp>
 #include <boost/core/demangle.hpp>
@@ -363,14 +364,17 @@ namespace json_convert {
 
         template <std::size_t N>
         std::array<uint8_t, N> array_uint8_from_json(const boost::json::value& json) {
-            auto decoded_result = Utils::from_base64<std::string>(json.as_string().c_str());
+            const auto& encoded = json.as_string();
+            auto decoded_result = Utils::from_base64<std::string>(std::string(encoded.data(), encoded.size()));
             if (!decoded_result.has_value()) {
-                throw "base 64 decode error";
+                throw std::invalid_argument("Invalid base64 value");
             }
             std::string            decoded = decoded_result.value();
             std::array<uint8_t, N> result {};
-            std::size_t            copy_size = std::min<std::size_t>(N, decoded.size());
-            std::memcpy(result.data(), decoded.data(), copy_size);
+            if (decoded.size() != N) {
+                throw std::invalid_argument("Invalid fixed byte array length");
+            }
+            std::memcpy(result.data(), decoded.data(), N);
             return result;
         }
 
@@ -406,7 +410,7 @@ namespace json_convert {
                     for (const auto& pair : obj) {
                         auto value = to_json(pair.second);
                         if (!value.is_null()) {
-                            result[to_json(pair.first).as_string()] = value;
+                            result[to_json(pair.first).as_string()] = std::move(value);
                         }
                     }
                     return result;
@@ -415,7 +419,7 @@ namespace json_convert {
                     for (const auto& item : obj) {
                         auto value = to_json(item);
                         if (!value.is_null()) {
-                            result.push_back(value);
+                            result.push_back(std::move(value));
                         }
                     }
                     return result;
@@ -429,7 +433,7 @@ namespace json_convert {
                         if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
                             auto value = to_json(magic::invoke_member(obj, D.pointer));
                             if (!value.is_null()) {
-                                result[magic::detail::clean_field_name(D.name)] = value;
+                                result[magic::detail::clean_field_name(D.name)] = std::move(value);
                             }
                         }
                     });

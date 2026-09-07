@@ -163,6 +163,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/standard_token.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/wasm_runtime.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/toolchain_registry.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/relay_transport.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/consensus_engine.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/consensus_protocol.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/consensus/intent_store.h
@@ -199,6 +200,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/chain_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/control_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/box_session.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_public.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/account_controller.cpp
@@ -239,6 +241,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_runtime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/relay_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/relay_transport.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_engine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_protocol.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/intent_store.cpp
@@ -466,7 +470,7 @@ endif()
 
 # C FFI bindings
 if(EXTRACHAIN_BUILD_CBINDINGS)
-  add_subdirectory(Cbindings)
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/Cbindings ${CMAKE_CURRENT_BINARY_DIR}/Cbindings)
 endif()
 
 set_property(TARGET extrachain-core PROPERTY POSITION_INDEPENDENT_CODE ON)

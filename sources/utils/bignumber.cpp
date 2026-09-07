@@ -426,8 +426,14 @@ namespace magic {
         // Format is decided by the active WireFormat scope, never sniffed from
         // content. Legacy (pre-decimal) peers and the migration reader set
         // Mode::Legacy; everything else is canonical decimal.
-        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? BigNumber::from_hex(value)
-                                                                    : BigNumber(value);
+        const auto number =
+            BigNumber::create(value,
+                              WireFormat::get_mode() == WireFormat::Mode::Legacy ? NumeralBase::Hex
+                                                                                 : NumeralBase::Dec);
+        if (!number.has_value()) {
+            throw std::invalid_argument("Invalid BigNumber JSON value");
+        }
+        return number.value();
     }
 } // namespace magic
 

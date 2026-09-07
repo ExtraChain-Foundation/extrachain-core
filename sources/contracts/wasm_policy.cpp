@@ -96,6 +96,10 @@ namespace ExtraChain::Contracts::Internal {
 
         class Validator final {
         public:
+            explicit Validator(std::uint32_t maximum_memory_pages)
+                : maximum_memory_pages_(maximum_memory_pages) {
+            }
+
             WasmPolicyResult validate(std::span<const std::uint8_t> module) {
                 static constexpr std::array<std::uint8_t, 8> Header { 0x00, 0x61, 0x73, 0x6d,
                                                                       0x01, 0x00, 0x00, 0x00 };
@@ -123,6 +127,9 @@ namespace ExtraChain::Contracts::Internal {
                     case 2:
                         valid = imports(section);
                         break;
+                    case 5:
+                        valid = memories(section);
+                        break;
                     case 6:
                         valid = globals(section);
                         break;
@@ -135,7 +142,8 @@ namespace ExtraChain::Contracts::Internal {
                     if (!valid) {
                         return result_;
                     }
-                    const bool scanned = section_id == 1 || section_id == 2 || section_id == 6 || section_id == 10;
+                    const bool scanned = section_id == 1 || section_id == 2 || section_id == 5 || section_id == 6
+                                         || section_id == 10;
                     if (scanned && !section.empty()) {
                         return invalid();
                     }
@@ -206,7 +214,7 @@ namespace ExtraChain::Contracts::Internal {
                         }
                         break;
                     case 2:
-                        if (!limits(input)) {
+                        if (++memory_count_ > 1 || !limits(input, maximum_memory_pages_)) {
                             return fail();
                         }
                         break;
@@ -222,14 +230,27 @@ namespace ExtraChain::Contracts::Internal {
                 return true;
             }
 
-            bool limits(Reader &input) {
-                std::uint32_t flags = 0;
-                std::uint32_t value = 0;
-                if (!input.unsigned_leb(flags) || flags > 1 || !input.unsigned_leb(value)) {
+            bool memories(Reader &input) {
+                std::uint32_t count = 0;
+                if (!input.unsigned_leb(count) || count > 1 || memory_count_ + count > 1) {
                     return fail();
                 }
-                if ((flags & 1) != 0 && !input.unsigned_leb(value)) {
+                memory_count_ += count;
+                return count == 0 || limits(input, maximum_memory_pages_);
+            }
+
+            bool limits(Reader &input, std::uint32_t maximum = std::numeric_limits<std::uint32_t>::max()) {
+                std::uint32_t flags   = 0;
+                std::uint32_t minimum = 0;
+                if (!input.unsigned_leb(flags) || flags > 1 || !input.unsigned_leb(minimum) || minimum > maximum) {
                     return fail();
+                }
+                if ((flags & 1) != 0) {
+                    std::uint32_t declared_maximum = 0;
+                    if (!input.unsigned_leb(declared_maximum) || declared_maximum < minimum
+                        || declared_maximum > maximum) {
+                        return fail();
+                    }
                 }
                 return true;
             }
@@ -449,12 +470,15 @@ namespace ExtraChain::Contracts::Internal {
             }
 
             WasmPolicyResult result_ = WasmPolicyResult::Accepted;
+            std::uint32_t    maximum_memory_pages_;
+            std::uint32_t    memory_count_ = 0;
         };
 
     } // namespace
 
-    WasmPolicyResult validate_wasm_policy(std::span<const std::uint8_t> module) {
-        return Validator {}.validate(module);
+    WasmPolicyResult validate_wasm_policy(std::span<const std::uint8_t> module,
+                                          std::uint32_t                 maximum_memory_pages) {
+        return Validator { maximum_memory_pages }.validate(module);
     }
 
 } // namespace ExtraChain::Contracts::Internal

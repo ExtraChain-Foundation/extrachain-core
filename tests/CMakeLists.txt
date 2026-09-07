@@ -7,6 +7,8 @@ file(STRINGS "../extrachain_version.h" EXTRACHAIN_VERSION_LINE REGEX "extrachain
 string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" EXTRACHAIN_VERSION "${EXTRACHAIN_VERSION_LINE}")
 project(extrachain-tests LANGUAGES C CXX VERSION ${EXTRACHAIN_VERSION})
 
+enable_testing()
+
 set(EXTRACHAIN_STATIC_BUILD true)
 option(EXTRACHAIN_BUILD_QT_COMPAT_TESTS "Build tests for the optional Qt compatibility library" OFF)
 set(EXTRACHAIN_BUILD_QT_COMPAT ${EXTRACHAIN_BUILD_QT_COMPAT_TESTS} CACHE BOOL "" FORCE)
@@ -54,8 +56,19 @@ add_core_test_executable(extrachain-consensus-tests consensus_test.cpp)
 add_core_test_executable(extrachain-consensus-protocol-tests consensus_protocol_test.cpp)
 add_core_test_executable(extrachain-consensus-network-tests consensus_network_test.cpp)
 add_core_test_executable(extrachain-shadow-recovery-tests shadow_recovery_test.cpp)
+add_core_test_executable(extrachain-shadow-bootstrap-tests shadow_bootstrap_test.cpp)
 add_core_test_executable(extrachain-shadow-bundle shadow_bundle.cpp)
 add_core_test_executable(extrachain-consensus-benchmark consensus_benchmark.cpp)
+add_core_test_executable(extrachain-envelope-tests envelope_test.cpp)
+add_core_test_executable(extrachain-signature-tests signature_test.cpp)
+add_core_test_executable(extrachain-crypto-tests encryption_test.cpp)
+add_core_test_executable(extrachain-msgpack-budget-tests msgpack_budget.cpp)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_definitions(extrachain-msgpack-budget-tests PRIVATE EXTRACHAIN_TEST_TRACK_MALLOC=1)
+    target_link_options(extrachain-msgpack-budget-tests PRIVATE "LINKER:--wrap=malloc")
+endif()
+add_test(NAME msgpack-budget COMMAND extrachain-msgpack-budget-tests)
+set_tests_properties(msgpack-budget PROPERTIES TIMEOUT 30)
 
 if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)
     add_executable(extrachain-qt-compat-tests qt_compat_test.cpp)
@@ -63,7 +76,28 @@ if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)
     set_property(TARGET extrachain-qt-compat-tests PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
 
-enable_testing()
+add_core_test_executable(extrachain-relay-tests relay_test.cpp)
+add_core_test_executable(extrachain-contract-storage-tests contract_storage.cpp)
+add_core_test_executable(extrachain-contract-depth-replay-tests contract_depth_replay.cpp)
+add_core_test_executable(extrachain-dfs-recovery-tests dfs_recovery.cpp)
+add_core_test_executable(extrachain-dfs-source-tests dfs_source_recovery.cpp)
+add_test(NAME dfs-complete-file-recovery COMMAND extrachain-dfs-source-tests metadata)
+add_test(NAME dfs-source-backoff COMMAND extrachain-dfs-source-tests backoff)
+set_tests_properties(dfs-complete-file-recovery dfs-source-backoff PROPERTIES TIMEOUT 30)
+add_test(NAME dfs-recovery COMMAND extrachain-dfs-recovery-tests)
+add_test(NAME contract-storage COMMAND extrachain-contract-storage-tests)
+add_test(NAME contract-depth-replay COMMAND extrachain-contract-depth-replay-tests
+         ${CMAKE_CURRENT_LIST_DIR}/contracts/depth-fixture.wasm)
+set_tests_properties(contract-depth-replay PROPERTIES
+    TIMEOUT 120
+    ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=0"
+)
+add_test(NAME relay COMMAND extrachain-relay-tests)
+if(EXTRACHAIN_BUILD_CBINDINGS)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME cbindings-lifecycle COMMAND ${Python3_EXECUTABLE}
+             ${CMAKE_CURRENT_LIST_DIR}/cbindings_lifecycle.py $<TARGET_FILE:extrachainc>)
+endif()
 if(EXTRACHAIN_BUILD_LEGACY_TESTS)
     add_test(NAME legacy-monolith COMMAND extrachain-tests)
 endif()
@@ -73,15 +107,20 @@ add_test(NAME sync-roundtrip COMMAND extrachain-sync-tests)
 add_test(NAME native-balance COMMAND extrachain-native-balance)
 add_test(NAME token-registry COMMAND extrachain-token-registry)
 add_test(NAME dag-recovery COMMAND extrachain-dag-recovery)
+add_test(NAME envelope COMMAND extrachain-envelope-tests)
+add_test(NAME signature COMMAND extrachain-signature-tests)
+set_tests_properties(signature PROPERTIES TIMEOUT 30)
+add_test(NAME crypto COMMAND extrachain-crypto-tests)
 add_test(NAME runtime COMMAND extrachain-runtime-tests)
 add_test(NAME consensus COMMAND extrachain-consensus-tests)
 add_test(NAME consensus-protocol COMMAND extrachain-consensus-protocol-tests)
 add_test(NAME consensus-network COMMAND extrachain-consensus-network-tests)
 add_test(NAME shadow-recovery COMMAND extrachain-shadow-recovery-tests)
+add_test(NAME shadow-bootstrap COMMAND extrachain-shadow-bootstrap-tests)
 if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)
     add_test(NAME qt-compat COMMAND extrachain-qt-compat-tests)
 endif()
-set(EXTRACHAIN_TEST_NAMES core-unit amount-roundtrip sync-roundtrip native-balance token-registry dag-recovery runtime consensus consensus-protocol consensus-network shadow-recovery)
+set(EXTRACHAIN_TEST_NAMES contract-depth-replay relay core-unit amount-roundtrip sync-roundtrip native-balance token-registry dag-recovery runtime consensus consensus-protocol consensus-network shadow-recovery)
 if(EXTRACHAIN_BUILD_LEGACY_TESTS)
     list(APPEND EXTRACHAIN_TEST_NAMES legacy-monolith)
 endif()
@@ -111,6 +150,7 @@ set(EXTRACHAIN_HEADER_CHECKS
     contracts/contract_manager.h
     contracts/wasm_runtime.h
     consensus/consensus_engine.h
+    consensus/relay_transport.h
     consensus/consensus_protocol.h
     consensus/intent_store.h
     consensus/light_client.h
@@ -132,6 +172,20 @@ set(EXTRACHAIN_HEADER_CHECKS
     utils/hash.h
     utils/serialization.h
     utils/version.h
+)
+list(APPEND EXTRACHAIN_HEADER_CHECKS
+    chain/dag_cache.h
+    contracts/dfs_contract_storage.h
+    dfs/dfs_utils.h
+    dfs/load_manager.h
+    encryption/box_session.h
+    network/isocket_service.h
+    network/network_service.h
+    network/peer_meta.h
+    runtime/runtime.h
+    utils/bignumber.h
+    utils/bignumber_float.h
+    utils/exc_magic.h
 )
 set(EXTRACHAIN_HEADER_CHECK_TARGETS)
 foreach(header IN LISTS EXTRACHAIN_HEADER_CHECKS)

@@ -10,6 +10,8 @@
 
 #include "network/isocket_service.h"
 
+#include "encryption/box_session.h"
+
 #include "extrachain_version.h"
 #include "utils/exc_logs.h"
 #include "utils/serialization.h"
@@ -18,6 +20,19 @@
 SocketService::SocketService(PeerContext& context)
     : context_(context) {
     private_key_.generate_random();
+}
+
+SocketService::~SocketService() = default;
+
+bool SocketService::set_peer_key(const PublicKey& key) {
+    auto session = Cryptography::BoxSession::create(private_key_.secret_key(), key);
+    if (!session.has_value()) {
+        box_session_.reset();
+        return false;
+    }
+    public_key_  = KeyPublic(key);
+    box_session_ = std::move(session.value());
+    return true;
 }
 
 const std::string& SocketService::identifier() const noexcept {
@@ -230,7 +245,8 @@ SocketService::Data SocketService::generate_first_message() {
         .capabilities = std::set<std::string> { std::string(DAG_TX_BATCH_CAPABILITY),
                                                 std::string(TOKEN_MIGRATION_CAPABILITY),
                                                 std::string(DAG_REPAIR_CAPABILITY),
-                                                std::string(SHADOW_CONSENSUS_CAPABILITY) },
+                                                std::string(SHADOW_CONSENSUS_CAPABILITY),
+                                                std::string(SHADOW_RELAY_CAPABILITY) },
     };
 
     message.connections = context_.shareable_peers(ip_);
@@ -240,15 +256,15 @@ SocketService::Data SocketService::generate_first_message() {
     return { serialized.begin(), serialized.end() };
 }
 
-SocketService::Data SocketService::prepare_send_message(std::span<const std::uint8_t> message) {
-    return prepare_send_message(Data(message.begin(), message.end()));
+SocketService::Data SocketService::prepare_send_message(const Data& message) {
+    return prepare_send_message(std::span<const std::uint8_t>(message));
 }
 
-SocketService::Data SocketService::prepare_send_message(const Data& message) {
-    if (public_key_.empty()) {
+SocketService::Data SocketService::prepare_send_message(std::span<const std::uint8_t> message) {
+    if (!box_session_) {
         return {};
     }
-    const auto encrypted = private_key_.encrypt(message, public_key_.public_key());
+    auto encrypted = box_session_->encrypt(message);
     if (!encrypted.has_value()) {
         return {};
     }
@@ -256,15 +272,15 @@ SocketService::Data SocketService::prepare_send_message(const Data& message) {
     return std::move(encrypted.value());
 }
 
-SocketService::Data SocketService::prepare_receive_message(std::span<const std::uint8_t> message) {
-    return prepare_receive_message(Data(message.begin(), message.end()));
+SocketService::Data SocketService::prepare_receive_message(const Data& message) {
+    return prepare_receive_message(std::span<const std::uint8_t>(message));
 }
 
-SocketService::Data SocketService::prepare_receive_message(const Data& message) {
-    if (public_key_.empty()) {
+SocketService::Data SocketService::prepare_receive_message(std::span<const std::uint8_t> message) {
+    if (!box_session_) {
         return {};
     }
-    const auto decrypted = private_key_.decrypt(message, public_key_.public_key());
+    auto decrypted = box_session_->decrypt(message);
     if (!decrypted.has_value() || decrypted.value().empty()) {
         return {};
     }

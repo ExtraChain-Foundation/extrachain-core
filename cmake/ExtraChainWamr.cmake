@@ -39,6 +39,8 @@ set(WAMR_BUILD_GC 0)
 include("${WAMR_ROOT_DIR}/build-scripts/runtime_lib.cmake")
 
 add_library(extrachain-wamr STATIC ${WAMR_RUNTIME_LIB_SOURCE})
+# Wasm cells and linear memory do not guarantee host scalar alignment.
+target_compile_definitions(extrachain-wamr PRIVATE WASM_CPU_SUPPORTS_UNALIGNED_ADDR_ACCESS=0)
 target_include_directories(extrachain-wamr PUBLIC "${WAMR_ROOT_DIR}/core/iwasm/include")
 set_target_properties(extrachain-wamr PROPERTIES
     C_STANDARD 99

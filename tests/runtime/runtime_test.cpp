@@ -525,5 +525,32 @@ int main() {
     compute_runtime.stop();
     require(pool_tasks.load(std::memory_order_acquire) == 65, "runtime stop must drain all accepted compute work");
 
+    Runtime         exception_runtime({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
+    std::atomic_int exception_followups { 0 };
+    for (const auto& executor : { exception_runtime.storage_executor(), exception_runtime.compute_executor() }) {
+        boost::asio::post(executor, Runtime::guard_handler("test pool", [] {
+                              throw std::runtime_error("invalid input");
+                          }));
+        boost::asio::post(executor, Runtime::guard_handler("test pool", [] {
+                              throw 17;
+                          }));
+        boost::asio::post(executor, [&] {
+            ++exception_followups;
+        });
+    }
+    boost::asio::post(exception_runtime.executor(), [] {
+        throw std::runtime_error("invalid input");
+    });
+    boost::asio::post(exception_runtime.executor(), [] {
+        throw 17;
+    });
+    boost::asio::post(exception_runtime.executor(), [&] {
+        ++exception_followups;
+    });
+    exception_runtime.start();
+    exception_runtime.stop();
+    require(exception_followups == 3,
+            "I/O and both pools must continue after standard and non-standard exceptions");
+
     std::cout << "PASS: runtime, event, timer, listener, probe, and owned pool lifecycle\n";
 }

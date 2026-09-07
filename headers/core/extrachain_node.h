@@ -53,6 +53,7 @@
 #include "contracts/contract_types.h"
 #include "contracts/contract_transaction.h"
 #include "runtime/event.h"
+#include "runtime/runtime.h"
 
 class DfsService;
 class ActorIndex;
@@ -269,12 +270,14 @@ namespace ExtraChain::Core {
 
         template <typename Function>
         void post_storage(Function&& function) {
-            boost::asio::post(storage_executor(), std::forward<Function>(function));
+            boost::asio::post(storage_executor(),
+                              Runtime::guard_handler("storage", std::forward<Function>(function)));
         }
 
         template <typename Function>
         void post_compute(Function&& function) {
-            boost::asio::post(compute_executor(), std::forward<Function>(function));
+            boost::asio::post(compute_executor(),
+                              Runtime::guard_handler("compute", std::forward<Function>(function)));
         }
 
 

@@ -145,14 +145,6 @@ void DirsManager::old_dfs_to_new_dfs_converter() {
 }
 
 void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) {
-    auto max_last_modified = Dfs::Tables::DirsFile::DirsSpace::max_last_modified(db_);
-    if (!max_last_modified.has_value()) {
-        return;
-    }
-    if (last_modified <= max_last_modified.value()) {
-        return;
-    }
-
     Dfs::Tables::DirsFile::DirsSpace::update_row(db_, actor_id, last_modified);
 }
 
@@ -348,9 +340,10 @@ void DirsManager::network_response_dir_rows(
                                                                          Dfs::FileState::Removed);
                 }
 
-                if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Ready) {
-                    if (!file_path->exists()) { // TODO: size
-                        // eLog("Not exists: {} {}", owner_id, row.file_id);
+                // A neighbour can still be downloading this file during reconnect.
+                // Keep a retry queue even when an unchanged catalogue says Known.
+                if (row.type == Dfs::FileType::File && row.state != Dfs::FileState::Removed && !row.hash.empty()) {
+                    if (!node->dfs()->is_file_already_downloaded(owner_id, row.file_id, row.hash)) {
                         dir_rows_todo.push_back(row);
                     }
                 }
@@ -359,7 +352,9 @@ void DirsManager::network_response_dir_rows(
             // Need to change adding
             auto [res, dir_rows_res] = Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(db_, owner_id, dir_rows);
 
-            // eTemp("~~~~~~~~~~~~~~~~b {}", res);
+            // Rebuild the owner index from persisted rows, including an unchanged
+            // catalogue received after an interrupted download.
+            Dfs::Tables::DirsFile::DirsSpace::update_from_files(db_, owner_id);
 
             if (!dir_rows_res.empty()) {
                 auto max_value = std::ranges::max(dir_rows_res, {}, &Dfs::DirRow::last_modified).last_modified;

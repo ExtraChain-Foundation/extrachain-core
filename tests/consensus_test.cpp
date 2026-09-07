@@ -446,6 +446,39 @@ int main() {
           observer_proofs.has_value() && observer_proofs.value().size() == 1);
     certified_observer.reset();
 
+    std::size_t stale_validator_calls = 0;
+    auto        stale_validator =
+        std::make_unique<ConsensusEngine>(fixture.view,
+                                          ValidatorIdentity {
+                                              .validator_id = validator_id_for(fixture.keys.front().public_key()),
+                                              .key          = fixture.keys.front() },
+                                          std::make_unique<SafetyStore>(certified_observer_path),
+                                          [&](const Proposal&) -> std::expected<void, ConsensusError> {
+                                              ++stale_validator_calls;
+                                              return std::unexpected(ConsensusError::InvalidRoot);
+                                          });
+    check("stale proposal fixture restores finalized height two",
+          stale_validator->initialize().has_value() && stale_validator->safety_state().finalized_height == 2);
+    const auto stale_state = MessagePack::serialize(stale_validator->safety_state());
+    for (std::size_t index = 0; index < 2; ++index) {
+        const auto observed = stale_validator->observe_proposal(chain_proposals[index]);
+        const auto voted    = stale_validator->accept_proposal(chain_proposals[index]);
+        check("finalized live proposal is classified as replay before state validation",
+              !observed.has_value() && observed.error() == ConsensusError::Replay && !voted.has_value()
+                  && voted.error() == ConsensusError::Replay && stale_validator_calls == 0);
+    }
+    check("stale live proposals leave safety state and vote count unchanged",
+          MessagePack::serialize(stale_validator->safety_state()) == stale_state
+              && stale_validator->metrics().votes_created == 0);
+    const auto current_observed = stale_validator->observe_proposal(chain_proposals.back());
+    check("unfinalized proposal still requires live state validation",
+          !current_observed.has_value() && current_observed.error() == ConsensusError::InvalidRoot
+              && stale_validator_calls == 1);
+    check("certified recovery can still observe finalized history",
+          stale_validator->observe_certified_proposal(chain_proposals.front()).has_value()
+              && stale_validator_calls == 1);
+    stale_validator.reset();
+
     auto reordered_observer =
         std::make_unique<ConsensusEngine>(fixture.view,
                                           std::nullopt,
@@ -527,6 +560,9 @@ int main() {
           restarted_validator->observe_proposal(last_proposal).has_value());
     check("validator durably stages data before a vote",
           restarted_validator->stage_batch(batch_data(last_proposal.header.height, observed_hash)).has_value());
+    const auto missing_parent_vote = restarted_validator->accept_proposal(last_proposal);
+    check("validator cannot vote without its parent proposal",
+          !missing_parent_vote.has_value() && missing_parent_vote.error() == ConsensusError::DataUnavailable);
     restarted_validator.reset();
     restarted_validator = std::make_unique<ConsensusEngine>(fixture.view,
                                                             validator_identity,

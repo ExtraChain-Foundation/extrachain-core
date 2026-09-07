@@ -15,6 +15,12 @@
 #        EXC_SHADOW_PER_SENDER   intents per submitting node        (default 32)
 #        EXC_SHADOW_RUN_SECONDS  per-node run window                (default 240)
 #        EXC_SHADOW_DEADLINE_S   harness deadline for the committee (default 300)
+#        EXC_SHADOW_HOLD_S       keep a passed committee alive this long (default 0)
+#        EXC_SHADOW_ALLOWED_DEAD this many committee nodes may die (chaos kills) and the
+#                                run still passes on the survivors (default 0)
+#        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
+#                                the run passes only if it reaches every node (default 0)
+#        EXC_SHADOW_CAPTURE_AUDIT_CRASH save GDB dumps from offline verifiers (default 0)
 
 set -u
 
@@ -30,7 +36,84 @@ RUN_SECONDS="${EXC_SHADOW_RUN_SECONDS:-240}"
 # The harness must outlive the nodes' own window, otherwise their scheduled exit
 # races our deadline and a normal end-of-run looks like a crash.
 DEADLINE_S="${EXC_SHADOW_DEADLINE_S:-$((RUN_SECONDS + 120))}"
-NODE_COUNT=7
+NODE_COUNT="${EXC_SHADOW_NODE_COUNT:-7}"
+DFS_BYTES="${EXC_SHADOW_DFS_BYTES:-0}"
+export EXC_DFS_BYTES="$DFS_BYTES"
+ALLOWED_DEAD="${EXC_SHADOW_ALLOWED_DEAD:-0}"
+# Nodes found dead when the watch loop ends (chaos kills); set once, before cleanup.
+DEAD_NODES=""
+is_dead() { case " $DEAD_NODES " in *" $1 "*) return 0 ;; esac; return 1; }
+# A node restarted by the fault controller in the same home writes its new pid to
+# barrier/pid-<index>; that process is the node from then on.
+node_pid() { if [ -f "$BARRIER/pid-$1" ]; then cat "$BARRIER/pid-$1"; else echo "${PIDS[$1]}"; fi; }
+restarted() { [ -f "$BARRIER/pid-$1" ]; }
+
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then sha256sum < "$1" | cut -d' ' -f1
+    else shasum -a 256 < "$1" | cut -d' ' -f1; fi
+}
+
+offline_verify() {
+    local core="$1"
+    shift
+    if [ "${EXC_SHADOW_CAPTURE_AUDIT_CRASH:-0}" = 1 ]; then
+        python3 "$SCRIPT_DIR/shadow_crash_capture.py" --core "$core" -- "$@"
+    else
+        "$@"
+    fi
+}
+
+# One line per published file: "<publisher index> <owner> <file id> <size>".
+dfs_published() {
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        # A file whose publisher died may never have reached anyone: not required.
+        is_dead "$index" && continue
+        sed -E "s/$(printf '\033')\[[0-9;]*m//g" "$WORK/node-$index.log" 2>/dev/null \
+            | sed -n "s/^\[node-run\] DFS stored owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\) size=\([0-9]*\).*/$index \1 \2 \3/p"
+    done
+}
+
+# ExDFS replication audit: every file a committee node published has to sit on
+# every node byte for byte. With report=1 prints one line per node; returns 0
+# only when the mesh is complete. A corrupt copy counts separately from a
+# missing one — they point at different code.
+dfs_audit() {
+    local report="$1" complete=1 published total expected_publishers
+    published="$(dfs_published)"
+    total="$(printf '%s\n' "$published" | grep -c .)"
+    if [ "$total" -eq 0 ]; then
+        [ "$DFS_BYTES" -eq 0 ] && return 0
+        [ "$report" = 1 ] && echo "dfs: no node published a file"
+        return 1
+    fi
+    expected_publishers=$((NODE_COUNT - $(wc -w <<<"$DEAD_NODES")))
+    [ "$DFS_BYTES" -eq 0 ] || [ "$total" -eq "$expected_publishers" ] || complete=0
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        if is_dead "$index"; then
+            [ "$report" = 1 ] && printf 'dfs: node %s died during the run; not audited\n' "$index"
+            continue
+        fi
+        local have=0 corrupt=0 publisher owner file_id size src dst
+        while read -r publisher owner file_id size; do
+            [ -n "$file_id" ] || continue
+            src="${NODE_HOMES[$publisher]}/dfs/$owner/$file_id"
+            dst="${NODE_HOMES[$index]}/dfs/$owner/$file_id"
+            [ -f "$dst" ] || continue
+            if [ "$(wc -c < "$dst" | tr -d ' ')" = "$size" ] && [ "$(sha256_of "$dst")" = "$(sha256_of "$src")" ]; then
+                have=$((have + 1))
+            else
+                corrupt=$((corrupt + 1))
+            fi
+        done <<<"$published"
+        [ "$have" -eq "$total" ] || complete=0
+        if [ "$report" = 1 ]; then
+            printf 'dfs: node %s has %s/%s files' "$index" "$have" "$total"
+            [ "$corrupt" -gt 0 ] && printf ' (%s corrupt)' "$corrupt"
+            printf '\n'
+        fi
+    done
+    [ "$complete" -eq 1 ]
+}
 
 WORK="${EXC_SHADOW_WORK:-$(mktemp -d /tmp/exc-shadow-soak-XXXXXX)}"
 mkdir -p "$WORK"
@@ -44,6 +127,7 @@ PIDS=()
 
 cleanup() {
     [ "${#PIDS[@]}" -eq 0 ] && return 0
+    for f in "$BARRIER"/pid-*; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; done
     for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
     local deadline=$(( $(date +%s) + 15 ))
     local alive=1
@@ -54,6 +138,7 @@ cleanup() {
         done
         [ "$alive" -eq 1 ] && sleep 1
     done
+    for f in "$BARRIER"/pid-*; do [ -f "$f" ] && kill -9 "$(cat "$f")" 2>/dev/null; done
     for pid in "${PIDS[@]}"; do
         kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
     done
@@ -68,6 +153,20 @@ fail() {
     summary >&2
     printf 'stand data: %s\n' "$WORK" >&2
     exit 1
+}
+
+# How far a node actually got. The periodic counter sample stops the moment a
+# node hangs or shuts down, so its last line under-reports; the engine's own
+# "Finalized height N" log is written per finalization and never goes stale.
+# Take whichever of the two is further along.
+finalized_height() {
+    local log="$WORK/node-$1.log"
+    [ -f "$log" ] || return 0
+    local sampled logged
+    sampled="$(grep 'committee node=' "$log" 2>/dev/null \
+        | tail -1 | sed -n 's/.*finalized=\([0-9]*\).*/\1/p')"
+    logged="$(sed -n 's/.*\[Shadow\] Finalized height \([0-9]*\) .*/\1/p' "$log" 2>/dev/null | tail -1)"
+    printf '%s\n' "$sampled" "$logged" | grep -E '^[0-9]+$' | sort -n | tail -1
 }
 
 # Per-node picture of the last reported counters — the first thing worth seeing
@@ -91,7 +190,7 @@ summary() {
             "$(sed -n 's/.*votes=\([0-9]*\).*/\1/p'          <<<"$line")" \
             "$(sed -n 's/.*timeouts=\([0-9]*\).*/\1/p'       <<<"$line")" \
             "$(sed -n 's/.*certificates=\([0-9]*\).*/\1/p'   <<<"$line")" \
-            "$(sed -n 's/.*finalized=\([0-9]*\).*/\1/p'      <<<"$line")"
+            "$(finalized_height "$index")"
     done
     printf '\n'
     local roots
@@ -105,6 +204,7 @@ summary() {
 [ -x "$DAG_AUDIT" ] || fail "DAG audit tool is absent: $DAG_AUDIT"
 [ -f "$SHADOW_VERIFY" ] || fail "cross-node verifier is absent: $SHADOW_VERIFY"
 [ -d "$SEED/dag" ] || fail "seed DAG is absent: $SEED"
+[ "$NODE_COUNT" -eq 7 ] || [ "$NODE_COUNT" -eq 8 ] || fail "NODE_COUNT must be 7 or 8"
 [ "$SENDERS" -ge 1 ] && [ "$SENDERS" -le "$NODE_COUNT" ] || fail "SENDERS must be 1..$NODE_COUNT"
 [ "$PER_SENDER" -le 64 ] || fail "PER_SENDER above 64 hits maximum_nonce_gap; use more senders instead"
 
@@ -114,15 +214,34 @@ if command -v lsof >/dev/null 2>&1; then
     done
 fi
 
+NODE_HOMES=("$SYNC_WORK/server/data")
+for index in $(seq 1 $((NODE_COUNT - 1))); do NODE_HOMES+=("$SYNC_WORK/client$index/data"); done
+if [ -n "${EXC_SHADOW_PREPARED_FIXTURE:-}" ]; then
+    python3 - "$EXC_SHADOW_PREPARED_FIXTURE" "$SYNC_WORK" <<'PYFIXTURE' || fail "prepared fixture restoration failed"
+from pathlib import Path
+import json, shutil, sys
+fixture, destination = map(Path, sys.argv[1:])
+if json.loads((fixture / 'fixture.json').read_text())['bootstrap_path'] != str(destination.resolve()):
+    raise SystemExit('The fixture must use its original absolute path for profile login')
+shutil.copytree(fixture / 'bootstrap', destination)
+PYFIXTURE
+    log "=== restored prepared committee fixture ==="
+else
 log "=== bootstrap $NODE_COUNT nodes from $SEED ==="
 EXTRACHAIN_TEST_BUILD="$BUILD_DIR" \
 EXTRACHAIN_TEST_WORK="$SYNC_WORK" \
 EXTRACHAIN_TEST_DFS_BYTES=1048576 \
-    bash "$CORE_TESTS/multi_console_sync.sh" "$SEED" 6 "$BASE_PORT" >"$WORK/bootstrap.log" 2>&1 \
+    bash "$CORE_TESTS/multi_console_sync.sh" "$SEED" "$((NODE_COUNT - 1))" "$BASE_PORT" >"$WORK/bootstrap.log" 2>&1 \
     || { tail -30 "$WORK/bootstrap.log" >&2; fail "DAG and ExDFS bootstrap failed"; }
 
-NODE_HOMES=("$SYNC_WORK/server/data")
-for index in $(seq 1 6); do NODE_HOMES+=("$SYNC_WORK/client$index/data"); done
+# multi_console_sync's cleanup kills its nodes but does not wait for them, and the
+# seed's data directory is still open while the server shuts down. Running the
+# ceremony's --prepare on it in that window fails (1 in ~170 cycles), so wait
+# for the server to be gone first.
+for _ in $(seq 1 30); do
+    ps -eo args --no-headers | grep -q "[e]xtrachain-node-run serve data $BASE_PORT " || break
+    sleep 1
+done
 
 log "=== Shadow ceremony ==="
 PREPARED=""
@@ -135,9 +254,27 @@ for index in $(seq 0 $((NODE_COUNT - 1))); do
     if [ -z "$PREPARED" ]; then PREPARED="$marker"
     elif [ "$PREPARED" != "$marker" ]; then fail "node $index has a different transition boundary"; fi
 done
-"$BUNDLE" "${NODE_HOMES[0]}" "${NODE_HOMES[@]}" >"$WORK/bundle.log" 2>&1 \
+"$BUNDLE" "${NODE_HOMES[0]}" "${NODE_HOMES[@]:0:7}" >"$WORK/bundle.log" 2>&1 \
     || { tail -40 "$WORK/bundle.log" >&2; fail "Shadow bundle creation failed"; }
+if [ "$NODE_COUNT" -eq 8 ]; then
+    mkdir -p "${NODE_HOMES[7]}/consensus"
+    for document in activation-manifest governance-policy recovery-policy shadow-config trust-anchor validator-set; do
+        cp "${NODE_HOMES[0]}/consensus/$document.msgpack" "${NODE_HOMES[7]}/consensus/"
+    done
+fi
 log "boundary=$PREPARED leader=$(sed -n 's/.*leader_index=\([0-6]\).*/\1/p' "$WORK/bundle.log")"
+
+fi
+if [ -n "${EXC_SHADOW_SAVE_FIXTURE:-}" ]; then
+    python3 - "$EXC_SHADOW_SAVE_FIXTURE" "$SYNC_WORK" <<'PYFIXTURE' || fail "prepared fixture creation failed"
+from pathlib import Path
+import json, shutil, sys
+fixture, source = map(Path, sys.argv[1:])
+fixture.mkdir(parents=True, exist_ok=False)
+shutil.copytree(source, fixture / 'bootstrap')
+(fixture / 'fixture.json').write_text(json.dumps({'bootstrap_path': str(source.resolve())}) + '\n')
+PYFIXTURE
+fi
 
 # Spreading intents keeps every sender under maximum_sender_intents, and gives the
 # state machine several independent nonce sequences to interleave — which is the
@@ -169,6 +306,7 @@ for index in $(seq 0 $((NODE_COUNT - 1))); do
                  "$intents" "$RUN_SECONDS" "$BARRIER" 1 1
     ) >"$WORK/node-$index.log" 2>&1 &
     PIDS+=("$!")
+    printf '%s\n' "$!" > "$BARRIER/initial-pid-$index"
     sleep 1
 done
 
@@ -177,7 +315,16 @@ while [ "$(find "$BARRIER" -maxdepth 1 -type f -name 'node-*' | wc -l)" -ne "$NO
     [ "$(date +%s)" -ge "$barrier_deadline" ] && fail "the committee did not reach the start barrier"
     sleep 1
 done
+if [ "${EXC_SHADOW_EXTERNAL_CONTROL:-0}" = "1" ]; then
+    touch "$BARRIER/committee-ready"
+    control_deadline=$(( $(date +%s) + 60 ))
+    while [ ! -f "$BARRIER/controller-ready" ]; do
+        [ "$(date +%s)" -ge "$control_deadline" ] && fail "external controller did not become ready"
+        sleep 0.1
+    done
+fi
 touch "$BARRIER/go"
+committee_started=$(( $(date +%s) ))
 log "committee started, deadline ${DEADLINE_S}s"
 
 # Watch instead of blocking on wait(): the interesting outcomes (all intents
@@ -187,9 +334,31 @@ verdict=""
 while :; do
     done_nodes=0
     for index in $(seq 0 $((SENDERS - 1))); do
-        grep -q "finalized intents=$PER_SENDER" "$WORK/node-$index.log" 2>/dev/null && done_nodes=$((done_nodes + 1))
+        # A restarted sender lost its submission list with the old process and
+        # can never report its own receipts; it is judged by convergence instead.
+        if grep -q "finalized intents=$PER_SENDER" "$WORK/node-$index.log" 2>/dev/null || restarted "$index"; then
+            done_nodes=$((done_nodes + 1))
+        fi
     done
-    if [ "$done_nodes" -eq "$SENDERS" ]; then verdict="pass"; break; fi
+    controller_done=1
+    if [ "${EXC_SHADOW_EXTERNAL_CONTROL:-0}" = "1" ] && [ ! -f "$BARRIER/faults-done" ]; then
+        controller_done=0
+    fi
+    if [ "$done_nodes" -eq "$SENDERS" ] && [ "$controller_done" -eq 1 ] \
+       && [ "$(( $(date +%s) - committee_started ))" -ge "${EXC_SHADOW_MIN_RUNTIME_S:-0}" ]; then
+        verdict="pass"
+        break
+    fi
+    # Chaos kills: a run passes on the survivors when every sender that has not
+    # finalized is dead and no more than ALLOWED_DEAD of them died.
+    if [ "$ALLOWED_DEAD" -gt 0 ]; then
+        dead_senders=0; unfinished_alive=0
+        for index in $(seq 0 $((SENDERS - 1))); do
+            grep -q "finalized intents=$PER_SENDER" "$WORK/node-$index.log" 2>/dev/null && continue
+            if kill -0 "$(node_pid "$index")" 2>/dev/null; then unfinished_alive=1; else dead_senders=$((dead_senders + 1)); fi
+        done
+        if [ "$unfinished_alive" -eq 0 ] && [ "$dead_senders" -le "$ALLOWED_DEAD" ]; then verdict="pass"; break; fi
+    fi
     # Negative mode: unfunded senders can never finalize; the pass condition is
     # that node 0 finishes its load anyway and the poison intents were evicted.
     if [ "${EXC_SHADOW_FUND:-1}" != "1" ] && [ "$SENDERS" -gt 1 ]; then
@@ -206,11 +375,26 @@ while :; do
                | awk '{s+=$1} END {print s+0}')"
     if [ "$rejects" -ge 50 ]; then verdict="invalid-root"; break; fi
     alive=0
-    for pid in "${PIDS[@]}"; do kill -0 "$pid" 2>/dev/null && alive=$((alive + 1)); done
+    for index in $(seq 0 $((NODE_COUNT - 1))); do kill -0 "$(node_pid "$index")" 2>/dev/null && alive=$((alive + 1)); done
     if [ "$alive" -eq 0 ]; then verdict="exited"; break; fi
     if [ "$(date +%s)" -ge "$deadline" ]; then verdict="deadline"; break; fi
     sleep 5
 done
+
+RESTARTED_NODES=""
+for index in $(seq 0 $((NODE_COUNT - 1))); do
+    restarted "$index" && RESTARTED_NODES="$RESTARTED_NODES$index "
+    kill -0 "$(node_pid "$index")" 2>/dev/null || DEAD_NODES="$DEAD_NODES$index "
+done
+[ -n "$RESTARTED_NODES" ] && log "note: node(s) $RESTARTED_NODES were restarted during the run and are audited as members"
+if [ -n "$DEAD_NODES" ]; then
+    if [ "$(printf '%s' "$DEAD_NODES" | wc -w)" -le "$ALLOWED_DEAD" ]; then
+        log "note: node(s) $DEAD_NODES died during the run (allowed); the survivors are audited"
+    else
+        log "node(s) $DEAD_NODES died during the run"
+        verdict="unexpected-death"
+    fi
+fi
 
 # A receipt proves that the submitting node applied the checkpoint. Other nodes
 # can still be importing the same certified height. Keep the committee alive
@@ -218,57 +402,128 @@ done
 # converged snapshot instead of a shutdown race.
 if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     convergence_deadline=$(( $(date +%s) + 60 ))
+    if [ "${EXC_SHADOW_EXTERNAL_CONTROL:-0}" = "1" ]; then
+        # Fault recovery uses the remaining portion of its total 300-second budget.
+        convergence_deadline="$deadline"
+    fi
     while :; do
-        seed_finalized="$(grep 'committee node=' "$WORK/node-0.log" 2>/dev/null \
-            | tail -1 | sed -n 's/.*finalized=\([0-9]*\).*/\1/p')"
+        # Every surviving node has to report one finalized count; the first
+        # survivor (the seed, unless it died) is the reference.
+        reference=""
         converged=1
-        [ -n "$seed_finalized" ] || converged=0
-        for index in $(seq 1 $((NODE_COUNT - 1))); do
-            node_finalized="$(grep 'committee node=' "$WORK/node-$index.log" 2>/dev/null \
-                | tail -1 | sed -n 's/.*finalized=\([0-9]*\).*/\1/p')"
-            [ -n "$node_finalized" ] && [ "$node_finalized" = "$seed_finalized" ] || converged=0
+        for index in $(seq 0 $((NODE_COUNT - 1))); do
+            is_dead "$index" && continue
+            node_finalized="$(finalized_height "$index")"
+            [ -n "$node_finalized" ] || { converged=0; continue; }
+            [ -n "$reference" ] || reference="$node_finalized"
+            [ "$node_finalized" = "$reference" ] || converged=0
         done
-        [ "$converged" -eq 1 ] && break
+        [ -n "$reference" ] || converged=0
+        if [ "$converged" -eq 1 ]; then
+            # Heights agree; the ExDFS mesh has to be complete as well before the
+            # audits read a snapshot.
+            if dfs_audit 0; then
+                if [ "$verdict" != "pass" ] || [ -z "${EXC_SHADOW_RECEIPTS_PYTHON:-}" ]; then
+                    break
+                fi
+                "$EXC_SHADOW_RECEIPTS_PYTHON" "$SCRIPT_DIR/shadow_receipts.py" "$WORK" \
+                    --nodes "$NODE_COUNT" --expected "$TOTAL_INTENTS" > "$WORK/live-receipts.json" 2>&1 && break
+            fi
+        fi
         if [ "$(date +%s)" -ge "$convergence_deadline" ]; then
+            # Name the thing that is actually still missing at the deadline.
             verdict="convergence"
+            [ "$converged" -eq 1 ] && verdict="dfs-incomplete"
             break
         fi
         sleep 1
     done
 fi
 
+# Optional hold: keep the converged committee serving for a while so an outside
+# node can join it live (see shadow_live_join.sh). On a fast host the whole load
+# finalizes in seconds, so without this there is nothing left to join.
+if [ "$verdict" = "pass" ] && [ "${EXC_SHADOW_HOLD_S:-0}" -gt 0 ]; then
+    log "holding the committee for ${EXC_SHADOW_HOLD_S}s"
+    sleep "$EXC_SHADOW_HOLD_S"
+fi
+
 # A stack from a live node is worth more than the same node killed — this is how
 # the ABBA deadlock was found. Take it before the processes go away.
-if [ "$verdict" != "pass" ] && [ "$verdict" != "pass-negative" ] && command -v sample >/dev/null 2>&1; then
-    for pid in "${PIDS[@]}"; do
-        kill -0 "$pid" 2>/dev/null && sample "$pid" 3 -f "$WORK/sample-$pid.txt" >/dev/null 2>&1 &
-    done
-    wait
+# Not for dfs-incomplete: the committee is healthy there, and attaching gdb to
+# seven nodes stops them for minutes — the counters then show a stall that the
+# sampler itself caused.
+if [ "$verdict" != "pass" ] && [ "$verdict" != "pass-negative" ] && [ "$verdict" != "dfs-incomplete" ]; then
+    if command -v sample >/dev/null 2>&1; then
+        for pid in "${PIDS[@]}"; do
+            kill -0 "$pid" 2>/dev/null && sample "$pid" 3 -f "$WORK/sample-$pid.txt" >/dev/null 2>&1 &
+        done
+        wait
+    elif command -v gdb >/dev/null 2>&1; then
+        for pid in "${PIDS[@]}"; do
+            kill -0 "$pid" 2>/dev/null \
+                && gdb -batch -p "$pid" -ex "thread apply all bt" > "$WORK/sample-$pid.txt" 2>&1 &
+        done
+        wait
+    else
+        printf 'no stack sampler (sample/gdb) on this host: %s\n' "$WORK" >&2
+    fi
 fi
 cleanup
 
 if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
-    CACHE_SNAPSHOT=""
+    # Nodes are killed one after another, so the last one alive can still commit a
+    # checkpoint or two. Comparing snapshot POSITIONS across nodes therefore fails on
+    # a perfectly good run. What must agree is the CONTENT at a shared section: group
+    # the snapshots by section and require one hash per section.
+    declare -A SNAPSHOT_HASH=() SNAPSHOT_OWNER=()
     for index in $(seq 0 $((NODE_COUNT - 1))); do
         role="joiner"; [ "$index" -eq 0 ] && role="seed"
-        "$DAG_AUDIT" "${NODE_HOMES[$index]}" "$role" >"$WORK/audit-$index.log" 2>&1 \
+        offline_verify "$WORK/audit-$index.core" "$DAG_AUDIT" "${NODE_HOMES[$index]}" "$role" >"$WORK/audit-$index.log" 2>&1 \
             || { tail -60 "$WORK/audit-$index.log" >&2; fail "DAG or balance audit failed for node $index"; }
         snapshot="$(sed -n 's/.*balance cache: section=\([^ ]*\).*hash=\([^ ]*\).*/\1:\2/p' \
                     "$WORK/audit-$index.log")"
         [ -n "$snapshot" ] || fail "node $index did not report a balance snapshot"
-        if [ -z "$CACHE_SNAPSHOT" ]; then CACHE_SNAPSHOT="$snapshot"
-        elif [ "$CACHE_SNAPSHOT" != "$snapshot" ]; then
-            fail "node $index has a different logical balance snapshot"
+        section="${snapshot%%:*}"
+        hash="${snapshot#*:}"
+        if [ -n "${SNAPSHOT_HASH[$section]:-}" ] && [ "${SNAPSHOT_HASH[$section]}" != "$hash" ]; then
+            printf 'node %s and node %s disagree at section %s: %s vs %s\n' \
+                "${SNAPSHOT_OWNER[$section]}" "$index" "$section" \
+                "${SNAPSHOT_HASH[$section]}" "$hash" >&2
+            fail "nodes disagree on the balance snapshot at section $section"
         fi
+        SNAPSHOT_HASH[$section]="$hash"
+        SNAPSHOT_OWNER[$section]="$index"
     done
-    python3 "$SHADOW_VERIFY" "$WORK" >"$WORK/cross-node.log" 2>&1 \
+    if [ "${#SNAPSHOT_HASH[@]}" -gt 1 ]; then
+        log "note: nodes stopped at ${#SNAPSHOT_HASH[@]} different snapshot sections (shutdown skew, not a mismatch)"
+    fi
+    EXC_VERIFY_SKIP="$DEAD_NODES" offline_verify "$WORK/cross-node.core" python3 "$SHADOW_VERIFY" "$WORK" >"$WORK/cross-node.log" 2>&1 \
         || { tail -80 "$WORK/cross-node.log" >&2; fail "cross-node content verification failed"; }
+fi
+
+if [ "$verdict" = "pass" ] && [ -n "${EXC_SHADOW_RECEIPTS_PYTHON:-}" ]; then
+    "$EXC_SHADOW_RECEIPTS_PYTHON" "$SCRIPT_DIR/shadow_receipts.py" "$WORK" \
+        --nodes "$NODE_COUNT" --expected "$TOTAL_INTENTS" > "$WORK/durable-receipts.json" 2>&1 \
+        || { cat "$WORK/durable-receipts.json" >&2; fail "durable receipts are incomplete or disagree"; }
+    if [ "$DFS_BYTES" -gt 0 ]; then
+        "$EXC_SHADOW_RECEIPTS_PYTHON" "$SCRIPT_DIR/shadow_artifacts.py" "$WORK" \
+            --nodes "$NODE_COUNT" --size "$DFS_BYTES" > "$WORK/deterministic-files.json" 2>&1 \
+            || { cat "$WORK/deterministic-files.json" >&2; fail "workload file contents are incomplete or incorrect"; }
+    fi
 fi
 
 case "$verdict" in
     pass)
         summary
-        log "PASS: $SENDERS senders finalized $PER_SENDER intents each ($TOTAL_INTENTS total)"
+        if [ "$DFS_BYTES" -gt 0 ]; then
+            dfs_audit 1 || fail "ExDFS content is incomplete after shutdown"
+        fi
+        if [ -n "$DEAD_NODES" ]; then
+            log "PASS (survivors): $done_nodes/$SENDERS senders finalized $PER_SENDER intents each; node(s) $DEAD_NODES died"
+        else
+            log "PASS: $SENDERS senders finalized $PER_SENDER intents each ($TOTAL_INTENTS total)"
+        fi
         printf 'stand data: %s\n' "$WORK"
         ;;
     pass-negative)
@@ -282,10 +537,14 @@ case "$verdict" in
         grep -h "rejected with error 11" "$WORK"/node-*.log 2>/dev/null | head -5 >&2
         fail "proposals rejected with InvalidRoot (11) — state_commitment divergence"
         ;;
+    unexpected-death) fail "more nodes died than the configured limit" ;;
     exited)
         # Nodes leaving on schedule is not a crash — it means finality never came
         # within their window. Say which one it was, they need different fixes.
         fail "nodes finished their ${RUN_SECONDS}s window with $done_nodes/$SENDERS senders finalized" ;;
     deadline) fail "harness deadline reached with $done_nodes/$SENDERS senders finalized" ;;
-    convergence) fail "committee did not converge on one finalized height within 60s" ;;
+    convergence) fail "committee did not converge on one finalized height before the recovery deadline" ;;
+    dfs-incomplete)
+        dfs_audit 1 >&2
+        fail "ExDFS content did not reach every node before the recovery deadline" ;;
 esac

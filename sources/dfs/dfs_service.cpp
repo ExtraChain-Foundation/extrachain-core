@@ -1419,6 +1419,7 @@ bool DfsService::is_file_already_downloaded(const ActorId     &owner_id,
     const auto path = Dfs::Path::file_path(owner_id, file_id);
     if (!path.has_value()) {
         eWarning("[Dfs] Add file from network: incorrect dir row for owner {} and hash '{}'", owner_id, hash);
+        return false;
     }
 
     auto dir_row =
@@ -2151,18 +2152,23 @@ void DfsService::network_response_file_state(const Dfs::Packets::FileState &data
 
     eLog("[Dfs] File state response: {}/{} state={}", data.owner_id, data.file_id, data.state);
 
+    const auto file_link = Dfs::FileLink { .owner_id = data.owner_id, .file_id = data.file_id };
+    const auto source    = *responder.identifiers().begin();
+    if (data.state != Dfs::FileState::Ready) {
+        // Not a holder (or not a whole one): stop asking it for this file.
+        load_manager_.drop_source(file_link, source);
+        return;
+    }
+
     if (!dir_row.has_value()) {
         return;
     }
 
-    if (data.state == Dfs::FileState::Ready) {
-        dir_row->state = data.state;
-        dir_row->hash  = data.hash;
-        load_manager_.add_to_queue(data.owner_id,
-                                   dir_row.value(),
-                                   *responder.identifiers().begin(),
-                                   data.notify_neighbours);
-    }
+    dir_row->state = data.state;
+    dir_row->hash  = data.hash;
+    load_manager_.add_to_queue(data.owner_id, dir_row.value(), source, data.notify_neighbours);
+    // Confirmed holder: ahead of the sources guessed from the connection list.
+    load_manager_.prefer_source(file_link, source);
 }
 
 void DfsService::network_file_exist_notification(const Dfs::Packets::FileState &data, const Responder &responder) {
@@ -2529,7 +2535,8 @@ void DfsService::completeDownloadedFile(const ActorId &owner_id, const Dfs::DirR
     std::lock_guard lock(size_state_mutex_);
     auto            current =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, dir_row.file_id);
-    if (!current.has_value() || current->state == Dfs::FileState::Ready) {
+    if (!current.has_value() || current.value().state == Dfs::FileState::Ready
+        || current.value().state == Dfs::FileState::Removed || current.value().hash != dir_row.hash) {
         return;
     }
     Dfs::Tables::DirsFile::ActorSpace::update_file_state(dirs_manager_.get_db_instance(),
@@ -2950,6 +2957,10 @@ void DfsService::check_all_files(std::string identifier) {
             }
 
             auto file_link = Dfs::FileLink { .owner_id = dir.actor_id, .file_id = row.file_id };
+
+            // A one-shot state request can arrive before the neighbour finishes
+            // its copy. Restore retries before asking whether it can serve us.
+            load_manager_.add_to_queue(dir.actor_id, row, identifier);
 
             // TODO: insert to queue
 

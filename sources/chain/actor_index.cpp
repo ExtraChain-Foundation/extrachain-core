@@ -145,6 +145,9 @@ void ActorIndex::network_actors_request(const std::set<ActorId> &actors, const R
 void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &actors) {
     if (!sync_first_done_) {
         for (const auto &actor : actors) {
+            if (!actor.has_valid_id()) {
+                continue;
+            }
             auto id              = actor.id().to_string();
             actors_todo_map_[id] = actor;
         }
@@ -357,6 +360,9 @@ std::expected<void, ActorSaveError> ActorIndex::network_store_new_actor(const Ac
 }
 
 std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic> &actor) {
+    if (!actor.has_valid_id()) {
+        return std::unexpected(ActorSaveError::Undefined);
+    }
     auto result = this->add(actor.id(), actor.toJson());
 
     if (!result.has_value()) {

@@ -9,6 +9,7 @@
  */
 
 #include "runtime/runtime.h"
+#include "utils/exc_logs.h"
 
 #include <algorithm>
 #include <optional>
@@ -27,6 +28,19 @@ namespace ExtraChain::Core {
             : config(runtime_config)
             , storage_pool(runtime_config.storage_threads)
             , compute_pool(runtime_config.compute_threads) {
+        }
+
+        void run_io() {
+            for (;;) {
+                try {
+                    io_context.run();
+                    return;
+                } catch (const std::exception& error) {
+                    report_handler_exception("I/O", error.what());
+                } catch (...) {
+                    report_handler_exception("I/O", "non-standard exception");
+                }
+            }
         }
 
         RuntimeConfig            config;
@@ -60,6 +74,14 @@ namespace ExtraChain::Core {
         stop();
     }
 
+    void Runtime::report_handler_exception(const char* boundary, const char* detail) noexcept {
+        try {
+            eCritical("[Runtime] {} handler failed: {}", boundary, detail);
+        } catch (...) {
+            // A logging failure must not let the original error escape a pool worker.
+        }
+    }
+
     void Runtime::start() {
         const auto       state = state_;
         std::scoped_lock lock(state->lifecycle_mutex);
@@ -74,7 +96,7 @@ namespace ExtraChain::Core {
         state->io_threads.reserve(state->config.io_threads);
         for (std::size_t index = 0; index < state->config.io_threads; ++index) {
             state->io_threads.emplace_back([state]() {
-                state->io_context.run();
+                state->run_io();
             });
         }
     }
@@ -90,7 +112,7 @@ namespace ExtraChain::Core {
                 state->work_guard.emplace(boost::asio::make_work_guard(state->io_context));
             }
         }
-        state->io_context.run();
+        state->run_io();
     }
 
     void Runtime::request_stop() {

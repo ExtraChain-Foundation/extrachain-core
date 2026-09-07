@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <stdexcept>
 #include <cstdint>
 #include <string>
 #include <expected>
@@ -145,7 +146,14 @@ public:
         std::string num = msgpack_o.as<std::string>();
         // Mirror msgpack_pack: the active WireFormat scope decides the encoding,
         // never the content. Legacy peers send hex; canonical peers send decimal.
-        *this = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? from_hex(num) : BigNumber(num);
+        const auto value =
+            BigNumber::create(num,
+                              WireFormat::get_mode() == WireFormat::Mode::Legacy ? NumeralBase::Hex
+                                                                                 : NumeralBase::Dec);
+        if (!value.has_value()) {
+            throw std::invalid_argument("Invalid BigNumber wire value");
+        }
+        *this = value.value();
     }
 };
 

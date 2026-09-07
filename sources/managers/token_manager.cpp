@@ -27,6 +27,7 @@
 #include "network/network_service.h"
 #include "network/wire_format.h"
 #include "utils/exc_utils.h"
+#include "utils/msgpack_limits.h"
 #include "contracts/contract_manager.h"
 #include "contracts/contract_codec.h"
 #include "contracts/contract_transaction.h"
@@ -113,7 +114,12 @@ namespace {
     bool decode_boolean(std::span<const std::uint8_t> value) {
         try {
             std::size_t offset = 0;
-            auto        data = msgpack::unpack(reinterpret_cast<const char *>(value.data()), value.size(), offset);
+            auto        data   = msgpack::unpack(reinterpret_cast<const char *>(value.data()),
+                                        value.size(),
+                                        offset,
+                                        nullptr,
+                                        nullptr,
+                                        MessagePack::unpack_limits(value.size()));
             return offset == value.size() && data.get().as<bool>();
         } catch (const std::exception &) {
             return false;
@@ -123,7 +129,12 @@ namespace {
     std::optional<std::string> decode_string(std::span<const std::uint8_t> value) {
         try {
             std::size_t offset = 0;
-            auto        data = msgpack::unpack(reinterpret_cast<const char *>(value.data()), value.size(), offset);
+            auto        data   = msgpack::unpack(reinterpret_cast<const char *>(value.data()),
+                                        value.size(),
+                                        offset,
+                                        nullptr,
+                                        nullptr,
+                                        MessagePack::unpack_limits(value.size()));
             if (offset != value.size()) {
                 return std::nullopt;
             }
@@ -136,7 +147,12 @@ namespace {
     std::optional<std::uint64_t> decode_unsigned(std::span<const std::uint8_t> value) {
         try {
             std::size_t offset = 0;
-            auto        data = msgpack::unpack(reinterpret_cast<const char *>(value.data()), value.size(), offset);
+            auto        data   = msgpack::unpack(reinterpret_cast<const char *>(value.data()),
+                                        value.size(),
+                                        offset,
+                                        nullptr,
+                                        nullptr,
+                                        MessagePack::unpack_limits(value.size()));
             if (offset != value.size()) {
                 return std::nullopt;
             }
@@ -249,8 +265,12 @@ namespace {
     std::optional<TokenInitData> decode_token_init(std::span<const std::uint8_t> arguments) {
         try {
             std::size_t offset = 0;
-            auto        handle =
-                msgpack::unpack(reinterpret_cast<const char *>(arguments.data()), arguments.size(), offset);
+            auto        handle = msgpack::unpack(reinterpret_cast<const char *>(arguments.data()),
+                                          arguments.size(),
+                                          offset,
+                                          nullptr,
+                                          nullptr,
+                                          MessagePack::unpack_limits(arguments.size()));
             const auto &root = handle.get();
             if (offset != arguments.size() || root.type != msgpack::type::ARRAY
                 || (root.via.array.size != 4 && root.via.array.size != 5)) {
@@ -271,8 +291,12 @@ namespace {
         std::span<const std::uint8_t> arguments) {
         try {
             std::size_t offset = 0;
-            auto        handle =
-                msgpack::unpack(reinterpret_cast<const char *>(arguments.data()), arguments.size(), offset);
+            auto        handle = msgpack::unpack(reinterpret_cast<const char *>(arguments.data()),
+                                          arguments.size(),
+                                          offset,
+                                          nullptr,
+                                          nullptr,
+                                          MessagePack::unpack_limits(arguments.size()));
             const auto &root = handle.get();
             if (offset != arguments.size() || root.type != msgpack::type::ARRAY || root.via.array.size != 2) {
                 return std::nullopt;

@@ -51,6 +51,10 @@ namespace ExtraChain::Consensus {
                                                                     std::uint64_t        round = 0);
         std::expected<TimeoutVote, ConsensusError>    make_timeout_vote(std::uint64_t height, std::uint64_t round);
         std::expected<void, ConsensusError>           observe_proposal(const Proposal& proposal);
+        /// A proposal carried by a verified finality proof: checked structurally and
+        /// stored, without the live-proposal validator (its batch is validated by the
+        /// sync path itself, and its certificates were verified with the proof).
+        std::expected<void, ConsensusError>              observe_certified_proposal(const Proposal& proposal);
         std::expected<void, ConsensusError>           stage_batch(SectionBatchData batch);
         std::expected<void, ConsensusError>           stage_batch_for_vote(SectionBatchData batch);
         std::expected<Vote, ConsensusError>           accept_proposal(const Proposal& proposal);
@@ -59,7 +63,13 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError> accept_timeout_certificate(const TimeoutCertificate& certificate);
         std::expected<std::optional<FinalizedCheckpoint>, ConsensusError> accept_certificate(
             const QuorumCertificate& certificate);
+        /// Finalize checkpoints that were held back earlier because their payload or
+        /// a lower height was still missing. Returns them oldest first; empty when
+        /// there is nothing left to catch up on.
+        std::vector<FinalizedCheckpoint> resume_deferred_finalization();
 
+        /// True once a quorum has certified this header — voting on it is settled.
+        [[nodiscard]] bool certified(const std::string& header_hash) const;
         [[nodiscard]] bool verify_certificate(const QuorumCertificate& certificate) const;
         [[nodiscard]] bool verify_timeout_certificate(const TimeoutCertificate& certificate) const;
         [[nodiscard]] bool verify_finality_proof(const FinalityProof& proof) const;

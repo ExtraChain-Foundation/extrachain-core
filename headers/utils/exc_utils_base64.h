@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <expected>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -56,19 +57,20 @@ namespace Utils {
             if (input.empty()) {
                 return Container {};
             }
-            const auto padding      = input.find('=');
-            const auto encoded_size = padding == std::string::npos ? input.size() : padding;
+            const std::string_view encoded(input);
+            const auto             padding      = encoded.find('=');
+            const auto             encoded_size = padding == std::string::npos ? input.size() : padding;
             if (encoded_size % 4 == 1) {
                 return std::unexpected(Base64Error::InvalidPadding);
             }
             if (padding != std::string::npos
                 && (input.size() % 4 != 0 || input.size() - padding > 2
-                    || !std::ranges::all_of(input.substr(padding), [](char character) {
+                    || !std::ranges::all_of(encoded.substr(padding), [](char character) {
                            return character == '=';
                        }))) {
                 return std::unexpected(Base64Error::InvalidPadding);
             }
-            if (!std::ranges::all_of(input.substr(0, encoded_size), [](unsigned char character) {
+            if (!std::ranges::all_of(encoded.substr(0, encoded_size), [](unsigned char character) {
                     return (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z')
                            || (character >= '0' && character <= '9') || character == '+' || character == '/'
                            || character == '-' || character == '_';
@@ -76,18 +78,30 @@ namespace Utils {
                 return std::unexpected(Base64Error::InvalidInput);
             }
 
-            std::string canonical_input = input.substr(0, encoded_size);
-            for (char &character : canonical_input) {
-                if (character == '+') {
-                    character = '-';
-                } else if (character == '/') {
-                    character = '_';
+            auto        canonical_input = encoded.substr(0, encoded_size);
+            std::string normalized;
+            if (canonical_input.find_first_of("+/") != std::string_view::npos) {
+                normalized.assign(canonical_input);
+                for (char &character : normalized) {
+                    if (character == '+') {
+                        character = '-';
+                    } else if (character == '/') {
+                        character = '_';
+                    }
                 }
+                canonical_input = normalized;
             }
 
-            std::vector<unsigned char> decoded(canonical_input.size());
-            std::size_t                decoded_size = 0;
-            if (sodium_base642bin(decoded.data(),
+            using Buffer = std::conditional_t<std::is_same_v<Container, std::string>
+                                                  || std::is_same_v<Container, std::vector<unsigned char>>
+                                                  || std::is_same_v<Container, std::vector<char>>,
+                                              Container,
+                                              std::vector<unsigned char>>;
+            Buffer decoded;
+            decoded.resize((encoded_size / 4) * 3 + (encoded_size % 4) * 3 / 4);
+            std::size_t decoded_size = 0;
+            // libsodium rejects nonzero trailing bits as part of decoding.
+            if (sodium_base642bin(reinterpret_cast<unsigned char *>(decoded.data()),
                                   decoded.size(),
                                   canonical_input.data(),
                                   canonical_input.size(),
@@ -100,14 +114,11 @@ namespace Utils {
             }
             decoded.resize(decoded_size);
 
-            if (to_base64(decoded) != canonical_input) {
-                return std::unexpected(Base64Error::InvalidPadding);
+            if constexpr (std::is_same_v<Container, Buffer>) {
+                return decoded;
+            } else {
+                return Container(decoded.begin(), decoded.end());
             }
-
-            if constexpr (std::is_same_v<Container, std::string>) {
-                return std::string(decoded.begin(), decoded.end());
-            }
-            return Container(decoded.begin(), decoded.end());
         } catch (...) {
             return std::unexpected(Base64Error::InvalidInput);
         }

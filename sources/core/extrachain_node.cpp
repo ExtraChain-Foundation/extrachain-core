@@ -66,6 +66,7 @@
 #include "contracts/toolchain_registry.h"
 #include "consensus/consensus_service.h"
 #include "utils/exc_utils.h"
+#include "utils/msgpack_limits.h"
 
 std::atomic<bool> node_enabled { true };
 
@@ -195,7 +196,10 @@ namespace {
                 std::size_t offset = 0;
                 auto        handle = msgpack::unpack(reinterpret_cast<const char*>(effect.arguments.data()),
                                               effect.arguments.size(),
-                                              offset);
+                                              offset,
+                                              nullptr,
+                                              nullptr,
+                                              MessagePack::unpack_limits(effect.arguments.size()));
                 std::tuple<std::string, std::string, std::string, std::string> binding;
                 handle.get().convert(binding);
                 const auto  owner   = ActorId::create(effect.target);
@@ -221,6 +225,9 @@ namespace {
 } // namespace
 
 namespace ExtraChain::Core {
+    namespace {
+        std::atomic<ExtraChainNode*> active_node { nullptr };
+    }
 
     ExtraChainNode::ExtraChainNode(bool                          is_client_application,
                                    bool                          is_custom_app,
@@ -252,13 +259,15 @@ namespace ExtraChain::Core {
     }
 
     void ExtraChainNode::process() {
-        static bool singleton = false;
-        if (!singleton)
-            singleton = true;
-        else
+        ExtraChainNode* expected = nullptr;
+        if (!active_node.compare_exchange_strong(expected, this)) {
+            if (expected == this) {
+                return;
+            }
             eFatal("Two instances of Node");
+        }
 
-        if (sodium_init() != 0) {
+        if (sodium_init() < 0) {
             eFatal("Encryption init error");
             node_enabled.store(false);
             return;
@@ -399,6 +408,8 @@ namespace ExtraChain::Core {
         stop_runtime_tasks();
         release_core();
         eLog("ExtraChainNode::~ExtraChainNode");
+        ExtraChainNode* expected = this;
+        active_node.compare_exchange_strong(expected, nullptr);
         if (cleanup_callback_) {
             cleanup_callback_();
         }
@@ -1063,7 +1074,15 @@ namespace ExtraChain::Core {
 
     void ExtraChainNode::start() {
         if (consensus_service_ && !actor_index_->network_id().is_zero()) {
-            const auto activated = consensus_service_->activate(actor_index_->network_id());
+            auto activated = consensus_service_->activate(actor_index_->network_id());
+            if (!activated.has_value() && activated.error() == Consensus::ConsensusError::BootstrapIncomplete) {
+                const auto prepared = consensus_service_->prepare_observer_bootstrap(actor_index_->network_id());
+                if (prepared.has_value()) {
+                    activated = consensus_service_->activate(actor_index_->network_id());
+                } else {
+                    activated = std::unexpected(prepared.error());
+                }
+            }
             if (!activated.has_value()) {
                 eCritical("[Consensus] Cannot activate shadow certification: {}",
                           std::to_underlying(activated.error()));

@@ -1,0 +1,14 @@
+[package]
+name = "extrachain-depth-fixture"
+version = "0.1.0"
+edition = "2024"
+[lib]
+crate-type = ["cdylib"]
+[dependencies]
+extrachain-contract-sdk = { path = "../../../contracts-rs/sdk" }
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true

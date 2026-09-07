@@ -24,6 +24,7 @@
 #include "chain/transaction.h"
 #include "encryption/key_public.h"
 #include "core/extrachain_node.h"
+#include "network/network_runtime.h"
 #include "utils/db_connector.h"
 #include "utils/exc_utils.h"
 #include "utils/file_io.h"
@@ -35,18 +36,22 @@ namespace {
 
     // Per-section hash exactly as hash_interval() composes it (independent reimpl, so
     // a bug in the production path is caught rather than mirrored).
-    std::string section_component(Dag *dag, const SectionId &i) {
+    std::string section_component(Dag *dag, const SectionId &i, long long &missing_reads) {
         auto section = dag->read_section(i);
-        bool empty   = !section.has_value() || section->transactions.empty();
+        if (!section.has_value()) {
+            ++missing_reads;
+            std::printf("  [ctrl] cannot read section %s\n", i.to_string().c_str());
+        }
+        const bool empty = !section.has_value() || section.value().transactions.empty();
         if (empty)
             return Utils::calculate_hash(i.to_string());
         return Utils::calculate_hash(i.to_string() + section->calculate_hash());
     }
 
-    std::string interval_hash(Dag *dag, const SectionId &from, const SectionId &to) {
+    std::string interval_hash(Dag *dag, const SectionId &from, const SectionId &to, long long &missing_reads) {
         std::string acc;
         for (SectionId i = from; i <= to; i++)
-            acc += section_component(dag, i);
+            acc += section_component(dag, i, missing_reads);
         return Utils::calculate_hash(acc);
     }
 
@@ -83,6 +88,8 @@ int main(int argc, char *argv[]) {
     }
 
     auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 17600);
+    // Live timers and peer sync can change the store between audit passes.
+    node->network_runtime().stop();
     node->process();
     const auto login_hash = role == "seed"
                                 ? Utils::calculate_hash(LOGIN + PASSWORD)
@@ -93,6 +100,7 @@ int main(int argc, char *argv[]) {
         return 2;
     }
     node->dag()->set_mode(DagMode::Full);
+    node->dag()->stop();
     auto *dag = node->dag();
 
     SectionId first      = dag->first_saved_section();
@@ -109,16 +117,16 @@ int main(int argc, char *argv[]) {
     for (SectionId i = first; i <= cur; i++) {
         auto section = dag->read_section(i);
         if (!section.has_value()) {
-            // section 0..first edges or genuinely-empty slots may be absent; only
-            // flag a gap if it's a hole between present sections.
             sec_missing++;
+            if (sec_missing <= 5)
+                std::printf("  [section] cannot read section %s\n", i.to_string().c_str());
             continue;
         }
         sec_ok++;
         for (const auto &tx : section->transactions) {
             tx_total++;
-            auto nh = const_cast<Transaction &>(tx).calculate_hash();
-            auto lh = const_cast<Transaction &>(tx).calculate_hash_hex();
+            auto nh = tx.calculate_hash();
+            auto lh = tx.calculate_hash_hex();
             if (tx.hash() != nh && tx.hash() != lh) {
                 tx_bad_hash++;
                 if (tx_bad_hash <= 5)
@@ -152,16 +160,16 @@ int main(int argc, char *argv[]) {
                 tx_bad_hash,
                 tx_bad_sig,
                 tx_no_actor);
-    total_fail += tx_bad_hash + tx_bad_sig;
+    total_fail += sec_missing + tx_bad_hash + tx_bad_sig + tx_no_actor;
 
     // 3. Control chain --------------------------------------------------------
     // Recompute the chain independently and compare to stored control at each
     // boundary. start=0 -> interval [0..0]; start=1,21,... -> [start..start+19].
-    long long   ctrl_checked = 0, ctrl_mismatch = 0, ctrl_missing = 0;
+    long long   ctrl_checked = 0, ctrl_mismatch = 0, ctrl_missing = 0, ctrl_missing_reads = 0;
     std::string last_hash;
     // genesis control at section 0
     {
-        last_hash   = interval_hash(dag, SectionId(0), SectionId(0));
+        last_hash   = interval_hash(dag, SectionId(0), SectionId(0), ctrl_missing_reads);
         auto stored = dag->read_control(SectionId(0));
         ctrl_checked++;
         if (!stored.has_value())
@@ -174,7 +182,7 @@ int main(int argc, char *argv[]) {
     // chained intervals: start = 1, 21, 41, ... end = start+19 (the %20 boundary)
     for (SectionId start(1); start + SectionId(CTRL_MOD - 1) <= closed_tip; start += CTRL_MOD) {
         SectionId end = start + SectionId(CTRL_MOD - 1); // a multiple of 20
-        auto      ih  = interval_hash(dag, start, end);
+        auto      ih  = interval_hash(dag, start, end, ctrl_missing_reads);
         last_hash     = Utils::calculate_hash(last_hash + ih);
         auto stored   = dag->read_control(end);
         ctrl_checked++;
@@ -192,7 +200,7 @@ int main(int argc, char *argv[]) {
                 ctrl_checked,
                 ctrl_mismatch,
                 ctrl_missing);
-    total_fail += ctrl_mismatch + ctrl_missing;
+    total_fail += ctrl_mismatch + ctrl_missing + ctrl_missing_reads;
 
     // 4. Control index vs sections -------------------------------------------
     long long ci_checked = 0, ci_mismatch = 0;
@@ -223,7 +231,7 @@ int main(int argc, char *argv[]) {
                     cur.to_string().c_str(),
                     tip_ok ? "yes" : "NO",
                     past_ok ? "yes" : "NO");
-        if (!tip_ok)
+        if (!tip_ok || !past_ok)
             total_fail++;
     }
 
@@ -237,6 +245,8 @@ int main(int argc, char *argv[]) {
             for (SectionId section_id(0); section_id <= cache_section; section_id += SectionId(1)) {
                 const auto section = dag->read_section(section_id);
                 if (!section.has_value()) {
+                    std::printf("  [balance] cannot read section %s\n", section_id.to_string().c_str());
+                    ++total_fail;
                     continue;
                 }
                 for (const auto &transaction : section->transactions) {

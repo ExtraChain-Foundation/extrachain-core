@@ -12,6 +12,7 @@
 
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "contracts/contract_manager.h"
 
@@ -42,6 +43,9 @@ namespace ExtraChain::Contracts {
         Dag                                                    *dag_ = nullptr;
         mutable std::mutex                                      mutex_;
         mutable std::unordered_map<std::string, ContractRecord> heads_;
+        mutable std::unordered_set<std::string>                 absent_contracts_;
+        mutable std::uint64_t                                   absence_revision_ = 0;
+        mutable std::string                                     absence_range_;
     };
 
 } // namespace ExtraChain::Contracts

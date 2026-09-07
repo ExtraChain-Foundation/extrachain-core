@@ -17,6 +17,7 @@
 
 #include "contracts/contract_hash.h"
 #include "utils/exc_utils_base64.h"
+#include "utils/msgpack_limits.h"
 
 namespace ExtraChain::Contracts::Codec {
     namespace {
@@ -212,8 +213,12 @@ namespace ExtraChain::Contracts::Codec {
     std::expected<std::string, ContractFailure> decode_json(std::span<const std::uint8_t> value) {
         try {
             std::size_t offset = 0;
-            const auto  handle =
-                msgpack::unpack(reinterpret_cast<const char *>(value.data()), value.size(), offset);
+            const auto  handle = msgpack::unpack(reinterpret_cast<const char *>(value.data()),
+                                                value.size(),
+                                                offset,
+                                                nullptr,
+                                                nullptr,
+                                                MessagePack::unpack_limits(value.size()));
             if (offset != value.size()) {
                 return std::unexpected(
                     ContractFailure { ContractError::InvalidResponse, "MessagePack value has trailing data" });
@@ -227,8 +232,12 @@ namespace ExtraChain::Contracts::Codec {
     std::expected<ContractOutput, ContractFailure> decode_response(std::span<const std::uint8_t> response) {
         try {
             std::size_t offset = 0;
-            auto        handle =
-                msgpack::unpack(reinterpret_cast<const char *>(response.data()), response.size(), offset);
+            auto        handle = msgpack::unpack(reinterpret_cast<const char *>(response.data()),
+                                          response.size(),
+                                          offset,
+                                          nullptr,
+                                          nullptr,
+                                          MessagePack::unpack_limits(response.size()));
             const auto &root = handle.get();
             if (offset != response.size() || root.type != msgpack::type::ARRAY || root.via.array.size != 6) {
                 return std::unexpected(
@@ -316,7 +325,12 @@ namespace ExtraChain::Contracts::Codec {
         std::span<const std::uint8_t> encoded) {
         try {
             std::size_t offset = 0;
-            auto handle = msgpack::unpack(reinterpret_cast<const char *>(encoded.data()), encoded.size(), offset);
+            auto        handle = msgpack::unpack(reinterpret_cast<const char *>(encoded.data()),
+                                          encoded.size(),
+                                          offset,
+                                          nullptr,
+                                          nullptr,
+                                          MessagePack::unpack_limits(encoded.size()));
             const auto &root = handle.get();
             if (offset != encoded.size() || root.type != msgpack::type::ARRAY
                 || root.via.array.size > ContractMaximumEffects) {

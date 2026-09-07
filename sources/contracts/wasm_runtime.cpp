@@ -99,10 +99,10 @@ namespace ExtraChain::Contracts {
                 trim();
             }
 
-            wasm_module_t find(std::span<const std::uint8_t> bytes, std::string_view hash) {
+            wasm_module_t find(std::size_t byte_count, std::string_view hash) {
                 for (auto &entry : entries_) {
-                    if (entry->hash == hash && entry->bytes.size() == bytes.size()
-                        && std::equal(entry->bytes.begin(), entry->bytes.end(), bytes.begin())) {
+                    // WAMR rewrites its backing bytes when it loads a module.
+                    if (entry->hash == hash && entry->bytes.size() == byte_count) {
                         entry->used = ++clock_;
                         return entry->module;
                     }
@@ -238,6 +238,17 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ExecutionError::InputTooLarge, "Contract input cannot be addressed"));
         }
 
+        const auto policy_result =
+            Internal::validate_wasm_policy(module_bytes, limits_.linear_memory_bytes / (64 * 1024));
+        if (policy_result == Internal::WasmPolicyResult::FloatingPoint) {
+            return std::unexpected(
+                failure(ExecutionError::InvalidModule, "Contract modules cannot use floating-point values"));
+        }
+        if (policy_result == Internal::WasmPolicyResult::Invalid) {
+            return std::unexpected(failure(ExecutionError::InvalidModule,
+                                           "Contract module is malformed or exceeds its memory limit"));
+        }
+
         ExecutionSlot execution_slot(execution_slots_);
 
         if (!thread_environment().ready()) {
@@ -249,29 +260,15 @@ namespace ExtraChain::Contracts {
         auto                              &module_cache = thread_module_cache();
         module_cache.configure(tuning_.module_cache_entries,
                                std::max(tuning_.module_cache_bytes, module_bytes.size()));
-        std::string computed_hash;
-        if (module_hash.empty())
-            computed_hash = content_hash(module_bytes);
-        const auto    hash   = module_hash.empty() ? std::string_view(computed_hash) : module_hash;
-        wasm_module_t module = module_cache.find(module_bytes, hash);
+        auto computed_hash = content_hash(module_bytes);
+        if (!module_hash.empty() && computed_hash != module_hash) {
+            return std::unexpected(
+                failure(ExecutionError::InvalidModule, "Contract module hash does not match its bytes"));
+        }
+        wasm_module_t module = module_cache.find(module_bytes.size(), computed_hash);
         if (module == nullptr) {
-            if (!module_hash.empty()) {
-                computed_hash = content_hash(module_bytes);
-                if (computed_hash != module_hash) {
-                    return std::unexpected(
-                        failure(ExecutionError::InvalidModule, "Contract module hash does not match its bytes"));
-                }
-            }
-            const auto policy_result = Internal::validate_wasm_policy(module_bytes);
-            if (policy_result == Internal::WasmPolicyResult::FloatingPoint) {
-                return std::unexpected(
-                    failure(ExecutionError::InvalidModule, "Contract modules cannot use floating-point values"));
-            }
-            if (policy_result == Internal::WasmPolicyResult::Invalid) {
-                return std::unexpected(failure(ExecutionError::InvalidModule, "Contract module is malformed"));
-            }
             module = module_cache.load(module_bytes,
-                                       module_hash.empty() ? std::move(computed_hash) : std::string(module_hash),
+                                       std::move(computed_hash),
                                        error_buffer.data(),
                                        error_buffer.size());
         }

@@ -56,6 +56,39 @@ int main() {
     auto receiver     = make_actor(ActorType::User);
     auto other_sender = make_actor(ActorType::User);
 
+    const auto        cache_key       = Utils::to_base64(sender.key().public_key());
+    const std::string cache_payload   = "immutable signature validation";
+    const auto        cache_signature = sign_payload(sender.key(), cache_payload).value();
+    check("valid payload signature primes repeated verification",
+          verify_payload(cache_key, cache_payload, cache_signature)
+              && verify_payload(cache_key, cache_payload, cache_signature));
+    auto changed_signature    = cache_signature;
+    changed_signature.front() = changed_signature.front() == 'A' ? 'B' : 'A';
+    check("repeated verification rejects a changed signature",
+          !verify_payload(cache_key, cache_payload, changed_signature));
+    check("repeated verification rejects a changed payload",
+          !verify_payload(cache_key, cache_payload + "changed", cache_signature));
+    check("repeated verification rejects a different key",
+          !verify_payload(Utils::to_base64(other_sender.key().public_key()), cache_payload, cache_signature));
+    check("repeated verification rejects an empty payload", !verify_payload(cache_key, {}, cache_signature));
+    bool cache_pressure_valid = true;
+    for (std::size_t index = 0; index < 1025; ++index) {
+        const auto payload   = "distinct signed payload " + std::to_string(index);
+        const auto signature = sign_payload(sender.key(), payload);
+        if (!signature.has_value() || !verify_payload(cache_key, payload, signature.value())) {
+            cache_pressure_valid = false;
+            break;
+        }
+    }
+    check("verification remains correct after cache pressure",
+          cache_pressure_valid && verify_payload(cache_key, cache_payload, cache_signature)
+              && !verify_payload(cache_key, cache_payload, changed_signature));
+    const std::string large_payload(4097, 'x');
+    const auto        large_signature = sign_payload(sender.key(), large_payload).value();
+    check("large signed payloads remain valid without caching",
+          verify_payload(cache_key, large_payload, large_signature)
+              && !verify_payload(cache_key, large_payload + "x", large_signature));
+
     TransactionIntentV2 first {
         .network_id           = network.id(),
         .sender               = sender.id(),

@@ -33,6 +33,10 @@
 #include "network/peer_context.h"
 #include "network/peer_meta.h"
 
+namespace Cryptography {
+    class BoxSession;
+}
+
 enum class SocketMode {
     Full,
     Light
@@ -73,7 +77,7 @@ public:
     };
 
     explicit SocketService(PeerContext& context);
-    virtual ~SocketService() = default;
+    virtual ~SocketService();
 
     SocketService(const SocketService&)            = delete;
     SocketService& operator=(const SocketService&) = delete;
@@ -124,6 +128,7 @@ public:
     std::function<void(Ptr, std::string, std::string, std::string)> on_message;
 
 protected:
+    bool set_peer_key(const PublicKey& key);
     bool check_first_message(const HandshakeMessage& message);
     Data generate_first_message();
     Data prepare_send_message(const Data& message);
@@ -157,9 +162,10 @@ protected:
     static constexpr std::int64_t MAX_BUFFER_SIZE       = 1024 * 1024;
     bool                          waiting_buffer_space_ = false;
 
-    KeyPrivate private_key_;
-    KeyPublic  public_key_;
-    bool       public_key_received_ = false;
+    std::unique_ptr<Cryptography::BoxSession> box_session_;
+    KeyPrivate                                private_key_;
+    KeyPublic                                 public_key_;
+    bool                                      public_key_received_ = false;
 };
 
 BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,

@@ -118,12 +118,16 @@ public:
         public_key[0] = 1;
 
         Actor<KeyPublic> actor;
-        actor.set_id(ActorId("abc"));
+        const auto       actor_id =
+            ActorId::create(Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Blake3)
+                                .substr(0, ActorId::SIZE));
+        TEST_REQUIRE(actor_id.has_value());
+        actor.set_id(actor_id.value());
         actor.set_type(ActorType::Service);
         actor.set_public_key(public_key);
 
-        constexpr auto Expected =
-            R"(["0000000000000000000000000000000000000abc",2,"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"])";
+        const auto Expected =
+            "[\"" + actor.id().to_string() + R"(",2,"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"])";
         const auto encoded = actor.toJson();
         TEST_REQUIRE_EQ(encoded, std::string(Expected));
 
@@ -145,6 +149,8 @@ public:
 
         TEST_REQUIRE(Actor<KeyPublic>::fromJson("").empty());
         TEST_REQUIRE(Actor<KeyPublic>::fromJson("not-json").empty());
+        TEST_REQUIRE(!Json::deserialize<PublicKey>(std::string(R"("%%invalid%%")")).has_value());
+        TEST_REQUIRE(!Json::deserialize<PublicKey>(std::string(R"("AQ")")).has_value());
         TEST_REQUIRE(
             Actor<KeyPublic>::fromJson(R"(["abc",8,"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"])").empty());
         TEST_REQUIRE(Actor<KeyPublic>::fromJson(R"(["abc",2,"AQ"])").empty());
@@ -508,6 +514,20 @@ public:
         TEST_REQUIRE(float_hex.has_value());
         TEST_REQUIRE_EQ(float_hex->to_string(), std::string("10.5"));
         TEST_REQUIRE(!BigNumberFloat::create("a.5.1", NumeralBase::Hex).has_value());
+
+        for (const auto mode : { WireFormat::Mode::Canonical, WireFormat::Mode::Legacy }) {
+            WireFormat::Scope scope(mode);
+            for (const std::string invalid : { "inf", "nan", "-inf", "1.2.3", "garbage" }) {
+                const auto wire = MessagePack::serialize(invalid);
+                TEST_REQUIRE(!MessagePack::deserialize<BigNumber>(wire).has_value());
+                TEST_REQUIRE(!MessagePack::deserialize<BigNumberFloat>(wire).has_value());
+                const auto json = Json::serialize(invalid);
+                TEST_REQUIRE(!Json::deserialize<BigNumber>(json).has_value());
+                TEST_REQUIRE(!Json::deserialize<BigNumberFloat>(json).has_value());
+            }
+        }
+        TEST_REQUIRE(!BigNumberFloat::create("invalid").has_value());
+        TEST_REQUIRE(!BigNumberFloat::create("nan").has_value());
 
         TEST_REQUIRE_EQ(BigNumber("12345").to_printable_string(), std::string("12345"));
         TEST_REQUIRE_EQ(BigNumber("1234567").to_printable_string(), std::string("1 234 567"));

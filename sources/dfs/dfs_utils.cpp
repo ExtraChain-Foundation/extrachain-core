@@ -19,6 +19,8 @@
 
 #include "dfs/dfs_utils.h"
 
+#include <limits>
+
 #include "chain/actor.h"
 #include "utils/fs_path.h"
 
@@ -801,8 +803,31 @@ std::expected<uint64_t, Dfs::Tables::DirsFile::DirsSpace::DirsError> Dfs::Tables
 void Dfs::Tables::DirsFile::DirsSpace::update_row(const std::shared_ptr<DbConnector> db,
                                                   const ActorId                     &actor_id,
                                                   std::uint64_t                      last_modified) {
-    auto dirs_row = DirsRow { .actor_id = actor_id, .last_modified = last_modified };
-    insert(db, dirs_row);
+    if (last_modified > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        eWarning("[DirsManager] Directory timestamp is out of range for {}", actor_id);
+        return;
+    }
+    // Each owner has its own clock. The atomic maximum also prevents an older
+    // concurrent update from replacing a newer timestamp for the same owner.
+    const auto query = fmt::format(
+        "INSERT INTO Dirs(actor_id, last_modified) VALUES(?, {}) "
+        "ON CONFLICT(actor_id) DO UPDATE SET last_modified = MAX(Dirs.last_modified, excluded.last_modified) "
+        "RETURNING actor_id",
+        last_modified);
+    if (db->select(query, TableNameDirs, { { "actor_id", actor_id.to_string() } }).size() != 1) {
+        eWarning("[DirsManager] Cannot update directory index for {}", actor_id);
+    }
+}
+
+void Dfs::Tables::DirsFile::DirsSpace::update_from_files(const std::shared_ptr<DbConnector> db,
+                                                         const ActorId                     &actor_id) {
+    db->select(
+        "INSERT INTO Dirs(actor_id, last_modified) "
+        "SELECT owner_id, MAX(last_modified) FROM ActorsFiles WHERE owner_id = ? GROUP BY owner_id "
+        "ON CONFLICT(actor_id) DO UPDATE SET last_modified = MAX(Dirs.last_modified, excluded.last_modified) "
+        "RETURNING actor_id",
+        TableNameActorsFiles,
+        { { "owner_id", actor_id.to_string() } });
 }
 
 void Dfs::initialize_actor_folder(const ActorId &actor_id) {

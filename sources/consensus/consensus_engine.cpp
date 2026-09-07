@@ -333,10 +333,17 @@ namespace ExtraChain::Consensus {
         if (!initialized_ || !identity_.has_value()) {
             return std::unexpected(ConsensusError::NotValidator);
         }
+        // Live validation uses the current ledger. Finalized history belongs to
+        // the verified proof path and must not be checked against a newer state.
+        if (proposal.header.height <= safety_state_.finalized_height) {
+            return std::unexpected(ConsensusError::Replay);
+        }
         if (!verify_proposal(proposal)) {
             return std::unexpected(ConsensusError::InvalidSignature);
         }
-        if (!batches_.contains(hash_header(proposal.header))) {
+        if ((proposal.parent_certificate.phase != Phase::Genesis
+             && !proposals_.contains(proposal.parent_certificate.header_hash))
+            || !batches_.contains(hash_header(proposal.header))) {
             return std::unexpected(ConsensusError::DataUnavailable);
         }
         if (proposal_validator_) {
@@ -346,10 +353,15 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(validated.error());
             }
             lock.lock();
+            if (proposal.header.height <= safety_state_.finalized_height) {
+                return std::unexpected(ConsensusError::Replay);
+            }
             if (!initialized_ || !identity_.has_value() || !verify_proposal(proposal)) {
                 return std::unexpected(ConsensusError::NotValidator);
             }
-            if (!batches_.contains(hash_header(proposal.header))) {
+            if ((proposal.parent_certificate.phase != Phase::Genesis
+                 && !proposals_.contains(proposal.parent_certificate.header_hash))
+                || !batches_.contains(hash_header(proposal.header))) {
                 return std::unexpected(ConsensusError::DataUnavailable);
             }
         }
@@ -397,6 +409,11 @@ namespace ExtraChain::Consensus {
         if (!initialized_) {
             return std::unexpected(ConsensusError::NotReady);
         }
+        // Live validation uses the current ledger. Finalized history belongs to
+        // the verified proof path and must not be checked against a newer state.
+        if (proposal.header.height <= safety_state_.finalized_height) {
+            return std::unexpected(ConsensusError::Replay);
+        }
         if (!verify_proposal(proposal)) {
             return std::unexpected(ConsensusError::InvalidSignature);
         }
@@ -407,9 +424,24 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(validated.error());
             }
             lock.lock();
+            if (proposal.header.height <= safety_state_.finalized_height) {
+                return std::unexpected(ConsensusError::Replay);
+            }
             if (!initialized_ || !verify_proposal(proposal)) {
                 return std::unexpected(ConsensusError::NotReady);
             }
+        }
+        proposals_.insert_or_assign(hash_header(proposal.header), proposal);
+        return {};
+    }
+
+    std::expected<void, ConsensusError> ConsensusEngine::observe_certified_proposal(const Proposal& proposal) {
+        std::lock_guard lock(mutex_);
+        if (!initialized_) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        if (!verify_proposal(proposal)) {
+            return std::unexpected(ConsensusError::InvalidSignature);
         }
         proposals_.insert_or_assign(hash_header(proposal.header), proposal);
         return {};
@@ -620,7 +652,12 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidCertificate);
         }
         const auto proposal = proposals_.find(certificate.header_hash);
-        if (certificate.phase != Phase::Genesis && proposal == proposals_.end()) {
+        // No proposal is ever stored for the genesis header, and the state we would
+        // persist below dereferences this iterator unconditionally. A genesis
+        // certificate is verifiable by anyone, so accepting one off the wire used to
+        // walk straight into an end() dereference; there is nothing to learn from it
+        // either, since initialize() already installs it.
+        if (proposal == proposals_.end()) {
             return std::unexpected(ConsensusError::InvalidParent);
         }
         auto next_state = safety_state_;
@@ -636,21 +673,28 @@ namespace ExtraChain::Consensus {
             next_state.locked_certificate = proposal->second.parent_certificate;
         }
 
-        auto finalized = finalization_for(certificate);
+        bool deferred_finalization = false;
+        auto finalized             = finalization_for(certificate);
         if (finalized.has_value() && finalized.value().height > next_state.finalized_height) {
             const bool first_epoch_checkpoint =
                 epoch_bootstrap_.has_value()
                 && next_state.finalized_height == epoch_bootstrap_.value().previous_finalized_height
                 && finalized.value().height == epoch_bootstrap_.value().activation_height;
-            if (!first_epoch_checkpoint
-                && (next_state.finalized_height == std::numeric_limits<std::uint64_t>::max()
-                    || finalized.value().height != next_state.finalized_height + 1)) {
-                return std::unexpected(ConsensusError::DataUnavailable);
+            const bool contiguous = first_epoch_checkpoint
+                                    || (next_state.finalized_height != std::numeric_limits<std::uint64_t>::max()
+                                        && finalized.value().height == next_state.finalized_height + 1);
+            // Finalizing out of order, or without the payload, is not allowed — but
+            // that is a reason to defer this checkpoint, not to forget a certificate
+            // a quorum already signed. We still report DataUnavailable so the caller
+            // starts a sync; what changed is that the certificate is kept first, so
+            // the deferred checkpoint can complete once the gap is filled instead of
+            // leaving the node behind for the rest of the run.
+            if (!contiguous || !batches_.contains(finalized.value().header_hash)) {
+                deferred_finalization = true;
+                finalized.reset();
+            } else {
+                next_state.finalized_height = finalized.value().height;
             }
-            if (!batches_.contains(finalized.value().header_hash)) {
-                return std::unexpected(ConsensusError::DataUnavailable);
-            }
-            next_state.finalized_height = finalized.value().height;
         } else {
             finalized.reset();
         }
@@ -676,7 +720,60 @@ namespace ExtraChain::Consensus {
             checkpoints_finalized_.fetch_add(1, std::memory_order_relaxed);
         }
         prune_memory(safety_state_.finalized_height);
+        if (deferred_finalization) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
         return finalized;
+    }
+
+    std::vector<FinalizedCheckpoint> ConsensusEngine::resume_deferred_finalization() {
+        std::lock_guard                  lock(mutex_);
+        std::vector<FinalizedCheckpoint> caught_up;
+        if (!initialized_) {
+            return caught_up;
+        }
+        // Walk forward one height at a time: a certificate we already hold may have
+        // been unfinalizable only because the height below it was, so every success
+        // can unlock the next one.
+        for (bool progressed = true; progressed;) {
+            progressed = false;
+            for (const auto& [_, certificate] : certificates_) {
+                const auto finalized = finalization_for(certificate);
+                if (!finalized.has_value() || finalized.value().height != safety_state_.finalized_height + 1
+                    || !batches_.contains(finalized.value().header_hash)) {
+                    continue;
+                }
+                const auto proof = finality_proof_for(certificate);
+                if (!proof.has_value()) {
+                    continue;
+                }
+                const auto proposal = proposals_.find(certificate.header_hash);
+                if (proposal == proposals_.end()) {
+                    continue;
+                }
+                auto next_state             = safety_state_;
+                next_state.finalized_height = finalized.value().height;
+                if (!store_->persist_certificate_state(certificate, proposal->second, next_state, proof)
+                         .has_value()) {
+                    continue;
+                }
+                safety_state_ = std::move(next_state);
+                finality_proofs_.insert_or_assign(finalized.value().height, proof.value());
+                checkpoints_finalized_.fetch_add(1, std::memory_order_relaxed);
+                caught_up.push_back(finalized.value());
+                progressed = true;
+                break;
+            }
+        }
+        if (!caught_up.empty()) {
+            prune_memory(safety_state_.finalized_height);
+        }
+        return caught_up;
+    }
+
+    bool ConsensusEngine::certified(const std::string& header_hash) const {
+        std::lock_guard lock(mutex_);
+        return certified_headers_.contains(header_hash);
     }
 
     bool ConsensusEngine::verify_certificate(const QuorumCertificate& certificate) const {

@@ -141,10 +141,11 @@ private:
     ExtraChain::Core::Event<RuntimeActivity>::Connection      runtime_activity_connection_;
 
     struct ReconnEntry {
+        std::string   identifier;
         std::uint64_t attempts        = 0;
         std::int64_t  next_attempt_ms = 0;
     };
-    std::map<std::string, ReconnEntry> reconn_;
+    std::map<NetworkReconnect, ReconnEntry> reconn_;
 
     SafePtr<std::map<std::string, std::pair<std::string, CacheTime>>>           messages_;
     std::shared_ptr<ExtraChain::Core::DeadlineTask>                             reconnect_timer_;
@@ -179,6 +180,22 @@ private:
         };
 #endif
     std::string first_node_;
+    // Envelope verification: actors of message origins, misses and pending
+    // actor requests, all keyed by actor id (see verify_envelope).
+    std::mutex                              envelope_actors_mutex_;
+    std::map<std::string, Actor<KeyPublic>> envelope_actors_;
+    std::map<std::string, std::int64_t>     envelope_actor_misses_;
+    std::map<std::string, std::int64_t>     envelope_actor_requests_;
+    struct PendingEnvelope {
+        std::string                           message;
+        std::string                           ip;
+        std::string                           identifier;
+        ActorId                               origin;
+        std::chrono::steady_clock::time_point received;
+    };
+    std::vector<PendingEnvelope> pending_envelopes_;
+    std::size_t                  pending_envelope_bytes_ = 0;
+    void                         retry_envelopes(const ActorId& actor_id);
 
 public:
     explicit NetworkService(ExtraChain::Core::ExtraChainNode* node,
@@ -329,6 +346,10 @@ public:
     std::vector<std::string> active_full_peer_identifiers() const;
     std::vector<std::string> active_full_peers_with_capability(std::string_view capability) const;
     std::int64_t             connection_pending_bytes(const std::string& identifier) const;
+
+    std::optional<Actor<KeyPublic>> envelope_actor(const ActorId& actor_id);
+
+    bool verify_envelope(const MessageBody& message_body, std::string_view sign, const std::string& identifier);
 
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
 

@@ -1144,6 +1144,11 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
                     section->id = section_id;
                     return section.value();
                 }
+                // Bytes that will not parse are corruption, not absence, and the
+                // callers below cannot tell the two apart: save_transaction would
+                // build a fresh section over this row and lose whatever was in it.
+                // Say so, so the audit has something to find.
+                eWarning("[Dag] Section {} is stored but does not parse ({} bytes)", section_id, content->size());
             }
         }
 
@@ -1179,7 +1184,8 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
     }
 }
 
-std::expected<SectionId, ExtraChain::Consensus::ConsensusError> Dag::prepare_shadow_activation() {
+std::expected<SectionId, ExtraChain::Consensus::ConsensusError> Dag::prepare_shadow_activation(
+    std::optional<SectionId> requested_boundary) {
     using ExtraChain::Consensus::ConsensusError;
 
     if (mode_ != DagMode::Full || status_ != DagStatus::Ready || !state_projection_ready()
@@ -1193,8 +1199,9 @@ std::expected<SectionId, ExtraChain::Consensus::ConsensusError> Dag::prepare_sha
     };
 
     flush_admission();
-    const auto boundary = current_section_;
-    if (first_saved_section_ < SectionId(0) || boundary <= SectionId(0) || !is_aligned20(boundary)) {
+    const auto boundary = requested_boundary.value_or(current_section_);
+    if (first_saved_section_ < SectionId(0) || boundary <= SectionId(0) || boundary > current_section_
+        || !is_aligned20(boundary)) {
         return fail(ConsensusError::InvalidHeight);
     }
     for (auto section = first_saved_section_; section <= boundary; section += SectionId(1)) {
@@ -1203,6 +1210,14 @@ std::expected<SectionId, ExtraChain::Consensus::ConsensusError> Dag::prepare_sha
         }
     }
 
+    // A fresh observer can receive later sections before loading its finality proofs.
+    // Replay only the governed prefix; a later cache is not a valid starting point.
+    if (requested_boundary.has_value() && cache_.section() > boundary) {
+        cache_.reset_db();
+        if (!cache_.init_db() || cache_.section() != SectionId(-1)) {
+            return fail(ConsensusError::StorageFailure);
+        }
+    }
     const auto violation = cache_.validate_state_to(boundary);
     if (violation.has_value()) {
         return fail(ConsensusError::InvalidRoot);
@@ -1318,6 +1333,7 @@ std::optional<bool> Dag::write_section(const Section &section) {
             }
         }
 
+        history_revision_.fetch_add(1, std::memory_order_release);
         update_range();
         // Full nodes rebuild the complete index after sync. Light nodes index
         // their small local subset here and avoid a full DAG scan on a phone.
@@ -1785,15 +1801,20 @@ void Dag::schedule_section_repair(const SectionId &section_id) {
     std::uint64_t section_value = 0;
     const auto    parsed =
         std::from_chars(section_text.data(), section_text.data() + section_text.size(), section_value);
-    if (parsed.ec == std::errc {} && parsed.ptr == section_text.data() + section_text.size()
-        && node->consensus() != nullptr && node->consensus()->controls_section(section_value)) {
-        boost::asio::dispatch(node->serial_executor(), [this, section_value] {
-            static_cast<void>(node->consensus()->repair_section(section_value));
-        });
-        return;
-    }
+    const bool section_parsed =
+        parsed.ec == std::errc {} && parsed.ptr == section_text.data() + section_text.size();
 
-    boost::asio::dispatch(node->serial_executor(), [this, section_id] {
+    // post, not dispatch: this runs from the cache rebuild, which holds the cache
+    // locks, and dispatch executes the handler inline when the caller is already on
+    // the strand. Asking consensus anything from there — even whether it owns the
+    // section — takes its mutex in the opposite order from repair_section, which
+    // walks back into the DAG. Both the question and the answer belong to a later
+    // turn, with the peer request as the fallback when consensus cannot help.
+    boost::asio::post(node->serial_executor(), [this, section_id, section_value, section_parsed] {
+        if (section_parsed && node->consensus() != nullptr && node->consensus()->controls_section(section_value)) {
+            static_cast<void>(node->consensus()->repair_section(section_value));
+            return;
+        }
         const auto  from        = section_id > CONTROL_INTERVAL ? section_id - CONTROL_INTERVAL : SectionId(0);
         const auto  to          = std::min(current_section_, section_id + CONTROL_INTERVAL);
         std::size_t requested   = 0;
@@ -2037,8 +2058,8 @@ std::optional<std::map<SectionId, std::string>> Dag::collect_repair_vote(
 bool Dag::validate_repair_transaction(const Transaction           &transaction,
                                       const std::set<Transaction> &pending,
                                       bool                         report_failure) {
-    if (transaction.hash() != transaction.calculate_hash()
-        && transaction.hash() != transaction.calculate_hash_hex()) {
+    const auto hash = transaction.hash();
+    if (hash != transaction.calculate_hash() && hash != transaction.calculate_hash_hex()) {
         if (report_failure) {
             eWarning("[Dag] Repair transaction has an invalid hash: {}", transaction.hash());
         }
@@ -2073,7 +2094,14 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
         }
         return false;
     }
-    if (!transaction.verify(sender)) {
+    const auto signature_valid = [&] {
+        if (transaction.consensus_intent().has_value()) {
+            return transaction.verify(sender);
+        }
+        const auto verified = sender.key().verify(hash, transaction.signature());
+        return verified.has_value() && verified.value();
+    }();
+    if (!signature_valid) {
         if (report_failure) {
             eWarning("[Dag] Repair transaction has an invalid signature: tx={} sender={}",
                      transaction.hash(),
@@ -2082,9 +2110,16 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
         return false;
     }
 
-    const std::set<Transaction> empty;
-    const auto                  frontier = transaction.section();
-    const auto                  prove    = prove_transaction(transaction, empty, &pending, &frontier, false);
+    const std::set<Transaction>      empty;
+    const auto                       frontier = transaction.section();
+    const TransactionValidationFacts facts {
+        .hash            = hash,
+        .hash_valid      = true,
+        .sender_exists   = true,
+        .signature_valid = true,
+    };
+    const auto prove =
+        prove_transaction_with_facts(transaction, empty, &pending, nullptr, &frontier, &facts, false);
     if (report_failure && prove != TransactionProveError::NoError) {
         eWarning("[Dag] Repair transaction proof failed: prove={} tx={} sender={} section={} pending={}",
                  std::to_underlying(prove),
@@ -2351,7 +2386,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
     const ExtraChain::Consensus::Proposal         &proposal,
     const ExtraChain::Consensus::SectionBatchData &batch,
     std::uint64_t                                  maximum_batch_bytes,
-    const std::set<Transaction>                   &staged_ancestors) {
+    std::set<Transaction>                          staged_ancestors) {
     using namespace ExtraChain::Consensus;
     if (batch.header_hash != hash_header(proposal.header)
         || hash_batch_manifest(batch.manifest) != proposal.header.batch_root
@@ -2364,11 +2399,13 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
         return std::unexpected(ConsensusError::InvalidRoot);
     }
 
-    std::map<SectionId, std::string> sections;
-    std::vector<std::string>         transaction_hashes;
-    std::uint64_t                    payload_bytes    = 0;
-    std::uint64_t                    expected_section = batch.manifest.first_section;
-    WireFormat::Scope                canonical_scope(WireFormat::Mode::Canonical);
+    std::vector<Section> sections;
+    std::string          section_hashes;
+    sections.reserve(batch.sections.size());
+    std::vector<std::string> transaction_hashes;
+    std::uint64_t            payload_bytes    = 0;
+    std::uint64_t            expected_section = batch.manifest.first_section;
+    WireFormat::Scope        canonical_scope(WireFormat::Mode::Canonical);
     for (const auto &[section_value, bytes] : batch.sections) {
         if (section_value != expected_section || bytes.size() > maximum_batch_bytes - payload_bytes) {
             return std::unexpected(ConsensusError::InvalidRoot);
@@ -2390,20 +2427,37 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
         for (const auto &transaction : section.value().transactions) {
             transaction_hashes.push_back(consensus_transaction_hash(transaction));
         }
-        sections.insert_or_assign(section_id, bytes);
+        const auto root_input = section.value().transactions.empty()
+                                    ? section_id.to_string()
+                                    : section_id.to_string() + section.value().calculate_hash();
+        section_hashes += Utils::calculate_hash(root_input);
+        sections.push_back(std::move(section.value()));
         ++expected_section;
     }
     if (payload_bytes != batch.manifest.payload_bytes || transaction_hashes != batch.manifest.transaction_hashes
         || calculate_transaction_root(transaction_hashes) != batch.manifest.transaction_root) {
         return std::unexpected(ConsensusError::InvalidRoot);
     }
-    const auto validated = validated_repair_candidate(sections, staged_ancestors);
-    if (!validated.has_value() || validated.value() != sections) {
-        return std::unexpected(ConsensusError::InvalidRoot);
+    // Canonical bytes were checked above; reuse their decoded values for the proof.
+    std::set<Transaction> accepted_transactions = std::move(staged_ancestors);
+    for (auto &section : sections) {
+        while (!section.transactions.empty()) {
+            const auto transaction = section.transactions.begin();
+            if (!validate_repair_transaction(*transaction, accepted_transactions)) {
+                return std::unexpected(ConsensusError::InvalidRoot);
+            }
+            accepted_transactions.insert(section.transactions.extract(transaction));
+        }
     }
 
-    const auto expected_root = shadow_batch_section_root(batch);
-    if (!expected_root.has_value() || expected_root.value() != proposal.header.section_root) {
+    auto expected_root = Utils::calculate_hash(section_hashes);
+    if (batch.manifest.first_section != 0) {
+        if (batch.manifest.previous_section_root.empty()) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        expected_root = Utils::calculate_hash(batch.manifest.previous_section_root + expected_root);
+    }
+    if (expected_root != proposal.header.section_root) {
         return std::unexpected(ConsensusError::InvalidRoot);
     }
     return {};
@@ -2531,6 +2585,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
 
     first_saved_section_ = committed_first;
     current_section_     = committed_last;
+    history_revision_.fetch_add(1, std::memory_order_release);
     if (!previous_control.has_value() || previous_control.value().control != proposal.header.section_root) {
         clear_controls(last + SectionId(1));
     }
@@ -2538,9 +2593,16 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
         control_index_->put(last, proposal.header.section_root);
     }
     if (recovery_incidents.empty() && first <= cache_.section()) {
+        // Rebuilding the cache walks the controls, which takes
+        // controls_generation_mutex_ and then save_mutex_. Holding save_mutex_
+        // across that call inverts the order against every control generation
+        // running concurrently, and the two sides deadlock. The sections are
+        // already written at this point, so the lock has done its job.
+        save_lock.unlock();
         cache_.reset_db();
         cache_.init_db();
         cache_.check_and_update_cache_thread(current_section_);
+        save_lock.lock();
     }
     if (chain_index_enabled_ && chain_index_) {
         for (const auto &[_, bytes] : sections) {
@@ -2556,11 +2618,17 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     if (!contracts_committed.has_value()) {
         return std::unexpected(contracts_committed.error());
     }
-    if (!recovery_incidents.empty()
-        && !replay_repaired_state(first, last, proposal.header.section_root, proof_hash)) {
-        return std::unexpected(ConsensusError::StorageFailure);
+    if (!recovery_incidents.empty()) {
+        // Replaying repaired state ends up rebuilding the cache too, so it needs the
+        // same lock order as the branches below: controls first, save second.
+        save_lock.unlock();
+        if (!replay_repaired_state(first, last, proposal.header.section_root, proof_hash)) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
     }
     if (recovery_incidents.empty() && first > cache_.section()) {
+        // Same lock-order inversion as above.
+        save_lock.unlock();
         cache_.check_and_update_cache_thread(current_section_);
     }
     update_range(true);
@@ -3833,19 +3901,55 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             }
         }
 
-        if (!received_sections.empty() && hot_section_store_ && hot_section_store_->is_open()) {
-            const auto received_first  = received_sections.begin()->first;
-            const auto received_last   = received_sections.rbegin()->first;
-            const auto committed_first = first_saved_section_ < SectionId(0)
-                                             ? received_first
-                                             : std::min(first_saved_section_, received_first);
-            const auto committed_last  = std::max(current_section_, received_last);
-            if (!hot_section_store_->commit_batch(received_sections,
+        // A repair round writes only what actually differs. Over a range we already
+        // hold byte for byte (the mismatch was in a peer's claim, not in the
+        // sections) it used to copy every packed section into the hot store, where
+        // the copies then shadowed the pack on every node that took part.
+        std::map<SectionId, std::string> changed_sections;
+        if (repair_response) {
+            for (const auto &[section_id, bytes] : received_sections) {
+                const auto local = read_section(section_id);
+                bool       same  = false;
+                if (local.has_value()) {
+                    WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+                    auto              copy = local.value();
+                    copy.id                = section_id;
+                    copy.control.reset();
+                    same = Json::serialize(copy) == bytes;
+                }
+                if (!same) {
+                    changed_sections.emplace(section_id, bytes);
+                }
+            }
+            if (changed_sections.empty() && recovery_incidents.empty()) {
+                eLog("[Dag] Repair range {}..{} matches the local sections; nothing to rewrite",
+                     expected_range->first,
+                     expected_range->second);
+                start_control(Force::Active);
+                return;
+            }
+        }
+        const auto &sections_to_store = repair_response ? changed_sections : received_sections;
+
+        if (!sections_to_store.empty() && hot_section_store_ && hot_section_store_->is_open()) {
+            // Whole sections go in here, so this has to serialize against
+            // save_transaction the same way write_section_diff does: that path
+            // read-modify-writes a section, and a sync write landing in between
+            // silently drops whichever side wrote second.
+            std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+            const auto                            received_first  = sections_to_store.begin()->first;
+            const auto                            received_last   = sections_to_store.rbegin()->first;
+            const auto                            committed_first = first_saved_section_ < SectionId(0)
+                                                                        ? received_first
+                                                                        : std::min(first_saved_section_, received_first);
+            const auto                            committed_last  = std::max(current_section_, received_last);
+            if (!hot_section_store_->commit_batch(sections_to_store,
                                                   std::pair { committed_first, committed_last })) {
                 eWarning("[Dag] Failed to store a section sync batch");
                 return;
             }
         }
+        history_revision_.fetch_add(1, std::memory_order_release);
         // The answer survived every check and is about to be applied — only now is it
         // safe to stop the retry clock. See the note at the top of this function.
         if (!repair_response) {
@@ -3870,6 +3974,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 }
             }
         }
+        history_revision_.fetch_add(1, std::memory_order_release);
 
         if (mode_ == DagMode::Light) {
             return;
@@ -4249,7 +4354,14 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         }
 
         reset_progressive_audit();
-        schedule_section_repair(hash_interval.from);
+        // Start at the interval the mismatching control closes, whatever range the
+        // peer named. A claim built over a wider span (a cache rebuilt from genesis
+        // announces 0..tip) sent the repair back to section 0, and every node then
+        // walked the chain from there in 20-section steps. The control-range search
+        // that follows still finds an earlier divergence when there is one.
+        const auto interval_start =
+            hash_interval.to < CONTROL_INTERVAL ? SectionId(0) : hash_interval.to - CONTROL_INTERVAL_DIFF;
+        schedule_section_repair(max_sid(hash_interval.from, interval_start));
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
     }
@@ -4606,6 +4718,7 @@ void Dag::clear_dag_folder() {
 
 void Dag::clear_dag() {
 #ifdef IS_APP_CLIENT
+    history_revision_.fetch_add(1, std::memory_order_release);
     eLog("[Dag] Clearing...");
     pack_hot_generation_.fetch_add(1);
     std::lock_guard pack_lock(pack_mutex_);
@@ -4691,6 +4804,7 @@ void Dag::clear_dag() {
     if (control_index_)
         control_index_->clear();
 
+    history_revision_.fetch_add(1, std::memory_order_release);
     eLog("[Dag] Cleared");
 #endif
 }
@@ -5037,6 +5151,7 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
     }
 
     // Pack fully received and installed.
+    history_revision_.fetch_add(1, std::memory_order_release);
     {
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
         pack_sync_in_flight_     = false;
@@ -5283,8 +5398,28 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
         SectionId  pack_first = pack_idx * section_size;
 
         if (pack_registry_->find_pack_for_section(pack_first).has_value()) {
-            if (hot_section_store_)
-                hot_section_store_->erase_range(pack_first, pack_first + section_size - 1);
+            if (hot_section_store_) {
+                const SectionId packed_last = pack_first + section_size - 1;
+                // A hot row over an already-packed range is usually a leftover copy,
+                // but it can also be a repair that landed after packing. Dropping it
+                // wholesale rolls that repair back to the stale pack contents, so
+                // only discard rows the pack already agrees with.
+                auto hot = hot_section_store_->read_range(pack_first, packed_last);
+                if (!hot.empty()) {
+                    std::map<SectionId, std::string> packed;
+                    for (auto &[section, bytes] : pack_registry_->read_sections(pack_first, packed_last)) {
+                        packed.emplace(section, std::move(bytes));
+                    }
+                    for (const auto &[section, bytes] : hot) {
+                        const auto stored = packed.find(section);
+                        if (stored != packed.end() && stored->second == bytes) {
+                            hot_section_store_->erase_range(section, section);
+                        } else {
+                            eWarning("[Dag] Hot section {} differs from its pack; keeping the hot copy", section);
+                        }
+                    }
+                }
+            }
             next_pack_index_ += 1;
             continue;
         }
@@ -5398,6 +5533,7 @@ void Dag::remove_sections(const SectionId &from) {
 #ifndef IS_APP_CLIENT
     return;
 #endif
+    history_revision_.fetch_add(1, std::memory_order_release);
     pack_hot_generation_.fetch_add(1);
     std::lock_guard pack_lock(pack_mutex_);
 
@@ -5438,6 +5574,7 @@ void Dag::remove_sections(const SectionId &from) {
             std::filesystem::remove_all(this->file_folder(i), error);
         }
     }
+    history_revision_.fetch_add(1, std::memory_order_release);
 }
 
 void Dag::tx_list_log(const ActorId &actor_id, bool ignore_reward) {

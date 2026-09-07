@@ -197,6 +197,17 @@ namespace ExtraChain::Consensus {
     }
 
     bool verify_payload(const std::string& public_key, const std::string& payload, const std::string& signature) {
+        thread_local std::unordered_set<std::string> verified_payloads;
+        const bool  cacheable = public_key.size() <= 128 && signature.size() <= 128 && payload.size() <= 4096;
+        std::string verification_id;
+        if (cacheable) {
+            verification_id =
+                Utils::calculate_hash(MessagePack::serialize(std::tie(public_key, payload, signature)),
+                                      Utils::HashAlgorithm::Blake3);
+            if (verified_payloads.contains(verification_id)) {
+                return true;
+            }
+        }
         const auto public_key_bytes = ByteArray::fromBase64(public_key);
         const auto signature_bytes  = ByteArray::fromBase64(signature);
         if (!public_key_bytes.has_value() || public_key_bytes.value().size() != crypto_sign_PUBLICKEYBYTES
@@ -206,7 +217,16 @@ namespace ExtraChain::Consensus {
         const KeyPublic key(public_key_bytes.value().toArray<crypto_sign_PUBLICKEYBYTES>());
         const auto      verified =
             key.verify(ByteArray(payload).toBytes(), signature_bytes.value().toArray<crypto_sign_BYTES>());
-        return verified.has_value() && verified.value();
+        const bool valid = verified.has_value() && verified.value();
+        // Validity is immutable for this exact key, payload and signature.
+        // Authorization and current ledger checks remain with the callers.
+        if (valid && cacheable) {
+            if (verified_payloads.size() >= 1024) {
+                verified_payloads.clear();
+            }
+            verified_payloads.insert(std::move(verification_id));
+        }
+        return valid;
     }
 
 } // namespace ExtraChain::Consensus

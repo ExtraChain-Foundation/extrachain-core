@@ -29,6 +29,7 @@
 #include "network/network_service.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
+#include "utils/msgpack_limits.h"
 #include "dfs/historical_collection.h"
 #include "dfs/dirs_manager.h"
 
@@ -173,11 +174,14 @@ void NetworkService::dispatch_serial(std::function<void()> handler) {
     if (!handler || stopping_.load(std::memory_order_acquire)) {
         return;
     }
-    boost::asio::dispatch(serial_executor_, [this, handler = std::move(handler)]() mutable {
-        if (!stopping_.load(std::memory_order_acquire)) {
-            handler();
-        }
-    });
+    boost::asio::dispatch(serial_executor_,
+                          ExtraChain::Core::Runtime::guard_handler("network",
+                                                                   [this, handler = std::move(handler)]() mutable {
+                                                                       if (!stopping_.load(
+                                                                               std::memory_order_acquire)) {
+                                                                           handler();
+                                                                       }
+                                                                   }));
 }
 
 SafePtr<std::map<NetworkReconnect, std::string>> NetworkService::reconnections() {
@@ -389,6 +393,12 @@ void NetworkService::add_all_services_identifiers_to_message(MessageBody &msg) {
 
     const auto connections = connection_snapshot();
     for (const auto &service : connections) {
+        // Only peers we can actually reach. The send loop skips inactive sockets,
+        // so listing one here would tell every relay that this peer is already
+        // served — and the message would reach it neither directly nor forwarded.
+        if (!service->is_active())
+            continue;
+
         std::string ident = service->identifier();
 
         if (!ident.empty())
@@ -466,108 +476,68 @@ void NetworkService::reconnection() {
     if (offline_) {
         return;
     }
-    // Do not dial ourselves: the network seed's first_node resolves to one of this
-    // host's own listening addresses. A self-connection would pass the handshake
-    // (matching network id) and loop, so skip re-dial entirely for the seed.
-    if (server_status() && is_own_address(first_node_)) {
-        return;
-    }
-    if (first_node_self_detected_.load()) {
-        return;
-    }
-    if (this->node->account_controller()->empty()) {
+    if (node->account_controller()->empty()) {
         schedule_reconnection(30000);
         return;
     }
 
-    if (this->failed_ips_.contains(this->first_node_)) {
-        schedule_reconnection(60000);
-        return;
-    }
-
-    // if (first_node_ == localIp().toStdString()) {
-    //     m_reconnectTimer->stop();
-    //     return;
-    // }
-
-    bool                         skip_first_node = false;
-    auto                         need_reconnect  = this->reconn_;
-    std::set<SocketService::Ptr> to_close;
-
-    {
-        auto connectionsLocked = *this->connections_;
-        for (const auto &el : *connectionsLocked) {
-            // eLog("_____________");
-            if (el->is_closed()) {
-                // if (Utils::current_date_ms() - el->timestamp() > 10000) {
-                //     s.insert(el);
-                // }
-                continue;
-            }
-
-            if (el->ip() == this->first_node_) {
-                bool is_early = Utils::current_date_ms() - el->timestamp() < 30000;
-
-                if (!is_early && !el->is_active()) {
-                    skip_first_node = false;
-                    to_close.insert(el);
-                    break;
-                } else {
-                    skip_first_node = true;
-                }
-            }
-
-            if (el->timestamp() != 0 && need_reconnect.contains(el->ip())) {
-                need_reconnect.erase(el->ip());
-            }
-
-            if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 30000) {
-                // eLog("PHYYYY {}", Utils::current_date_ms() - el->timestamp());
-                // to_close.insert(el);
-            }
+    // A self uplink must not suppress recovery of other known endpoints.
+    bool skip_first_node = (server_status() && is_own_address(first_node_)) || first_node_self_detected_.load()
+                           || failed_ips_.contains(first_node_);
+    auto       need_reconnect = reconn_;
+    const auto now            = Utils::current_date_ms();
+    for (const auto &connection : connection_snapshot()) {
+        if (connection->is_closed()) {
+            continue;
         }
+        if (!connection->is_active() && now - connection->timestamp() >= 30000) {
+            connection->close_connection();
+            continue;
+        }
+        if (connection->direction() == SocketDirection::Outgoing && connection->ip() == first_node_) {
+            skip_first_node = true;
+        }
+        std::erase_if(need_reconnect, [&](const auto &candidate) {
+            const auto &[endpoint, entry] = candidate;
+            return (connection->is_active() && connection->identifier() == entry.identifier)
+                   || (connection->direction() == SocketDirection::Outgoing && connection->ip() == endpoint.ip
+                       && connection->port() == endpoint.port);
+        });
+    }
+    const auto known_uplink = std::ranges::any_of(reconn_, [&](const auto &candidate) {
+        return candidate.first.ip == first_node_;
+    });
+    if (!skip_first_node && !known_uplink) {
+        connect_network();
     }
 
-    for (const auto &el : to_close) {
-        el->close_connection();
-    }
-
-    if (!skip_first_node) {
-        this->connect_network();
-        schedule_reconnection(10000);
-        return;
-    }
-
-    const std::int64_t now = Utils::current_date_ms();
-    for (auto &[ip, entry] : reconn_) {
-        if (!need_reconnect.contains(ip))
+    for (auto &[endpoint, entry] : reconn_) {
+        if (!need_reconnect.contains(endpoint) || failed_ips_.contains(endpoint.ip)
+            || now < entry.next_attempt_ms) {
             continue;
-        if (this->failed_ips_.contains(ip))
-            continue;
-        if (now < entry.next_attempt_ms)
-            continue;
-
-        eLog("[Network] Reconnect to node: {} (attempt {})", ip, entry.attempts + 1);
-        request_connection(ip);
-
-        if (entry.attempts < 7)
-            entry.attempts++;
+        }
+        eLog("[Network] Reconnect to endpoint {}:{} (attempt {})", endpoint.ip, endpoint.port, entry.attempts + 1);
+        request_endpoint(endpoint.ip, endpoint.port, false, true);
+        if (entry.attempts < 7) {
+            ++entry.attempts;
+        }
 #ifdef IS_APP_UI_CLIENT
         constexpr int max_delay_ms = 60'000;
 #else
         constexpr int max_delay_ms = 300'000;
 #endif
-        const int delay       = std::min(5000 * (1 << entry.attempts), max_delay_ms);
-        entry.next_attempt_ms = now + delay;
+        const int  delay  = std::min(5000 * (1 << entry.attempts), max_delay_ms);
+        const auto jitter = static_cast<int>(
+            std::hash<std::string> {}(node->node_identifier() + endpoint.ip + std::to_string(endpoint.port))
+            % 2000);
+        entry.next_attempt_ms = now + delay + jitter;
     }
-
     int next_delay_ms = node->runtime_activity() == RuntimeActivity::Background ? 60000 : 30000;
-    for (const auto &[ip, entry] : reconn_) {
-        if (!need_reconnect.contains(ip) || failed_ips_.contains(ip)) {
-            continue;
+    for (const auto &[endpoint, entry] : reconn_) {
+        if (need_reconnect.contains(endpoint) && !failed_ips_.contains(endpoint.ip)) {
+            next_delay_ms = std::min(next_delay_ms,
+                                     static_cast<int>(std::max<std::int64_t>(1000, entry.next_attempt_ms - now)));
         }
-        next_delay_ms =
-            std::min(next_delay_ms, static_cast<int>(std::max<std::int64_t>(1000, entry.next_attempt_ms - now)));
     }
     schedule_reconnection(next_delay_ms);
 }
@@ -604,9 +574,27 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
             socket_activated_event_.publish(activated->ip(), activated->identifier());
             socket_ready_event_.publish();
 
-            if (activated->mode() == SocketMode::Full && activated->ip() != first_node()
-                && activated->direction() == SocketDirection::Outgoing) {
-                reconn_.insert({ activated->ip(), {} });
+            if (activated->mode() == SocketMode::Full && activated->direction() == SocketDirection::Outgoing) {
+                // Only a completed outbound handshake proves a listening endpoint.
+                // An accepted socket's remote port is an ephemeral client port.
+                const NetworkReconnect endpoint { activated->ip(),
+                                                  activated->port(),
+                                                  Network::Protocol::WebSocket };
+                if (!reconn_.contains(endpoint) && reconn_.size() >= 1024) {
+                    const auto connections = connection_snapshot();
+                    const auto stale       = std::ranges::find_if(reconn_, [&](const auto &candidate) {
+                        return std::ranges::none_of(connections, [&](const auto &connection) {
+                            return connection->is_active()
+                                   && connection->identifier() == candidate.second.identifier;
+                        });
+                    });
+                    if (stale != reconn_.end()) {
+                        reconn_.erase(stale);
+                    }
+                }
+                if (reconn_.contains(endpoint) || reconn_.size() < 1024) {
+                    reconn_.insert_or_assign(endpoint, ReconnEntry { .identifier = activated->identifier() });
+                }
             }
         });
     };
@@ -756,7 +744,6 @@ void NetworkService::prepare_shutdown() {
     reconnect_timer_->cancel();
     clear_network_caches_timer_->cancel();
     live_dag_batch_timer_->cancel();
-    live_dag_peer_queues_.clear();
     network_runtime_->stop_listening();
 
     std::set<SocketService::Ptr> copied;
@@ -766,11 +753,9 @@ void NetworkService::prepare_shutdown() {
     }
 
     for (const auto &connection : copied) {
-        connection->on_error             = {};
-        connection->on_disconnected      = {};
-        connection->on_activated         = {};
-        connection->on_share_connections = {};
-        connection->on_message           = {};
+        // Socket callbacks remain immutable while socket threads can read them.
+        // dispatch_serial drops callbacks after stopping_; the runtime joins
+        // its workers before this service and its queues are destroyed.
         connection->flush();
         connection->close_connection();
     }
@@ -942,7 +927,8 @@ void NetworkService::connect_to_websocket(std::string   ip,
     const auto                      connections = connection_snapshot();
     std::vector<SocketService::Ptr> to_close;
     for (const auto &connection : connections) {
-        if (connection->ip() == ip) {
+        if (connection->direction() == SocketDirection::Outgoing && connection->ip() == ip
+            && connection->port() == port) {
             if (connection->is_active()) {
                 return;
             }
@@ -1110,7 +1096,11 @@ std::string NetworkService::send_message_send(const std::string &data_serialized
 #ifndef NDEBUG
     if (Network::networkDebug) {
         auto                   serialized   = message.serialize();
-        msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
+        msgpack::object_handle oh           = msgpack::unpack(serialized.data(),
+                                                    serialized.size(),
+                                                    nullptr,
+                                                    nullptr,
+                                                    MessagePack::unpack_limits(serialized.size()));
         msgpack::object        deserialized = oh.get();
         eLog("[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
              message.message_type,
@@ -1121,13 +1111,22 @@ std::string NetworkService::send_message_send(const std::string &data_serialized
     }
 #endif
 
-    this->send_message_connections(*canonical_blob,
-                                   *legacy_blob,
-                                   message,
-                                   send_mode,
-                                   receiver_identifier,
-                                   type,
-                                   status);
+    const auto send_to = [&](const std::string &identifier) {
+        send_message_connections(canonical_blob.value(),
+                                 legacy_blob.value(),
+                                 message,
+                                 send_mode,
+                                 identifier,
+                                 type,
+                                 status);
+    };
+    if (send_mode == SendMode::Focused && !responder.identifiers().empty()) {
+        for (const auto &identifier : responder.identifiers()) {
+            send_to(identifier);
+        }
+    } else {
+        send_to(receiver_identifier);
+    }
 
     return message.message_id;
 }
@@ -1150,8 +1149,13 @@ bool NetworkService::needs_legacy_payload(SendMode send_mode, const Responder &r
     for (const auto &service : connections) {
         if (service == nullptr || !service->is_active())
             continue;
-        if (send_mode == SendMode::Focused && service->identifier() != focused_identifier) {
-            continue;
+        if (send_mode == SendMode::Focused) {
+            const bool selected = responder.identifiers().empty()
+                                      ? service->identifier() == focused_identifier
+                                      : responder.identifiers().contains(service->identifier());
+            if (!selected) {
+                continue;
+            }
         }
         if (service->peer_meta().is_legacy_dag())
             return true;
@@ -1219,7 +1223,8 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         || message_type == MessageType::ConsensusTimeoutCertificate
         || message_type == MessageType::ConsensusBatchRequest || message_type == MessageType::ConsensusSyncRequest;
     const bool high_priority_shadow_control =
-        message_type == MessageType::ConsensusBootstrapRequest || message_type == MessageType::ConsensusRecovery;
+        message_type == MessageType::ConsensusBootstrapRequest || message_type == MessageType::ConsensusRecovery
+        || (message_type == MessageType::ConsensusRelay && non_serialized_message.data.size() <= 1024 * 1024);
     if (message_type == MessageType::Custom || message_type == MessageType::NewActor
         || message_type == MessageType::DagTransactionResult || message_type == MessageType::DagIntervalHash
         || message_type == MessageType::DagSyncLastInfo || message_type == MessageType::DagControlRangeRequest
@@ -1327,6 +1332,21 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
                 break;
             }
         }
+    }
+    // Consensus liveness depends on these messages actually leaving the node;
+    // a silent skip here has produced week-long ghost hunts. Name the outcome
+    // whenever a consensus-class message misses anyone it should have reached.
+    if ((message_type == MessageType::ConsensusProposal || message_type == MessageType::ConsensusCertificate
+         || message_type == MessageType::ConsensusVote || message_type == MessageType::ConsensusTimeoutVote
+         || message_type == MessageType::ConsensusTimeoutCertificate)
+        && (sent_to == 0 || skipped_inactive > 0)) {
+        eWarning("[Network] {} delivery: sent_to={} skipped_inactive={} skipped_light={} mode={} receiver={}",
+                 message_type,
+                 sent_to,
+                 skipped_inactive,
+                 skipped_light,
+                 static_cast<int>(send_mode),
+                 receiver_identifier.empty() ? "-" : receiver_identifier.substr(0, 12));
     }
 
     if (send_mode == SendMode::Focused && sent_to == 0) {
@@ -1754,6 +1774,115 @@ bool NetworkService::check_message_count(const std::string &msg) {
     return flag_result;
 }
 
+std::optional<Actor<KeyPublic>> NetworkService::envelope_actor(const ActorId &actor_id) {
+    const auto key = actor_id.to_string();
+    {
+        std::lock_guard lock(envelope_actors_mutex_);
+        if (const auto cached = envelope_actors_.find(key); cached != envelope_actors_.end()) {
+            return cached->second;
+        }
+        // A miss is remembered briefly too: an origin whose actor has not arrived
+        // yet would otherwise cost a store lookup on every one of its messages.
+        if (const auto missed = envelope_actor_misses_.find(key);
+            missed != envelope_actor_misses_.end() && Utils::current_date_ms() - missed->second < 5'000) {
+            return std::nullopt;
+        }
+    }
+    auto            actor = node->actor_index()->read_actor(actor_id, ActorGetType::NoRequest);
+    std::lock_guard lock(envelope_actors_mutex_);
+    if (!actor.has_value()) {
+        envelope_actor_misses_[key] = Utils::current_date_ms();
+        if (envelope_actor_misses_.size() > 1024) {
+            envelope_actor_misses_.clear();
+        }
+        return std::nullopt;
+    }
+    if (envelope_actors_.size() > 4096) {
+        envelope_actors_.clear();
+    }
+    envelope_actors_.emplace(key, actor.value());
+    return actor.value();
+}
+
+void NetworkService::retry_envelopes(const ActorId &actor_id) {
+    std::vector<PendingEnvelope> ready;
+    {
+        std::lock_guard lock(envelope_actors_mutex_);
+        envelope_actor_misses_.erase(actor_id.to_string());
+        envelope_actor_requests_.erase(actor_id.to_string());
+        std::erase_if(pending_envelopes_, [&](PendingEnvelope &pending) {
+            if (pending.origin != actor_id) {
+                return false;
+            }
+            pending_envelope_bytes_ -= pending.message.size();
+            ready.push_back(std::move(pending));
+            return true;
+        });
+    }
+    for (const auto &pending : ready) {
+        if (std::chrono::steady_clock::now() - pending.received < std::chrono::seconds(30)) {
+            message_received(pending.message, pending.ip, pending.identifier);
+        }
+    }
+}
+
+bool NetworkService::verify_envelope(const MessageBody &message_body,
+                                     std::string_view   sign,
+                                     const std::string &identifier) {
+    std::optional<Actor<KeyPublic>> origin;
+    if (message_body.message_type == MessageType::NewActor || message_body.message_type == MessageType::Actor) {
+        // These carry the actor they are signed with; the id has to match the origin.
+        auto carried = MessagePack::deserialize<Actor<KeyPublic>>(message_body.data);
+        if (carried.has_value() && carried.value().has_valid_id()
+            && carried.value().id() == message_body.init_sender_id) {
+            origin = carried.value();
+        }
+    }
+    if (!origin.has_value()) {
+        origin = envelope_actor(message_body.init_sender_id);
+    }
+    if (!origin.has_value()) {
+        // Resolve the key before the queued envelope can change local state.
+        const auto key = message_body.init_sender_id.to_string();
+        bool       ask = false;
+        {
+            std::lock_guard lock(envelope_actors_mutex_);
+            const auto      now = Utils::current_date_ms();
+            std::erase_if(envelope_actor_requests_, [now](const auto &entry) {
+                return now - entry.second > 30'000;
+            });
+            if (!envelope_actor_requests_.contains(key) && envelope_actor_requests_.size() < 1024) {
+                envelope_actor_requests_.emplace(key, now);
+                ask = true;
+            }
+        }
+        if (ask) {
+            eDebug("[Network] Envelope from an unknown actor {} ({}) via {}; requesting the actor",
+                   message_body.init_sender_id,
+                   message_body.message_type,
+                   identifier.substr(0, 8));
+            static_cast<void>(node->actor_index()->read_actor(message_body.init_sender_id, ActorGetType::Request));
+        }
+        return false;
+    }
+    if (!origin.value().has_valid_id() || sign.size() != crypto_sign_BYTES) {
+        eWarning("[Network] Dropped a {} envelope with a malformed signature from {}",
+                 message_body.message_type,
+                 identifier.substr(0, 8));
+        return false;
+    }
+    const auto verified = origin.value().key().verify(ByteArray(message_body.calculate_hash()).toBytes(),
+                                                      ByteArray(sign).toArray<crypto_sign_BYTES>());
+    if (!verified.has_value() || !verified.value()) {
+        eWarning("[Network] Dropped a {} envelope with an invalid signature: origin {} via {}",
+                 message_body.message_type,
+                 message_body.init_sender_id,
+                 identifier.substr(0, 8));
+        return false;
+    }
+    return true;
+}
+
 void NetworkService::message_received(const std::string &message,
                                       const std::string &ip,
                                       const std::string &identifier) {
@@ -1762,13 +1891,11 @@ void NetworkService::message_received(const std::string &message,
         return;
     }
 
-    if (!check_message_count(message)) {
-        eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
+    if (message.size() < crypto_sign_BYTES) {
         return;
     }
-
-    std::string_view msg  = std::string_view(message).substr(0, message.size() - 64);
-    std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
+    const std::string_view msg(message.data(), message.size() - crypto_sign_BYTES);
+    const std::string_view sign(message.data() + msg.size(), crypto_sign_BYTES);
 
     auto message_body_expected = MessagePack::deserialize<MessageBody>(msg);
     if (!message_body_expected.has_value()) {
@@ -1780,36 +1907,40 @@ void NetworkService::message_received(const std::string &message,
     const auto  node_id =
         NodeId { .actor_id = message_body.init_sender_id, .node_identifier = message_body.init_sender_identifier };
 
-    /*
-    auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id, ActorGetType::NoRequest);
-    if (!sign_actor.has_value()
-        && (message_body.message_type == MessageType::NewActor
-            || message_body.message_type == MessageType::Actor)) {
-        auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(message_body.data);
-        if (!actor_result.has_value()) {
-            return;
-        }
-        sign_actor = actor_result.value();
+    if (message_body.init_sender_id.is_zero() || message_body.message_id.size() != 15
+        || !std::ranges::all_of(message_body.message_id, [](char value) {
+               return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f');
+           })) {
+        return;
     }
-
-     if (sign_actor.has_value()) {
-         auto verify = sign_actor.value().key().verify(ByteArray(message_body.calculate_hash()).toBytes(),
-                                                       ByteArray(sign.data()).toArray<crypto_sign_BYTES>());
-         if (!verify.has_value()) {
-             eWarning("[Network] Can't verify message");
-             return;
-         }
-         if (!verify) {
-             eWarning("[Network] Sign package is invalid!");
-             return;
-         }
-
-      } else {
-          // if (message_body.message_type != MessageType::NewActor) {
-          return;
-          // }
-      }
-      */
+    if (message_body.message_type == MessageType::ConsensusRelay && node->consensus() != nullptr
+        && node->consensus()->should_drop_duplicate_relay(message_body.data)) {
+        return;
+    }
+    if (!verify_envelope(message_body, sign, identifier)) {
+        if (!envelope_actor(message_body.init_sender_id).has_value()) {
+            std::lock_guard lock(envelope_actors_mutex_);
+            const auto      now = std::chrono::steady_clock::now();
+            std::erase_if(pending_envelopes_, [&](const PendingEnvelope &pending) {
+                if (now - pending.received < std::chrono::seconds(30)) {
+                    return false;
+                }
+                pending_envelope_bytes_ -= pending.message.size();
+                return true;
+            });
+            const auto per_origin =
+                std::ranges::count(pending_envelopes_, message_body.init_sender_id, &PendingEnvelope::origin);
+            if (per_origin < 16 && pending_envelopes_.size() < 256
+                && message.size() <= 2 * 1024 * 1024 - pending_envelope_bytes_) {
+                pending_envelope_bytes_ += message.size();
+                pending_envelopes_.push_back({ message, ip, identifier, message_body.init_sender_id, now });
+            }
+        }
+        return;
+    }
+    if (!check_message_count(message)) {
+        return;
+    }
 
     const MessageType   type         = message_body.message_type;
     const MessageStatus status       = message_body.status;
@@ -1881,7 +2012,11 @@ void NetworkService::message_received(const std::string &message,
 
 #ifndef NDEBUG
     if (Network::networkDebug) {
-        msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
+        msgpack::object_handle oh           = msgpack::unpack(serialized.data(),
+                                                    serialized.size(),
+                                                    nullptr,
+                                                    nullptr,
+                                                    MessagePack::unpack_limits(serialized.size()));
         msgpack::object        deserialized = oh.get();
         eLog("[Network Message] Received: type {}, status {}, id {}, body: {}",
              type,
@@ -1927,6 +2062,7 @@ void NetworkService::message_received(const std::string &message,
     switch (type) {
     case MessageType::ConsensusChallenge:
     case MessageType::ConsensusAuthentication:
+    case MessageType::ConsensusRelay:
     case MessageType::ConsensusProposal:
     case MessageType::ConsensusVote:
     case MessageType::ConsensusCertificate:
@@ -2084,12 +2220,12 @@ void NetworkService::message_received(const std::string &message,
         auto actor_handling_result = node->actor_index()->network_store_new_actor(new_actor_result.value());
         if (actor_handling_result.has_value()) {
             send_broadcast_message_further(package_data);
+            retry_envelopes(new_actor_result.value().id());
         }
         break;
     }
 
     case MessageType::Actor: {
-        break;
         if (status == MessageStatus::Request) {
             auto actor_id_result = MessagePack::deserialize<ActorId>(serialized);
             if (!actor_id_result.has_value()) {
@@ -2097,7 +2233,9 @@ void NetworkService::message_received(const std::string &message,
                 break;
             }
 
-            node->actor_index()->network_actor_request(actor_id_result.value(), responder);
+            if (!actor_id_result.value().is_zero()) {
+                node->actor_index()->network_actor_request(actor_id_result.value(), responder);
+            }
         } else if (status == MessageStatus::Response) {
             auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
             if (!actor_result.has_value()) {
@@ -2108,6 +2246,10 @@ void NetworkService::message_received(const std::string &message,
             auto save_result = node->actor_index()->save_actor(actor_result.value());
             if (!save_result.has_value() && save_result.error() != ActorSaveError::AlreadyExists) {
                 eWarning("[NetworkService] Cannot save actor: error {}", static_cast<int>(save_result.error()));
+            }
+            if (actor_result.value().has_valid_id()
+                && (save_result.has_value() || save_result.error() == ActorSaveError::AlreadyExists)) {
+                retry_envelopes(actor_result.value().id());
             }
         }
 
@@ -2133,6 +2275,11 @@ void NetworkService::message_received(const std::string &message,
             }
 
             node->actor_index()->network_actors_response(actors_list_result.value());
+            for (const auto &actor : actors_list_result.value()) {
+                if (actor.has_valid_id()) {
+                    retry_envelopes(actor.id());
+                }
+            }
         }
         break;
     }
@@ -2154,6 +2301,11 @@ void NetworkService::message_received(const std::string &message,
             }
 
             node->actor_index()->network_actors_response(actors_list_result.value());
+            for (const auto &actor : actors_list_result.value()) {
+                if (actor.has_valid_id()) {
+                    retry_envelopes(actor.id());
+                }
+            }
         }
         break;
     }
@@ -2895,7 +3047,9 @@ void NetworkService::socket_error(Network::SocketServiceError error,
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
         || error == Network::SocketServiceError::VersionTooNew) {
-        reconn_.erase(ip);
+        std::erase_if(reconn_, [&](const auto &entry) {
+            return entry.first.ip == ip;
+        });
         if (!Utils::vector_contains(first_nodes_, ip) && ip != first_node_) {
             failed_ips_.insert(ip);
         }
@@ -3040,7 +3194,6 @@ bool NetworkService::remove_one_connection() {
     }
     return doomed != nullptr;
 }
-
 
 NetworkPackageStorage::NetworkPackageStorage(const MessageBody &body,
                                              const std::string &identifier,

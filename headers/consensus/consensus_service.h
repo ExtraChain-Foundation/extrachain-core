@@ -12,6 +12,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <chrono>
 #include <map>
 #include <mutex>
 #include <string_view>
@@ -21,6 +22,7 @@
 #include <boost/signals2/connection.hpp>
 
 #include "consensus/peer_authenticator.h"
+#include "consensus/relay_transport.h"
 #include "consensus/intent_store.h"
 #include "consensus/shadow_consensus.h"
 #include "runtime/event.h"
@@ -45,6 +47,7 @@ namespace ExtraChain::Consensus {
         ConsensusService& operator=(const ConsensusService&) = delete;
 
         std::expected<bool, ConsensusError> activate(const ActorId& network_id);
+        std::expected<void, ConsensusError> prepare_observer_bootstrap(const ActorId& network_id);
         void                                deactivate();
 
         void receive_network_message(MessageType        type,
@@ -52,6 +55,8 @@ namespace ExtraChain::Consensus {
                                      const std::string& serialized,
                                      const Responder&   responder,
                                      std::string_view   peer_identifier);
+
+        [[nodiscard]] bool should_drop_duplicate_relay(std::string_view serialized) const;
 
         void receive_challenge(const AuthenticationChallenge& challenge, const Responder& responder);
         void receive_authentication(const AuthenticationResponse& response, std::string_view peer_identifier);
@@ -101,6 +106,21 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] Core::Event<const ShadowBootstrapResponse&, std::string_view>& bootstrap_event() noexcept;
 
     private:
+        struct RelayContext {
+            std::string validator_id;
+            std::string node_identifier;
+            std::string request_id;
+        };
+        RelayTransport              relay_transport_;
+        std::optional<RelayContext> relay_context_;
+        std::optional<std::string>  authenticated_sender(std::string_view identifier) const;
+        void                        receive_relay(const RelayEnvelope& envelope, std::string_view peer_identifier);
+        bool send_relay(MessageType type, MessageStatus status, std::string payload, std::string destination = {});
+        void dispatch_message(MessageType        type,
+                              MessageStatus      status,
+                              const std::string& serialized,
+                              const Responder&   responder,
+                              std::string_view   peer_identifier);
         void                                peer_connected(const std::string& identifier);
         void                                challenge_peer(const std::string& identifier, bool reset_existing);
         void                                refresh_peer_authentication();
@@ -111,7 +131,21 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError> reconcile_finalized_checkpoint();
         bool                                apply_timeout_certificate(const TimeoutCertificate& certificate);
         void                                propose_checkpoint(std::uint64_t round);
+        void                                discard_stale_checkpoints(std::uint64_t next_section);
         void request_batch(const Proposal& proposal, std::string_view peer_identifier);
+        /// Stop voting over a failure that may pass — a write that did not land, a
+        /// checkpoint we could not apply yet. Unlike halt_voting() the pacemaker
+        /// keeps running, so the node retries instead of needing a restart.
+        void pause_voting(std::string_view reason);
+        /// Apply one finalized checkpoint: reconcile it with the DAG in finality
+        /// mode, publish it otherwise. Returns false when the checkpoint could not
+        /// be applied and voting had to stop.
+        bool apply_finalized_checkpoint(const FinalizedCheckpoint& checkpoint);
+        /// Drive checkpoints that were deferred for missing data to completion.
+        void catch_up_deferred_finalization();
+        /// Ask every validator for a specific ancestor payload we are missing.
+        void request_ancestor_batch(const std::string& header_hash, std::string_view peer_identifier);
+        void request_sync_from(std::string_view peer_identifier);
         void vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier);
         void timeout_elapsed();
         void reset_timeout();
@@ -122,20 +156,27 @@ namespace ExtraChain::Consensus {
                           MessageStatus      status);
         void send_to_validators(const auto& payload, MessageType message_type);
         void send_to_validators(const auto& payload, MessageType message_type, MessageStatus status);
-        [[nodiscard]] std::expected<void, ConsensusError>              validate_proposal(const Proposal& proposal);
+        [[nodiscard]] std::expected<void, ConsensusError> validate_proposal(
+            const Proposal& proposal,
+            std::string*    missing_ancestor = nullptr);
         [[nodiscard]] std::expected<StateCommitmentV2, ConsensusError> build_state_commitment(
             const SectionBatchData&  batch,
             std::string_view         section_root,
             std::uint64_t            height,
             const QuorumCertificate& parent) const;
+        /// \p missing_ancestor, when given, receives the header hash of the first
+        /// ancestor whose batch we simply do not hold yet. Absent data and corrupt
+        /// data both break the walk, but only the former is worth another request.
         [[nodiscard]] std::expected<std::vector<Transaction>, ConsensusError> staged_ancestor_transactions(
             const QuorumCertificate& parent,
-            std::uint64_t            first_section) const;
+            std::uint64_t            first_section,
+            std::string*             missing_ancestor = nullptr) const;
         /// Ancestors as a set, ready for the DAG's balance proofs. An empty set means
         /// the parent is already canonical; a broken ancestor chain is an error, not
         /// an empty set, so a proposal is never accepted on a silently weaker check.
         [[nodiscard]] std::expected<std::set<Transaction>, ConsensusError> staged_ancestors_for(
-            const Proposal& proposal) const;
+            const Proposal& proposal,
+            std::string*    missing_ancestor = nullptr) const;
         [[nodiscard]] bool                         has_unfinalized_intents() const;
         std::expected<std::string, ConsensusError> accept_intent(const IntentEnvelope& envelope, bool broadcast);
         [[nodiscard]] std::expected<std::vector<std::pair<IntentEnvelope, IntentReceipt>>, ConsensusError>
@@ -164,6 +205,10 @@ namespace ExtraChain::Consensus {
         std::map<std::uint64_t, ShadowCheckpoint>                     pending_checkpoints_;
         std::map<std::uint64_t, SectionBatchData>                     pending_batches_;
         std::map<std::string, Proposal>                               pending_proposals_;
+        /// Last time an ancestor batch was asked for, by header hash, and the last
+        /// sync request: a lagging node used to re-ask on every reply it got.
+        std::map<std::string, std::chrono::steady_clock::time_point>  ancestor_requests_;
+        std::chrono::steady_clock::time_point                         last_sync_request_ {};
         std::shared_ptr<Core::DeadlineTask>                           timeout_task_;
         std::shared_ptr<Core::DeadlineTask>                           recovery_task_;
         std::shared_ptr<Core::DeadlineTask>                           intent_batch_task_;
@@ -171,6 +216,11 @@ namespace ExtraChain::Consensus {
         Core::Event<const FinalizedCheckpoint&>                       finalized_event_;
         Core::Event<const ShadowBootstrapResponse&, std::string_view> bootstrap_event_;
         bool                                                          voting_enabled_ = false;
+        /// Set when voting stopped over a transient failure; cleared once the
+        /// pacemaker manages to resume. Never set for a deliberate halt.
+        bool voting_paused_ { false };
+        /// Guards discard_stale_checkpoints against re-entering itself.
+        bool                                                          rebuilding_checkpoints_ { false };
         mutable std::recursive_mutex                                  mutex_;
     };
 

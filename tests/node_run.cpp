@@ -120,8 +120,20 @@ int main(int argc, char* argv[]) {
 
     const char* bind_ip = std::getenv("EXC_BIND_IP");
     if (mode == "committee" && bind_ip != nullptr) {
-        auto settings       = Utils::read_settings();
-        settings.first_node = bind_ip;
+        auto              settings = Utils::read_settings();
+        const auto        index    = argc > 4 ? std::strtoull(argv[4], nullptr, 10) : 0;
+        const std::string topology =
+            std::getenv("EXC_SHADOW_TOPOLOGY") ? std::getenv("EXC_SHADOW_TOPOLOGY") : "mesh";
+        // The reconnect uplink must be an edge in the selected test topology.
+        settings.first_node = index == 0           ? std::string(bind_ip)
+                              : topology == "mesh" ? "127.0.0.1"
+                                                   : "127.0.0." + std::to_string(index);
+        if (topology == "observer-chain") {
+            if (index == 3)
+                settings.first_node = "127.0.0.8";
+            if (index == 7)
+                settings.first_node = "127.0.0.3";
+        }
         Utils::write_settings(settings);
     }
     auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false,
@@ -154,8 +166,9 @@ int main(int argc, char* argv[]) {
         const auto first_intent_nonce =
             static_cast<std::uint64_t>(argc > 11 ? std::strtoull(argv[11], nullptr, 10) : 1);
         const bool stay_until_deadline = argc > 12 && std::atoi(argv[12]) != 0;
-        if ((role != "seed" && role != "joiner") || node_count != ShadowCommitteeSize || node_index >= node_count
-            || run_seconds < 10 || first_intent_nonce == 0
+        if ((role != "seed" && role != "joiner")
+            || (node_count != ShadowCommitteeSize && node_count != ShadowCommitteeSize + 1)
+            || node_index >= node_count || run_seconds < 10 || first_intent_nonce == 0
             || (intent_count > 0
                 && intent_count - 1 > std::numeric_limits<std::uint64_t>::max() - first_intent_nonce)) {
             std::printf("[node-run] invalid committee arguments\n");
@@ -181,7 +194,9 @@ int main(int argc, char* argv[]) {
                 std::printf("[node-run] explicit Shadow activation found no configuration\n");
             }
         }
-        if (node->consensus() == nullptr || !node->consensus()->active() || !node->consensus()->voting()) {
+        if (node->consensus() == nullptr || !node->consensus()->active()
+            || (node_index < ShadowCommitteeSize && !node->consensus()->voting())
+            || (node_index >= ShadowCommitteeSize && node->consensus()->voting())) {
             std::printf("[node-run] Shadow Finality did not activate\n");
             node->cleanUp();
             return 3;
@@ -190,7 +205,37 @@ int main(int argc, char* argv[]) {
         std::signal(SIGINT, request_stop);
         std::signal(SIGTERM, request_stop);
         std::this_thread::sleep_for(std::chrono::seconds(1));
+        const std::string topology =
+            std::getenv("EXC_SHADOW_TOPOLOGY") ? std::getenv("EXC_SHADOW_TOPOLOGY") : "mesh";
+        if (topology != "mesh" && topology != "ring" && topology != "chain" && topology != "degree3"
+            && topology != "observer-chain") {
+            std::printf("[node-run] unknown topology: %s\n", topology.c_str());
+            node->cleanUp();
+            return 64;
+        }
+        const auto adjacent = [&](std::size_t peer) {
+            if (topology == "observer-chain") {
+                const auto position = [](std::size_t index) {
+                    return index == 7 ? 3 : index >= 3 ? index + 1 : index;
+                };
+                return position(peer) + 1 == position(node_index) || position(node_index) + 1 == position(peer);
+            }
+            return topology == "mesh" || peer + 1 == node_index || node_index + 1 == peer
+                   || (topology == "ring"
+                       && ((node_index == 0 && peer + 1 == node_count)
+                           || (peer == 0 && node_index + 1 == node_count)))
+                   || (topology == "degree3"
+                       && ((node_index < 3 && peer == node_index + 3) || (peer < 3 && node_index == peer + 3)));
+        };
+        std::size_t required_peers = 0;
+        for (std::size_t peer = 0; peer < node_count; ++peer) {
+            if (peer != node_index && adjacent(peer))
+                ++required_peers;
+        }
         for (std::size_t peer = 0; peer < node_index; ++peer) {
+            if (!adjacent(peer)) {
+                continue;
+            }
             node->network()->request_endpoint("127.0.0." + std::to_string(peer + 1),
                                               static_cast<std::uint16_t>(first_port + peer),
                                               false,
@@ -202,13 +247,16 @@ int main(int argc, char* argv[]) {
         while (stop_requested == 0 && std::chrono::steady_clock::now() < connect_deadline && stable_samples < 3) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             ++connect_attempt;
-            if (node->network()->active_connections_count() == static_cast<int>(node_count - 1)) {
+            if (node->network()->active_connections_count() == static_cast<int>(required_peers)) {
                 ++stable_samples;
             } else {
                 stable_samples = 0;
             }
             if (stable_samples == 0 && connect_attempt % 3 == 0) {
                 for (std::size_t peer = 0; peer < node_index; ++peer) {
+                    if (!adjacent(peer)) {
+                        continue;
+                    }
                     node->network()->request_endpoint("127.0.0." + std::to_string(peer + 1),
                                                       static_cast<std::uint16_t>(first_port + peer),
                                                       false,
@@ -217,12 +265,30 @@ int main(int argc, char* argv[]) {
             }
         }
         const auto connected = node->network()->active_connections_count();
-        std::printf("[node-run] committee node=%zu connected=%d voting=yes\n", node_index, connected);
+        std::printf("[node-run] committee node=%zu connected=%d voting=%s\n",
+                    node_index,
+                    connected,
+                    node->consensus()->voting() ? "yes" : "no");
         std::fflush(stdout);
-        if (connected < static_cast<int>(node_count - 1)) {
+        if (connected < static_cast<int>(required_peers)) {
             node->cleanUp();
             return 4;
         }
+        // Wait for capability exchange before publishing signed relay messages.
+        const auto shadow_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+        while (stop_requested == 0 && std::chrono::steady_clock::now() < shadow_deadline
+               && node->network()->active_full_peers_with_capability(SHADOW_RELAY_CAPABILITY).size()
+                      < required_peers) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+        if (node->network()->active_full_peers_with_capability(SHADOW_RELAY_CAPABILITY).size() < required_peers) {
+            std::printf("[node-run] committee node=%zu shadow links incomplete\n", node_index);
+            node->cleanUp();
+            return 4;
+        }
+        // A short settle window lets the challenge/response authentication
+        // round-trips behind the capability flags finish too.
+        std::this_thread::sleep_for(std::chrono::seconds(2));
         if (!barrier_directory.empty()) {
             std::filesystem::create_directories(barrier_directory);
             const auto actor_marker =
@@ -372,6 +438,37 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // Optional ExDFS load: every committee node publishes one file of
+        // EXC_DFS_BYTES bytes while consensus runs, so the harness can check that
+        // content replicates across the whole mesh — through chaos included. The
+        // payload is deterministic per node, so a corrupt copy is told from a
+        // missing one.
+        if (const char* dfs_bytes_env = std::getenv("EXC_DFS_BYTES");
+            dfs_bytes_env != nullptr && std::strtoull(dfs_bytes_env, nullptr, 10) > 0) {
+            const auto dfs_bytes = static_cast<std::size_t>(std::strtoull(dfs_bytes_env, nullptr, 10));
+            std::vector<std::uint8_t> payload(dfs_bytes);
+            for (std::size_t index = 0; index < payload.size(); ++index) {
+                payload[index] =
+                    static_cast<std::uint8_t>((index * (131U + node_index) + 17U + node_index * 7U) & 0xffU);
+            }
+            const auto& owner = node->account_controller()->system_actor().id();
+            const auto  row   = node->dfs()->store_data_as_file(owner,
+                                                             owner,
+                                                             std::move(payload),
+                                                             "soak",
+                                                             "node-" + std::to_string(node_index) + ".bin");
+            if (!row.has_value()) {
+                std::printf("[node-run] DFS store failed (error %d)\n", static_cast<int>(row.error()));
+                node->cleanUp();
+                return 5;
+            }
+            std::printf("[node-run] DFS stored owner=%s file_id=%s size=%zu\n",
+                        owner.to_string().c_str(),
+                        row->file_id.c_str(),
+                        row->size);
+            std::fflush(stdout);
+        }
+
         std::vector<std::string> submitted_hashes;
         if (intent_count > 0) {
             const auto&              sender   = node->account_controller()->system_actor();
@@ -411,6 +508,9 @@ int main(int argc, char* argv[]) {
                     node->cleanUp();
                     return 5;
                 }
+                const auto submitted_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                 std::chrono::steady_clock::now().time_since_epoch())
+                                                 .count();
                 const auto submitted = node->consensus()->submit_intent(IntentEnvelope {
                     .intent   = intent.value(),
                     .metadata = metadata,
@@ -423,6 +523,10 @@ int main(int argc, char* argv[]) {
                     return 5;
                 }
                 submitted_hashes.push_back(submitted.value());
+                std::printf("[node-run] intent hash=%s submitted_at_ms=%lld\n",
+                            submitted.value().c_str(),
+                            static_cast<long long>(submitted_at_ms));
+                std::fflush(stdout);
             }
             std::printf("[node-run] submitted intents=%zu\n", submitted_hashes.size());
             std::fflush(stdout);

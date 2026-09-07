@@ -28,6 +28,24 @@
 using Cryptography::CryptoError;
 
 namespace {
+    std::expected<Curve25519Key, CryptoError> curve_public_key(const PublicKey& public_key) {
+        thread_local std::map<PublicKey, Curve25519Key> converted_keys;
+        const auto                                      found = converted_keys.find(public_key);
+        if (found != converted_keys.end()) {
+            return found->second;
+        }
+        Curve25519Key converted;
+        if (crypto_sign_ed25519_pk_to_curve25519(converted.data(), public_key.data()) != 0) {
+            return std::unexpected(CryptoError::KeyConversionFailed);
+        }
+        // Conversion is immutable for an exact public key. No secret is cached.
+        if (converted_keys.size() >= 256) {
+            converted_keys.clear();
+        }
+        converted_keys.emplace(public_key, converted);
+        return converted;
+    }
+
     bool validate_file_basic(const FsPath& path) {
         auto exists = path.exists();
         if (!exists)
@@ -328,10 +346,11 @@ Cryptography::CryptoResult Cryptography::asymmetric_encrypt(const Bytes&      da
     }
 
     Curve25519Key x_secret_key;
-    Curve25519Key x_public_key;
-
-    if (crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), sender_secret_key.data()) != 0
-        || crypto_sign_ed25519_pk_to_curve25519(x_public_key.data(), receiver_public_key.data()) != 0) {
+    if (crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), sender_secret_key.data()) != 0) {
+        return std::unexpected(CryptoError::KeyConversionFailed);
+    }
+    const auto x_public_key = curve_public_key(receiver_public_key);
+    if (!x_public_key.has_value()) {
         return std::unexpected(CryptoError::KeyConversionFailed);
     }
 
@@ -344,7 +363,7 @@ Cryptography::CryptoResult Cryptography::asymmetric_encrypt(const Bytes&      da
                         data.data(),
                         data.size(),
                         nonce.data(),
-                        x_public_key.data(),
+                        x_public_key.value().data(),
                         x_secret_key.data())
         != 0) {
         return std::unexpected(CryptoError::EncryptionFailed);
@@ -368,9 +387,11 @@ Cryptography::CryptoResult Cryptography::asymmetric_decrypt(const Bytes&      en
     std::copy_n(encrypted_data.begin(), crypto_box_NONCEBYTES, nonce.begin());
 
     Curve25519Key x_secret_key;
-    Curve25519Key x_public_key;
-    if (crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), receiver_secret_key.data()) != 0
-        || crypto_sign_ed25519_pk_to_curve25519(x_public_key.data(), sender_public_key.data()) != 0) {
+    if (crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), receiver_secret_key.data()) != 0) {
+        return std::unexpected(CryptoError::KeyConversionFailed);
+    }
+    const auto x_public_key = curve_public_key(sender_public_key);
+    if (!x_public_key.has_value()) {
         return std::unexpected(CryptoError::KeyConversionFailed);
     }
 
@@ -380,7 +401,7 @@ Cryptography::CryptoResult Cryptography::asymmetric_decrypt(const Bytes&      en
                              encrypted_data.data() + crypto_box_NONCEBYTES,
                              encrypted_size,
                              nonce.data(),
-                             x_public_key.data(),
+                             x_public_key.value().data(),
                              x_secret_key.data())
         != 0) {
         return std::unexpected(CryptoError::DecryptionFailed);

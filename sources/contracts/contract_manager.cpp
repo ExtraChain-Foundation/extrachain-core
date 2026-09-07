@@ -19,6 +19,7 @@
 #include "contracts/contract_hash.h"
 #include "contracts/contract_module.h"
 #include "contracts/standard_token.h"
+#include "utils/msgpack_limits.h"
 
 namespace ExtraChain::Contracts {
     namespace {
@@ -61,7 +62,10 @@ namespace ExtraChain::Contracts {
                 std::size_t offset = 0;
                 auto        handle = msgpack::unpack(reinterpret_cast<const char *>(effect.arguments.data()),
                                               effect.arguments.size(),
-                                              offset);
+                                              offset,
+                                              nullptr,
+                                              nullptr,
+                                              MessagePack::unpack_limits(effect.arguments.size()));
                 if (offset != effect.arguments.size()) {
                     return false;
                 }
@@ -89,7 +93,10 @@ namespace ExtraChain::Contracts {
                 std::size_t offset = 0;
                 auto        handle = msgpack::unpack(reinterpret_cast<const char *>(effect.arguments.data()),
                                               effect.arguments.size(),
-                                              offset);
+                                              offset,
+                                              nullptr,
+                                              nullptr,
+                                              MessagePack::unpack_limits(effect.arguments.size()));
                 if (offset != effect.arguments.size()) {
                     return false;
                 }
@@ -150,7 +157,10 @@ namespace ExtraChain::Contracts {
                 std::size_t offset = 0;
                 auto        handle = msgpack::unpack(reinterpret_cast<const char *>(effect.arguments.data()),
                                               effect.arguments.size(),
-                                              offset);
+                                              offset,
+                                              nullptr,
+                                              nullptr,
+                                              MessagePack::unpack_limits(effect.arguments.size()));
                 if (offset != effect.arguments.size()) {
                     return false;
                 }

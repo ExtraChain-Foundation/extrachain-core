@@ -298,8 +298,12 @@ std::expected<BigNumberFloat, BigNumberError> BigNumberFloat::create(const std::
     }
 
     try {
-        return BigNumberFloat(bigNumberFloat);
-    } catch (std::exception &) {
+        const cpp_dec_float_exc value(bigNumberFloat.empty() ? "0" : bigNumberFloat);
+        if (!boost::multiprecision::isfinite(value)) {
+            return std::unexpected(BigNumberError::Infinity);
+        }
+        return BigNumberFloat(value);
+    } catch (const std::exception &) {
         return std::unexpected(BigNumberError::InvalidNumber);
     }
 }
@@ -383,8 +387,14 @@ namespace magic {
 
     BigNumberFloat custom_magic<BigNumberFloat>::write(const std::string &value) {
         // Format is decided by the active WireFormat scope, never sniffed.
-        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? BigNumberFloat::from_hex(value)
-                                                                    : BigNumberFloat(value);
+        const auto number =
+            BigNumberFloat::create(value,
+                                   WireFormat::get_mode() == WireFormat::Mode::Legacy ? NumeralBase::Hex
+                                                                                      : NumeralBase::Dec);
+        if (!number.has_value()) {
+            throw std::invalid_argument("Invalid BigNumberFloat JSON value");
+        }
+        return number.value();
     }
 } // namespace magic
 

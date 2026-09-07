@@ -9,6 +9,7 @@ function(extrachain_generate_embedded_contracts output_root contracts_root)
           ITEMS fungible_token_rust fungible_token_assemblyscript
                 non_fungible_token_rust non_fungible_token_assemblyscript)
     set(contract_file "${contracts_root}/${contract_name}.wasm")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${contract_file}")
     if(EXTRACHAIN_XXD_EXECUTABLE)
       set(contract_fragment "${generated_directory}/${contract_name}.inc")
       execute_process(

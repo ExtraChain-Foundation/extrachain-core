@@ -9,6 +9,7 @@
  */
 
 #include "contracts/dfs_contract_storage.h"
+#include "contract_replay.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -23,6 +24,7 @@
 #include "dfs/dfs_service.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
+#include "utils/msgpack_limits.h"
 #include "utils/file_io.h"
 
 namespace ExtraChain::Contracts {
@@ -245,8 +247,22 @@ namespace ExtraChain::Contracts {
                                                                         const SectionId &last) {
             if (dag != nullptr && dag->mode() == DagMode::Full && dag->chain_index_enabled()) {
                 auto *index = dag->chain_index();
-                if (index != nullptr && index->derived_index_ready() && index->last_indexed_section() >= last) {
-                    return index->find_contract_sections(contract_id.to_string(), first);
+                if (index != nullptr && index->derived_index_ready()) {
+                    const auto indexed_through = index->last_indexed_section();
+                    auto       sections        = index->find_contract_sections(contract_id.to_string(), first);
+                    std::erase_if(sections, [&](const auto &section) {
+                        return section > last;
+                    });
+                    // Empty tail sections need no index rows. Scan only the
+                    // uncovered tail instead of repeating the complete history.
+                    for (auto section = std::max(first, indexed_through + SectionId(1)); section <= last;
+                         ++section) {
+                        sections.push_back(section);
+                    }
+                    std::ranges::sort(sections);
+                    const auto duplicates = std::ranges::unique(sections);
+                    sections.erase(duplicates.begin(), duplicates.end());
+                    return sections;
                 }
             }
             return std::nullopt;
@@ -283,7 +299,11 @@ namespace ExtraChain::Contracts {
                 return std::unexpected(failure(ContractError::NotFound, "Contract head does not exist"));
             }
             try {
-                auto object = msgpack::unpack(bytes->data(), bytes->size());
+                auto object = msgpack::unpack(bytes.value().data(),
+                                              bytes.value().size(),
+                                              nullptr,
+                                              nullptr,
+                                              MessagePack::unpack_limits(bytes.value().size()));
                 auto cache  = object.get().as<ContractHeadCache>();
                 if (cache.schema != 3 || cache.contract_id != contract_id.to_string() || cache.owner_id.empty()
                     || cache.kind.empty() || cache.active_version == 0
@@ -522,6 +542,13 @@ namespace ExtraChain::Contracts {
                                                     return failure(ContractError::StorageError,
                                                                    "Contract replay arguments are invalid");
                                                 }
+                                                const auto depth =
+                                                    replay_call_depth(metadata.value(),
+                                                                      transaction.receiver().to_string(),
+                                                                      record.contract_id);
+                                                if (!depth.has_value()) {
+                                                    return depth.error();
+                                                }
                                                 auto       output = evaluator.evaluate(version.module,
                                                                                  transaction.sender().to_string(),
                                                                                  invocation.method,
@@ -530,7 +557,8 @@ namespace ExtraChain::Contracts {
                                                                                  section_number,
                                                                                  record.contract_id,
                                                                                  invocation.caller_contract_id,
-                                                                                 metadata->verified_inputs);
+                                                                                 metadata->verified_inputs,
+                                                                                 depth.value());
                                                 const auto encoded_effects =
                                                     output.has_value()
                                                         ? Utils::to_base64(Codec::encode_effects(output->effects))
@@ -767,8 +795,34 @@ namespace ExtraChain::Contracts {
             heads_.insert_or_assign(contract_id->to_string(), *head);
             return head;
         }
-        auto checkpoint = load_checkpoint_from_dag(dfs_, dag_, *contract_id);
+        const auto revision = dag_ == nullptr ? 0 : dag_->history_revision();
+        // A ready index is cheap to query and can change independently during
+        // rebuild. Negative entries are only for the unindexed DAG fallback.
+        const bool cache_absence = dag_ == nullptr || dag_->mode() != DagMode::Full || !dag_->chain_index_enabled()
+                                   || dag_->chain_index() == nullptr
+                                   || !dag_->chain_index()->derived_index_ready();
+        const auto range =
+            dag_ == nullptr ? std::string()
+                            : dag_->first_saved_section().to_string() + ":" + dag_->current_section().to_string();
+        if (absence_revision_ != revision || absence_range_ != range) {
+            absent_contracts_.clear();
+            absence_revision_ = revision;
+            absence_range_    = range;
+        }
+        if (cache_absence && absent_contracts_.contains(contract_id.value().to_string())) {
+            return std::unexpected(failure(ContractError::NotFound, "Contract checkpoint does not exist"));
+        }
+        auto checkpoint = load_checkpoint_from_dag(dfs_, dag_, contract_id.value());
         if (!checkpoint.has_value()) {
+            // Missing DFS artifacts are retryable and must not become negative
+            // entries. Bound entries supplied by otherwise valid remote actors.
+            if (cache_absence && checkpoint.error().error == ContractError::NotFound
+                && (dag_ == nullptr || dag_->history_revision() == revision)) {
+                if (absent_contracts_.size() >= 1024) {
+                    absent_contracts_.erase(absent_contracts_.begin());
+                }
+                absent_contracts_.insert(contract_id.value().to_string());
+            }
             return std::unexpected(checkpoint.error());
         }
         auto replayed = replay_tail(std::move(*checkpoint), dag_);

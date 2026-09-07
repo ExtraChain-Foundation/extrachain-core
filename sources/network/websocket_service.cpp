@@ -202,12 +202,15 @@ asio::awaitable<bool> WebSocketService::exchange_keys() {
         co_return false;
     }
     auto decoded = Utils::from_base64<std::vector<std::uint8_t>>(received.value());
-    if (!decoded.has_value()) {
+    if (!decoded.has_value() || decoded.value().size() != crypto_sign_PUBLICKEYBYTES) {
         report_error(Network::SocketServiceError::IncorrectPublicKey, "invalid public key encoding");
         co_return false;
     }
 
-    public_key_          = KeyPublic(ByteArray(std::move(decoded.value())).toArray<crypto_sign_PUBLICKEYBYTES>());
+    if (!set_peer_key(ByteArray(std::move(decoded.value())).toArray<crypto_sign_PUBLICKEYBYTES>())) {
+        report_error(Network::SocketServiceError::IncorrectPublicKey, "public key agreement failed");
+        co_return false;
+    }
     public_key_received_ = true;
     co_return true;
 }

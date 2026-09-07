@@ -147,7 +147,8 @@ impl Encoder {
     }
 
     pub fn amount(&mut self, value: u128) {
-        self.string(&value.to_string());
+        let mut buffer = itoa::Buffer::new();
+        self.string(buffer.format(value));
     }
 
     pub fn boolean(&mut self, value: bool) {
@@ -1465,6 +1466,33 @@ mod tests {
         let mut decoder = Decoder::new(&encoded);
         assert_eq!(decoder.amount(), Ok(u128::MAX));
         assert!(decoder.is_empty());
+    }
+
+    #[test]
+    fn amount_encoding_matches_canonical_decimal_bytes() {
+        let check = |value: u128| {
+            let mut actual = Encoder::new();
+            actual.amount(value);
+            let mut expected = Encoder::new();
+            expected.string(&value.to_string());
+            assert_eq!(actual.finish(), expected.finish());
+        };
+        check(u128::MAX);
+        let mut power = 1u128;
+        loop {
+            check(power - 1);
+            check(power);
+            check(power + 1);
+            match power.checked_mul(10) {
+                Some(next) => power = next,
+                None => break,
+            }
+        }
+        let mut value = 20260905u128;
+        for _ in 0..1000 {
+            value = value.wrapping_mul(6364136223846793005).wrapping_add(1);
+            check(value);
+        }
     }
 
     #[test]

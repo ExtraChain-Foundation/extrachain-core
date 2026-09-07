@@ -138,6 +138,12 @@ public:
         return key_;
     }
 
+    bool has_valid_id() const {
+        const auto hash =
+            Utils::calculate_hash(ByteArray(key_.public_key()).toString(), Utils::HashAlgorithm::Blake3);
+        return !id_.is_zero() && id_.to_string() == hash.substr(0, ActorId::SIZE);
+    }
+
     ActorType type() const {
         return type_;
     }
@@ -254,6 +260,9 @@ public:
             actor.set_secret_key(private_key->template toArray<crypto_sign_SECRETKEYBYTES>(), public_key_value);
         }
 
+        if (!actor.has_valid_id()) {
+            return {};
+        }
         return actor;
     }
 

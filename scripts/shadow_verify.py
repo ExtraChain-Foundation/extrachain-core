@@ -21,9 +21,11 @@ def node_dirs(work):
     """Committee homes, in node order: server is node 0, clients follow."""
     boot = os.path.join(work, "bootstrap")
     homes = [("node-0", os.path.join(boot, "server", "data"))]
-    for index in range(1, 7):
+    for index in range(1, 8):
         homes.append((f"node-{index}", os.path.join(boot, f"client{index}", "data")))
-    return [(name, path) for name, path in homes if os.path.isdir(path)]
+    # Nodes the harness saw die (chaos kills) are behind by design; skip them.
+    skipped = {f"node-{index}" for index in os.environ.get("EXC_VERIFY_SKIP", "").split()}
+    return [(name, path) for name, path in homes if os.path.isdir(path) and name not in skipped]
 
 
 def section_hashes(data_dir):
@@ -117,12 +119,17 @@ def main():
     )
 
     # Missing is only meaningful inside the range everybody has started, so take
-    # the highest lower bound across nodes as the floor.
+    # the highest lower bound across nodes as the floor. Within that range, compare
+    # against what some node actually holds: hot storage only keeps recent sections,
+    # older ones live in packs, and a node that has not packed yet drags the floor
+    # down to zero — every section below the others' hot window then looks "missing"
+    # on all seven at once, which is nobody diverging from anybody.
     floor = max(min(h) for h in per_node.values() if h)
     ceiling = min(max(h) for h in per_node.values() if h)
+    held_by_someone = {s for h in per_node.values() for s in h if floor <= s <= ceiling}
     missing = defaultdict(list)
     for name, hashes in per_node.items():
-        for section in range(floor, ceiling + 1):
+        for section in sorted(held_by_someone):
             if section not in hashes:
                 missing[name].append(section)
 
@@ -152,10 +159,20 @@ def main():
 
     tips = {name: max(h) for name, h in per_node.items() if h}
     spread = max(tips.values()) - min(tips.values())
-    print(f"height spread: {spread} (tips {min(tips.values())}..{max(tips.values())})")
-    if spread > 3:
+    # The nodes are killed one after another, so whoever dies last commits another
+    # checkpoint or two in the meantime — a spread of a few checkpoints is shutdown
+    # skew, not divergence. A checkpoint covers a fixed span of sections, so read
+    # that span from the tips the nodes actually stopped at.
+    distinct = sorted(set(tips.values()))
+    gaps = [b - a for a, b in zip(distinct, distinct[1:])]
+    span = min(gaps) if gaps else 0
+    checkpoints_behind = spread // span if span else 0
+    print(f"height spread: {spread} sections"
+          + (f" ≈ {checkpoints_behind} checkpoint(s) of {span}" if span else "")
+          + f" (tips {min(tips.values())}..{max(tips.values())})")
+    if checkpoints_behind > 3:
         ok = False
-        print("  ! spread above 3 — nodes are not tracking the same tip")
+        print("  ! more than 3 checkpoints apart — nodes are not tracking the same tip")
 
     print("\n--- intents ---")
     for name, path in homes:

@@ -24,6 +24,7 @@
 #include "core/extrachain_node.h"
 #include "network/network_service.h"
 #include "utils/db_connector.h"
+#include "utils/msgpack_limits.h"
 
 #include <msgpack.hpp>
 
@@ -49,8 +50,11 @@ namespace {
         }
 
         auto amount = [](const std::string& value, bool positive) {
-            auto result = BigNumberFloat(value);
-            return positive ? result : -result;
+            const auto result = BigNumberFloat::create(value);
+            if (!result.has_value() || result.value() < 0) {
+                throw std::invalid_argument("Invalid contract balance delta");
+            }
+            return positive ? result.value() : -result.value();
         };
         auto actor = [](std::string value) -> std::optional<ActorId> {
             auto result = ActorId::create(std::move(value));
@@ -68,7 +72,10 @@ namespace {
                     continue;
                 }
                 auto handle = msgpack::unpack(reinterpret_cast<const char*>(effect.arguments.data()),
-                                              effect.arguments.size());
+                                              effect.arguments.size(),
+                                              nullptr,
+                                              nullptr,
+                                              MessagePack::unpack_limits(effect.arguments.size()));
                 auto object = handle.get();
                 if (effect.operation == "mint" || effect.operation == "burn") {
                     std::vector<std::tuple<std::string, std::string>> entries;
@@ -373,7 +380,8 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         }
     }
 
-    BigNumber balance_start_section;
+    BigNumber                balance_start_section;
+    std::optional<BigNumber> rewind_from; // cache sits past the target: undo (target, cache]
 
     {
         std::lock_guard lock(mutex_);
@@ -393,13 +401,55 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
             if (cached_balances_opt.has_value()) {
                 balances = cached_balances_opt.value();
             }
+        } else if (cached_section_ != BigNumber(-1)
+                   && cached_section_ - target_section < target_section - first_saved_section) {
+            // The cache has moved past the target. Replaying from first_saved_section
+            // instead walks the whole chain — minutes on a long DAG, and
+            // validate_shadow_batch asks for this under the consensus mutex, which
+            // froze a validator for the rest of a run. Every delta is additive, so
+            // seeding from the cache and undoing the sections past the target gives
+            // the same answer the forward replay would, at the cost of the distance.
+            auto cached_balances_opt = get_cached_balances_for_actors(actor_ids);
+            if (cached_balances_opt.has_value()) {
+                balances    = cached_balances_opt.value();
+                rewind_from = cached_section_;
+            } else {
+                balance_start_section = first_saved_section;
+            }
         } else {
             balance_start_section = first_saved_section;
         }
     }
 
+    const auto affects_actors = [&actor_ids](const Transaction& tx) {
+        // Contract effects can change accounts outside the transaction endpoints.
+        if (is_contract_transaction(tx.type())) {
+            return true;
+        }
+        for (const auto& actor_id : actor_ids) {
+            if (tx.sender() == actor_id || tx.receiver() == actor_id) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     // Process transactions after the balance_start_section up to current_section
     auto to = to_section.has_value() ? to_section.value() : current_section;
+    if (rewind_from.has_value()) {
+        for (BigNumber i = rewind_from.value(); i > to; i = i - BigNumber(1)) {
+            auto section = dag->read_section(i);
+            if (!section.has_value() || section->transactions.empty() || section->id < 0) {
+                continue;
+            }
+            for (auto tx = section->transactions.rbegin(); tx != section->transactions.rend(); ++tx) {
+                if (affects_actors(*tx)) {
+                    apply_transaction(*tx, balances, true);
+                }
+            }
+        }
+        balance_start_section = to + 1; // nothing left to replay forward
+    }
     for (BigNumber i = balance_start_section; i <= to; i++) {
         auto section = dag->read_section(i);
         if (!section.has_value()) {
@@ -411,15 +461,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
 
         // Process each transaction in the section
         for (const auto& tx : section->transactions) {
-            bool affects_our_actors = false;
-            for (const auto& actor_id : actor_ids) {
-                if (tx.sender() == actor_id || tx.receiver() == actor_id) {
-                    affects_our_actors = true;
-                    break;
-                }
-            }
-
-            if (affects_our_actors) {
+            if (affects_actors(tx)) {
                 process_transaction(tx, balances);
             }
         }
@@ -617,7 +659,25 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
                     return;
                 }
 
-                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
+                if (last_hash.value() != control_hash.value().control) {
+                    // generate_hash_from_section returns the last control it produced in
+                    // this pass, and that is not the control at res.to whenever the pass
+                    // stops short: a cache rebuilt from genesis (legacy sync resets it)
+                    // gets here before the chain is closed up to the tip, so the pass
+                    // ends at the genesis control. Announcing that value under `to` made
+                    // every peer see a mismatch at a boundary they all agree on and start
+                    // a repair from section 0. Peers compare the claim against their
+                    // stored control at `to`, so that is what must go out.
+                    eWarning(
+                        "[DagCache] Control pass from {} ended at {} but the control at {} is {}; announcing the "
+                        "stored one",
+                        res.from,
+                        last_hash.value().substr(0, 8),
+                        res.to,
+                        control_hash.value().control.substr(0, 8));
+                }
+                auto hash_interval =
+                    HashInterval { .from = res.from, .to = res.to, .hash = control_hash.value().control };
                 eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
                 // eLog("[Dag] Send {}", hash_interval);
                 node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
@@ -635,7 +695,25 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
                 return;
             }
 
-            auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
+            if (last_hash.value() != control_hash.value().control) {
+                // generate_hash_from_section returns the last control it produced in
+                // this pass, and that is not the control at res.to whenever the pass
+                // stops short: a cache rebuilt from genesis (legacy sync resets it)
+                // gets here before the chain is closed up to the tip, so the pass
+                // ends at the genesis control. Announcing that value under `to` made
+                // every peer see a mismatch at a boundary they all agree on and start
+                // a repair from section 0. Peers compare the claim against their
+                // stored control at `to`, so that is what must go out.
+                eWarning(
+                    "[DagCache] Control pass from {} ended at {} but the control at {} is {}; announcing the "
+                    "stored one",
+                    res.from,
+                    last_hash.value().substr(0, 8),
+                    res.to,
+                    control_hash.value().control.substr(0, 8));
+            }
+            auto hash_interval =
+                HashInterval { .from = res.from, .to = res.to, .hash = control_hash.value().control };
             eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
             // eLog("[Dag] Send {}", hash_interval);
             node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
@@ -803,49 +881,59 @@ std::optional<StateTransitionViolation> DagCache::validate_state_to(const Sectio
 }
 
 void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
+    apply_transaction(tx, balances, false);
+}
+
+void DagCache::apply_transaction(const Transaction& tx, Balances& balances, bool reverse) {
+    // Every balance effect below is additive, so undoing a transaction is the
+    // same walk with the signs flipped. calculate_balances relies on that to
+    // rewind a cache that sits past the section it was asked about.
+    const auto credit = [&](const std::pair<ActorId, TokenId>& key, const BigNumberFloat& amount) {
+        if (reverse) {
+            balances[key] -= amount;
+        } else {
+            balances[key] += amount;
+        }
+    };
+    const auto debit = [&](const std::pair<ActorId, TokenId>& key, const BigNumberFloat& amount) {
+        if (reverse) {
+            balances[key] += amount;
+        } else {
+            balances[key] -= amount;
+        }
+    };
+
     // Skip if transaction doesn't affect balances
     if (tx.type() == TransactionType::Unknown) {
         return;
     }
     if (is_contract_transaction(tx.type())) {
-        apply_contract_deltas(tx, balances, false);
+        apply_contract_deltas(tx, balances, reverse);
         return;
     }
 
     // Minting transactions (creates from nothing, adds to receiver)
     if (tx.type() == TransactionType::Minting && !tx.receiver().is_zero() && !tx.token().is_zero()) {
-        auto key = std::make_pair(tx.receiver(), tx.token());
-
-        balances[key] += tx.amount();
+        credit(std::make_pair(tx.receiver(), tx.token()), tx.amount());
         return;
     }
 
     // Reward transactions
     if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
-        auto key = std::make_pair(tx.sender(), tx.token());
-
-        balances[key] += tx.amount();
+        credit(std::make_pair(tx.sender(), tx.token()), tx.amount());
     }
     // Contract initialization
     else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
-        auto key = std::make_pair(tx.sender(), tx.token());
-
-        balances[key] += tx.amount();
+        credit(std::make_pair(tx.sender(), tx.token()), tx.amount());
     }
     // Token conversion
     else if (tx.type() == TransactionType::Conversion && !tx.sender().is_zero()) {
         if (tx.meta().has_value()) {
             auto from_token = TokenId::create(tx.meta().value());
             if (from_token.has_value()) {
-                // Deduct from source token
-                auto from_key = std::make_pair(tx.sender(), from_token.value());
-
-                balances[from_key] -= tx.amount();
-
-                // Add to destination token
-                auto to_key = std::make_pair(tx.sender(), tx.token());
-
-                balances[to_key] += tx.amount();
+                // Deduct from source token, add to destination token
+                debit(std::make_pair(tx.sender(), from_token.value()), tx.amount());
+                credit(std::make_pair(tx.sender(), tx.token()), tx.amount());
             }
         }
     }
@@ -853,15 +941,11 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
     else {
         // If receiver is valid, add funds
         if (!tx.receiver().is_zero()) {
-            auto key = std::make_pair(tx.receiver(), tx.token());
-
-            balances[key] += tx.amount();
+            credit(std::make_pair(tx.receiver(), tx.token()), tx.amount());
         }
         // If sender is valid, deduct funds
         if (!tx.sender().is_zero()) {
-            auto key = std::make_pair(tx.sender(), tx.token());
-
-            balances[key] -= tx.amount();
+            debit(std::make_pair(tx.sender(), tx.token()), tx.amount());
         }
     }
 }

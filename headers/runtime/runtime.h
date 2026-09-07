@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <type_traits>
@@ -23,6 +24,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_awaitable.hpp>
+
+#include "extrachain_global.h"
 
 namespace ExtraChain::Core {
 
@@ -65,6 +68,19 @@ namespace ExtraChain::Core {
         [[nodiscard]] boost::asio::thread_pool& storage_pool() noexcept;
         [[nodiscard]] boost::asio::thread_pool& compute_pool() noexcept;
 
+        template <typename Function>
+        [[nodiscard]] static auto guard_handler(const char* boundary, Function&& function) {
+            return [boundary, function = std::forward<Function>(function)]() mutable noexcept {
+                try {
+                    std::invoke(function);
+                } catch (const std::exception& error) {
+                    report_handler_exception(boundary, error.what());
+                } catch (...) {
+                    report_handler_exception(boundary, "non-standard exception");
+                }
+            };
+        }
+
         /**
          * Run CPU-bound work on the bounded compute pool.
          *
@@ -96,6 +112,7 @@ namespace ExtraChain::Core {
         }
 
     private:
+        EXTRACHAIN_EXPORT static void report_handler_exception(const char* boundary, const char* detail) noexcept;
         struct State;
         std::shared_ptr<State> state_;
     };

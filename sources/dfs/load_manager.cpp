@@ -83,11 +83,19 @@ std::size_t LoadManager::max_forced_downloads() const {
     return limit == 0 ? 0 : std::max<std::size_t>(1, limit / 2);
 }
 
+bool LoadManager::downloads_empty() const {
+    // SafePtr temporaries retain their locks until the full expression ends.
+    // Keep these reads in separate expressions to avoid nesting the pool locks.
+    if (!m_active_downloads->empty()) {
+        return false;
+    }
+    return m_active_downloads_priority->empty();
+}
+
 void LoadManager::schedule_watchdog() {
     boost::asio::dispatch(node->serial_executor(), [this] {
         if (stopping_.load(std::memory_order_acquire) || node->runtime_activity() == RuntimeActivity::Background
-            || max_concurrent_downloads() == 0
-            || (m_active_downloads->empty() && m_active_downloads_priority->empty())) {
+            || max_concurrent_downloads() == 0 || downloads_empty()) {
             watchdog_->cancel();
             return;
         }
@@ -184,12 +192,10 @@ bool LoadManager::compute_vectors_waiting() {
 }
 
 void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
-    // The scheduler owns both download pools and sometimes inspects one while
-    // it holds the other. Network and DFS workers can ask for an immediate
-    // refill, but they must not run the scheduler in parallel: two callers can
-    // otherwise take the priority and regular pool locks in opposite order.
-    // Keep all scheduling on the Core serial executor. The queued calls preserve
-    // the targeted refill without blocking the worker that stored a fragment.
+    // Keep scheduling on the Core serial executor. Network and DFS workers
+    // request refills here so queue selection and request accounting stay serial.
+    // The queued calls preserve targeted refills without blocking the worker
+    // that stored a fragment.
     // kick() also merges a burst of requests into one queued scheduler pass.
     const auto download_limit = max_concurrent_downloads();
     if (download_limit == 0 || node->runtime_activity() == RuntimeActivity::Background) {
@@ -210,23 +216,29 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
         }
     }
 
-    // "Vectors before files" gate: skip file scheduling while a vector (rank<=4) can still
-    // download. Freshness window guards against starving files forever if no peer has the vector.
-    // Computed lazily: on the per-fragment targeted path this full two-map scan is
-    // usually never needed — that matters on phones where the path runs per arrival.
-    std::optional<bool> vectors_waiting_cache;
-    const auto          vectors_waiting = [&]() -> bool {
-        if (vectors_waiting_cache.has_value()) {
-            return *vectors_waiting_cache;
+    // Inspect the gate before locking either pool. A targeted fragment refill
+    // needs only two lookups unless an ordinary, unforced file needs the gate.
+    const auto needs_vector_gate = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& pool) {
+        auto       locked     = *pool;
+        const auto needs_gate = [&](const auto& entry) {
+            return !entry.second.forced
+                   && node->dfs()->download_rank(entry.first.owner_id, entry.second.dir_row)
+                          > DfsService::RANK_OTHER_VECTORS;
+        };
+        if (!file_link_to_proceed.file_id.empty()) {
+            const auto item = locked->find(file_link_to_proceed);
+            return item != locked->end() && needs_gate(*item);
         }
-        vectors_waiting_cache = compute_vectors_waiting();
-        // Log the gate flipping: when files get paused and when they're released.
-        const int state = *vectors_waiting_cache ? 1 : 0;
-        if (vector_gate_state_.exchange(state) != state) {
-            eLog("[Load] {}", *vectors_waiting_cache ? "files PAUSED (vectors downloading)" : "files RESUMED");
-        }
-        return *vectors_waiting_cache;
+        return std::any_of(locked->begin(), locked->end(), needs_gate);
     };
+    bool vectors_waiting = false;
+    if (needs_vector_gate(m_active_downloads_priority) || needs_vector_gate(m_active_downloads)) {
+        vectors_waiting = compute_vectors_waiting();
+        const int state = vectors_waiting ? 1 : 0;
+        if (vector_gate_state_.exchange(state) != state) {
+            eLog("[Load] {}", vectors_waiting ? "files PAUSED (vectors downloading)" : "files RESUMED");
+        }
+    }
 
     auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) -> bool {
         if (!active_downloads->empty()) {
@@ -302,7 +314,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 if (!load_info.forced
                     && node->dfs()->download_rank(file_link.owner_id, load_info.dir_row)
                            > DfsService::RANK_OTHER_VECTORS
-                    && vectors_waiting()) {
+                    && vectors_waiting) {
                     continue;
                 }
                 bool         ignore_timeout = file_link_to_proceed == file_link;
@@ -436,6 +448,16 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                             // must not age the source towards the dead-peer limit.
                             identifier.second.counter++;
                             identifier.second.last_attempt = std::chrono::system_clock::now();
+                            it->second.last_source         = identifier.first;
+                            eDebug("[Load] REQUEST {}/{} fragments={} left={} from {} attempt={} inflight={}/{}",
+                                   file_link.owner_id,
+                                   file_link.file_id.substr(0, 12),
+                                   output.fragment_numbers.size(),
+                                   it->second.fragments_left.size(),
+                                   identifier.first.substr(0, 8),
+                                   identifier.second.counter,
+                                   m_amount_file_fragments_requests->size(),
+                                   active_request_limit);
                             this->node->network()->send_message(output,
                                                                 MessageType::DfsFileRequest,
                                                                 SendMode::Focused,
@@ -495,8 +517,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
     // Idle: nothing queued in either pool — stop the periodic tick so an idle
     // messenger does not wake the CPU every 5 seconds (battery on phones).
     // kick() re-arms the timer when a download is queued again.
-    if (file_link_to_proceed.file_id.empty() && m_active_downloads->empty()
-        && m_active_downloads_priority->empty()) {
+    if (file_link_to_proceed.file_id.empty() && downloads_empty()) {
         watchdog_->cancel();
     }
 }
@@ -506,6 +527,90 @@ void LoadManager::remove_active_download(const Dfs::FileLinkFragment& file_link_
     m_active_downloads->erase(file_link_fragment.file_link);
     m_amount_file_fragments_requests->erase(file_link_fragment);
     schedule_watchdog();
+}
+
+void LoadManager::prefer_source(const Dfs::FileLink& file_link, const std::string& identifier) {
+    // The scheduler asks the first eligible source for the whole window and gives
+    // it three silent attempts before moving on. Sources seeded from the connection
+    // list are guesses; a peer that answered Ready is a confirmed holder, and it
+    // arrived at the back of that list — behind up to five guesses at 4-5s each.
+    // Measured on a 7-node loopback stand: a 1MB file took 1.5s when the guess was
+    // right and up to 41s when it was not. Put the confirmed holder first.
+    auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) {
+        auto locked = *active_downloads;
+        auto it     = locked->find(file_link);
+        if (it == locked->end()) {
+            return false;
+        }
+        auto& list = it->second.identifier_list;
+        auto  pos  = std::find_if(list.begin(), list.end(), [&](const auto& entry) {
+            return entry.first == identifier;
+        });
+        if (pos == list.end()) {
+            it->second.identifier_storage_checker.emplace(identifier);
+            list.insert(list.begin(), { identifier, LoadInfo::Attempts { .counter = 0 } });
+        } else {
+            pos->second = {};
+            if (pos != list.begin()) {
+                std::rotate(list.begin(), pos, std::next(pos));
+            }
+        }
+        it->second.cooldown_until        = {};
+        it->second.cooldown_rounds       = 0;
+        it->second.source_refresh_cycles = 0;
+        return true;
+    };
+    if (process_func(m_active_downloads_priority) || process_func(m_active_downloads)) {
+        kick(file_link);
+    }
+}
+
+void LoadManager::drop_source(const Dfs::FileLink& file_link, const std::string& identifier) {
+    // Keep a refused peer exhausted until the normal source refresh. Erasing it
+    // lets the immediate refill rediscover the same peer with zero attempts.
+    bool waiting_on_it = false;
+    auto process_func  = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) {
+        auto locked = *active_downloads;
+        auto it     = locked->find(file_link);
+        if (it == locked->end()) {
+            return false;
+        }
+        auto& list   = it->second.identifier_list;
+        auto  source = std::find_if(list.begin(), list.end(), [&](const auto& entry) {
+            return entry.first == identifier;
+        });
+        if (source == list.end() || source->second.refused) {
+            return false;
+        }
+        source->second.refused      = true;
+        source->second.counter      = 3;
+        source->second.last_attempt = std::chrono::system_clock::now();
+        // Only the peer we are actually waiting on holds the window. Refusals
+        // from the other probed peers must not release it: the targeted refill
+        // skips the retry timer, so it would re-ask the pending source at once
+        // and burn its three attempts before its answer had a chance to arrive.
+        waiting_on_it = it->second.last_source == identifier;
+        return true;
+    };
+    const bool dropped = process_func(m_active_downloads_priority) || process_func(m_active_downloads);
+    if (!dropped) {
+        return;
+    }
+    eDebug("[Load] DROP source {} for {}/{}: it cannot serve the file{}",
+           identifier.substr(0, 8),
+           file_link.owner_id,
+           file_link.file_id.substr(0, 12),
+           waiting_on_it ? " (window released)" : "");
+    if (!waiting_on_it) {
+        return;
+    }
+    {
+        auto pending_locked = *m_amount_file_fragments_requests;
+        std::erase_if(*pending_locked, [&](const auto& entry) {
+            return entry.first.file_link == file_link;
+        });
+    }
+    kick(file_link);
 }
 
 bool LoadManager::add_node_identifier(const Dfs::FileLink& file_link, std::string identifier) {
@@ -563,6 +668,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         if (is_forced) {
             existing->second.forced = true;
         }
+        // Metadata can queue the file before a peer requests a completion notice.
+        existing->second.notify_neighbours = existing->second.notify_neighbours || notify_neighbours;
         if (!identifier.empty() && existing->second.identifier_storage_checker.emplace(identifier).second) {
             existing->second.identifier_list.emplace_back(identifier, LoadInfo::Attempts { .counter = 0 });
         }
@@ -620,11 +727,6 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
             }
 
             if (row->type == Dfs::FileType::File && file_path->exists()) {
-                auto size = file_path->file_size();
-                if (size.has_value() && size == row->size) {
-                    return;
-                }
-
                 if (row->last_modified > dir_row.last_modified) {
                     return;
                 }
@@ -662,6 +764,11 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     // check duplicate
     if (!vector_broken_on_disk
         && node->dfs()->is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
+        // A crash can leave complete content on disk before its Ready state commits.
+        if (row.has_value() && row.value().type == Dfs::FileType::File && row.value().hash == dir_row.hash
+            && (row.value().state == Dfs::FileState::Known || row.value().state == Dfs::FileState::Partial)) {
+            node->dfs()->completeDownloadedFile(owner_id, row.value());
+        }
         return;
     }
 
@@ -787,9 +894,18 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(),
                                                                   file_link_fragment.file_link.owner_id,
                                                                   file_link_fragment.file_link.file_id);
+    // A request we cannot serve gets a negative FileState back. Silence here used
+    // to cost the requester three 4s attempts before it tried the next peer.
+    const auto decline = [&](Dfs::FileState state) {
+        responder.send_response(Dfs::Packets::FileState { .owner_id = file_link_fragment.file_link.owner_id,
+                                                          .file_id  = file_link_fragment.file_link.file_id,
+                                                          .state    = state },
+                                MessageType::DfsFileState,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    };
     if (!dir_row.has_value()) {
-        // eCritical("LoadManager::share_stored_file, no dir_row. file_id: {}",
-        // file_link_fragment.file_link.file_id);
+        decline(Dfs::FileState::Unknown);
         return;
     }
 
@@ -797,9 +913,10 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     // fan-out every peer asks every connection, including nodes still mid-download;
     // those used to read their own partially-written file and served ZEROES from
     // the unwritten holes as valid fragments — the requester assembled a full-size
-    // corrupted copy (the "Ooops"/stuck-partial family). Known-state rows stay
-    // silent; the requester's source cycling moves on to a peer that is Ready.
+    // corrupted copy (the "Ooops"/stuck-partial family). A Known-state row answers
+    // Known, so the requester drops us as a source instead of timing out on us.
     if (dir_row->state != Dfs::FileState::Ready) {
+        decline(Dfs::FileState::Known);
         return;
     }
 
@@ -815,6 +932,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                  file_link_fragment.file_link.file_id,
                  total_size,
                  dir_row->size);
+        decline(Dfs::FileState::Known);
         return;
     }
 
@@ -846,6 +964,11 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     auto max_offsets = calculate_max_offsets(total_size, Dfs::Basic::FRAGMENT_SIZE);
 
     std::string identifier = *responder.identifiers().begin();
+    eDebug("[Load] SERVE {}/{} fragments={} to {}",
+           file_link_fragment.file_link.owner_id,
+           file_link_fragment.file_link.file_id.substr(0, 12),
+           file_link_fragment.fragment_numbers.size(),
+           identifier.substr(0, 8));
     node->post_storage(
         [this, identifier, max_offsets, total_size, file_link_fragment, path = *path, dir_row]() {
             uint64_t offset = 0;
@@ -982,6 +1105,13 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             }
             res->second.fragments_left.erase(file_content.fragment_number);
             res->second.last_fragment_received = std::chrono::system_clock::now();
+            eDebug("[Load] GOT {}/{} fragment {}/{} from {} left={}",
+                   file_content.owner_id,
+                   file_content.file_id.substr(0, 12),
+                   file_content.fragment_number,
+                   file_content.full_amount_fragments,
+                   identifier.substr(0, 8),
+                   res->second.fragments_left.size());
             // Real progress: reset the exhaustion backoff so a transfer that stalls
             // again starts from the short cooldown, not from the grown-out interval.
             res->second.cooldown_rounds = 0;
@@ -990,6 +1120,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             // refills sent below.
             for (auto& id_pair : res->second.identifier_list) {
                 if (id_pair.first == identifier) {
+                    id_pair.second.refused = false;
                     // Clamp at zero: one request carries a whole window of
                     // fragments, so per-fragment decrements would drive the
                     // counter negative and fail the `counter == 0` send gate —
@@ -1142,7 +1273,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                     item->second.fragments_left.emplace(number);
                 }
                 for (auto& source : item->second.identifier_list) {
-                    source.second.counter = 0;
+                    source.second = {};
                 }
                 return true;
             };

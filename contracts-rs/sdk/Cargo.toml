@@ -8,4 +8,5 @@ rust-version.workspace = true
 [dependencies]
 dlmalloc = { version = "0.2.14", default-features = false, features = ["global"] }
 extrachain-contract-macros = { path = "../macros" }
+itoa = { version = "1.0", default-features = false }
 rmp = { version = "0.8.15", default-features = false }
