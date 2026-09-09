@@ -48,6 +48,7 @@
 #include "consensus/consensus_protocol.h"
 #include "consensus/consensus_service.h"
 #include "core/extrachain_node.h"
+#include "dfs/collection_template.h"
 #include "dfs/dfs_service.h"
 #include "managers/account_controller.h"
 #include "network/network_service.h"
@@ -427,6 +428,67 @@ int main(int argc, char* argv[]) {
                         row->file_id.c_str(),
                         row->size);
             std::fflush(stdout);
+        }
+
+        // Optional ExDFS vector load: every committee node creates a vector from
+        // its own template and appends EXC_DFS_VECTOR_ROWS rows to it. Vectors
+        // replicate row by row over a different path than plain files (gossiped
+        // DfsVectorAdd rather than fragment transfers), so the harness can tell
+        // the two apart when one of them stops working.
+        if (const char* rows_env = std::getenv("EXC_DFS_VECTOR_ROWS");
+            rows_env != nullptr && std::strtoull(rows_env, nullptr, 10) > 0) {
+            const auto  row_count = static_cast<std::size_t>(std::strtoull(rows_env, nullptr, 10));
+            const auto& owner     = node->account_controller()->system_actor().id();
+            const auto  name      = "soak_vector_" + std::to_string(node_index);
+            auto        collection_template = Dfs::CollectionTemplate::create(name);
+            if (!collection_template.has_value()) {
+                std::printf("[node-run] vector template creation failed\n");
+                node->cleanUp();
+                return 5;
+            }
+            auto vector_template = collection_template.value()
+                                       .use_id()
+                                       .add_fields({ Dfs::Field::String("payload").not_null(),
+                                                     Dfs::Field::Integer("position").not_null() });
+            // Store the template first and create the vector from that stored row:
+            // the variant overload is ambiguous against the (actor, file id) one.
+            const auto stored_template = node->dfs()->store_template(owner, vector_template);
+            if (!stored_template.has_value()) {
+                std::printf("[node-run] vector template store failed (error %d)\n",
+                            static_cast<int>(stored_template.error()));
+                node->cleanUp();
+                return 5;
+            }
+            const auto row =
+                node->dfs()->store_vector(owner, owner, name, owner, stored_template->file_id);
+            if (!row.has_value()) {
+                std::printf("[node-run] vector creation failed (error %d)\n", static_cast<int>(row.error()));
+                node->cleanUp();
+                return 5;
+            }
+            std::size_t appended = 0;
+            for (std::size_t index = 0; index < row_count; ++index) {
+                DbRow entry;
+                // use_id() makes "id" the primary field, and DfsVector::calculate_hash
+                // reads it with .at() without checking — an absent id terminates the
+                // process. The caller must supply it.
+                entry["id"]       = name + "_" + std::to_string(index);
+                entry["payload"]  = name + "_row_" + std::to_string(index);
+                entry["position"] = std::to_string(index);
+                if (node->dfs()->add_vector_row(owner, row->file_id, entry)) {
+                    ++appended;
+                }
+            }
+            std::printf("[node-run] DFS vector owner=%s file_id=%s rows=%zu/%zu\n",
+                        owner.to_string().c_str(),
+                        row->file_id.c_str(),
+                        appended,
+                        row_count);
+            std::fflush(stdout);
+            if (appended != row_count) {
+                node->cleanUp();
+                return 5;
+            }
         }
 
         std::vector<std::string> submitted_hashes;

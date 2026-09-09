@@ -18,6 +18,8 @@
 #        EXC_SHADOW_HOLD_S       keep a passed committee alive this long (default 0)
 #        EXC_SHADOW_ALLOWED_DEAD this many committee nodes may die (chaos kills) and the
 #                                run still passes on the survivors (default 0)
+#        EXC_SHADOW_VECTOR_ROWS  every node also publishes an ExDFS vector with this many
+#                                rows; the run passes only if every row reaches every node
 #        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
 #                                the run passes only if it reaches every node (default 0)
 
@@ -38,6 +40,8 @@ DEADLINE_S="${EXC_SHADOW_DEADLINE_S:-$((RUN_SECONDS + 120))}"
 NODE_COUNT=7
 DFS_BYTES="${EXC_SHADOW_DFS_BYTES:-0}"
 export EXC_DFS_BYTES="$DFS_BYTES"
+VECTOR_ROWS="${EXC_SHADOW_VECTOR_ROWS:-0}"
+export EXC_DFS_VECTOR_ROWS="$VECTOR_ROWS"
 ALLOWED_DEAD="${EXC_SHADOW_ALLOWED_DEAD:-0}"
 # Nodes found dead when the watch loop ends (chaos kills); set once, before cleanup.
 DEAD_NODES=""
@@ -60,6 +64,68 @@ dfs_published() {
         sed -n "s/^\[node-run\] DFS stored owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\) size=\([0-9]*\).*/$index \1 \2 \3/p" \
             "$WORK/node-$index.log" 2>/dev/null
     done
+}
+
+# Row count of a vector's sqlite file, read through the backup API so a live WAL
+# database is never opened directly (a direct read gives torn or stale rows).
+# The table name differs between vector versions, so count the first user table.
+vector_rows() {
+    python3 - "$1" <<'PYVEC'
+import sqlite3, sys
+try:
+    source = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+    snapshot = sqlite3.connect(":memory:")
+    source.backup(snapshot)
+    source.close()
+    names = [row[0] for row in snapshot.execute(
+        "select name from sqlite_master where type='table' and name not like 'sqlite_%'")]
+    total = 0
+    for name in names:
+        total += snapshot.execute(f'select count(*) from "{name}"').fetchone()[0]
+    print(total)
+except Exception:
+    print(0)
+PYVEC
+}
+
+# One line per published vector: "<publisher index> <owner> <file id>".
+vectors_published() {
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        is_dead "$index" && continue
+        sed -n "s/^\\[node-run\\] DFS vector owner=\\([0-9a-f]*\\) file_id=\\([0-9a-f]*\\).*/$index \\1 \\2/p" \
+            "$WORK/node-$index.log" 2>/dev/null
+    done
+}
+
+# ExDFS vector replication audit: a vector lives in its own sqlite file, and rows
+# arrive one gossiped message at a time, so this checks row COUNT per node rather
+# than bytes: two nodes can hold the same rows in a different physical order.
+vector_audit() {
+    local report="$1" complete=1 published total
+    published="$(vectors_published)"
+    total="$(printf '%s\n' "$published" | grep -c .)"
+    if [ "$total" -eq 0 ]; then
+        [ "$VECTOR_ROWS" -eq 0 ] && return 0
+        [ "$report" = 1 ] && echo "vectors: no node published a vector"
+        return 1
+    fi
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        if is_dead "$index"; then
+            [ "$report" = 1 ] && printf 'vectors: node %s died during the run; not audited\n' "$index"
+            continue
+        fi
+        local have=0 publisher owner file_id db rows
+        while read -r publisher owner file_id; do
+            [ -n "$file_id" ] || continue
+            db="${NODE_HOMES[$index]}/dfs/$owner/$file_id"
+            [ -f "$db" ] || continue
+            rows="$(vector_rows "$db")"
+            [ "${rows:-0}" -ge "$VECTOR_ROWS" ] && have=$((have + 1))
+        done <<<"$published"
+        [ "$have" -eq "$total" ] || complete=0
+        [ "$report" = 1 ] && printf 'vectors: node %s has %s/%s complete\n' "$index" "$have" "$total"
+    done
+    [ "$complete" -eq 1 ]
 }
 
 # ExDFS replication audit: every file a committee node published has to sit on
@@ -357,7 +423,7 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
         if [ "$converged" -eq 1 ]; then
             # Heights agree; the ExDFS mesh has to be complete as well before the
             # audits read a snapshot.
-            dfs_audit 0 && break
+            dfs_audit 0 && vector_audit 0 && break
         fi
         if [ "$(date +%s)" -ge "$convergence_deadline" ]; then
             # Name the thing that is actually still missing at the deadline.
@@ -435,6 +501,7 @@ case "$verdict" in
     pass)
         summary
         [ "$DFS_BYTES" -gt 0 ] && dfs_audit 1
+        [ "$VECTOR_ROWS" -gt 0 ] && vector_audit 1
         if [ -n "$DEAD_NODES" ]; then
             log "PASS (survivors): $done_nodes/$SENDERS senders finalized $PER_SENDER intents each; node(s) $DEAD_NODES died"
         else
@@ -461,5 +528,6 @@ case "$verdict" in
     convergence) fail "committee did not converge on one finalized height within 60s" ;;
     dfs-incomplete)
         dfs_audit 1 >&2
+        vector_audit 1 >&2
         fail "ExDFS content did not reach every node within 60s of finality" ;;
 esac
