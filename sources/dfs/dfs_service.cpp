@@ -2248,23 +2248,28 @@ void DfsService::network_remove_stored_file(const ActorId     &owner_id,
     if (!dir_row.has_value()) {
         return;
     }
-    auto dir_row_new = dir_row.value();
-
     auto actor = node->actor_index()->read_actor(owner_id);
     if (!actor.has_value()) {
         eWarning("[Dfs] Can't remove file, because no owner {}", actor.error());
         return;
     }
 
+    // The owner signed the row as it looks after removal (remove_stored_file clears
+    // hash/folder/name/size, sets Removed and the new last_modified), so verify that
+    // shape. Verifying the pre-removal copy, as this did before, never matched: every
+    // gossiped removal was rejected with "Can't verify file remove".
     dir_row->hash          = "";
     dir_row->folder        = std::nullopt;
     dir_row->name          = "";
     dir_row->size          = 0;
     dir_row->state         = Dfs::FileState::Removed;
     dir_row->last_modified = last_modified;
-    auto hash              = dir_row_new.calculate_hash(owner_id);
+    auto hash              = dir_row->calculate_hash(owner_id);
     auto verify            = actor.value().key().verify(hash, sign);
-    if (!verify) {
+    // verify() yields expected<bool>: an error means the call failed, false means the
+    // signature does not match. Testing only the error left a mismatch accepted, so a
+    // removal signed by anyone at all went through.
+    if (!verify.has_value() || !verify.value()) {
         eWarning("[Dfs] Can't verify file remove {} / {}", owner_id, file_id);
         return;
     }
