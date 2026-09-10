@@ -214,6 +214,30 @@ int main() {
     TEST_REQUIRE_EQ(again.size(), std::size_t(1));
     TEST_REQUIRE(again.front().digest == peer_digest->digest);
 
+    // 7b. The hash column is part of the digest: a vector whose content moved on
+    //     (hash updated locally, signature unchanged) must differ from a copy that
+    //     did not, otherwise the row is never re-offered and the content never
+    //     re-requested.
+    {
+        auto moved    = row_of(peer.id(), f1);
+        moved.hash    = Utils::calculate_hash("more rows arrived");
+        const auto ok = Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs.get_db_instance(),
+                                                                                peer.id(),
+                                                                                moved,
+                                                                                false);
+        TEST_REQUIRE(ok);
+        const auto after = dirs.catalog_digests({ peer.id() });
+        TEST_REQUIRE_EQ(after.size(), std::size_t(1));
+        TEST_REQUIRE(after.front().digest != peer_digest->digest);
+        // Put it back so the digest comparisons below use the published content.
+        moved.hash = r1_renamed.hash;
+        TEST_REQUIRE(Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs.get_db_instance(),
+                                                                             peer.id(),
+                                                                             moved,
+                                                                             false));
+        TEST_REQUIRE(dirs.catalog_digests({ peer.id() }).front().digest == peer_digest->digest);
+    }
+
     // 8. A requester holding the same catalog: no rows travel, the reply is empty.
     {
         Capture   capture;

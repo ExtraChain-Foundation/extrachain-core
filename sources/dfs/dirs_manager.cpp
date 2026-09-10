@@ -562,8 +562,16 @@ std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std:
     // One pass over the catalog: rows arrive grouped by owner and ordered by file_id, so
     // every node hashes the same material for the same set of rows whatever the order
     // the rows were inserted in.
-    const auto rows = db_->select(fmt::format("SELECT owner_id, file_id, sign FROM {} ORDER BY owner_id, file_id",
-                                              Dfs::Tables::DirsFile::TableNameActorsFiles));
+    // (file_id, sign, hash) per row. The signature covers what the owner published;
+    // the hash column is the same thing for a File but for a Vector or Dictionary it
+    // is the current content hash, maintained on every node as rows arrive. Leaving
+    // it out made two catalogs equal while one of them still lacked vector rows —
+    // and the re-request of incomplete vector content lives in the row handler,
+    // which equal digests never reach (seen on the stand after a chaos restart:
+    // 6/7 vectors, digests equal, nothing re-requested).
+    const auto rows =
+        db_->select(fmt::format("SELECT owner_id, file_id, sign, hash FROM {} ORDER BY owner_id, file_id",
+                                Dfs::Tables::DirsFile::TableNameActorsFiles));
 
     std::string   current_owner;
     std::string   material;
@@ -584,7 +592,8 @@ std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std:
         const auto owner   = row.find("owner_id");
         const auto file_id = row.find("file_id");
         const auto sign    = row.find("sign");
-        if (owner == row.end() || file_id == row.end() || sign == row.end()) {
+        const auto hash    = row.find("hash");
+        if (owner == row.end() || file_id == row.end() || sign == row.end() || hash == row.end()) {
             continue;
         }
         if (owner->second != current_owner) {
@@ -594,6 +603,8 @@ std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std:
         material += file_id->second;
         material += '\0';
         material += sign->second;
+        material += '\0';
+        material += hash->second;
         material += '\n';
         ++count;
     }

@@ -391,10 +391,10 @@ namespace Dfs {
         BOOST_DESCRIBE_STRUCT(VectorRowAdd, (), (owner_id, file_id, row, thothed))
 
         // Catalog reconciliation by content (#75). One digest per owner over that owner's
-        // rows sorted by file_id, each contributing (file_id, sign). The signature is the
-        // part that replicates verbatim, so equal digests mean equal catalogs regardless
-        // of the local-only column (state) or the locally maintained ones (a vector's
-        // hash and size, which the owner updates without re-signing).
+        // rows sorted by file_id, each contributing (file_id, sign, hash). The signature
+        // is what the owner published; the hash column is the same for a File and the
+        // current content hash for a Vector/Dictionary, so a node missing vector rows
+        // differs and gets the row re-offered. The local-only state column stays out.
         struct CatalogDigest {
             ActorId       owner_id;
             std::uint64_t rows = 0;
