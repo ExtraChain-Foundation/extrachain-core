@@ -911,9 +911,16 @@ private:
     SectionId                                      next_pack_index_ = SectionId(0);
     std::mutex                                     pack_mutex_;
     std::mutex                                     pack_hot_cache_mutex_;
-    std::mutex                                     pack_hot_completion_mutex_;
-    std::condition_variable                        pack_hot_completion_;
-    std::atomic_bool                               pack_hot_running_    = false;
+    // Shared with the queued pack worker: the handler owns a guard that marks the
+    // run finished when the handler is destroyed, whether it ran or the pool dropped
+    // it (#77). Shared ownership keeps the guard safe even if the handler outlives
+    // this Dag.
+    struct PackHotCompletion {
+        std::mutex              mutex;
+        std::condition_variable finished;
+        std::atomic_bool        running = false;
+    };
+    std::shared_ptr<PackHotCompletion>             pack_hot_completion_ = std::make_shared<PackHotCompletion>();
     std::atomic_uint64_t                           pack_hot_generation_ = 0;
     std::atomic_uint64_t                           history_revision_    = 0;
     std::map<SectionId, std::string>               pack_hot_cache_;
