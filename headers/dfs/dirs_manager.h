@@ -21,6 +21,8 @@
 
 #include <string>
 #include <expected>
+#include <mutex>
+#include <set>
 
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
@@ -71,10 +73,17 @@ public:
     void network_request_digest(const Dfs::Packets::CatalogDigestRequest& request, const Responder& responder);
     void network_response_digest(const Dfs::Packets::CatalogDigestReply& reply, const Responder& responder);
     void send_rows_for_owners(const std::vector<ActorId>& owners, const Responder& responder);
+    // Whether the peer behind this connection identifier has answered a digest request.
+    // Per peer, not a global counter: a node with mixed peers gets replies from the new
+    // ones within the fallback window, and a global counter would hide the silent old one.
+    bool digest_answered(const std::string& identifier);
 
 private:
     void old_dfs_to_new_dfs_converter();
 
     std::shared_ptr<DbConnector> db_;
+
+    std::mutex            digest_mutex_;
+    std::set<std::string> digest_answered_;
     ExtraChain::Core::ExtraChainNode* node;
 };

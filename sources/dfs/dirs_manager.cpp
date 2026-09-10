@@ -692,6 +692,12 @@ void DirsManager::network_request_digest(const Dfs::Packets::CatalogDigestReques
 void DirsManager::network_response_digest(const Dfs::Packets::CatalogDigestReply& reply, const Responder& responder) {
     // The peer speaks digest sync: no full-catalog fallback needed for this handshake.
     node->dfs()->mark_startup_sync_response();
+    {
+        std::lock_guard lock(digest_mutex_);
+        for (const auto& identifier : responder.identifiers()) {
+            digest_answered_.insert(identifier);
+        }
+    }
 
     // Owners the peer has never heard of: it cannot ask for them, so push them now.
     if (!reply.unknown.empty()) {
@@ -725,4 +731,9 @@ void DirsManager::network_response_digest(const Dfs::Packets::CatalogDigestReply
             }
         });
     });
+}
+
+bool DirsManager::digest_answered(const std::string& identifier) {
+    std::lock_guard lock(digest_mutex_);
+    return digest_answered_.contains(identifier);
 }
