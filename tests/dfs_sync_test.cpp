@@ -295,6 +295,26 @@ int main() {
         TEST_REQUIRE(rows->front().first == peer.id());
     }
 
+    // 12. The gossiped removal (DfsFileRemove) carries the same signature as the
+    //     tombstone; the receiver must apply it. The sender signs the cleared row
+    //     (state Removed, empty hash/name/folder, size 0, new last_modified).
+    {
+        const std::string f4 = Utils::generate_random_hex(32);
+        const auto        r4 = file_row(peer, f4, "d.txt", 1000);
+        merge(peer.id(), { r4 });
+        TEST_REQUIRE(row_of(peer.id(), f4).state != Dfs::FileState::Removed);
+        // Signed by someone else: refused. (Was accepted: the check looked only at
+        // whether verify() returned a value, never at the value.)
+        const auto forged_t4 = tombstone(impostor, r4, 5000);
+        node->dfs_service()->network_remove_stored_file(peer.id(), f4, forged_t4.sign, forged_t4.last_modified);
+        TEST_REQUIRE(row_of(peer.id(), f4).state != Dfs::FileState::Removed);
+
+        const auto t4 = tombstone(peer, r4, 6000);
+        node->dfs_service()->network_remove_stored_file(peer.id(), f4, t4.sign, t4.last_modified);
+        TEST_REQUIRE(row_of(peer.id(), f4).state == Dfs::FileState::Removed);
+        TEST_REQUIRE(row_of(peer.id(), f4).sign == t4.sign);
+    }
+
     node->cleanUp();
     node.reset();
     std::error_code ignored;
