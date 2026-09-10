@@ -20,6 +20,10 @@
 #include "dfs/dirs_manager.h"
 
 #include <algorithm>
+#include <map>
+#include <set>
+
+#include "utils/hash.h"
 
 #include "core/extrachain_node.h"
 #include "network/network_service.h"
@@ -285,6 +289,65 @@ void DirsManager::network_response_dir_rows(
             // first payload is written.
             std::vector<Dfs::DirRow> dir_rows_todo;
 
+            // #75: a catalog can only converge if a row the owner re-signed replaces the
+            // local one and a row nobody signed never lands. Before this, rows went
+            // straight into an INSERT: forged rows were accepted, re-signed rows were
+            // silently dropped, and a tombstone kept the pre-removal signature locally.
+            //
+            // File and Folder rows verify against the owner's key. A tombstone verifies
+            // as the owner signed it (hash/name/folder/size cleared, state Removed).
+            // Vector and Dictionary rows cannot be verified here: they carry the
+            // creation-time signature over a hash column the owner keeps updating
+            // without re-signing. Unknown owner: accepted as before.
+            const auto owner_actor = node->actor_index()->read_actor(owner_id);
+            std::vector<Dfs::DirRow> accepted;
+            accepted.reserve(dir_rows.size());
+            for (const auto& row : dir_rows) {
+                const bool is_tombstone = row.state == Dfs::FileState::Removed;
+                const bool verifiable   = is_tombstone || row.type == Dfs::FileType::File
+                                        || row.type == Dfs::FileType::Folder;
+                if (verifiable && owner_actor.has_value()) {
+                    auto probe = row;
+                    if (is_tombstone) {
+                        probe.hash   = "";
+                        probe.folder = std::nullopt;
+                        probe.name   = "";
+                        probe.size   = 0;
+                    }
+                    const auto verified = owner_actor->key().verify(probe.calculate_hash(owner_id), row.sign);
+                    if (!verified.has_value() || !verified.value()) {
+                        eWarning("[Dfs] Sync row rejected, bad signature: {} / {}", owner_id, row.file_id);
+                        continue;
+                    }
+                }
+
+                const auto local = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
+                if (local.has_value() && !is_tombstone && local->sign != row.sign) {
+                    if (local->state == Dfs::FileState::Removed || row.last_modified < local->last_modified) {
+                        continue; // ours is the newer version, or already removed
+                    }
+                    // Re-signed by the owner (rename, move): take it, keep the local state.
+                    auto db_row = Utils::to_dbrow(row);
+                    if (!row.prev_file_id.has_value() || row.prev_file_id->empty()) {
+                        db_row.erase("prev_file_id");
+                    }
+                    db_row["state"] = std::to_string(std::to_underlying(local->state));
+                    if (!db_->replace(Dfs::Tables::DirsFile::TableNameActorsFiles, db_row)) {
+                        eWarning("[Dfs] Sync row update failed: {} / {}", owner_id, row.file_id);
+                    }
+                    continue;
+                }
+                if (local.has_value() && is_tombstone && local->sign != row.sign) {
+                    // Take the tombstone's signature and time so the digests converge.
+                    Dfs::Tables::DirsFile::ActorSpace::update_file_after_stored_remove(db_,
+                                                                                       owner_id,
+                                                                                       row.file_id,
+                                                                                       row.sign,
+                                                                                       row.last_modified);
+                }
+                accepted.push_back(row);
+            }
+
             /*
             auto local_dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows_map(owner_id);
             if (local_dir_rows.has_value()) {
@@ -300,7 +363,7 @@ void DirsManager::network_response_dir_rows(
              */
 
             // for removed
-            for (const auto& row : dir_rows) {
+            for (const auto& row : accepted) {
                 auto file_path = Dfs::Path::file_path(owner_id, row.file_id);
                 if (!file_path.has_value()) {
                     continue;
@@ -350,7 +413,7 @@ void DirsManager::network_response_dir_rows(
             }
 
             // Need to change adding
-            auto [res, dir_rows_res] = Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(db_, owner_id, dir_rows);
+            auto [res, dir_rows_res] = Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(db_, owner_id, accepted);
 
             // Rebuild the owner index from persisted rows, including an unchanged
             // catalogue received after an interrupted download.
@@ -486,4 +549,180 @@ void DirsManager::network_request_all(const Responder& responder, const std::vec
 
 std::shared_ptr<DbConnector> DirsManager::get_db_instance() {
     return db_;
+}
+
+// ---------------------------------------------------------------------------
+// Content-based catalog sync (#75)
+// ---------------------------------------------------------------------------
+
+std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std::vector<ActorId>& only) {
+    std::vector<Dfs::Packets::CatalogDigest> digests;
+    const std::set<ActorId>                  filter(only.begin(), only.end());
+
+    // One pass over the catalog: rows arrive grouped by owner and ordered by file_id, so
+    // every node hashes the same material for the same set of rows whatever the order
+    // the rows were inserted in.
+    const auto rows = db_->select(fmt::format("SELECT owner_id, file_id, sign FROM {} ORDER BY owner_id, file_id",
+                                              Dfs::Tables::DirsFile::TableNameActorsFiles));
+
+    std::string   current_owner;
+    std::string   material;
+    std::uint64_t count = 0;
+    const auto    flush = [&]() {
+        if (current_owner.empty()) {
+            return;
+        }
+        const ActorId owner(current_owner);
+        if (filter.empty() || filter.contains(owner)) {
+            digests.push_back({ .owner_id = owner, .rows = count, .digest = Utils::calculate_hash(material) });
+        }
+        material.clear();
+        count = 0;
+    };
+
+    for (const auto& row : rows) {
+        const auto owner   = row.find("owner_id");
+        const auto file_id = row.find("file_id");
+        const auto sign    = row.find("sign");
+        if (owner == row.end() || file_id == row.end() || sign == row.end()) {
+            continue;
+        }
+        if (owner->second != current_owner) {
+            flush();
+            current_owner = owner->second;
+        }
+        material += file_id->second;
+        material += '\0';
+        material += sign->second;
+        material += '\n';
+        ++count;
+    }
+    flush();
+
+    return digests;
+}
+
+void DirsManager::sync_digest(const std::string& identifier, const std::vector<ActorId>& allowed) {
+    Responder responder(nullptr);
+    responder.add_identifier(identifier);
+
+    const Dfs::Packets::CatalogDigestRequest request { .owners = catalog_digests(allowed), .allowed = allowed };
+    eLog("[Dfs] Catalog digest sync request: identifier={}, owners={}, allowed={}",
+         identifier,
+         request.owners.size(),
+         allowed.size());
+    node->network()->send_message(request,
+                                  MessageType::DfsSyncDigest,
+                                  SendMode::Focused,
+                                  MessageStatus::Response,
+                                  responder);
+}
+
+void DirsManager::send_rows_for_owners(const std::vector<ActorId>& owners, const Responder& responder) {
+    std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
+    response_data.reserve(owners.size());
+    std::size_t rows_count = 0;
+
+    for (const auto& owner : owners) {
+        auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, owner, 0);
+        if (!dir_rows.has_value() || dir_rows->empty()) {
+            continue;
+        }
+        rows_count += dir_rows->size();
+        response_data.emplace_back(owner, std::move(dir_rows.value()));
+    }
+
+    if (response_data.empty()) {
+        return;
+    }
+
+    responder.send_response(response_data, MessageType::DfsSyncDirRows, SendMode::Focused, MessageStatus::Response);
+    eLog("[Dfs] Catalog digest rows sent: owners={}, rows={}", response_data.size(), rows_count);
+}
+
+void DirsManager::network_request_digest(const Dfs::Packets::CatalogDigestRequest& request,
+                                         const Responder&                          responder) {
+    node->post_storage([this, request, responder] {
+        // Same narrowing as network_request_all: a Selective responder only ever offers
+        // the actors it follows.
+        std::vector<ActorId> only = request.allowed;
+        if (only.empty() && node->dfs()->mode() == DfsMode::Selective) {
+            only = node->dfs()->startup_sync_actors();
+        }
+
+        std::map<ActorId, const Dfs::Packets::CatalogDigest*> remote;
+        for (const auto& digest : request.owners) {
+            remote.emplace(digest.owner_id, &digest);
+        }
+
+        Dfs::Packets::CatalogDigestReply reply;
+        std::vector<ActorId>             to_send;
+        std::set<ActorId>                seen;
+        for (const auto& digest : catalog_digests(only)) {
+            seen.insert(digest.owner_id);
+            const auto it = remote.find(digest.owner_id);
+            if (it != remote.end() && it->second->digest == digest.digest) {
+                continue;
+            }
+            to_send.push_back(digest.owner_id);
+            reply.mismatched.push_back(digest);
+        }
+        for (const auto& [owner, digest] : remote) {
+            if (!seen.contains(owner)) {
+                reply.unknown.push_back(owner);
+            }
+        }
+
+        if (!node_enabled.load()) {
+            return;
+        }
+
+        // Rows first, then the reply: the reply tells the requester the comparison is
+        // over and whose rows it may have to push back.
+        send_rows_for_owners(to_send, responder);
+        responder.send_response(reply, MessageType::DfsSyncDigestReply, SendMode::Focused, MessageStatus::Response);
+        eLog("[Dfs] Catalog digest compared: requested={}, local={}, differ={}, unknown_to_us={}",
+             request.owners.size(),
+             seen.size(),
+             to_send.size(),
+             reply.unknown.size());
+    });
+}
+
+void DirsManager::network_response_digest(const Dfs::Packets::CatalogDigestReply& reply, const Responder& responder) {
+    // The peer speaks digest sync: no full-catalog fallback needed for this handshake.
+    node->dfs()->mark_startup_sync_response();
+
+    // Owners the peer has never heard of: it cannot ask for them, so push them now.
+    if (!reply.unknown.empty()) {
+        node->post_storage([this, unknown = reply.unknown, responder] { send_rows_for_owners(unknown, responder); });
+    }
+
+    if (reply.mismatched.empty()) {
+        return;
+    }
+
+    // Owners that differed: the peer's rows are on their way (sent before this reply).
+    // Once they have been merged, whatever still differs is ours that the peer lacks —
+    // push it. One round, no ping-pong: the peer does not answer rows with a digest.
+    node->dfs()->schedule_delayed(std::chrono::seconds(2), [this, mismatched = reply.mismatched, responder] {
+        node->post_storage([this, mismatched, responder] {
+            std::vector<ActorId>           owners;
+            std::map<ActorId, std::string> remote;
+            for (const auto& digest : mismatched) {
+                owners.push_back(digest.owner_id);
+                remote.emplace(digest.owner_id, digest.digest);
+            }
+            std::vector<ActorId> to_push;
+            for (const auto& local : catalog_digests(owners)) {
+                if (remote[local.owner_id] != local.digest) {
+                    to_push.push_back(local.owner_id);
+                }
+            }
+            if (!to_push.empty()) {
+                eLog("[Dfs] Catalog digest still differs after merge, pushing ours: owners={}", to_push.size());
+                send_rows_for_owners(to_push, responder);
+            }
+        });
+    });
 }

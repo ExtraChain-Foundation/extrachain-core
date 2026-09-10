@@ -11,6 +11,7 @@
 #include <future>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "chain/actor.h"
 #include "core/extrachain_node.h"
@@ -21,13 +22,15 @@
 #include "utils/exc_utils.h"
 
 namespace {
-    // network_vector_add runs on the storage executor; wait until everything posted
-    // before this barrier has been processed.
+    // network_vector_add runs on the storage executor, which is a thread pool: a
+    // barrier job proves the pool is alive, not that the job posted before it has
+    // finished. Barrier, then settle, so a rejection is actually observed.
     void drain_storage(ExtraChain::Core::ExtraChainNode &node) {
         std::promise<void> done;
         auto               future = done.get_future();
         node.post_storage([&done] { done.set_value(); });
         TEST_REQUIRE(future.wait_for(std::chrono::seconds(30)) == std::future_status::ready);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 } // namespace
 

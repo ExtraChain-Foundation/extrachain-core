@@ -1208,7 +1208,9 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
     SocketService::Priority priority = SocketService::Priority::Normal;
 
     if (message_type == MessageType::DfsFileExistNotification || message_type == MessageType::DfsFileFragment
-        || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows) {
+        || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows
+        || message_type == MessageType::DfsSyncDigest || message_type == MessageType::DfsSyncDigestReply) {
+        // The digest reply must not overtake the rows it announces (#75): same lane.
         priority = SocketService::Priority::Low;
     }
 
@@ -2381,6 +2383,26 @@ void NetworkService::message_received(const std::string &message,
 
             node->dfs_service()->dirs_manager().network_response_dir_rows(dirs_row_result.value(), responder);
         }
+        break;
+    }
+
+    case MessageType::DfsSyncDigest: {
+        auto request = MessagePack::deserialize<Dfs::Packets::CatalogDigestRequest>(serialized);
+        if (!request.has_value()) {
+            eWarning("[NetworkService] {} deserialization failed for catalog digest request", type);
+            break;
+        }
+        node->dfs_service()->dirs_manager().network_request_digest(request.value(), responder);
+        break;
+    }
+
+    case MessageType::DfsSyncDigestReply: {
+        auto reply = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(serialized);
+        if (!reply.has_value()) {
+            eWarning("[NetworkService] {} deserialization failed for catalog digest reply", type);
+            break;
+        }
+        node->dfs_service()->dirs_manager().network_response_digest(reply.value(), responder);
         break;
     }
 

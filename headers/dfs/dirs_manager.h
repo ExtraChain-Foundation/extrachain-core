@@ -65,6 +65,13 @@ public:
 
     std::shared_ptr<DbConnector> get_db_instance();
 
+    // Content-based catalog sync (#75). Storage thread only.
+    std::vector<Dfs::Packets::CatalogDigest> catalog_digests(const std::vector<ActorId>& only = {});
+    void sync_digest(const std::string& identifier, const std::vector<ActorId>& allowed);
+    void network_request_digest(const Dfs::Packets::CatalogDigestRequest& request, const Responder& responder);
+    void network_response_digest(const Dfs::Packets::CatalogDigestReply& reply, const Responder& responder);
+    void send_rows_for_owners(const std::vector<ActorId>& owners, const Responder& responder);
+
 private:
     void old_dfs_to_new_dfs_converter();
 

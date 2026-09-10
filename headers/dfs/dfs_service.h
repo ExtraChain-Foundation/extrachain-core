@@ -297,6 +297,9 @@ public:
     void mark_startup_sync_response() {
         staged_startup_response_count_.fetch_add(1, std::memory_order_relaxed);
     }
+    void schedule_delayed(std::chrono::steady_clock::duration delay, std::function<void()> callback) {
+        schedule_after(delay, std::move(callback));
+    }
 
     void set_mode(DfsMode mode) {
         if (dfs_mode_ == mode) {
@@ -629,6 +632,10 @@ public:
     size_t       load_manager_downloads_size();
 
     void sync(const std::string &identifier);
+
+    // Full-catalog sync as it was before #75; the fallback for peers without digest sync.
+
+    void legacy_sync(const std::string &identifier);
     bool refresh_actors(const std::vector<ActorId> &actors);
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
     void refresh_calculate();
