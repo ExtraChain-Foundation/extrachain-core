@@ -390,6 +390,34 @@ namespace Dfs {
         };
         BOOST_DESCRIBE_STRUCT(VectorRowAdd, (), (owner_id, file_id, row, thothed))
 
+        // Catalog reconciliation by content (#75). One digest per owner over that owner's
+        // rows sorted by file_id, each contributing (file_id, sign). The signature is the
+        // part that replicates verbatim, so equal digests mean equal catalogs regardless
+        // of the local-only column (state) or the locally maintained ones (a vector's
+        // hash and size, which the owner updates without re-signing).
+        struct CatalogDigest {
+            ActorId       owner_id;
+            std::uint64_t rows = 0;
+            std::string   digest;
+        };
+        BOOST_DESCRIBE_STRUCT(CatalogDigest, (), (owner_id, rows, digest))
+
+        struct CatalogDigestRequest {
+            std::vector<CatalogDigest> owners;
+            // A Selective requester narrows the reply to these owners; empty means all.
+            std::vector<ActorId> allowed;
+        };
+        BOOST_DESCRIBE_STRUCT(CatalogDigestRequest, (), (owners, allowed))
+
+        struct CatalogDigestReply {
+            // The responder's digests for owners that differed; their rows travel in a
+            // DfsSyncDirRows message sent just before this reply.
+            std::vector<CatalogDigest> mismatched;
+            // Owners the requester listed that the responder has no rows for at all.
+            std::vector<ActorId> unknown;
+        };
+        BOOST_DESCRIBE_STRUCT(CatalogDigestReply, (), (mismatched, unknown))
+
         struct VectorRowRemove {
             ActorId     owner_id;
             std::string file_id;

@@ -81,6 +81,10 @@ enum class MessageType {
     // DfsFileThanks   = 61,
     DfsFileRemove                = 62,
     DfsFileRequestContinueUpload = 63,
+    // Catalog reconciliation by content (#75): the requester sends one digest per owner,
+    // the responder answers with rows (DfsSyncDirRows) only for owners that differ.
+    DfsSyncDigest      = 64, // CatalogDigestRequest
+    DfsSyncDigestReply = 65, // CatalogDigestReply
 
     DfsCollectionRequest   = 70,
     DfsCollectionContent   = 71,
