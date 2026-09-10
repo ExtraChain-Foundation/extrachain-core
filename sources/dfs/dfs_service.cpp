@@ -2078,26 +2078,33 @@ void DfsService::network_vector_add(const ActorId &owner_id, const std::string &
             eWarning("[Dfs] Vector row not stored: {} / {}", owner_id, file_id);
         }
 
+        if (!operation_res) {
+            // Nothing was stored, so the catalog row is unchanged. Touching it here also
+            // read row.at("timestamp") on a row local_add may have rejected precisely
+            // for lacking a timestamp — std::out_of_range on the storage thread, and
+            // the node is gone.
+            return;
+        }
+
         auto hash_size = dfs_vector.data_hash_size();
         if (hash_size.has_value()) {
-            dir_row.hash          = hash_size.value().first;
-            dir_row.size          = hash_size.value().second;
-            dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+            dir_row.hash = hash_size.value().first;
+            dir_row.size = hash_size.value().second;
+            // local_add verified the row, so the timestamp is present and numeric.
+            dir_row.last_modified = std::stoull(row.at("timestamp"));
             Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
                                                                     owner_id,
                                                                     dir_row,
                                                                     false);
         }
 
-        if (operation_res) {
-            // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
-            if (row.at("status") == "1") {
-                notify_vector_row_added(owner_id, dir_row, row);
-            } else {
-                notify_vector_row_removed(owner_id, dir_row, row);
-            }
-            node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
+        // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
+        if (row.at("status") == "1") {
+            notify_vector_row_added(owner_id, dir_row, row);
+        } else {
+            notify_vector_row_removed(owner_id, dir_row, row);
         }
+        node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
     });
 }
 

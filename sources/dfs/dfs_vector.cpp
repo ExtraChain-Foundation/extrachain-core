@@ -697,8 +697,17 @@ std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
 }
 
 std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
-    // TODO: try..catch
-    std::string to_hash   = row.at("status") + row.at("timestamp") + file_actor_id_.to_string() + file_id_;
+    // Every lookup goes through find(): a row arriving from the network (DfsVectorAdd,
+    // content package) may lack any field, and DbRow::at() on a missing key throws
+    // std::out_of_range straight out of the network handler — a peer could terminate
+    // the node with one malformed row. A missing field is simply an unhashable row.
+    const auto status    = row.find("status");
+    const auto timestamp = row.find("timestamp");
+    if (status == row.end() || timestamp == row.end()) {
+        return { "", true };
+    }
+
+    std::string to_hash   = status->second + timestamp->second + file_actor_id_.to_string() + file_id_;
     bool        all_empty = true;
 
     if (to_hash.size() != 14 + 40 + 64) { // 1 + 13 + 40 + 64
@@ -706,16 +715,21 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
     }
 
     if (collection_template_.primary.has_value()) {
-        to_hash += row.at(collection_template_.primary->name()); // TODO: crash?
+        const auto primary = row.find(collection_template_.primary->name());
+        if (primary == row.end()) {
+            return { "", true };
+        }
+        to_hash += primary->second;
     }
 
     const auto &fields = collection_template_.fields();
     for (const auto &field : fields) {
-        if (row.find(field.name()) == row.end()) {
+        const auto found = row.find(field.name());
+        if (found == row.end()) {
             continue;
         }
 
-        std::string value = row.at(field.name());
+        const std::string &value = found->second;
         if (!value.empty()) {
             all_empty = false;
         }
