@@ -3040,14 +3040,16 @@ void DfsService::sync(const std::string &identifier) {
         // predates digest sync logs the unknown type and stays silent, so after 3 s
         // without a reply this falls back to the full-catalog path, exactly as the
         // staged sync below already does for peers without staged support.
-        const auto responses_before = staged_startup_response_count();
         const auto allowed = mode() == DfsMode::Selective ? startup_sync_actors() : std::vector<ActorId> {};
         dirs_manager_.sync_digest(identifier, allowed);
 
+        // Per peer: with mixed peers the new ones answer within the window, and a global
+        // response counter would hide the old peer that never will (seen on the stand:
+        // 5 new + 2 old nodes, zero fallbacks).
         constexpr auto digestFallbackDelay = std::chrono::seconds(3);
-        schedule_after(digestFallbackDelay, [this, identifier, responses_before]() {
-            node->post_storage([this, identifier, responses_before]() {
-                if (staged_startup_response_count() != responses_before) {
+        schedule_after(digestFallbackDelay, [this, identifier]() {
+            node->post_storage([this, identifier]() {
+                if (dirs_manager_.digest_answered(identifier)) {
                     return;
                 }
                 eWarning("[Dfs] Catalog digest sync unanswered, full sync: identifier={}", identifier);
