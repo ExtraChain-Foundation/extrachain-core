@@ -22,6 +22,9 @@
 #                                rows; the run passes only if every row reaches every node
 #        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
 #                                the run passes only if it reaches every node (default 0)
+#        EXC_SHADOW_OLD_BIN      an older extrachain-node-run; together with
+#        EXC_SHADOW_OLD_INDEXES  ("3 5") those committee nodes run it instead of the
+#                                fresh build, for protocol compatibility runs
 
 set -u
 
@@ -325,8 +328,14 @@ for index in $(seq 0 $((NODE_COUNT - 1))); do
     port=$((BASE_PORT + 20 + index))
     (
         cd "$parent" || exit 73
+        # Mixed-version committee: EXC_SHADOW_OLD_INDEXES lists node indexes that run
+        # EXC_SHADOW_OLD_BIN instead of the fresh build (protocol compatibility runs).
+        node_bin="$NODE_RUN"
+        case " ${EXC_SHADOW_OLD_INDEXES:-} " in
+            *" $index "*) [ -n "${EXC_SHADOW_OLD_BIN:-}" ] && node_bin="$EXC_SHADOW_OLD_BIN" ;;
+        esac
         EXC_DEBUG_LOG=1 EXC_BIND_IP="127.0.0.$((index + 1))" EXC_FUND_NODES="$FUND_NODES" \
-            exec "$NODE_RUN" committee data "$role" "$index" "$port" "$((BASE_PORT + 20))" "$NODE_COUNT" \
+            exec "$node_bin" committee data "$role" "$index" "$port" "$((BASE_PORT + 20))" "$NODE_COUNT" \
                  "$intents" "$RUN_SECONDS" "$BARRIER" 1 1
     ) >"$WORK/node-$index.log" 2>&1 &
     PIDS+=("$!")
