@@ -3034,6 +3034,7 @@ std::vector<ActorId> DfsService::startup_sync_actors() const {
 }
 
 void DfsService::sync(const std::string &identifier) {
+    ensure_periodic_reconcile();
     node->post_storage([this, identifier]() {
         // Not once-per-process: a file left in a non-final state (peer had it only
         // as Known when we first asked, or our queue was lost to a restart mid-
@@ -3058,10 +3059,45 @@ void DfsService::sync(const std::string &identifier) {
                     return;
                 }
                 eWarning("[Dfs] Catalog digest sync unanswered, full sync: identifier={}", identifier);
+                dirs_manager_.note_digest_unanswered(identifier);
                 legacy_sync(identifier);
             });
         });
     });
+}
+
+void DfsService::ensure_periodic_reconcile() {
+    bool expected = false;
+    if (!reconcile_scheduled_.compare_exchange_strong(expected, true)) {
+        return;
+    }
+    schedule_after(reconcile_period(), [this]() { reconcile_tick(); });
+}
+
+std::chrono::seconds DfsService::reconcile_period() {
+    // Seen on the stand (#75): a 28 s partition during a multi-writer burst lost one
+    // gossiped row on a connection that never re-handshook; nothing repaired it.
+    // Digest requests are a few KB per peer when catalogs agree, so a short period
+    // is affordable; EXC_DFS_RECONCILE_S overrides it.
+    const char *env = std::getenv("EXC_DFS_RECONCILE_S");
+    const auto  seconds = env ? std::strtoul(env, nullptr, 10) : 30UL;
+    return std::chrono::seconds(seconds > 0 ? seconds : 30UL);
+}
+
+void DfsService::reconcile_tick() {
+    if (!node_enabled.load()) {
+        return;
+    }
+    auto identifiers = node->network()->active_connection_identifiers();
+    std::erase_if(identifiers, [this](const std::string &identifier) {
+        return dirs_manager_.digest_unsupported(identifier);
+    });
+    if (!identifiers.empty()) {
+        const auto &pick = identifiers[reconcile_round_++ % identifiers.size()];
+        eLog("[Dfs] Periodic catalog reconcile: identifier={}, peers={}", pick, identifiers.size());
+        sync(pick);
+    }
+    schedule_after(reconcile_period(), [this]() { reconcile_tick(); });
 }
 
 void DfsService::legacy_sync(const std::string &identifier) {

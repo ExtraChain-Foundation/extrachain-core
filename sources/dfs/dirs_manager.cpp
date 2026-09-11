@@ -748,3 +748,13 @@ bool DirsManager::digest_answered(const std::string& identifier) {
     std::lock_guard lock(digest_mutex_);
     return digest_answered_.contains(identifier);
 }
+
+void DirsManager::note_digest_unanswered(const std::string& identifier) {
+    std::lock_guard lock(digest_mutex_);
+    digest_unanswered_.insert(identifier);
+}
+
+bool DirsManager::digest_unsupported(const std::string& identifier) {
+    std::lock_guard lock(digest_mutex_);
+    return digest_unanswered_.contains(identifier) && !digest_answered_.contains(identifier);
+}

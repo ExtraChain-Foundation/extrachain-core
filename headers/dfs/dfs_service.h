@@ -151,6 +151,8 @@ private:
     std::mutex           size_state_mutex_;
 
     std::atomic_uint64_t                                         staged_startup_response_count_ { 0 };
+    std::atomic_bool                                             reconcile_scheduled_ { false };
+    std::size_t                                                  reconcile_round_ = 0;
     std::mutex                                                   delayed_tasks_mutex_;
     std::vector<std::shared_ptr<ExtraChain::Core::DeadlineTask>> delayed_tasks_;
 
@@ -636,6 +638,12 @@ public:
     // Full-catalog sync as it was before #75; the fallback for peers without digest sync.
 
     void legacy_sync(const std::string &identifier);
+    // Catalog reconciliation is otherwise a handshake-only event; a row lost to
+    // gossip while the connection survived (a partition healed before TCP gave
+    // up) was never repaired. One peer per tick, round-robin.
+    void ensure_periodic_reconcile();
+    void reconcile_tick();
+    static std::chrono::seconds reconcile_period();
     bool refresh_actors(const std::vector<ActorId> &actors);
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
     void refresh_calculate();

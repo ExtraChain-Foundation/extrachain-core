@@ -77,6 +77,10 @@ public:
     // Per peer, not a global counter: a node with mixed peers gets replies from the new
     // ones within the fallback window, and a global counter would hide the silent old one.
     bool digest_answered(const std::string& identifier);
+    // A peer whose digest request timed out once is an old node: the periodic
+    // reconcile skips it, otherwise every tick would pull a full catalog dump.
+    void note_digest_unanswered(const std::string& identifier);
+    bool digest_unsupported(const std::string& identifier);
 
 private:
     void old_dfs_to_new_dfs_converter();
@@ -85,5 +89,6 @@ private:
 
     std::mutex            digest_mutex_;
     std::set<std::string> digest_answered_;
+    std::set<std::string> digest_unanswered_;
     ExtraChain::Core::ExtraChainNode* node;
 };
