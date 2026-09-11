@@ -603,18 +603,32 @@ bool DbConnector::implementation_prepare(const std::string &tableName, const DbR
         int  indx   = std::distance(columns.begin(), it);
         auto column = columns[indx].type;
 
-        if (column == "BLOB")
-            rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
-        else if (column == "TEXT" || column == "JSON")
-            rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
-        else if (column == "INT")
-            rc = sqlite3_bind_int(stmt, fieldNum, std::stoi(el.second));
-        else if (column == "INTEGER")
-            rc = sqlite3_bind_int64(stmt, fieldNum, std::stoll(el.second));
-        else if (column == "REAL" || column == "NUMERIC")
-            rc = sqlite3_bind_double(stmt, fieldNum, std::stod(el.second.data()));
-        else {
-            eWarning("[DbConnector] ImplementationPrepare: Column type not supported");
+        // The numeric conversions throw on a value that is not a number. Rows reach
+        // this point straight from the network (a DfsVectorAdd row is verified by
+        // signature, not by shape), and an uncaught std::invalid_argument on the
+        // storage thread terminated the node: one row with "abc" in an INTEGER
+        // field, or a vector tombstone with "-" in one, was enough. Now a failed
+        // bind is a failed write.
+        try {
+            if (column == "BLOB")
+                rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
+            else if (column == "TEXT" || column == "JSON")
+                rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
+            else if (column == "INT")
+                rc = sqlite3_bind_int(stmt, fieldNum, std::stoi(el.second));
+            else if (column == "INTEGER")
+                rc = sqlite3_bind_int64(stmt, fieldNum, std::stoll(el.second));
+            else if (column == "REAL" || column == "NUMERIC")
+                rc = sqlite3_bind_double(stmt, fieldNum, std::stod(el.second.data()));
+            else {
+                eWarning("[DbConnector] ImplementationPrepare: Column type not supported");
+                return false;
+            }
+        } catch (const std::exception &error) {
+            eWarning("[DbConnector] ImplementationPrepare: value does not fit column {} ({}): {}",
+                     el.first,
+                     column,
+                     error.what());
             return false;
         }
         fieldNum++;

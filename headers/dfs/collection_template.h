@@ -144,6 +144,10 @@ namespace Dfs {
             return m_name;
         }
 
+        FieldType type() const {
+            return m_type;
+        }
+
     private:
         friend struct Field;
 

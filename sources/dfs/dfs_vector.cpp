@@ -677,12 +677,24 @@ std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
         return std::nullopt;
     }
 
+    // A tombstone blanks every non-primary field. Numeric columns cannot take "-":
+    // the INTEGER bind used to throw and take the node down with it, so they get
+    // "0" (the tombstone's meaning is carried by status, and the row is re-signed).
+    std::unordered_map<std::string, Dfs::FieldType> field_types;
+    for (const auto &field : collection_template_.fields()) {
+        field_types.emplace(field.name(), field.type());
+    }
     for (const auto &[key, _] : row) {
         if (collection_template_.primary.has_value() && collection_template_.primary->name() == key) {
             continue;
         }
 
-        row[key] = "-";
+        const auto type = field_types.find(key);
+        const bool numeric = type != field_types.end()
+                             && (type->second == Dfs::FieldType::Integer || type->second == Dfs::FieldType::Real
+                                 || type->second == Dfs::FieldType::Bool
+                                 || type->second == Dfs::FieldType::Timestamp);
+        row[key] = numeric ? "0" : "-";
     }
 
     row["status"] = "0";
