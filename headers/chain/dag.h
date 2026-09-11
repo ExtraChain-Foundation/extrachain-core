@@ -911,14 +911,19 @@ private:
     SectionId                                      next_pack_index_ = SectionId(0);
     std::mutex                                     pack_mutex_;
     std::mutex                                     pack_hot_cache_mutex_;
-    // Shared with the queued pack worker: the handler owns a guard that marks the
-    // run finished when the handler is destroyed, whether it ran or the pool dropped
-    // it (#77). Shared ownership keeps the guard safe even if the handler outlives
-    // this Dag.
+    // Shared with the queued pack worker (#77). `scheduled` stops a second worker
+    // from being queued; `running` is set only once the worker actually executes.
+    // stop() waits for `running` alone: a worker that is still queued when the
+    // storage pool has been stopped (the audit tool stops the runtime first) may
+    // never execute, and waiting for it hung forever. If it does execute later, the
+    // bumped generation makes it return at once. The guard in the handler clears
+    // both flags on destruction, whether the handler ran or was dropped; shared
+    // ownership keeps it safe even if the handler outlives this Dag.
     struct PackHotCompletion {
         std::mutex              mutex;
         std::condition_variable finished;
-        std::atomic_bool        running = false;
+        std::atomic_bool        scheduled = false;
+        std::atomic_bool        running   = false;
     };
     std::shared_ptr<PackHotCompletion>             pack_hot_completion_ = std::make_shared<PackHotCompletion>();
     std::atomic_uint64_t                           pack_hot_generation_ = 0;

@@ -5347,24 +5347,26 @@ void Dag::try_pack_hot() {
     }
 
     bool expected = false;
-    if (!pack_hot_completion_->running.compare_exchange_strong(expected, true))
+    if (!pack_hot_completion_->scheduled.compare_exchange_strong(expected, true))
         return;
 
-    // The guard, not the handler body, marks the run finished: a handler queued on
-    // the storage pool and then dropped when the pool stops (runtime stopped before
-    // Dag::stop, as the audit tool does) is destroyed without running, and before
-    // this stop() waited on a flag nobody would ever clear — two hours on the stand
-    // (#77). Destroying the guard clears it whichever way the handler goes.
+    // The guard, not the handler body, marks the worker finished: a handler queued
+    // on the storage pool after the pool was stopped (runtime stopped before
+    // Dag::stop, as the audit tool does) never executes, and stop() must not wait
+    // for it — it waits for `running` only. Destroying the guard clears both flags
+    // whichever way the handler goes (#77).
     const auto guard = std::shared_ptr<void>(nullptr, [state = pack_hot_completion_](void *) {
         {
             std::lock_guard completion_lock(state->mutex);
             state->running.store(false);
+            state->scheduled.store(false);
         }
         state->finished.notify_all();
     });
 
     try {
-        node->post_storage([this, guard, max_pack_idx, first_saved, generation]() {
+        node->post_storage([this, guard, state = pack_hot_completion_, max_pack_idx, first_saved, generation]() {
+            state->running.store(true);
             try {
                 pack_hot_sections(max_pack_idx, first_saved, generation);
             } catch (const std::exception &error) {
@@ -5384,6 +5386,7 @@ void Dag::finish_pack_hot() {
     {
         std::lock_guard completion_lock(pack_hot_completion_->mutex);
         pack_hot_completion_->running.store(false);
+        pack_hot_completion_->scheduled.store(false);
     }
     pack_hot_completion_->finished.notify_all();
 }
