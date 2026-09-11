@@ -1,8 +1,11 @@
 #include "precompiled.h"
 #include "utils/db_connector.h"
+#include "dfs/dfs_utils.h"
 #include "sqlite3.h"
 
 #include <QTemporaryDir>
+#include <QDir>
+#include <QScopeGuard>
 #include <QtTest/QtTest>
 #include <chrono>
 #include <condition_variable>
@@ -54,6 +57,65 @@ class DbConnectorConcurrencyTest : public QObject
     Q_OBJECT
 
 private slots:
+    void dfsMetadataProgressesIndependently()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("dfs"));
+        auto result = Dfs::Tables::DirsFile::DirsSpace::create_file();
+        QVERIFY(result.has_value());
+        auto metadata = result.value();
+        DbConnector busy(directory.filePath("unrelated.sqlite").toStdString());
+        QVERIFY(busy.open());
+        QueryGate gate;
+        QCOMPARE(sqlite3_create_function_v2(busy.getDb(), "test_gate", 0, SQLITE_UTF8,
+                                            &gate, QueryGate::wait, nullptr, nullptr, nullptr), SQLITE_OK);
+        auto blocked = std::async(std::launch::async, [&] { return busy.select("SELECT test_gate() AS value"); });
+        const bool entered = gate.awaitEntry();
+        auto reader = std::async(std::launch::async, [&] { return metadata->select("SELECT 42 AS value"); });
+        const bool progressed = reader.wait_for(500ms) == std::future_status::ready;
+        gate.release();
+        const auto busyRows = blocked.get();
+        const auto rows = reader.get();
+        QVERIFY(entered);
+        QVERIFY2(progressed, "DFS metadata waited for an unrelated database operation");
+        QCOMPARE(busyRows.size(), std::size_t(1));
+        QCOMPARE(rows.size(), std::size_t(1));
+        QCOMPARE(rows.front().at("value"), std::string("42"));
+    }
+
+    void dfsMetadataSharedOwnerStillSerializes()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("dfs"));
+        auto result = Dfs::Tables::DirsFile::DirsSpace::create_file();
+        QVERIFY(result.has_value());
+        auto metadata = result.value();
+        auto consumer = metadata;
+        QueryGate gate;
+        QCOMPARE(sqlite3_create_function_v2(metadata->getDb(), "test_gate", 0, SQLITE_UTF8,
+                                            &gate, QueryGate::wait, nullptr, nullptr, nullptr), SQLITE_OK);
+        auto blocked = std::async(std::launch::async, [&] { return metadata->select("SELECT test_gate() AS value"); });
+        const bool entered = gate.awaitEntry();
+        auto reader = std::async(std::launch::async, [&] { return consumer->select("SELECT 7 AS value"); });
+        const bool serialized = reader.wait_for(150ms) == std::future_status::timeout;
+        gate.release();
+        const auto first = blocked.get();
+        const auto second = reader.get();
+        QVERIFY(entered);
+        QVERIFY(serialized);
+        QCOMPARE(first.size(), std::size_t(1));
+        QCOMPARE(second.size(), std::size_t(1));
+        QCOMPARE(second.front().at("value"), std::string("7"));
+    }
+
     void independentConnectionsProgress()
     {
         QTemporaryDir directory;
