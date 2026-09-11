@@ -20,6 +20,8 @@
 #                                run still passes on the survivors (default 0)
 #        EXC_SHADOW_VECTOR_ROWS  every node also publishes an ExDFS vector with this many
 #                                rows; the run passes only if every row reaches every node
+#        EXC_SHADOW_VECTOR_CROSS every node also appends this many rows to every OTHER
+#                                node's vector (multi-writer); audited together
 #        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
 #                                the run passes only if it reaches every node (default 0)
 #        EXC_SHADOW_CAPTURE_AUDIT_CRASH save GDB dumps from offline verifiers (default 0)
@@ -46,6 +48,9 @@ DFS_BYTES="${EXC_SHADOW_DFS_BYTES:-0}"
 export EXC_DFS_BYTES="$DFS_BYTES"
 VECTOR_ROWS="${EXC_SHADOW_VECTOR_ROWS:-0}"
 export EXC_DFS_VECTOR_ROWS="$VECTOR_ROWS"
+# Multi-writer: every node appends this many rows to every other node's vector.
+VECTOR_CROSS="${EXC_SHADOW_VECTOR_CROSS:-0}"
+export EXC_DFS_VECTOR_CROSS="$VECTOR_CROSS"
 ALLOWED_DEAD="${EXC_SHADOW_ALLOWED_DEAD:-0}"
 # Nodes found dead when the watch loop ends (chaos kills); set once, before cleanup.
 DEAD_NODES=""
@@ -134,7 +139,7 @@ vector_audit() {
             db="${NODE_HOMES[$index]}/dfs/$owner/$file_id"
             [ -f "$db" ] || continue
             rows="$(vector_rows "$db")"
-            [ "${rows:-0}" -ge "$VECTOR_ROWS" ] && have=$((have + 1))
+            [ "${rows:-0}" -ge $(( VECTOR_ROWS + VECTOR_CROSS * (NODE_COUNT - 1) )) ] && have=$((have + 1))
         done <<<"$published"
         [ "$have" -eq "$total" ] || complete=0
         [ "$report" = 1 ] && printf 'vectors: node %s has %s/%s complete\n' "$index" "$have" "$total"
@@ -167,6 +172,16 @@ dfs_audit() {
             [ -n "$file_id" ] || continue
             src="${NODE_HOMES[$publisher]}/dfs/$owner/$file_id"
             dst="${NODE_HOMES[$index]}/dfs/$owner/$file_id"
+            # The reference is a copy taken from the publisher while it still had the
+            # file: under payload-wipe chaos the publisher's own copy can be gone at
+            # audit time, and comparing against a missing file called every intact
+            # copy corrupt.
+            mkdir -p "$WORK/ref"
+            if [ ! -f "$WORK/ref/$file_id" ] && [ -f "$src" ] \
+               && [ "$(wc -c < "$src" | tr -d ' ')" = "$size" ]; then
+                cp "$src" "$WORK/ref/$file_id"
+            fi
+            [ -f "$WORK/ref/$file_id" ] && src="$WORK/ref/$file_id"
             [ -f "$dst" ] || continue
             if [ "$(wc -c < "$dst" | tr -d ' ')" = "$size" ] && [ "$(sha256_of "$dst")" = "$(sha256_of "$src")" ]; then
                 have=$((have + 1))
@@ -520,6 +535,8 @@ fi
 # finalizes in seconds, so without this there is nothing left to join.
 if [ "$verdict" = "pass" ] && [ "${EXC_SHADOW_HOLD_S:-0}" -gt 0 ]; then
     log "holding the committee for ${EXC_SHADOW_HOLD_S}s"
+    # Lets a chaos agent leave a quiet tail before the final audits.
+    echo $(( $(date +%s) + EXC_SHADOW_HOLD_S )) > "$BARRIER/hold-until"
     sleep "$EXC_SHADOW_HOLD_S"
 fi
 

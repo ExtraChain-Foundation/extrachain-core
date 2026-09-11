@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <fstream>
 #include <csignal>
 #include <cstdlib>
 #include <cstdio>
@@ -528,6 +529,78 @@ int main(int argc, char* argv[]) {
             if (appended != row_count) {
                 node->cleanUp();
                 return 5;
+            }
+
+            // Multi-writer vectors (a chat is one): with EXC_DFS_VECTOR_CROSS=K every
+            // node also appends K rows to every other node's vector, signed with its
+            // own actor. The handle travels through the barrier directory; the vector
+            // itself has to arrive over the network first (creation broadcast or
+            // catalog sync), so each target is polled until it is readable here.
+            const char* cross_env = std::getenv("EXC_DFS_VECTOR_CROSS");
+            const auto  cross_rows =
+                cross_env ? static_cast<std::size_t>(std::strtoull(cross_env, nullptr, 10)) : std::size_t(0);
+            if (!barrier_directory.empty()) {
+                (void)FileIo::write_atomic(barrier_directory / ("vector-" + std::to_string(node_index)),
+                                           owner.to_string() + " " + row->file_id);
+            }
+            if (cross_rows > 0 && !barrier_directory.empty()) {
+                std::size_t targets = 0, targets_done = 0;
+                for (std::size_t other = 0; other < node_count; ++other) {
+                    if (other == node_index) {
+                        continue;
+                    }
+                    ++targets;
+                    const auto handle_path = barrier_directory / ("vector-" + std::to_string(other));
+                    std::string owner_text, file_id_other;
+                    const auto  handle_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(90);
+                    while (stop_requested == 0 && std::chrono::steady_clock::now() < handle_deadline) {
+                        std::ifstream handle(handle_path);
+                        if (handle >> owner_text >> file_id_other) {
+                            break;
+                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    }
+                    if (owner_text.empty() || file_id_other.empty()) {
+                        std::printf("[node-run] DFS cross target=%zu: no vector handle\n", other);
+                        continue;
+                    }
+                    const ActorId owner_other(owner_text);
+                    // Wait for the vector to be readable locally (it replicates over the network).
+                    bool       readable      = false;
+                    const auto ready_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+                    while (stop_requested == 0 && std::chrono::steady_clock::now() < ready_deadline) {
+                        if (node->dfs()->read_vector_rows(owner_other, file_id_other).has_value()) {
+                            readable = true;
+                            break;
+                        }
+                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                    }
+                    if (!readable) {
+                        std::printf("[node-run] DFS cross target=%zu: vector never became readable\n", other);
+                        continue;
+                    }
+                    std::size_t cross_appended = 0;
+                    for (std::size_t index = 0; index < cross_rows; ++index) {
+                        DbRow entry;
+                        entry["id"]       = "from_" + std::to_string(node_index) + "_" + std::to_string(index);
+                        entry["payload"]  = "cross_" + std::to_string(node_index) + "_" + std::to_string(index);
+                        entry["position"] = std::to_string(1000 * (node_index + 1) + index);
+                        if (node->dfs()->add_vector_row(owner_other, file_id_other, entry, owner)) {
+                            ++cross_appended;
+                        }
+                    }
+                    std::printf("[node-run] DFS cross target=%zu owner=%s rows=%zu/%zu\n",
+                                other,
+                                owner_text.c_str(),
+                                cross_appended,
+                                cross_rows);
+                    std::fflush(stdout);
+                    if (cross_appended == cross_rows) {
+                        ++targets_done;
+                    }
+                }
+                std::printf("[node-run] DFS cross done targets=%zu/%zu\n", targets_done, targets);
+                std::fflush(stdout);
             }
         }
 
