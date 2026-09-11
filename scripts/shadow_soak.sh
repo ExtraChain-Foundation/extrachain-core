@@ -24,6 +24,9 @@
 #                                node's vector (multi-writer); audited together
 #        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
 #                                the run passes only if it reaches every node (default 0)
+#        EXC_SHADOW_REMOVE_AFTER_S every node also publishes a small file and removes it
+#                                this many seconds later; the run passes only if every
+#                                node ends with the row Removed and no payload on disk
 #        EXC_SHADOW_CAPTURE_AUDIT_CRASH save GDB dumps from offline verifiers (default 0)
 #        EXC_SHADOW_OLD_BIN      an older extrachain-node-run; together with
 #        EXC_SHADOW_OLD_INDEXES  ("3 5") those committee nodes run it instead of the
@@ -51,6 +54,8 @@ export EXC_DFS_VECTOR_ROWS="$VECTOR_ROWS"
 # Multi-writer: every node appends this many rows to every other node's vector.
 VECTOR_CROSS="${EXC_SHADOW_VECTOR_CROSS:-0}"
 export EXC_DFS_VECTOR_CROSS="$VECTOR_CROSS"
+REMOVE_AFTER="${EXC_SHADOW_REMOVE_AFTER_S:-0}"
+export EXC_DFS_REMOVE_AFTER_S="$REMOVE_AFTER"
 ALLOWED_DEAD="${EXC_SHADOW_ALLOWED_DEAD:-0}"
 # Nodes found dead when the watch loop ends (chaos kills); set once, before cleanup.
 DEAD_NODES=""
@@ -105,6 +110,85 @@ try:
 except Exception:
     print(0)
 PYVEC
+}
+
+# Catalog state of one row, read through the backup API like vector_rows.
+# Prints the numeric state (0 = Removed) or "none".
+dirs_state() {
+    python3 - "$1" "$2" "$3" <<'PYDIRS'
+import sqlite3, sys
+try:
+    source = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+    snapshot = sqlite3.connect(":memory:")
+    source.backup(snapshot)
+    source.close()
+    row = snapshot.execute("select state from ActorsFiles where owner_id = ? and file_id = ?",
+                           (sys.argv[2], sys.argv[3])).fetchone()
+    print(row[0] if row else "none")
+except Exception:
+    print("error")
+PYDIRS
+}
+
+# Status of one vector row (by the "id" primary field), through the backup API.
+# Prints the status value or "none".
+vector_row_status() {
+    python3 - "$1" "$2" <<'PYROW'
+import sqlite3, sys
+try:
+    source = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+    snapshot = sqlite3.connect(":memory:")
+    source.backup(snapshot)
+    source.close()
+    row = snapshot.execute("select status from Vector where id = ?", (sys.argv[2],)).fetchone()
+    print(row[0] if row else "none")
+except Exception:
+    print("error")
+PYROW
+}
+
+# One line per doomed file: "<publisher index> <owner> <file id>".
+dfs_doomed() {
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        is_dead "$index" && continue
+        sed -n "s/^\[node-run\] DFS doomed owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\).*/$index \1 \2/p" \
+            "$WORK/node-$index.log" 2>/dev/null
+    done
+}
+
+# Removal audit: every doomed file must be a tombstone (state Removed) with no
+# payload on every live node, and its owner must have logged the removal.
+remove_audit() {
+    local report="$1" complete=1 doomed total
+    doomed="$(dfs_doomed)"
+    total="$(printf '%s\n' "$doomed" | grep -c .)"
+    [ "$total" -gt 0 ] || { [ "$report" = 1 ] && echo "removed: no doomed files published"; return 1; }
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        if is_dead "$index"; then
+            [ "$report" = 1 ] && printf 'removed: node %s died during the run; not audited\n' "$index"
+            continue
+        fi
+        local gone=0 publisher owner file_id state payload
+        while read -r publisher owner file_id; do
+            [ -n "$file_id" ] || continue
+            state="$(dirs_state "${NODE_HOMES[$index]}/dfs/.dirs" "$owner" "$file_id")"
+            payload="${NODE_HOMES[$index]}/dfs/$owner/$file_id"
+            [ "$state" = "0" ] && [ ! -f "$payload" ] && gone=$((gone + 1))
+        done <<<"$doomed"
+        [ "$gone" -eq "$total" ] || complete=0
+        # Vector row 0 of every published vector must be a tombstone here as well.
+        local rows_gone=0 rows_total=0 vpublisher vowner vfile
+        while read -r vpublisher vowner vfile; do
+            [ -n "$vfile" ] || continue
+            rows_total=$((rows_total + 1))
+            [ "$(vector_row_status "${NODE_HOMES[$index]}/dfs/$vowner/$vfile" "soak_vector_${vpublisher}_0")" = "0" ] \
+                && rows_gone=$((rows_gone + 1))
+        done <<<"$(vectors_published)"
+        [ "$rows_gone" -eq "$rows_total" ] || complete=0
+        [ "$report" = 1 ] && printf 'removed: node %s has %s/%s file tombstones without payload, %s/%s vector row tombstones\n' \
+            "$index" "$gone" "$total" "$rows_gone" "$rows_total"
+    done
+    [ "$complete" -eq 1 ]
 }
 
 # One line per published vector: "<publisher index> <owner> <file id>".
@@ -615,6 +699,9 @@ case "$verdict" in
         fi
         if [ "$VECTOR_ROWS" -gt 0 ]; then
             vector_audit 1 || fail "ExDFS vectors are incomplete after shutdown"
+        fi
+        if [ "$REMOVE_AFTER" -gt 0 ]; then
+            remove_audit 1 || fail "ExDFS removal did not reach every node"
         fi
         if [ -n "$DEAD_NODES" ]; then
             log "PASS (survivors): $done_nodes/$SENDERS senders finalized $PER_SENDER intents each; node(s) $DEAD_NODES died"

@@ -469,6 +469,48 @@ int main(int argc, char* argv[]) {
                         row->file_id.c_str(),
                         row->size);
             std::fflush(stdout);
+
+            // Network removal (EXC_DFS_REMOVE_AFTER_S): a second, small file is
+            // published now and removed by its owner that many seconds later. The
+            // tombstone travels by DfsFileRemove gossip and by catalog sync, and the
+            // harness expects every node to end with the row Removed and no payload.
+            if (const char* remove_env = std::getenv("EXC_DFS_REMOVE_AFTER_S");
+                remove_env != nullptr && std::strtoull(remove_env, nullptr, 10) > 0) {
+                const auto remove_after = std::strtoull(remove_env, nullptr, 10);
+                std::vector<std::uint8_t> doomed(65536);
+                for (std::size_t index = 0; index < doomed.size(); ++index) {
+                    doomed[index] = static_cast<std::uint8_t>((index * 7U + node_index) & 0xffU);
+                }
+                const auto doomed_row = node->dfs()->store_data_as_file(owner,
+                                                                        owner,
+                                                                        std::move(doomed),
+                                                                        "soak",
+                                                                        "doomed-" + std::to_string(node_index) + ".bin");
+                if (!doomed_row.has_value()) {
+                    std::printf("[node-run] DFS doomed store failed (error %d)\n", static_cast<int>(doomed_row.error()));
+                    node->cleanUp();
+                    return 5;
+                }
+                std::printf("[node-run] DFS doomed owner=%s file_id=%s size=%zu\n",
+                            owner.to_string().c_str(),
+                            doomed_row->file_id.c_str(),
+                            doomed_row->size);
+                std::fflush(stdout);
+                std::thread([node = node.get(), owner, file_id = doomed_row->file_id, remove_after, node_index]() {
+                    for (unsigned long long waited = 0; waited < remove_after && stop_requested == 0; ++waited) {
+                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                    }
+                    if (stop_requested != 0) {
+                        return;
+                    }
+                    const auto removed = node->dfs()->remove_stored_file(owner, file_id);
+                    std::printf("[node-run] DFS removed owner=%s file_id=%s ok=%d\n",
+                                owner.to_string().c_str(),
+                                file_id.c_str(),
+                                removed.has_value() ? 1 : 0);
+                    std::fflush(stdout);
+                }).detach();
+            }
         }
 
         // Optional ExDFS vector load: every committee node creates a vector from
@@ -543,6 +585,31 @@ int main(int argc, char* argv[]) {
                 (void)FileIo::write_atomic(barrier_directory / ("vector-" + std::to_string(node_index)),
                                            owner.to_string() + " " + row->file_id);
             }
+            // Row removal (EXC_DFS_REMOVE_AFTER_S, shared with the doomed file): the
+            // owner flips its row 0 to a tombstone after that many seconds. The
+            // tombstone travels by DfsVectorAdd gossip and, when that is lost, by the
+            // catalog digest (the vector's content hash changes), and every node
+            // must end with row 0 at status 0.
+            if (const char* remove_env = std::getenv("EXC_DFS_REMOVE_AFTER_S");
+                remove_env != nullptr && std::strtoull(remove_env, nullptr, 10) > 0) {
+                const auto remove_after = std::strtoull(remove_env, nullptr, 10);
+                std::thread([node = node.get(), owner, file_id = row->file_id, name, remove_after]() {
+                    for (unsigned long long waited = 0; waited < remove_after && stop_requested == 0; ++waited) {
+                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                    }
+                    if (stop_requested != 0) {
+                        return;
+                    }
+                    const bool removed = node->dfs()->remove_vector_row(owner, file_id, name + "_0");
+                    std::printf("[node-run] DFS vector row removed owner=%s file_id=%s id=%s ok=%d\n",
+                                owner.to_string().c_str(),
+                                file_id.c_str(),
+                                (name + "_0").c_str(),
+                                removed ? 1 : 0);
+                    std::fflush(stdout);
+                }).detach();
+            }
+
             if (cross_rows > 0 && !barrier_directory.empty()) {
                 std::size_t targets = 0, targets_done = 0;
                 for (std::size_t other = 0; other < node_count; ++other) {
