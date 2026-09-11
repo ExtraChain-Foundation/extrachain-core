@@ -151,6 +151,11 @@ enum class DbConnectorType {
 };
 // FORMAT_ENUM(DbConnectorType)
 
+enum class DbConnectorLockScope
+{
+    Shared,
+    Connection
+};
 // TODO: while select, open check in query, std::vector<DBColumn>
 
 class EXTRACHAIN_EXPORT DbConnector {
@@ -160,8 +165,13 @@ protected:
     sqlite3        *db     = nullptr;
     DbConnectorType m_type = DbConnectorType::Regular;
 
+    // Opt in only when this connector is the process-local owner of its database.
+    std::unique_ptr<std::recursive_mutex> connection_mutex_;
+    std::recursive_mutex &operation_mutex();
+
 public:
     explicit DbConnector(const std::string &filePath, DbConnectorType type = DbConnectorType::Regular);
+    DbConnector(const std::string &filePath, DbConnectorType type, DbConnectorLockScope lockScope);
     explicit DbConnector(const std::filesystem::path &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(const FsPath &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(const char *filePath, DbConnectorType type = DbConnectorType::Regular);
