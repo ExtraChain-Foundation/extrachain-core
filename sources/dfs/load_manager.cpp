@@ -233,8 +233,6 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const std::string& identifier,
                                const bool         notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
-    bool is_forced = node->dfs()->forces_files_.contains(file_link);
-
     bool is_priority = node->dfs()->is_priority(file_link);
 
     if (!node_enabled.load()) {
@@ -245,10 +243,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         return;
     }
 
+    const bool is_forced = node->dfs()->forces_files_->erase(file_link) != 0;
     bool is_full = node->dfs()->mode() == DfsMode::Full;
-
-    if (is_forced)
-        node->dfs()->forces_files_.erase(file_link);
 
     if (is_priority) {
         if (m_active_downloads_priority->contains(file_link)) {
