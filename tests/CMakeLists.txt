@@ -71,6 +71,7 @@ add_test(NAME msgpack-budget COMMAND extrachain-msgpack-budget-tests)
 set_tests_properties(msgpack-budget PROPERTIES TIMEOUT 30)
 add_core_test_executable(extrachain-dfs-vector-tests dfs_vector_test.cpp)
 add_core_test_executable(extrachain-dfs-sync-tests dfs_sync_test.cpp)
+add_core_test_executable(extrachain-dfs-vector-bench dfs_vector_bench.cpp)
 
 if(EXTRACHAIN_BUILD_QT_COMPAT_TESTS)
     add_executable(extrachain-qt-compat-tests qt_compat_test.cpp)
