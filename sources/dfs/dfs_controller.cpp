@@ -1778,22 +1778,31 @@ void DfsController::network_request_file_existance(const Dfs::FileLink &file_lin
 }
 
 void DfsController::network_response_file_state(const Dfs::Packets::FileState &data, const Responder &responder) {
-    auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
-                                                                  data.owner_id,
-                                                                  data.file_id);
-
-    if (!dir_row.has_value()) {
+    if (data.state != Dfs::FileState::Ready || responder.identifiers().empty() || !node_enabled.load()) {
         return;
     }
 
-    if (data.state == Dfs::FileState::Ready) {
-        dir_row->state = data.state;
-        dir_row->hash  = data.hash;
-        load_manager_.add_to_queue(data.owner_id,
-                                   dir_row.value(),
-                                   *responder.identifiers().begin(),
-                                   data.notify_neighbours);
-    }
+    const auto identifier = *responder.identifiers().begin();
+    // Metadata reads and download preparation can block; own the request across dispatch.
+    ThreadPoolBoost::instance_dfs()->post([this, data, identifier] {
+        if (!node_enabled.load()) {
+            return;
+        }
+        try {
+            auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
+                                                                        data.owner_id,
+                                                                        data.file_id);
+            if (!dir_row.has_value() || !node_enabled.load()) {
+                return;
+            }
+
+            dir_row->state = data.state;
+            dir_row->hash  = data.hash;
+            load_manager_.add_to_queue(data.owner_id, dir_row.value(), identifier, data.notify_neighbours);
+        } catch (const std::exception &) {
+            eWarning("[Dfs] File-state response processing failed");
+        }
+    });
 }
 
 void DfsController::network_file_exist_notification(const Dfs::Packets::FileState &data,
