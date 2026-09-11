@@ -133,16 +133,18 @@ vector_audit() {
             [ "$report" = 1 ] && printf 'vectors: node %s died during the run; not audited\n' "$index"
             continue
         fi
-        local have=0 publisher owner file_id db rows
+        local have=0 publisher owner file_id db rows min_rows=-1
         while read -r publisher owner file_id; do
             [ -n "$file_id" ] || continue
             db="${NODE_HOMES[$index]}/dfs/$owner/$file_id"
             [ -f "$db" ] || continue
             rows="$(vector_rows "$db")"
             [ "${rows:-0}" -ge $(( VECTOR_ROWS + VECTOR_CROSS * (NODE_COUNT - 1) )) ] && have=$((have + 1))
+            [ "$min_rows" -lt 0 ] || [ "${rows:-0}" -lt "$min_rows" ] && min_rows="${rows:-0}"
         done <<<"$published"
         [ "$have" -eq "$total" ] || complete=0
-        [ "$report" = 1 ] && printf 'vectors: node %s has %s/%s complete\n' "$index" "$have" "$total"
+        [ "$report" = 1 ] && printf 'vectors: node %s has %s/%s complete (min rows %s, need %s)\n' \
+            "$index" "$have" "$total" "$min_rows" $(( VECTOR_ROWS + VECTOR_CROSS * (NODE_COUNT - 1) ))
     done
     [ "$complete" -eq 1 ]
 }
