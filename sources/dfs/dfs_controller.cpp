@@ -1329,7 +1329,7 @@ void DfsController::request_file(const ActorId &owner_id, const std::string &fil
     eLog("[Dfs] Request file: {} / {}", owner_id, file_id);
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
 
-    forces_files_.insert(file_link);
+    forces_files_->insert(file_link);
 
     this->node->network()->send_message(file_link,
                                         MessageType::DfsFileState,
