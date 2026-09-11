@@ -2923,48 +2923,47 @@ void DfsService::check_all_files(std::string identifier) {
     }
 
     for (const auto &dir : dirs.value()) {
-        bool is_full   = mode() == DfsMode::Full;
-        bool need_load = is_full || is_priority(dir.actor_id);
-        if (!need_load) {
-            continue;
-        }
+        const bool is_full   = mode() == DfsMode::Full;
+        const bool need_load = is_full || is_priority(dir.actor_id);
 
         const auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, dir.actor_id);
         if (!dir_rows.has_value()) {
-            //
             continue;
         }
 
         for (const auto &row : dir_rows.value()) {
-            if (row.type == Dfs::FileType::File && !need_load) {
+            if (row.state == Dfs::FileState::Removed || row.type == Dfs::FileType::Folder) {
                 continue;
             }
 
             if (row.state == Dfs::FileState::Ready) {
+                // A Ready row is a promise this node kept once. If the payload is gone
+                // (disk loss) or stale (a vector that missed rows), fetch it again in
+                // every mode. The catalog digest (#75) cannot notice this: both catalogs
+                // agree, so no rows travel and the row handler that used to re-queue
+                // such payloads on every full dump is never reached.
                 auto file_path = Dfs::Path::file_path(dir.actor_id, row.file_id);
                 if (!file_path.has_value()) {
                     continue;
                 }
 
-                if (row.type == Dfs::FileType::File && file_path->exists()) {
-                    auto size = file_path->file_size();
-                    if (size.has_value() && size == row.size) {
-                        continue;
-                    }
-
-                    if (!need_load) {
-                        continue;
+                bool intact = false;
+                if (file_path->exists()) {
+                    if (row.type == Dfs::FileType::File) {
+                        const auto size = file_path->file_size();
+                        intact          = size.has_value() && size.value() == row.size;
+                    } else {
+                        const auto [hash, size] =
+                            Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(dir.actor_id,
+                                                                                             row.file_id);
+                        intact = hash == row.hash;
                     }
                 }
-
-                if (row.type != Dfs::FileType::File && file_path->exists()) {
-                    // TODO: vectorupdate
-                    // continue;
+                if (intact) {
+                    continue;
                 }
-                // TODO: add checks for vector and collection
-            }
-
-            if (row.state == Dfs::FileState::Removed) {
+            } else if (!need_load) {
+                // Never held it, and this mode does not pull it.
                 continue;
             }
 
