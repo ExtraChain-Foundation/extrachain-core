@@ -11,10 +11,15 @@ also transfers its mutex. A SQLite build with threading disabled is rejected.
 The application must not select SQLite's single-thread startup mode; see the
 [SQLite threading contract](https://www.sqlite.org/threadsafe.html).
 
-The only production opt-in is `LuminanceManager`: network message dispatch reads
-reputation synchronously, so waiting for unrelated database operations also stalls
-VPN control messages. This change does not bypass reputation checks, cache stale
-values, alter authorization, or change DAG synchronization.
+Production opt-ins are `LuminanceManager` and the DFS metadata connector created
+by `DirsSpace::database()` for `DirsManager`. Network message dispatch reads both
+reputation and DFS metadata synchronously, so unrelated database operations can
+stall VPN control messages. `DirsManager` creates the metadata connection once;
+DFS consumers share that same connector through `get_db_instance()`. Do not open
+another independent metadata connection while that owner is alive. Collection
+databases keep their existing shared scope because independent connectors may
+access the same collection. Neither opt-in bypasses checks, caches stale values,
+changes authorization, or changes DAG synchronization.
 
 This scope does not make concurrent connector destruction, `open`/`close`, escaped
 raw SQLite handles or returned iterators safe. Their existing lifetime contracts
@@ -30,3 +35,11 @@ Coverage: unrelated connection progress, serialization within one connection,
 unchanged default shared locking, recursive bound operations and a moved
 connector. The baseline shared-lock implementation fails unrelated progress.
 Native application/load qualification remains separate from these unit tests.
+
+The actual DFS factory is additionally tested against an unrelated blocked SQL
+operation, plus concurrent consumers of its one shared connector. The first
+case reproduces the old metadata stall; the second retains serialization. Tests
+create only temporary databases, restore their working directory and never
+instantiate a node or touch a retained profile. Captured runtime stacks establish
+the blocked metadata path, not the cause of every slow VPN connection. Collection
+hash reads can still wait on the default lock and need separate investigation.

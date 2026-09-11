@@ -679,7 +679,9 @@ std::optional<Dfs::CollectionTemplate> Dfs::Tables::DirsFile::ActorSpace::get_co
 
 std::expected<std::shared_ptr<DbConnector>, Dfs::Tables::DirsFile::DirsSpace::DirsError> Dfs::Tables::DirsFile::
     DirsSpace::database() {
-    std::shared_ptr<DbConnector> dirs_file = std::make_shared<DbConnector>(Dfs::Basic::dirsPath);
+    // DirsManager owns this connector; consumers share the same instance
+    auto dirs_file = std::make_shared<DbConnector>(Dfs::Basic::dirsPath, DbConnectorType::Regular,
+                                                 DbConnectorLockScope::Connection);
     if (!dirs_file->open()) {
         eCritical("[DirsFile] Can't open dirs file");
         return std::unexpected(DirsError::DirsNotOpen);
