@@ -595,8 +595,10 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
 }
 
 bool DfsVector::store_add(DbRow &row) {
+    // Every refusal below is a message the user never sees; say why.
     auto encryption_res = encrypt_data(row, security_data_);
     if (!encryption_res.has_value()) {
+        eWarning("[DfsVector] store_add refused, encryption failed: {} / {}", file_actor_id_, file_id_);
         return false;
     }
     if (!encryption_res->empty()) {
@@ -610,11 +612,16 @@ bool DfsVector::store_add(DbRow &row) {
 
     auto [hash, all_empty] = calculate_hash(row);
     if (hash.empty() || all_empty) {
+        eWarning("[DfsVector] store_add refused, row has no hashable content: {} / {}", file_actor_id_, file_id_);
         return false;
     }
 
     auto sign = actor_.key().sign(hash);
     if (!sign.has_value()) {
+        eWarning("[DfsVector] store_add refused, signing failed for actor {}: {} / {}",
+                 actor_.id(),
+                 file_actor_id_,
+                 file_id_);
         return false;
     }
 
@@ -626,6 +633,7 @@ bool DfsVector::store_add(DbRow &row) {
 
 bool DfsVector::local_add(const DbRow &row, bool check) {
     if (!this->verify(row)) {
+        eWarning("[DfsVector] local_add refused, row does not verify: {} / {}", file_actor_id_, file_id_);
         return false;
     }
 
@@ -634,11 +642,13 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
         field = collection_template_.primary.value().name();
     }
     if (!row.contains(field) || !row_timestamp(row).has_value()) {
+        eWarning("[DfsVector] local_add refused, no primary field or timestamp: {} / {}", file_actor_id_, file_id_);
         return false;
     }
 
     DbConnector db(file_path_);
     if (!db.open()) {
+        eWarning("[DfsVector] local_add refused, cannot open {}", file_path_.string());
         return false;
     }
 
@@ -799,6 +809,7 @@ bool DfsVector::verify(const DbRow &row) {
 
     auto actor_id = ActorId::create(row.at("actor"));
     if (!actor_id.has_value()) {
+        eWarning("[DfsVector] verify: malformed actor id in row: {} / {}", file_actor_id_, file_id_);
         return false;
     }
 
@@ -807,12 +818,25 @@ bool DfsVector::verify(const DbRow &row) {
 
     auto [hash, all_empty] = calculate_hash(row);
     if (hash.empty() || all_empty) {
+        eWarning("[DfsVector] verify: row has no hashable content: {} / {}", file_actor_id_, file_id_);
         return false;
     }
 
     auto verify = actor.key().verify(hash, sign);
     if (!verify.has_value()) {
+        eWarning("[DfsVector] verify: signature check errored for actor {} (actor {}): {} / {}",
+                 actor_id.value(),
+                 actor.empty() ? "not in index" : "loaded",
+                 file_actor_id_,
+                 file_id_);
         return false;
+    }
+    if (!verify.value()) {
+        eWarning("[DfsVector] verify: signature mismatch for actor {} (actor {}): {} / {}",
+                 actor_id.value(),
+                 actor.empty() ? "not in index" : "loaded",
+                 file_actor_id_,
+                 file_id_);
     }
 
     return verify.value();
