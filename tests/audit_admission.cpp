@@ -183,7 +183,9 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(!Space::get_dir_row(db, owner.id(), row.file_id, "file_id OR 1=1 --").has_value());
         TEST_REQUIRE(!Space::search_file_by_hash(db, owner.id(), hostile).has_value());
         Space::update_file_state(db, owner.id(), hostile, Dfs::FileState::Removed);
-        Space::update_file_after_stored_remove(db, owner.id(), hostile, { }, 100);
+        TEST_REQUIRE(!node->dfs()
+                          ->accept_catalog_row(owner.id(), Dfs::catalog_tombstone(owner.id(), hostile, 100, { }))
+                          .has_value());
         const auto retained = Space::get_dir_row(db, owner.id(), row.file_id);
         TEST_REQUIRE(retained.has_value());
         TEST_REQUIRE_EQ(retained.value().state, Dfs::FileState::Ready);

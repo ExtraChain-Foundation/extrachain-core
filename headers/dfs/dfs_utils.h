@@ -261,11 +261,13 @@ namespace Dfs {
         std::optional<std::string> prev_file_id;
 
         std::string hash;
+        std::string   template_hash;
+        std::uint64_t metadata_revision = 0;
 
         std::optional<std::string> folder;
         std::string                name;
 
-        std::size_t   size;
+        std::size_t   size          = 0;
         std::uint64_t created       = 0;
         std::uint64_t last_modified = 0;
 
@@ -312,7 +314,9 @@ namespace Dfs {
             return folder;
         }
 
-        std::string calculate_hash(const ActorId& owner_id);
+        std::string calculate_hash(const ActorId& owner_id) const;
+        // Local migration only. Network admission never accepts this signature format.
+        std::string calculate_legacy_hash(const ActorId& owner_id) const;
     };
 
     BOOST_DESCRIBE_STRUCT(DirRow,
@@ -322,6 +326,8 @@ namespace Dfs {
                            file_id,
                            prev_file_id,
                            hash,
+                           template_hash,
+                           metadata_revision,
                            folder,
                            name,
                            size,
@@ -557,9 +563,11 @@ namespace Dfs {
                                                         + "("
                                                         "owner_id      TEXT              NOT NULL,"
                                                         "file_id       TEXT              NOT NULL,"
-                                                        "prev_file_id  TEXT                UNIQUE,"
+                                                        "prev_file_id  TEXT                     ,"
                                                         "actor_id      TEXT              NOT NULL,"
                                                         "hash          TEXT              NOT NULL,"
+                                                        "template_hash TEXT NOT NULL DEFAULT '',"
+                                                        "metadata_revision INTEGER NOT NULL DEFAULT 0,"
                                                         "folder        TEXT                     ,"
                                                         "name          TEXT              NOT NULL,"
                                                         "size          INTEGER           NOT NULL,"
@@ -685,12 +693,6 @@ namespace Dfs {
                                        const std::string                  file_id,
                                        Dfs::FileState                     state);
 
-                void update_file_after_stored_remove(const std::shared_ptr<DbConnector> db,
-                                                     const ActorId&                     owner_id,
-                                                     const std::string&                 file_id,
-                                                     const Signature&                   sign,
-                                                     std::uint64_t                      last_modified);
-
                 // TODO: expected
                 std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId&     actor_id,
                                                                                        const std::string& file_id);
@@ -698,13 +700,10 @@ namespace Dfs {
                     const std::shared_ptr<DbConnector> db,
                     const ActorId&                     actor_id,
                     const std::string&                 template_name);
-                bool                                      add_dir_row(const std::shared_ptr<DbConnector> db,
-                                                                      const ActorId&                     owner_id,
-                                                                      DirRow&                            dir_row,
-                                                                      const Actor<KeyPrivate>&           signer);
-                std::pair<bool, std::vector<Dfs::DirRow>> add_dir_rows(const std::shared_ptr<DbConnector> db,
-                                                                       const ActorId&                     actor_id,
-                                                                       const std::vector<Dfs::DirRow>& dir_rows);
+                bool add_dir_row(const std::shared_ptr<DbConnector> db,
+                                 const ActorId&                     owner_id,
+                                 DirRow&                            dir_row,
+                                 const Actor<KeyPrivate>&           signer);
 
                 std::pair<std::string, uint64_t> calculate_collection_hash_size(
                     const ActorId&     owner_id,

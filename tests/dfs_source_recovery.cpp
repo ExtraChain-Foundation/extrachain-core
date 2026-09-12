@@ -176,14 +176,18 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(wait_for([&] {
             return state() == Dfs::FileState::Ready;
         }));
-        ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Removed);
-        node->dfs()->completeDownloadedFile(owner.id(), row);
-        TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
         ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
         auto obsolete = row;
         obsolete.hash = std::string(64, '0');
         node->dfs()->completeDownloadedFile(owner.id(), obsolete);
         TEST_REQUIRE_EQ(state(), Dfs::FileState::Known);
+        TEST_REQUIRE(node->dfs()->remove_stored_file(owner.id(), row.file_id).has_value());
+        node->dfs()->completeDownloadedFile(owner.id(), row);
+        TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
+        ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
+        TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
+        TEST_REQUIRE(!std::filesystem::exists(path.value().native()));
+
     } else {
         TEST_REQUIRE(std::string_view(argv[1]) == "backoff");
         std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));

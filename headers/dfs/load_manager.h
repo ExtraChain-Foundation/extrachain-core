@@ -101,6 +101,8 @@ public:
     ~LoadManager();
 
     void stop();
+    std::unique_lock<std::mutex> lock_file(const Dfs::FileLink& link);
+    void                         cancel_download(const Dfs::FileLink& link);
 
     bool add_node_identifier(const Dfs::FileLink& file_link, std::string identifier);
     /// A peer answered Ready for this file: ask it first, ahead of the guessed sources.

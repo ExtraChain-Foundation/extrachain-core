@@ -44,6 +44,7 @@
 #include "dfs/dirs_manager.h"
 #include "dfs/dfs_vector.h"
 #include "dfs/dfs_utils.h"
+#include "dfs/catalog_metadata.h"
 #include "dfs/historical_collection.h"
 #include "dfs/load_manager.h"
 #include "runtime/event.h"
@@ -633,9 +634,13 @@ public:
     void sync_stored(const Dfs::FileData &file_data, const Responder &responder);
 
     // External interfaces
-    std::string network_store_file(const ActorId        &owner_id,
-                                   const Dfs::DirRow    &dir_row,
-                                   Dfs::NetworkStoreFile network_stote);
+    std::expected<Dfs::CatalogUpdate, std::string> accept_catalog_row(const ActorId     &owner_id,
+                                                                      const Dfs::DirRow &row);
+    bool                                           network_store_file(const ActorId        &owner_id,
+                                                                      const Dfs::DirRow    &row,
+                                                                      Dfs::NetworkStoreFile origin,
+                                                                      std::string_view      peer,
+                                                                      std::function<void()> on_accepted = { });
     std::string getFileFromStorage(const ActorId &owner_id, const std::string &file_name);
 
     // Unique file ID: hash+msec+salt
@@ -644,7 +649,7 @@ public:
     std::uint64_t sizeTaken() const;
     std::uint64_t totalDfsSize() const;
     void          increaseSizeTaken(uintmax_t value);
-    void          completeDownloadedFile(const ActorId &owner_id, const Dfs::DirRow &dir_row);
+    bool          completeDownloadedFile(const ActorId &owner_id, const Dfs::DirRow &dir_row);
     std::expected<void, ExportFileError> export_file(const ActorId                &owner_id,
                                                      const std::string            &file_id,
                                                      const FsPath                 &output_folder,

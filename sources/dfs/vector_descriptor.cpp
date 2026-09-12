@@ -24,6 +24,10 @@ namespace {
     }
 } // namespace
 
+std::string Dfs::vector_template_hash(const CollectionTemplate& schema) {
+    return Utils::calculate_hash("extrachain-vector-schema-v1:" + Json::serialize(schema));
+}
+
 std::expected<Dfs::CollectionTemplate, std::string> Dfs::vector_storage_template(const CollectionTemplate& schema,
                                                                                  bool encrypted) {
     if (schema.fields().empty() || schema.fields().size() > 1995

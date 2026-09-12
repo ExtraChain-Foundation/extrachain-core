@@ -85,6 +85,14 @@ int main() {
     TEST_REQUIRE(std::filesystem::is_regular_file(companion));
     TEST_REQUIRE_EQ(vector.read_rows().value().size(), std::size_t(2));
     TEST_REQUIRE(!DfsVector::load_network(node.get(), owner, owner.id(), "../escape").has_value());
+    std::filesystem::remove(path.native());
+    std::filesystem::remove(companion);
+    changed = package;
+    changed.vector_template.add_fields({ Dfs::Field::String("forged_schema") });
+    changed.vector_file = Json::serialize(changed.vector_template);
+    TEST_REQUIRE(!receiver.handle_package(changed));
+    TEST_REQUIRE(!std::filesystem::exists(path.native()));
+    TEST_REQUIRE(receiver.handle_package(package));
 
     DbConnector probe(directory / "probe.db");
     TEST_REQUIRE(probe.open());

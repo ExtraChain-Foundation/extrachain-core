@@ -77,7 +77,7 @@ namespace {
         for (const auto &[name, value] : row) {
             fields.emplace_back(name, value);
         }
-        std::ranges::sort(fields, {}, &std::pair<std::string_view, std::string_view>::first);
+        std::ranges::sort(fields, { }, &std::pair<std::string_view, std::string_view>::first);
 
         std::string canonical;
         for (const auto &[name, value] : fields) {
@@ -457,8 +457,7 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
     return package;
 }
 
-std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError>
-DfsVector::generate_content_package_empty() {
+std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::generate_content_package_empty() {
     const auto descriptor = load_descriptor();
     if (!descriptor.has_value())
         return std::unexpected(descriptor.error());
@@ -484,6 +483,16 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         return false;
     }
 
+    auto write_lock =
+        node->dfs()->download_manager().lock_file({ .owner_id = file_actor_id_, .file_id = file_id_ });
+    const auto catalog =
+        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->dirs_manager().get_db_instance(),
+                                                       file_actor_id_,
+                                                       file_id_);
+    if (!catalog.has_value() || catalog.value().state == Dfs::FileState::Removed
+        || catalog.value().metadata_revision == 0
+        || catalog.value().template_hash != Dfs::vector_template_hash(vector_template))
+        return false;
     if (!Dfs::vector_storage_template(vector_template, is_encrypted_).has_value())
         return false;
     if (file_path_.exists()) {
@@ -642,6 +651,15 @@ bool DfsVector::store_add(DbRow &row) {
 }
 
 std::expected<bool, DfsVectorError> DfsVector::local_add(const DbRow &row, bool check) {
+    auto write_lock =
+        node->dfs()->download_manager().lock_file({ .owner_id = file_actor_id_, .file_id = file_id_ });
+    const auto catalog =
+        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->dirs_manager().get_db_instance(),
+                                                       file_actor_id_,
+                                                       file_id_);
+    if (!catalog.has_value() || catalog.value().state == Dfs::FileState::Removed
+        || catalog.value().template_hash != Dfs::vector_template_hash(collection_template_))
+        return std::unexpected(DfsVectorError::Adding);
     if (!this->verify(row)) {
         eWarning("[DfsVector] local_add refused, row does not verify: {} / {}", file_actor_id_, file_id_);
         return std::unexpected(DfsVectorError::Adding);
@@ -652,7 +670,9 @@ std::expected<bool, DfsVectorError> DfsVector::local_add(const DbRow &row, bool 
         field = collection_template_.primary.value().name();
     }
     if (!row.contains(field) || !row_timestamp(row).has_value()) {
-        eWarning("[DfsVector] local_add refused, no primary field or timestamp: {} / {}", file_actor_id_, file_id_);
+        eWarning("[DfsVector] local_add refused, no primary field or timestamp: {} / {}",
+                 file_actor_id_,
+                 file_id_);
         return std::unexpected(DfsVectorError::Adding);
     }
 
@@ -719,10 +739,10 @@ std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
         }
 
         const auto type = field_types.find(key);
-        const bool numeric = type != field_types.end()
-                             && (type->second == Dfs::FieldType::Integer || type->second == Dfs::FieldType::Real
-                                 || type->second == Dfs::FieldType::Bool
-                                 || type->second == Dfs::FieldType::Timestamp);
+        const bool numeric =
+            type != field_types.end()
+            && (type->second == Dfs::FieldType::Integer || type->second == Dfs::FieldType::Real
+                || type->second == Dfs::FieldType::Bool || type->second == Dfs::FieldType::Timestamp);
         row[key] = numeric ? "0" : "-";
     }
 
@@ -901,7 +921,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow        
     }
 
     if (!encryptor) {
-        return DbRow {};
+        return DbRow { };
     }
 
     DbRow encrypted_row;
@@ -966,7 +986,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::decrypt_data(const DbRow        
     }
 
     if (!decryptor) {
-        return DbRow {};
+        return DbRow { };
     }
 
     DbRow decrypted_row;

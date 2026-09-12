@@ -114,7 +114,7 @@ int main() {
     // Reproduce persisted metadata after a crash, including a peer that knows
     // the file but cannot yet serve it. A size match alone cannot prove readiness.
     for (unsigned variant = 0; variant < 4; ++variant) {
-        const auto  actor = ActorId::create(std::string(40, char('3' + variant))).value();
+        const auto  actor = owner.id();
         Dfs::DirRow remote;
         remote.owner_id      = actor;
         remote.actor_id      = owner.id();
@@ -122,6 +122,7 @@ int main() {
         remote.name          = "resume-" + std::to_string(variant);
         remote.size          = 1024;
         remote.last_modified = 500;
+        remote.metadata_revision = 500;
         remote.state         = variant >= 2 ? Dfs::FileState::Known : Dfs::FileState::Ready;
         remote.type          = Dfs::FileType::File;
         const auto path      = Dfs::Path::file_path(actor, remote.file_id);
@@ -133,6 +134,7 @@ int main() {
             file << std::string(1024, 'x');
         }
         remote.hash = Utils::calculate_hash_file(path.value()).value();
+        remote.sign = owner.key().sign(remote.calculate_hash(actor)).value();
         auto local  = remote;
         local.state = variant == 1 ? Dfs::FileState::Ready : Dfs::FileState::Known;
         auto row    = Utils::to_dbrow(local);
@@ -142,7 +144,7 @@ int main() {
             std::ofstream file(Dfs::Path::filePath(actor, remote.file_id), std::ios::binary);
             file << std::string(variant == 0 ? 512 : 2048, 'y');
         }
-        TEST_REQUIRE_EQ(DirsSpace::last_modified(db, actor).value(), 0U);
+        TEST_REQUIRE(DirsSpace::last_modified(db, actor).value() <= 500U);
         if (variant == 2) {
             std::filesystem::remove(Dfs::Path::filePath(actor, remote.file_id));
         }

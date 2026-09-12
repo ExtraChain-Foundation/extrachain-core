@@ -2511,11 +2511,13 @@ void NetworkService::message_received(const std::string &message,
             return;
         }
 
-        file_link_result->dir_row.state = Dfs::FileState::Known;
-        node->dfs_service()->network_store_file(file_link_result->owner_id,
-                                                file_link_result->dir_row,
-                                                Dfs::NetworkStoreFile::Broadcast);
-        send_broadcast_message_further(package_data);
+        node->dfs_service()->network_store_file(file_link_result.value().owner_id,
+                                                file_link_result.value().dir_row,
+                                                Dfs::NetworkStoreFile::Broadcast,
+                                                identifier,
+                                                [this, package_data] {
+                                                    send_broadcast_message_further(package_data);
+                                                });
 
         break;
     }
@@ -2601,12 +2603,17 @@ void NetworkService::message_received(const std::string &message,
             return;
         }
 
-        node->dfs_service()->network_remove_stored_file(file_remove->owner_id,
-                                                        file_remove->file_id,
-                                                        file_remove->sign,
-                                                        file_remove->last_modified);
-        // if sign not verify only -> not broadrcast
-        send_broadcast_message_further(package_data);
+        const auto &remove = file_remove.value();
+        node->dfs_service()->network_store_file(remove.owner_id,
+                                                Dfs::catalog_tombstone(remove.owner_id,
+                                                                       remove.file_id,
+                                                                       remove.last_modified,
+                                                                       remove.sign),
+                                                Dfs::NetworkStoreFile::Broadcast,
+                                                identifier,
+                                                [this, package_data] {
+                                                    send_broadcast_message_further(package_data);
+                                                });
         break;
     }
 

@@ -67,7 +67,9 @@ namespace {
     void drain_storage(ExtraChain::Core::ExtraChainNode &node) {
         std::promise<void> done;
         auto               future = done.get_future();
-        node.post_storage([&done] { done.set_value(); });
+        node.post_storage([&done] {
+            done.set_value();
+        });
         TEST_REQUIRE(future.wait_for(std::chrono::seconds(30)) == std::future_status::ready);
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
@@ -77,17 +79,18 @@ namespace {
                          const std::string       &name,
                          std::uint64_t            stamp) {
         Dfs::DirRow row;
-        row.actor_id      = owner.id();
-        row.owner_id      = owner.id();
-        row.file_id       = file_id;
-        row.hash          = Utils::calculate_hash(name);
-        row.name          = name;
-        row.size          = 10;
-        row.created       = stamp;
-        row.last_modified = stamp;
-        row.type          = Dfs::FileType::File;
-        row.state         = Dfs::FileState::Ready;
-        const auto sign   = owner.key().sign(row.calculate_hash(owner.id()));
+        row.actor_id          = owner.id();
+        row.owner_id          = owner.id();
+        row.file_id           = file_id;
+        row.hash              = Utils::calculate_hash(name);
+        row.name              = name;
+        row.size              = 10;
+        row.created           = 1;
+        row.metadata_revision = stamp;
+        row.last_modified     = stamp;
+        row.type              = Dfs::FileType::File;
+        row.state             = Dfs::FileState::Ready;
+        const auto sign       = owner.key().sign(row.calculate_hash(owner.id()));
         TEST_REQUIRE(sign.has_value());
         row.sign = sign.value();
         return row;
@@ -95,13 +98,14 @@ namespace {
 
     // Exactly what DfsService::remove_stored_file signs and stores.
     Dfs::DirRow tombstone(const Actor<KeyPrivate> &signer, Dfs::DirRow row, std::uint64_t stamp) {
-        row.hash          = "";
-        row.folder        = std::nullopt;
-        row.name          = "";
-        row.size          = 0;
-        row.state         = Dfs::FileState::Removed;
-        row.last_modified = stamp;
-        const auto sign   = signer.key().sign(row.calculate_hash(row.owner_id));
+        row.hash              = "";
+        row.folder            = std::nullopt;
+        row.name              = "";
+        row.size              = 0;
+        row.state             = Dfs::FileState::Removed;
+        row.last_modified     = stamp;
+        row.metadata_revision = stamp;
+        const auto sign       = signer.key().sign(row.calculate_hash(row.owner_id));
         TEST_REQUIRE(sign.has_value());
         row.sign = sign.value();
         return row;
@@ -205,7 +209,7 @@ int main() {
     TEST_REQUIRE_EQ(row_of(peer.id(), f1).name, std::string("renamed.txt"));
 
     // 7. Digests: one per owner, deterministic, and they follow the content.
-    const auto digests = dirs.catalog_digests();
+    const auto digests     = dirs.catalog_digests();
     const auto peer_digest = digest_of(digests, peer.id());
     TEST_REQUIRE(peer_digest != nullptr);
     TEST_REQUIRE_EQ(peer_digest->rows, std::uint64_t(2));
@@ -214,28 +218,15 @@ int main() {
     TEST_REQUIRE_EQ(again.size(), std::size_t(1));
     TEST_REQUIRE(again.front().digest == peer_digest->digest);
 
-    // 7b. The hash column is part of the digest: a vector whose content moved on
-    //     (hash updated locally, signature unchanged) must differ from a copy that
-    //     did not, otherwise the row is never re-offered and the content never
-    //     re-requested.
+    // Immutable file content cannot be changed through the local vector-hint API.
     {
-        auto moved    = row_of(peer.id(), f1);
-        moved.hash    = Utils::calculate_hash("more rows arrived");
-        const auto ok = Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs.get_db_instance(),
-                                                                                peer.id(),
-                                                                                moved,
-                                                                                false);
-        TEST_REQUIRE(ok);
-        const auto after = dirs.catalog_digests({ peer.id() });
-        TEST_REQUIRE_EQ(after.size(), std::size_t(1));
-        TEST_REQUIRE(after.front().digest != peer_digest->digest);
-        // Put it back so the digest comparisons below use the published content.
-        moved.hash = r1_renamed.hash;
-        TEST_REQUIRE(Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs.get_db_instance(),
-                                                                             peer.id(),
-                                                                             moved,
-                                                                             false));
-        TEST_REQUIRE(dirs.catalog_digests({ peer.id() }).front().digest == peer_digest->digest);
+        auto moved = row_of(peer.id(), f1);
+        moved.hash = Utils::calculate_hash("unverified content");
+        TEST_REQUIRE(!Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs.get_db_instance(),
+                                                                              peer.id(),
+                                                                              moved,
+                                                                              false));
+        TEST_REQUIRE_EQ(row_of(peer.id(), f1).hash, r1_renamed.hash);
     }
 
     // 8. A requester holding the same catalog: no rows travel, the reply is empty.
@@ -243,12 +234,12 @@ int main() {
         Capture   capture;
         Responder to_peer(&capture);
         to_peer.add_identifier("peer-node");
-        dirs.network_request_digest({ .owners = digests, .allowed = {} }, to_peer);
+        dirs.network_request_digest({ .owners = digests, .allowed = { } }, to_peer);
         drain_storage(*node);
         TEST_REQUIRE_EQ(capture.count(MessageType::DfsSyncDirRows), std::size_t(0));
         TEST_REQUIRE_EQ(capture.count(MessageType::DfsSyncDigestReply), std::size_t(1));
-        const auto reply =
-            MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(capture.payload(MessageType::DfsSyncDigestReply));
+        const auto reply = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(
+            capture.payload(MessageType::DfsSyncDigestReply));
         TEST_REQUIRE(reply.has_value());
         TEST_REQUIRE(reply->mismatched.empty());
         TEST_REQUIRE(reply->unknown.empty());
@@ -266,7 +257,7 @@ int main() {
         Capture   capture;
         Responder to_peer(&capture);
         to_peer.add_identifier("peer-node");
-        dirs.network_request_digest({ .owners = stale, .allowed = {} }, to_peer);
+        dirs.network_request_digest({ .owners = stale, .allowed = { } }, to_peer);
         drain_storage(*node);
         TEST_REQUIRE_EQ(capture.count(MessageType::DfsSyncDirRows), std::size_t(1));
         const auto rows = MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(
@@ -275,8 +266,8 @@ int main() {
         TEST_REQUIRE_EQ(rows->size(), std::size_t(1));
         TEST_REQUIRE(rows->front().first == peer.id());
         TEST_REQUIRE_EQ(rows->front().second.size(), std::size_t(2));
-        const auto reply =
-            MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(capture.payload(MessageType::DfsSyncDigestReply));
+        const auto reply = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(
+            capture.payload(MessageType::DfsSyncDigestReply));
         TEST_REQUIRE(reply.has_value());
         TEST_REQUIRE_EQ(reply->mismatched.size(), std::size_t(1));
         TEST_REQUIRE(reply->mismatched.front().digest == peer_digest->digest);
@@ -290,16 +281,16 @@ int main() {
         Capture   capture;
         Responder to_peer(&capture);
         to_peer.add_identifier("peer-node");
-        dirs.network_request_digest(
-            { .owners = { { .owner_id = stranger.id(), .rows = 1, .digest = "abcd" } }, .allowed = {} },
-            to_peer);
+        dirs.network_request_digest({ .owners  = { { .owner_id = stranger.id(), .rows = 1, .digest = "abcd" } },
+                                      .allowed = { } },
+                                    to_peer);
         drain_storage(*node);
         const auto rows = MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(
             capture.payload(MessageType::DfsSyncDirRows));
         TEST_REQUIRE(rows.has_value());
         TEST_REQUIRE_EQ(rows->size(), digests.size());
-        const auto reply =
-            MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(capture.payload(MessageType::DfsSyncDigestReply));
+        const auto reply = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(
+            capture.payload(MessageType::DfsSyncDigestReply));
         TEST_REQUIRE(reply.has_value());
         TEST_REQUIRE_EQ(reply->unknown.size(), std::size_t(1));
         TEST_REQUIRE(reply->unknown.front() == stranger.id());
@@ -310,7 +301,7 @@ int main() {
         Capture   capture;
         Responder to_peer(&capture);
         to_peer.add_identifier("peer-node");
-        dirs.network_request_digest({ .owners = {}, .allowed = { peer.id() } }, to_peer);
+        dirs.network_request_digest({ .owners = { }, .allowed = { peer.id() } }, to_peer);
         drain_storage(*node);
         const auto rows = MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(
             capture.payload(MessageType::DfsSyncDirRows));

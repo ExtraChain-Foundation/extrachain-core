@@ -1389,7 +1389,24 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
     });
 }
 
+std::unique_lock<std::mutex> LoadManager::lock_file(const Dfs::FileLink& link) {
+    return std::unique_lock(m_write_file_mutexes[link.hash() % WRITE_STRIPES]);
+}
+
+void LoadManager::cancel_download(const Dfs::FileLink& link) {
+    m_active_downloads_priority->erase(link);
+    m_active_downloads->erase(link);
+    m_active_reads->erase(link);
+    m_completed_once->erase(link);
+    auto pending = *m_amount_file_fragments_requests;
+    std::erase_if(*pending, [&](const auto& entry) {
+        return entry.first.file_link == link;
+    });
+}
+
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
+    if (!node->dfs()->completeDownloadedFile(owner_id, dir_row))
+        return;
     {
         auto completed_locked = *m_completed_once;
         if (completed_locked->size() >= 4096) {
@@ -1404,7 +1421,6 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
          dir_row.file_id,
          dir_row.size);
 
-    node->dfs()->completeDownloadedFile(owner_id, dir_row);
     node->dfs()->notify_added(owner_id, dir_row);
     node->dfs()->notify_downloaded(owner_id, dir_row);
 

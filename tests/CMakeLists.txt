@@ -127,6 +127,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Cla
 endif()
 add_test(NAME msgpack-budget COMMAND extrachain-msgpack-budget-tests)
 set_tests_properties(msgpack-budget PROPERTIES TIMEOUT 30)
+add_core_test_executable(extrachain-catalog-metadata catalog_metadata.cpp)
+add_test(NAME catalog-metadata COMMAND extrachain-catalog-metadata)
+set_tests_properties(catalog-metadata PROPERTIES TIMEOUT 30)
 add_core_test_executable(extrachain-chat-authorization chat_authorization.cpp)
 add_test(NAME chat-authorization COMMAND extrachain-chat-authorization)
 set_tests_properties(chat-authorization PROPERTIES TIMEOUT 60)
@@ -312,3 +315,7 @@ add_custom_target(extrachain-tests-qt-boundary-check ALL
         -P ${CMAKE_CURRENT_LIST_DIR}/../cmake/CheckCoreQtBoundary.cmake
     VERBATIM
 )
+
+add_core_test_executable(extrachain-catalog-ingress catalog_ingress.cpp)
+add_test(NAME catalog-ingress COMMAND extrachain-catalog-ingress)
+set_tests_properties(catalog-ingress PROPERTIES TIMEOUT 30)

@@ -12,6 +12,8 @@ namespace Dfs {
     BOOST_DESCRIBE_STRUCT(VectorDescriptor, (), (version, schema, companion))
 
     inline constexpr std::size_t                   VectorDescriptorLimit = 128 * 1024;
+    std::string                                    vector_template_hash(const CollectionTemplate& schema);
+
     std::expected<CollectionTemplate, std::string> vector_storage_template(const CollectionTemplate& schema,
                                                                            bool                      encrypted);
     std::expected<std::optional<VectorDescriptor>, std::string> read_vector_descriptor(DbConnector& database);

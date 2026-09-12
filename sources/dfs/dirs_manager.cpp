@@ -312,181 +312,34 @@ void DirsManager::network_response_dir_rows(
         return node->dfs()->is_priority(left.first) && !node->dfs()->is_priority(right.first);
     });
 
+    if (responder.identifiers().size() != 1)
+        return;
     node->post_storage([this, response_data = std::move(response_data), responder]() {
-        for (auto& [owner_id, dir_rows] : response_data) {
-            // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
-            // TODO: add merge for sync dir file
-
-            // No folder here either: knowing an actor's dir rows says nothing about
-            // whether we will ever download any of them. The folder is created when the
-            // first payload is written.
-            std::vector<Dfs::DirRow> dir_rows_todo;
-
-            // #75: a catalog can only converge if a row the owner re-signed replaces the
-            // local one and a row nobody signed never lands. Before this, rows went
-            // straight into an INSERT: forged rows were accepted, re-signed rows were
-            // silently dropped, and a tombstone kept the pre-removal signature locally.
-            //
-            // File and Folder rows verify against the owner's key. A tombstone verifies
-            // as the owner signed it (hash/name/folder/size cleared, state Removed).
-            // Vector and Dictionary rows cannot be verified here: they carry the
-            // creation-time signature over a hash column the owner keeps updating
-            // without re-signing. Unknown owner: accepted as before.
-            const auto owner_actor = node->actor_index()->read_actor(owner_id);
-            std::vector<Dfs::DirRow> accepted;
-            accepted.reserve(dir_rows.size());
-            for (const auto& row : dir_rows) {
-                const bool is_tombstone = row.state == Dfs::FileState::Removed;
-                const bool verifiable   = is_tombstone || row.type == Dfs::FileType::File
-                                        || row.type == Dfs::FileType::Folder;
-                if (verifiable && owner_actor.has_value()) {
-                    auto probe = row;
-                    if (is_tombstone) {
-                        probe.hash   = "";
-                        probe.folder = std::nullopt;
-                        probe.name   = "";
-                        probe.size   = 0;
-                    }
-                    const auto verified = owner_actor->key().verify(probe.calculate_hash(owner_id), row.sign);
-                    if (!verified.has_value() || !verified.value()) {
-                        eWarning("[Dfs] Sync row rejected, bad signature: {} / {}", owner_id, row.file_id);
-                        continue;
-                    }
-                }
-
-                const auto local = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
-                if (local.has_value() && !is_tombstone && local->sign != row.sign) {
-                    if (local->state == Dfs::FileState::Removed || row.last_modified < local->last_modified) {
-                        continue; // ours is the newer version, or already removed
-                    }
-                    // Re-signed by the owner (rename, move): take it, keep the local state.
-                    auto db_row = Utils::to_dbrow(row);
-                    if (!row.prev_file_id.has_value() || row.prev_file_id->empty()) {
-                        db_row.erase("prev_file_id");
-                    }
-                    db_row["state"] = std::to_string(std::to_underlying(local->state));
-                    if (!db_->replace(Dfs::Tables::DirsFile::TableNameActorsFiles, db_row)) {
-                        eWarning("[Dfs] Sync row update failed: {} / {}", owner_id, row.file_id);
-                    }
-                    continue;
-                }
-                if (local.has_value() && is_tombstone && local->sign != row.sign) {
-                    // Take the tombstone's signature and time so the digests converge.
-                    Dfs::Tables::DirsFile::ActorSpace::update_file_after_stored_remove(db_,
-                                                                                       owner_id,
-                                                                                       row.file_id,
-                                                                                       row.sign,
-                                                                                       row.last_modified);
-                }
-                accepted.push_back(row);
-            }
-
-            /*
-            auto local_dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows_map(owner_id);
-            if (local_dir_rows.has_value()) {
-                for (const auto& network_row : dir_rows) {
-                    auto it = local_dir_rows->find(network_row.file_id);
-
-                     if (it != local_dir_rows->end() && network_row.last_modified != it->second.last_modified) {
-                         eLog("Need to update: {} / {}, {}", owner_id, network_row.file_id,
-            network_row.last_modified);
-                     }
-                 }
-             }
-             */
-
-            // for removed
-            for (const auto& row : accepted) {
-                auto file_path = Dfs::Path::file_path(owner_id, row.file_id);
-                if (!file_path.has_value()) {
-                    continue;
-                }
-
-                // Vector/Dictionary newer on the network: route into the download
-                // queue, which admits it only for priority actors/files (or Full
-                // mode). The peer answers with a content package merged over the
-                // local db by signed rows, so local-only rows survive.
-                if ((row.type == Dfs::FileType::Vector || row.type == Dfs::FileType::Dictionary)
-                    && row.state == Dfs::FileState::Ready) {
-                    auto local = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
-                    // Also queue when there is no local row at all. Requiring one meant a
-                    // vector first seen through a sync was never queued: the row
-                    // replicated, the payload did not, and no later sync corrected it —
-                    // a node that missed the creation broadcast stayed permanently
-                    // without that vector. Files do not have this hole because they test
-                    // the file's presence on disk.
-                    if (!local.has_value() || !file_path->exists() || local->state != Dfs::FileState::Ready
-                        || row.last_modified > local->last_modified
-                        || !node->dfs()->is_file_already_downloaded(owner_id, row.file_id, row.hash)) {
-                        dir_rows_todo.push_back(row);
-                    }
-                }
-
-                if (row.state == Dfs::FileState::Removed) {
-                    if (row.type == Dfs::FileType::File && file_path->exists()) {
-                        auto remove_result = node->dfs()->remove_local_file(owner_id, row.file_id);
-                        if (!remove_result.has_value()) {
-                            eWarning("[DirsManager] Cannot remove local file {} / {}", owner_id, row.file_id);
-                            continue;
-                        }
-                    }
-                    Dfs::Tables::DirsFile::ActorSpace::update_file_state(db_,
-                                                                         owner_id,
-                                                                         row.file_id,
-                                                                         Dfs::FileState::Removed);
-                }
-
-                // A neighbour can still be downloading this file during reconnect.
-                // Keep a retry queue even when an unchanged catalogue says Known.
-                if (row.type == Dfs::FileType::File && row.state != Dfs::FileState::Removed && !row.hash.empty()) {
-                    if (!node->dfs()->is_file_already_downloaded(owner_id, row.file_id, row.hash)) {
-                        dir_rows_todo.push_back(row);
-                    }
-                }
-            }
-
-            // Need to change adding
-            auto [res, dir_rows_res] = Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(db_, owner_id, accepted);
-
-            // Rebuild the owner index from persisted rows, including an unchanged
-            // catalogue received after an interrupted download.
-            Dfs::Tables::DirsFile::DirsSpace::update_from_files(db_, owner_id);
-
-            if (!dir_rows_res.empty()) {
-                auto max_value = std::ranges::max(dir_rows_res, {}, &Dfs::DirRow::last_modified).last_modified;
-                this->update_dirs(owner_id, max_value);
-
-                for (const auto& row : dir_rows_res) {
-                    if (row.type == Dfs::FileType::Folder) {
-                        node->dfs()->notify_added(owner_id, row);
-                    }
-                }
-            }
-
-            if (!node_enabled.load()) {
+        for (const auto& [owner_id, rows] : response_data) {
+            if (!node_enabled.load())
                 return;
-            }
-
-            // Gossip fresh File rows that arrived via sync: a file added while its
-            // owner had no uplink reaches us through the handshake sync only, and
-            // without re-broadcast the rest of the network never hears about it.
-            // Receivers dedupe via is_file_already_downloaded; 10 min cap keeps a
-            // full catalog sync from turning into a broadcast storm.
-            if (node->dfs()->mode() == DfsMode::Full) {
-                const auto now_ms = Utils::current_date_ms();
-                for (const auto& row : dir_rows_res) {
-                    if (row.type != Dfs::FileType::File)
-                        continue;
-                    if (now_ms < 0 || now_ms - static_cast<long long>(row.last_modified) > 10 * 60 * 1000)
-                        continue;
-                    node->dfs()->broadcast_stored(owner_id, row);
+            std::vector<Dfs::DirRow> downloads;
+            for (const auto& row : rows) {
+                const auto accepted = node->dfs()->accept_catalog_row(owner_id, row);
+                if (!accepted.has_value())
+                    continue;
+                const auto& stored = accepted.value().current;
+                if (stored.state == Dfs::FileState::Removed)
+                    continue;
+                const bool vector =
+                    stored.type == Dfs::FileType::Vector || stored.type == Dfs::FileType::Dictionary;
+                if (stored.type == Dfs::FileType::File || vector) {
+                    // Content roots for mutable vectors are peer hints. The
+                    // signed metadata and downloaded rows establish authority.
+                    const auto& target = vector ? row : stored;
+                    if (!node->dfs()->is_file_already_downloaded(owner_id, stored.file_id, target.hash))
+                        downloads.push_back(target);
                 }
+                if (accepted.value().changed && node->dfs()->mode() == DfsMode::Full)
+                    node->dfs()->broadcast_stored(owner_id, stored);
             }
-
-            node->dfs()->download_manager().add_to_queue(owner_id, dir_rows_res, *responder.identifiers().begin());
-            node->dfs()->download_manager().add_to_queue(owner_id,
-                                                         dir_rows_todo,
-                                                         *responder.identifiers().begin());
+            Dfs::Tables::DirsFile::DirsSpace::update_from_files(db_, owner_id);
+            node->dfs()->download_manager().add_to_queue(owner_id, downloads, *responder.identifiers().begin());
         }
     });
 }
