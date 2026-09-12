@@ -1446,6 +1446,10 @@ void DfsController::network_response_historical_collection(
     const ActorId                              &owner_id,
     const std::string                          &file_id,
     const std::vector<HistoricalCollectionRow> &historical_rows) {
+    if (historical_rows.empty()) {
+        return;
+    }
+
     auto dir_row =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
     if (!dir_row.has_value()) {
