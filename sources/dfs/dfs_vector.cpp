@@ -477,11 +477,13 @@ DfsVector::generate_content_package_empty() {
 bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
     if (dfs_vector_content.owner_id != file_actor_id_ || dfs_vector_content.file_id != file_id_
         || !package_size_is_valid(dfs_vector_content.content)) {
+        eWarning("[DfsVector] handle_package: package is for another vector: {} / {}", file_actor_id_, file_id_);
         return false;
     }
 
     auto vector_template = dfs_vector_content.vector_template;
     if (vector_template.fields().size() == 0) {
+        eWarning("[DfsVector] handle_package: package template has no fields: {} / {}", file_actor_id_, file_id_);
         return false;
     }
 
@@ -508,6 +510,10 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
                                        return !allowed_fields.contains(field.first);
                                    })
             || !verify(row)) {
+            eWarning("[DfsVector] handle_package: a row failed validation, package dropped: {} / {} ({} rows)",
+                     file_actor_id_,
+                     file_id_,
+                     dfs_vector_content.content.size());
             return false;
         }
     }

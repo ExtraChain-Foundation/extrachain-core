@@ -927,7 +927,11 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     }
     const uint64_t total_size = size.value();
     // Belt and braces: a Ready row with a shorter file on disk is corrupt/partial.
-    if (dir_row->size > 0 && total_size < static_cast<uint64_t>(dir_row->size)) {
+    // Plain files only: a vector's catalog size is the hashed content, not the
+    // sqlite file, and with recent rows still in the WAL the main file is smaller —
+    // that refused to serve complete vectors and left partial copies unrepaired.
+    if (dir_row->type == Dfs::FileType::File && dir_row->size > 0
+        && total_size < static_cast<uint64_t>(dir_row->size)) {
         eWarning("[Dfs] share_stored_file: refusing to serve partial file {} ({}/{} bytes)",
                  file_link_fragment.file_link.file_id,
                  total_size,

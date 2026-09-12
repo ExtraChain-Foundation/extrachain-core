@@ -2029,6 +2029,14 @@ void DfsService::network_response_content_vector(
         auto &[dir_row, dfs_vector] = dfs_vector_result.value();
 
         bool res_handle = dfs_vector.handle_package(dfs_vector_content);
+        if (res_handle) {
+            const auto rows_now = dfs_vector.read_rows("");
+            eLog("[Dfs] Vector content package merged: {} / {} package={} rows, local={} rows",
+                 dfs_vector_content.owner_id,
+                 dfs_vector_content.file_id,
+                 dfs_vector_content.content.size(),
+                 rows_now.has_value() ? rows_now->size() : 0);
+        }
         if (!res_handle) {
             eWarning("[Dfs] Vector content package: handle failed for {} / {}",
                      dfs_vector_content.owner_id,
@@ -2123,12 +2131,29 @@ void DfsService::network_request_file_state(const ActorId     &owner_id,
     }
 
     auto available_state = dir_row->state;
-    if (available_state == Dfs::FileState::Ready
-        && !is_file_already_downloaded(owner_id, file_id, dir_row->hash)) {
+    if (available_state == Dfs::FileState::Ready) {
         // Metadata can arrive before content. Do not advertise such a row as
         // a usable source: the requester would otherwise retry a peer that
         // cannot serve the file.
-        available_state = Dfs::FileState::Known;
+        //
+        // A vector or dictionary is served as a snapshot and merged by row
+        // revisions, so "can I serve it" is "is the database here", not "does the
+        // content hash equal the catalog hash right now". The hash check raced
+        // with every row being written and answered Known so often under load
+        // that requesters exhausted all their sources and partial copies were
+        // never repaired (stand, 2000-row vectors).
+        const bool mutable_content =
+            dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary;
+        bool serviceable = false;
+        if (mutable_content) {
+            const auto path = Dfs::Path::file_path(owner_id, file_id);
+            serviceable     = path.has_value() && path->exists();
+        } else {
+            serviceable = is_file_already_downloaded(owner_id, file_id, dir_row->hash);
+        }
+        if (!serviceable) {
+            available_state = Dfs::FileState::Known;
+        }
     }
 
     auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
