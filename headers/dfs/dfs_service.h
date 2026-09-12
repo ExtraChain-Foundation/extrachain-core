@@ -277,7 +277,7 @@ public:
         download_rank_overrides_.erase(actor_id);
     }
 
-    void request_vector_content(const ActorId &owner_id, const std::string &file_id);
+    void request_vector_content(const ActorId &owner_id, const std::string &file_id, bool force = false);
 
     // Per-actor filename overrides win over per-actor ranks; used to pull a specific vector
     // off the critical path (e.g. the large network Usernames vector -> RANK_OTHER_VECTORS).

@@ -1580,7 +1580,7 @@ int DfsService::download_rank(const ActorId &owner_id, const Dfs::DirRow &dir_ro
 // Direct request for full vector content (DfsFileRequest -> peer replies with a
 // DfsVectorContent package): handle_package restores both the DB and the .vector companion.
 // Used to repair vectors with a lost template (read_template).
-void DfsService::request_vector_content(const ActorId &owner_id, const std::string &file_id) {
+void DfsService::request_vector_content(const ActorId &owner_id, const std::string &file_id, bool force) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
 
     const auto now = std::chrono::steady_clock::now();
@@ -1588,7 +1588,10 @@ void DfsService::request_vector_content(const ActorId &owner_id, const std::stri
         std::lock_guard lock(request_times_mutex_);
         prune_request_history(request_vector_times_, now);
         auto it = request_vector_times_.find(file_link);
-        if (it != request_vector_times_.end() && now - it->second < std::chrono::seconds(30)) {
+        // A forced retry follows a merge that left the copy short, so the throttle
+        // must not swallow it: without this the vector was asked for exactly once
+        // per 30 s window and, in practice, exactly once per run.
+        if (!force && it != request_vector_times_.end() && now - it->second < std::chrono::seconds(30)) {
             return;
         }
         request_vector_times_[file_link] = now;
@@ -2036,6 +2039,26 @@ void DfsService::network_response_content_vector(
                  dfs_vector_content.file_id,
                  dfs_vector_content.content.size(),
                  rows_now.has_value() ? rows_now->size() : 0);
+
+            // A snapshot from a peer that is itself short leaves us short: merging
+            // 1670 rows into a vector whose owner has 2000 is progress, not an end
+            // state. Nothing used to notice — the download was simply closed — so a
+            // vector stayed incomplete for the rest of the run. Compare the merged
+            // content against the catalog row and ask again while they differ; the
+            // load manager rotates to another source on each attempt.
+            const auto [content_hash, content_size] =
+                Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(dfs_vector_content.owner_id,
+                                                                                  dfs_vector_content.file_id);
+            if (!dir_row.hash.empty() && content_hash != dir_row.hash) {
+                eLog("[Dfs] Vector still short after merge, asking another source: {} / {}",
+                     dfs_vector_content.owner_id,
+                     dfs_vector_content.file_id);
+                schedule_after(std::chrono::seconds(5),
+                               [this, owner_id = dfs_vector_content.owner_id,
+                                file_id = dfs_vector_content.file_id] {
+                                   request_vector_content(owner_id, file_id, /*force=*/true);
+                               });
+            }
         }
         if (!res_handle) {
             eWarning("[Dfs] Vector content package: handle failed for {} / {}",
