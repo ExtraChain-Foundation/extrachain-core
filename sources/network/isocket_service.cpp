@@ -177,9 +177,6 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
     if (disconnected_.load(std::memory_order_acquire)) {
         return false;
     }
-    if (!is_constant() && handshake.is_constant) {
-        set_constant(true);
-    }
     if (context_.active_peer_count() >= context_.peer_limit()) {
         if (on_error) {
             on_error(shared_from_this(),

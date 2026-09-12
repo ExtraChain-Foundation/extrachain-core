@@ -193,6 +193,7 @@ public:
 
 public:
     bool                query(std::string query);
+    bool                query(std::string query, const std::string &table_name, const DbRow &binds);
     boost::json::object to_json_object();
     std::string         to_json();
 

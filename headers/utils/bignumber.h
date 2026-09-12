@@ -127,6 +127,8 @@ public:
 
     // Legacy hex helpers — used by migration and by peers running pre-decimal protocol.
     static bool      is_hex_string(const std::string &str);
+    static constexpr std::size_t                    MAX_INPUT_DIGITS = 1024;
+    static std::expected<BigNumber, BigNumberError> from_hex_checked(const std::string &hex);
     static BigNumber from_hex(const std::string &hex);
 
     std::strong_ordering operator<=>(const BigNumber &other) const;

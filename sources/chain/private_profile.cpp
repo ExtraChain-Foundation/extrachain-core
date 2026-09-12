@@ -109,11 +109,11 @@ const Actor<KeyPrivate> &PrivateProfile::current() const {
     if (current_.is_zero())
         return system();
 
-    auto current_actor = get_actor(system_);
+    auto current_actor = get_actor(current_);
     if (!current_actor.has_value()) {
         eFatal("ExtraUser current error");
     }
-    return current_actor->get();
+    return current_actor.value().get();
 }
 
 const std::vector<Actor<KeyPrivate>> &PrivateProfile::actors() const {

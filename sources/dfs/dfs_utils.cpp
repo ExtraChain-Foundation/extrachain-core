@@ -82,11 +82,9 @@ std::string Dfs::DirRow::calculate_hash(const ActorId &owner_id) {
 std::vector<DbRow> Dfs::Tables::DirsFile::ActorSpace::getFileDataByName(const std::shared_ptr<DbConnector> db,
                                                                         const ActorId &owner_id,
                                                                         std::string    name) {
-    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND file_id = '{}'",
-                                    TableNameActorsFiles,
-                                    owner_id.to_string(),
-                                    name);
-    return db->select(query);
+    return db->select("SELECT * FROM ActorsFiles WHERE owner_id = @owner_id AND file_id = @file_id",
+                      TableNameActorsFiles,
+                      { { "owner_id", owner_id.to_string() }, { "file_id", name } });
 }
 
 std::string Dfs::Tables::DirsFile::ActorSpace::read_last_file_id(const std::shared_ptr<DbConnector> db,
@@ -193,11 +191,9 @@ void Dfs::Tables::DirsFile::ActorSpace::update_file_state(const std::shared_ptr<
                                                           const ActorId                     &owner_id,
                                                           const std::string                  file_id,
                                                           FileState                          state) {
-    db->update(fmt::format("UPDATE {} SET state = '{}' WHERE owner_id='{}' AND file_id = '{}'",
-                           TableNameActorsFiles,
-                           std::to_underlying(state),
-                           owner_id.to_string(),
-                           file_id));
+    db->update(TableNameActorsFiles,
+               { { "state", std::to_string(std::to_underlying(state)) } },
+               { { "owner_id", owner_id.to_string() }, { "file_id", file_id } });
 }
 
 void Dfs::Tables::DirsFile::ActorSpace::update_file_after_stored_remove(const std::shared_ptr<DbConnector> db,
@@ -205,17 +201,14 @@ void Dfs::Tables::DirsFile::ActorSpace::update_file_after_stored_remove(const st
                                                                         const std::string &file_id,
                                                                         const Signature   &sign,
                                                                         std::uint64_t      last_modified) {
-    auto query = fmt::format(
-        "UPDATE {} SET folder = NULL, name = '', hash = '', last_modified = '{}', size = 0, sign = "
-        "'{}' WHERE owner_id = '{}' AND file_id = '{}'",
+    db->query(
+        "UPDATE ActorsFiles SET folder = NULL, name = '', hash = '', last_modified = @last_modified, "
+        "size = 0, sign = @sign WHERE owner_id = @owner_id AND file_id = @file_id",
         TableNameActorsFiles,
-        last_modified,
-        Utils::to_base64(sign),
-        owner_id.to_string(),
-        file_id);
-    db->update(query);
-
-    eLog("update_file_after_stored_remove {}", query);
+        { { "last_modified", std::to_string(last_modified) },
+          { "sign", Utils::to_base64(sign) },
+          { "owner_id", owner_id.to_string() },
+          { "file_id", file_id } });
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::get_dir_row(
@@ -223,11 +216,20 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::get
     const ActorId                     &owner_id,
     const std::string                 &search_value,
     const std::string                 &field) {
-    auto rows = db->select(fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND {} = '{}';",
-                                       TableNameActorsFiles,
-                                       owner_id.to_string(),
-                                       field,
-                                       search_value));
+    const auto columns = db->table_columns(TableNameActorsFiles);
+    if (!std::ranges::any_of(columns,
+                             [&](const auto &column) {
+                                 return column.name == field;
+                             })
+        || (field == "owner_id" && search_value != owner_id.to_string())) {
+        return std::unexpected(Dfs::DfsError::DirError);
+    }
+    DbRow binds { { "owner_id", owner_id.to_string() } };
+    binds[field] = search_value;
+    auto rows =
+        db->select(fmt::format("SELECT * FROM ActorsFiles WHERE owner_id = @owner_id AND {} = @{}", field, field),
+                   TableNameActorsFiles,
+                   std::move(binds));
     if (rows.empty()) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
@@ -247,15 +249,16 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::sea
     const ActorId                     &owner_id,
     const std::string                 &folder,
     const std::string                 &name) {
-    std::string query_folder = folder.empty() ? "" : fmt::format("folder = '{}' AND", folder);
-    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND {} name = '{}' AND state != '{}';",
-                                    TableNameActorsFiles,
-                                    owner_id.to_string(),
-                                    query_folder,
-                                    name,
-                                    std::to_underlying(FileState::Removed));
-
-    auto rows = db->select(query);
+    std::string query =
+        "SELECT * FROM ActorsFiles WHERE owner_id = @owner_id AND name = @name AND state != @state";
+    DbRow binds { { "owner_id", owner_id.to_string() },
+                  { "name", name },
+                  { "state", std::to_string(std::to_underlying(FileState::Removed)) } };
+    if (!folder.empty()) {
+        query += " AND folder = @folder";
+        binds["folder"] = folder;
+    }
+    auto rows = db->select(query, TableNameActorsFiles, std::move(binds));
     if (rows.empty()) {
         return std::unexpected(Dfs::DfsError::NotExists);
     }
@@ -275,15 +278,16 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::Ac
     const ActorId                     &owner_id,
     const std::string                 &folder,
     const std::string                 &name) {
-    std::string query_folder = folder.empty() ? "" : fmt::format("folder = '{}' AND", folder);
-    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND {} name = '{}' AND state != '{}';",
-                                    TableNameActorsFiles,
-                                    owner_id.to_string(),
-                                    query_folder,
-                                    name,
-                                    std::to_underlying(FileState::Removed));
-
-    auto rows = db->select(query);
+    std::string query =
+        "SELECT * FROM ActorsFiles WHERE owner_id = @owner_id AND name = @name AND state != @state";
+    DbRow binds { { "owner_id", owner_id.to_string() },
+                  { "name", name },
+                  { "state", std::to_string(std::to_underlying(FileState::Removed)) } };
+    if (!folder.empty()) {
+        query += " AND folder = @folder";
+        binds["folder"] = folder;
+    }
+    auto rows = db->select(query, TableNameActorsFiles, std::move(binds));
     if (rows.empty()) {
         return std::unexpected(Dfs::DfsError::NotExists);
     }
@@ -309,13 +313,12 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::sea
     const std::shared_ptr<DbConnector> db,
     const ActorId                     &owner_id,
     const std::string                 &hash) {
-    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND hash = '{}' AND state != '{}';",
-                                    TableNameActorsFiles,
-                                    owner_id.to_string(),
-                                    hash,
-                                    std::to_underlying(FileState::Removed));
-
-    auto rows = db->select(query);
+    auto rows =
+        db->select("SELECT * FROM ActorsFiles WHERE owner_id = @owner_id AND hash = @hash AND state != @state",
+                   TableNameActorsFiles,
+                   { { "owner_id", owner_id.to_string() },
+                     { "hash", hash },
+                     { "state", std::to_string(std::to_underlying(FileState::Removed)) } });
     if (rows.empty()) {
         return std::unexpected(Dfs::DfsError::NotExists);
     }
@@ -433,13 +436,12 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::Ac
     const std::shared_ptr<DbConnector> db,
     const ActorId                     &owner_id,
     const std::string                 &folder_file_id) {
-    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND folder = '{}' AND state != '{}';",
-                                    TableNameActorsFiles,
-                                    owner_id.to_string(),
-                                    folder_file_id,
-                                    std::to_underlying(Dfs::FileState::Removed));
-
-    auto                     db_rows = db->select(query);
+    auto db_rows =
+        db->select("SELECT * FROM ActorsFiles WHERE owner_id = @owner_id AND folder = @folder AND state != @state",
+                   TableNameActorsFiles,
+                   { { "owner_id", owner_id.to_string() },
+                     { "folder", folder_file_id },
+                     { "state", std::to_string(std::to_underlying(FileState::Removed)) } });
     std::vector<Dfs::DirRow> contents;
     contents.reserve(db_rows.size());
 
@@ -533,7 +535,7 @@ std::filesystem::path Dfs::Path::filePath(const ActorId &actor_id, const std::st
 }
 
 std::expected<FsPath, FsError> Dfs::Path::file_path(const ActorId &owner_id, const std::string &file_id) {
-    if (file_id.size() != 64 && !Utils::is_hex_string_lower(file_id)) {
+    if (file_id.size() != 64 || !Utils::is_hex_string_lower(file_id)) {
         return std::unexpected(FsError::InvalidPath);
     }
 
@@ -608,26 +610,15 @@ bool Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(const std::shared_p
                                                              const ActorId                     &owner_id,
                                                              DirRow                            &dir_row,
                                                              bool                               with_sign) {
-    std::string sign;
+    DbRow values { { "hash", dir_row.hash },
+                   { "size", std::to_string(dir_row.size) },
+                   { "last_modified", std::to_string(dir_row.last_modified) } };
     if (with_sign) {
-        sign = fmt::format(", sign = '{}'", Utils::to_base64(dir_row.sign));
+        values["sign"] = Utils::to_base64(dir_row.sign);
     }
-
-    std::string query = fmt::format(
-        "UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}'{} WHERE owner_id = '{}' AND file_id = '{}'",
-        TableNameActorsFiles,
-        dir_row.hash,
-        dir_row.size,
-        dir_row.last_modified,
-        sign,
-        dir_row.owner_id,
-        dir_row.file_id);
-    auto upd = db->update(query);
-    if (!upd) {
-        return false;
-    }
-
-    return true;
+    return db->update(TableNameActorsFiles,
+                      values,
+                      { { "owner_id", owner_id.to_string() }, { "file_id", dir_row.file_id } });
 }
 
 std::expected<std::vector<std::uint8_t>, Utils::ContentError> Dfs::Tables::DirsFile::ActorSpace::get_file_content(

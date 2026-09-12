@@ -73,10 +73,11 @@ namespace {
             TEST_REQUIRE(request.has_value());
             requests.fetch_add(1);
             boost::asio::post(node_.serial_executor(),
-                              [node   = &node_,
-                               link   = request.value().file_link,
-                               source = identifier_,
-                               ready  = available.load()] {
+                              [node       = &node_,
+                               link       = request.value().file_link,
+                               source     = identifier_,
+                               message_id = message.value().message_id,
+                               ready      = available.load()] {
                                   if (ready) {
                                       node->dfs()
                                           ->download_manager()
@@ -87,7 +88,8 @@ namespace {
                                                                     .current_size    = 1024,
                                                                     .fragment_number = 1,
                                                                     .full_amount_fragments = 1 },
-                                                                  source);
+                                                                  source,
+                                                                  message_id);
                                   } else {
                                       Responder responder;
                                       responder.add_identifier(source);
@@ -157,6 +159,16 @@ int main(int argc, char** argv) {
     };
 
     if (std::string_view(argv[1]) == "metadata") {
+        Responder                     holder;
+        const Dfs::Packets::FileState forged { .owner_id = owner.id(),
+                                               .file_id  = row.file_id,
+                                               .state    = Dfs::FileState::Ready,
+                                               .hash     = std::string(64, '0') };
+        node->dfs()->network_response_file_state(forged, holder);
+        holder.add_identifier(std::string(64, 'f'));
+        node->dfs()->network_response_file_state(forged, holder);
+        TEST_REQUIRE_EQ(node->dfs()->download_manager().active_downloads_size(), std::size_t(0));
+        TEST_REQUIRE_EQ(ActorSpace::get_dir_row(db, owner.id(), row.file_id).value().hash, row.hash);
         node->dfs()->download_manager().add_to_queue(owner.id(), row, "");
         TEST_REQUIRE_EQ(state(), Dfs::FileState::Ready);
         ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);

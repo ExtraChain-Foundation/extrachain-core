@@ -31,6 +31,27 @@
 namespace {
     using ContractDelta = std::pair<ActorId, BigNumberFloat>;
 
+    bool invalid_spending_balance(const Transaction& transaction, const Balances& balances) {
+        if (transaction.type() == TransactionType::Reward || is_contract_transaction(transaction.type())) {
+            return false;
+        }
+        auto token = transaction.token();
+        if (transaction.type() == TransactionType::Conversion) {
+            if (!transaction.meta().has_value()) {
+                return true;
+            }
+            const auto source = TokenId::create(transaction.meta().value());
+            if (!source.has_value() || source.value() == token) {
+                return true;
+            }
+            token = source.value();
+        } else if (transaction.section() <= SectionId(1)) {
+            return false;
+        }
+        const auto balance = balances.find({ transaction.sender(), token });
+        return balance != balances.end() && balance->second < 0;
+    }
+
     std::vector<ContractDelta> fungible_contract_deltas(const Transaction& transaction) {
         if (!is_contract_transaction(transaction.type()) || !transaction.meta().has_value()) {
             return {};
@@ -807,9 +828,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         for (const auto& tx : section->transactions) {
             process_transaction(tx, balances);
 
-            if (tx.section() > SectionId(1) && tx.type() != TransactionType::Reward
-                && tx.type() != TransactionType::Conversion && !is_contract_transaction(tx.type())
-                && balances[{ tx.sender(), tx.token() }] < 0) {
+            if (invalid_spending_balance(tx, balances)) {
                 static_cast<void>(cache_db_->query("ROLLBACK"));
                 eCritical("[DagCache] State transition {} creates a negative balance at section {}",
                           tx.hash(),
@@ -864,12 +883,7 @@ std::optional<StateTransitionViolation> DagCache::validate_state_to(const Sectio
         }
         for (const auto& transaction : section->transactions) {
             process_transaction(transaction, balances);
-            if (transaction.section() <= SectionId(1) || transaction.type() == TransactionType::Reward
-                || transaction.type() == TransactionType::Conversion
-                || is_contract_transaction(transaction.type())) {
-                continue;
-            }
-            if (balances[{ transaction.sender(), transaction.token() }] < 0) {
+            if (invalid_spending_balance(transaction, balances)) {
                 return StateTransitionViolation {
                     .section          = transaction.section(),
                     .transaction_hash = transaction.hash(),

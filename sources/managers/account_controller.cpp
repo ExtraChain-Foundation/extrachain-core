@@ -243,7 +243,7 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
 
     auto key_result = Cryptography::key_from_password(hash);
     if (!key_result.has_value()) {
-        return {};
+        return std::unexpected(LoadError::Unknown);
     }
 
     int count = 0;

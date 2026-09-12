@@ -211,7 +211,8 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
                 break;
             }
             case SQLITE3_TEXT: {
-                t = (reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)));
+                t.assign(reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)),
+                         sqlite3_column_bytes(stmt, i));
                 break;
             }
             case SQLITE_INTEGER:
@@ -326,7 +327,7 @@ bool DbConnector::update(const std::string &table_name, const DbRow &set_data, c
     }
     int bind_index = 1;
     for (auto &el : set_data) {
-        rc = sqlite3_bind_text(stmt, bind_index++, el.second.c_str(), -1, SQLITE_TRANSIENT);
+        rc = sqlite3_bind_text(stmt, bind_index++, el.second.data(), int(el.second.size()), SQLITE_TRANSIENT);
         if (rc != SQLITE_OK) {
             sqlite3_finalize(stmt);
             return false;
@@ -334,7 +335,7 @@ bool DbConnector::update(const std::string &table_name, const DbRow &set_data, c
     }
 
     for (auto &el : where_data) {
-        rc = sqlite3_bind_text(stmt, bind_index++, el.second.c_str(), -1, SQLITE_TRANSIENT);
+        rc = sqlite3_bind_text(stmt, bind_index++, el.second.data(), int(el.second.size()), SQLITE_TRANSIENT);
         if (rc != SQLITE_OK) {
             sqlite3_finalize(stmt);
             return false;
@@ -525,6 +526,10 @@ std::vector<DBColumn> DbConnector::table_columns(const std::string &table) {
 }
 
 bool DbConnector::query(std::string query) {
+    return this->query(std::move(query), { }, { });
+}
+
+bool DbConnector::query(std::string query, const std::string &table_name, const DbRow &binds) {
     std::unique_lock lock(m_database_mutex);
     if (!is_open()) {
         eFatal("[DbConnector] Database not open");
@@ -534,6 +539,10 @@ bool DbConnector::query(std::string query) {
     const auto    prepare_result = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     if (prepare_result != SQLITE_OK) {
         eWarning("[DbConnector] Query prepare error: {}", sqlite3_errmsg(db));
+        return false;
+    }
+    if (!binds.empty() && !implementation_prepare(table_name, binds, stmt)) {
+        sqlite3_finalize(stmt);
         return false;
     }
     int res = sqlite3_step(stmt);
@@ -588,9 +597,26 @@ sqlite3 *DbConnector::getDb() const {
 bool DbConnector::implementation_prepare(const std::string &tableName, const DbRow &data, sqlite3_stmt *stmt) {
     int  rc;
     auto columns  = table_columns(tableName);
-    int  fieldNum = 1;
+    int  position = 0;
+    if (sqlite3_bind_parameter_count(stmt) != static_cast<int>(data.size())) {
+        return false;
+    }
 
     for (auto &el : data) {
+        ++position;
+        int fieldNum = 0;
+        for (const auto prefix : { '@', ':', '$' }) {
+            fieldNum = sqlite3_bind_parameter_index(stmt, (prefix + el.first).c_str());
+            if (fieldNum != 0) {
+                break;
+            }
+        }
+        if (fieldNum == 0) {
+            if (sqlite3_bind_parameter_name(stmt, position) != nullptr) {
+                return false;
+            }
+            fieldNum = position;
+        }
         std::string toFind = el.first;
         auto        it     = std::find_if(columns.begin(), columns.end(), [&toFind](const DBColumn &column) {
             return column.name == toFind;
@@ -614,13 +640,24 @@ bool DbConnector::implementation_prepare(const std::string &tableName, const DbR
                 rc = sqlite3_bind_blob(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
             else if (column == "TEXT" || column == "JSON")
                 rc = sqlite3_bind_text(stmt, fieldNum, el.second.data(), int(el.second.size()), SQLITE_STATIC);
-            else if (column == "INT")
-                rc = sqlite3_bind_int(stmt, fieldNum, std::stoi(el.second));
-            else if (column == "INTEGER")
-                rc = sqlite3_bind_int64(stmt, fieldNum, std::stoll(el.second));
-            else if (column == "REAL" || column == "NUMERIC")
-                rc = sqlite3_bind_double(stmt, fieldNum, std::stod(el.second.data()));
-            else {
+            else if (column == "INT" || column == "INTEGER") {
+                std::int64_t number = 0;
+                const auto parsed = std::from_chars(el.second.data(), el.second.data() + el.second.size(), number);
+                if (parsed.ec != std::errc { } || parsed.ptr != el.second.data() + el.second.size()
+                    || (column == "INT"
+                        && (number < std::numeric_limits<int>::min()
+                            || number > std::numeric_limits<int>::max()))) {
+                    return false;
+                }
+                rc = sqlite3_bind_int64(stmt, fieldNum, number);
+            } else if (column == "REAL" || column == "NUMERIC") {
+                std::size_t consumed = 0;
+                const auto  number   = std::stod(el.second, &consumed);
+                if (consumed != el.second.size() || !std::isfinite(number)) {
+                    return false;
+                }
+                rc = sqlite3_bind_double(stmt, fieldNum, number);
+            } else {
                 eWarning("[DbConnector] ImplementationPrepare: Column type not supported");
                 return false;
             }
@@ -631,8 +668,6 @@ bool DbConnector::implementation_prepare(const std::string &tableName, const DbR
                      error.what());
             return false;
         }
-        fieldNum++;
-
         if (rc != SQLITE_OK) {
             return false;
         }

@@ -471,7 +471,7 @@ namespace json_convert {
                 }
                 return json.as_double();
             } else if constexpr (std::is_same_v<T, std::string>) {
-                return json.is_null() ? "" : json.as_string().c_str();
+                return json.is_null() ? std::string { } : std::string(json.as_string());
             } else if constexpr (std::is_enum_v<T>) {
                 return static_cast<T>(json.is_string() ? std::stoll(std::string(json.as_string()))
                                                        : json.as_int64());
@@ -529,7 +529,7 @@ namespace json_convert {
                     });
                 return result;
             } else if constexpr (has_custom_magic_v<T>) {
-                return magic::custom_magic<T>::write(json.as_string().c_str());
+                return magic::custom_magic<T>::write(std::string(json.as_string()));
             } else {
                 return T {};
             }

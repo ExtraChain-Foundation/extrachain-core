@@ -48,7 +48,8 @@ DbIterator::~DbIterator() {
 }
 
 std::string DbIterator::getString(int column) {
-    return reinterpret_cast<const char *>(sqlite3_column_text(m_stmt, column));
+    const auto text = reinterpret_cast<const char *>(sqlite3_column_text(m_stmt, column));
+    return text == nullptr ? std::string { } : std::string(text, sqlite3_column_bytes(m_stmt, column));
 }
 
 int64_t DbIterator::getInt64(int column) {
@@ -88,7 +89,7 @@ std::string DbIterator::getValue(int column) {
         value = std::to_string(sqlite3_column_double(m_stmt, column));
         break;
     case DbColumnType::Text:
-        value = (reinterpret_cast<const char *>(sqlite3_column_text(m_stmt, column)));
+        value = getString(column);
         break;
     case DbColumnType::Blob: {
         int size = sqlite3_column_bytes(m_stmt, column);

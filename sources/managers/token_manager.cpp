@@ -44,7 +44,8 @@ namespace {
     constexpr std::size_t      MigrationValidatorCount = 3;
     constexpr std::uint64_t    MigrationLeadSections   = 2 * CONTROL_INTERVAL_MOD;
     constexpr std::uint64_t    MigrationWindowSections = 10 * CONTROL_INTERVAL_MOD;
-    constexpr std::uint64_t    ReadinessRetryMs        = 5'000;
+    constexpr auto             ReadinessRetry           = std::chrono::seconds(5);
+    constexpr std::size_t      MaximumReadinessRequests = 1024;
 
     std::expected<std::string, CreateTokenError> base_units(const BigNumberFloat &amount, std::uint32_t decimals) {
         auto value = amount.to_string();
@@ -1140,7 +1141,10 @@ void TokenManager::handle_migration_readiness_request(const TokenMigrationReadin
 
 void TokenManager::handle_migration_readiness_response(const TokenMigrationReadinessResponse &response,
                                                        const Responder                       &responder) {
-    if (responder.identifiers().empty()) {
+    if (responder.identifiers().size() != 1 || responder.message_id().empty()
+        || response.plan_transaction_hash.size() != 64 || response.cutoff_section_hash.size() > 64
+        || response.cutoff_control_hash.size() > 64 || response.balances_hash.size() > 64
+        || response.module_hash.size() > 64 || response.supply.size() > MaximumU128.size()) {
         return;
     }
     const auto peers = node->network()->active_full_peers_with_capability(TOKEN_MIGRATION_CAPABILITY);
@@ -1149,7 +1153,13 @@ void TokenManager::handle_migration_readiness_response(const TokenMigrationReadi
         return;
     }
     std::scoped_lock lock(migration_mutex_);
-    migration_readiness_[response.plan_transaction_hash].insert_or_assign(peer, response);
+    const auto       pending = migration_readiness_.find({ response.plan_transaction_hash, peer });
+    if (pending == migration_readiness_.end() || pending->second.message_id != responder.message_id()
+        || std::chrono::steady_clock::now() - pending->second.sent >= ReadinessRetry) {
+        return;
+    }
+    pending->second.message_id.clear();
+    pending->second.response = response;
 }
 
 void TokenManager::publish_migration_status(LegacyTokenMigrationStatus status) {
@@ -1184,8 +1194,22 @@ void TokenManager::process_legacy_migrations() {
     const auto current       = node->dag()->current_section();
     const auto full_peers    = node->network()->active_full_peer_identifiers();
     const auto capable_peers = node->network()->active_full_peers_with_capability(TOKEN_MIGRATION_CAPABILITY);
+    const auto plans         = migration_plans();
+    {
+        std::scoped_lock lock(migration_mutex_);
+        const auto       now = std::chrono::steady_clock::now();
+        std::erase_if(migration_readiness_, [&](const auto &entry) {
+            return now - entry.second.sent
+                       >= (entry.second.response.has_value() ? std::chrono::seconds(30) : ReadinessRetry)
+                   || std::ranges::find(capable_peers, entry.first.second) == capable_peers.end()
+                   || std::ranges::none_of(plans, [&](const auto &record) {
+                          return record.transaction_hash == entry.first.first
+                                 && record.plan.expires_section >= current;
+                      });
+        });
+    }
     if (capable_peers.size() + 1 < MigrationValidatorCount || capable_peers.size() != full_peers.size()) {
-        for (const auto &record : migration_plans()) {
+        for (const auto &record : plans) {
             publish_migration_status(LegacyTokenMigrationStatus {
                 .legacy_token_id       = record.plan.legacy_token_id,
                 .target_contract_id    = record.plan.target_contract_id,
@@ -1196,7 +1220,7 @@ void TokenManager::process_legacy_migrations() {
         }
         return;
     }
-    for (const auto &record : migration_plans()) {
+    for (const auto &record : plans) {
         if (record.plan.expires_section < current) {
             publish_migration_status(LegacyTokenMigrationStatus {
                 .legacy_token_id       = record.plan.legacy_token_id,
@@ -1250,39 +1274,38 @@ void TokenManager::process_legacy_migrations() {
             continue;
         }
 
-        const auto now               = Utils::current_date_ms();
-        bool       request_readiness = false;
-        {
-            std::scoped_lock lock(migration_mutex_);
-            auto            &requested_at = readiness_requested_at_[record.transaction_hash];
-            if (now - requested_at >= ReadinessRetryMs) {
-                requested_at      = now;
-                request_readiness = true;
+        for (const auto &peer : capable_peers) {
+            Responder focused(node->network());
+            focused.add_identifier(peer);
+            focused = focused.with_new_message_id();
+            {
+                std::scoped_lock lock(migration_mutex_);
+                const auto       key = std::make_pair(record.transaction_hash, peer);
+                if (migration_readiness_.contains(key)
+                    || migration_readiness_.size() >= MaximumReadinessRequests) {
+                    continue;
+                }
+                migration_readiness_.emplace(key,
+                                             MigrationReadinessSlot { focused.message_id(),
+                                                                      std::chrono::steady_clock::now(),
+                                                                      std::nullopt });
             }
-        }
-        if (request_readiness) {
-            for (const auto &peer :
-                 node->network()->active_full_peers_with_capability(TOKEN_MIGRATION_CAPABILITY)) {
-                Responder focused(node->network());
-                focused.add_identifier(peer);
-                node->network()->send_message(TokenMigrationReadinessRequest { record.transaction_hash },
-                                              MessageType::TokenMigrationReadiness,
-                                              SendMode::Focused,
-                                              MessageStatus::Request,
-                                              focused);
-            }
+            node->network()->send_message(TokenMigrationReadinessRequest { record.transaction_hash },
+                                          MessageType::TokenMigrationReadiness,
+                                          SendMode::Focused,
+                                          MessageStatus::Request,
+                                          focused);
         }
 
         std::size_t matching = 1;
         {
             std::scoped_lock lock(migration_mutex_);
-            const auto       responses = migration_readiness_.find(record.transaction_hash);
-            if (responses != migration_readiness_.end()) {
-                for (const auto &[peer, response] : responses->second) {
-                    if (std::ranges::find(capable_peers, peer) != capable_peers.end() && response.ready
-                        && Json::serialize(response) == Json::serialize(snapshot->readiness)) {
-                        ++matching;
-                    }
+            for (const auto &peer : capable_peers) {
+                const auto slot = migration_readiness_.find({ record.transaction_hash, peer });
+                if (slot != migration_readiness_.end() && slot->second.response.has_value()
+                    && slot->second.response.value().ready
+                    && Json::serialize(slot->second.response.value()) == Json::serialize(snapshot->readiness)) {
+                    ++matching;
                 }
             }
         }

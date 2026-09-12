@@ -16,17 +16,35 @@ using namespace exc_ffi;
 
 namespace {
 
-ExcError map_dfs_error(Dfs::DfsError err) {
-    switch (err) {
-    case Dfs::DfsError::NotExists:    return EXC_ERR_DFS_NOT_EXISTS;
-    case Dfs::DfsError::NotFile:      return EXC_ERR_DFS_NOT_FILE;
-    case Dfs::DfsError::NotReadable:  return EXC_ERR_DFS_NOT_READABLE;
-    case Dfs::DfsError::StorageFull:  return EXC_ERR_DFS_STORAGE_FULL;
-    case Dfs::DfsError::AlreadyExists: return EXC_ERR_DFS_ALREADY_EXISTS;
-    case Dfs::DfsError::DirError:     return EXC_ERR_DFS_DIR_ERROR;
-    default:                          return EXC_ERR_DFS_UNKNOWN;
+    struct DfsFileInfo {
+        std::string   file_id;
+        std::string   name;
+        std::size_t   size;
+        int           type;
+        bool          encrypted;
+        std::string   folder;
+        std::uint64_t created;
+    };
+    BOOST_DESCRIBE_STRUCT(DfsFileInfo, (), (file_id, name, size, type, encrypted, folder, created))
+
+    ExcError map_dfs_error(Dfs::DfsError err) {
+        switch (err) {
+        case Dfs::DfsError::NotExists:
+            return EXC_ERR_DFS_NOT_EXISTS;
+        case Dfs::DfsError::NotFile:
+            return EXC_ERR_DFS_NOT_FILE;
+        case Dfs::DfsError::NotReadable:
+            return EXC_ERR_DFS_NOT_READABLE;
+        case Dfs::DfsError::StorageFull:
+            return EXC_ERR_DFS_STORAGE_FULL;
+        case Dfs::DfsError::AlreadyExists:
+            return EXC_ERR_DFS_ALREADY_EXISTS;
+        case Dfs::DfsError::DirError:
+            return EXC_ERR_DFS_DIR_ERROR;
+        default:
+            return EXC_ERR_DFS_UNKNOWN;
+        }
     }
-}
 
 ExcError map_export_error(ExportFileError err) {
     switch (err) {
@@ -437,43 +455,21 @@ EXC_API ExcError exc_dfs_list_files(const char* owner_id, char** out_json) {
             return;
         }
 
-        auto escape_json = [](const std::string& s) {
-            std::string out;
-            out.reserve(s.size());
-            for (char c : s) {
-                switch (c) {
-                case '"':  out += "\\\""; break;
-                case '\\': out += "\\\\"; break;
-                case '\n': out += "\\n";  break;
-                case '\r': out += "\\r";  break;
-                case '\t': out += "\\t";  break;
-                default:   out += c;
-                }
-            }
-            return out;
-        };
-
-        std::string json = "[";
-        bool first = true;
+        std::vector<DfsFileInfo> files;
+        files.reserve(rows.value().size());
         for (const auto& row : rows.value()) {
-            if (row.has_system_folder()) continue;
-
-            if (!first) json += ",";
-            first = false;
-
-            json += "{";
-            json += "\"file_id\":\"" + row.file_id + "\",";
-            json += "\"name\":\"" + escape_json(row.name) + "\",";
-            json += "\"size\":" + std::to_string(row.size) + ",";
-            json += "\"type\":" + std::to_string(static_cast<int>(row.type)) + ",";
-            json += "\"encrypted\":" + std::string(row.encryption ? "true" : "false") + ",";
-            json += "\"folder\":\"" + escape_json(row.folder.value_or("")) + "\",";
-            json += "\"created\":" + std::to_string(row.created);
-            json += "}";
+            if (row.has_system_folder()) {
+                continue;
+            }
+            files.push_back({ .file_id   = row.file_id,
+                              .name      = row.name,
+                              .size      = row.size,
+                              .type      = static_cast<int>(row.type),
+                              .encrypted = row.encryption,
+                              .folder    = row.folder.value_or(""),
+                              .created   = row.created });
         }
-        json += "]";
-
-        *out_json = exc_strdup(json);
+        *out_json = exc_strdup(Json::serialize(files));
     });
 
     return ok ? result : EXC_ERR_DISPATCH_FAILED;

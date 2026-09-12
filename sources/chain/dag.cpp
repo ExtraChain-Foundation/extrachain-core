@@ -3037,7 +3037,7 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
         return TransactionProveError::NoError;
     }
 
-    // Validate Conversion transactions
+    TokenId token = tx.token();
     if (tx.type() == TransactionType::Conversion) {
         // Check conversion token information
         if (!tx.meta().has_value()) {
@@ -3048,17 +3048,11 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
             return TransactionProveError::ConversionIncorrectFromToken;
         }
 
-        TokenId token = from_token.value();
-
-        if (from_token == tx.token()) {
+        token = from_token.value();
+        if (token == tx.token()) {
             return TransactionProveError::ConversionEqualToken;
         }
-
-        return TransactionProveError::NoError;
     }
-
-    // Balance validation for regular transactions
-    TokenId token = tx.token();
 
     // Calculate sender's current balance from all previous sections
     std::vector<ActorId> actor_ids = { targetSender };
@@ -3076,15 +3070,15 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
 
     // Check if the sender has sufficient balance
     if (senderBalance < transactionAmount) {
-        return TransactionProveError::SenderBalanceBelowZero;
+        return tx.type() == TransactionType::Conversion ? TransactionProveError::ConversionIncorrectBalance
+                                                        : TransactionProveError::SenderBalanceBelowZero;
     }
 
-    // Freeze check: block spending of minted amount (Regular only)
-    if (tx.type() == TransactionType::Regular) {
+    if (tx.type() == TransactionType::Regular || tx.type() == TransactionType::Conversion) {
         auto network_id = node->actor_index()->network_id();
         if (!network_id.is_zero()) {
             const auto minted_amount = frozen_token_allocation(targetSender, token);
-            if (minted_amount.has_value() && senderBalance - *minted_amount < transactionAmount) {
+            if (minted_amount.has_value() && senderBalance - minted_amount.value() < transactionAmount) {
                 return TransactionProveError::SenderBalanceBelowZero;
             }
         }
@@ -3486,23 +3480,12 @@ void Dag::request_sections(const SectionId &from, const SectionId &to, const Res
 }
 
 void Dag::network_request_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
-    if (current_section_ < from) { // to
-        eLog("[Dag] Send sections error: {} < {}", current_section_, from);
+    if (from < 0 || to < from || to > current_section_ || to - from >= SYNC_SECTIONS_MAX_REQ) {
         return;
     }
-
     if (from < first_saved_section_) {
         // eLog("sysync 1 {} {}", from, first_saved_section_);
         return;
-    }
-
-    if (to < from) {
-        eLog("[Dag] Send sections error: {} < {}", to, from);
-        return;
-    }
-
-    if (to - from >= SYNC_SECTIONS_MAX_REQ) {
-        // return;
     }
 
     std::set<Transaction>   txs;
@@ -3673,18 +3656,11 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 }
 
 void Dag::network_request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
-    if (current_section_ < from) {
-        eLog("[Dag] Send file sections error: {} < {}", current_section_, from);
+    if (from < 0 || to < from || to > current_section_ || to - from >= SYNC_SECTIONS_MAX_REQ) {
         return;
     }
-
     if (from < first_saved_section_) {
         eLog("[Dag] File sections: from {} < first_saved {}", from, first_saved_section_);
-        return;
-    }
-
-    if (to < from) {
-        eLog("[Dag] Send file sections error: {} < {}", to, from);
         return;
     }
 
@@ -4282,6 +4258,13 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 }
 
 void Dag::network_hash_interval(const HashInterval &hash_interval, const Responder &responder) {
+    if (hash_interval.from < 0 || hash_interval.from > hash_interval.to || hash_interval.to > current_section_
+        || hash_interval.to - hash_interval.from >= SYNC_SECTIONS_MAX_REQ || !is_aligned20(hash_interval.to)
+        || hash_interval.hash.size() != 64 || !std::ranges::all_of(hash_interval.hash, [](char c) {
+               return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+           })) {
+        return;
+    }
     if (status_ != DagStatus::Ready) {
         eLog("[Dag] Hash interval check: ignore", hash_interval);
         return;
@@ -6293,6 +6276,9 @@ bool Dag::generate_hash(const SectionId &start_section, Force qt_signals) {
 }
 
 std::optional<std::string> Dag::hash_interval(const SectionId &from, const SectionId &to) {
+    if (from < 0 || to < from || to > current_section_) {
+        return std::nullopt;
+    }
     std::string section_hashs;
 
     // TODO: if first < from or to
@@ -6451,8 +6437,9 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
     }
 
     // TODO: to thread? with status generated controls
-    if (!is_aligned20(control_request.from) || !is_aligned20(control_request.to)
-        || control_request.to < control_request.from) {
+    if (!is_aligned20(control_request.from) || !is_aligned20(control_request.to) || control_request.from < 0
+        || control_request.to < control_request.from || control_request.to > current_section_
+        || control_request.to - control_request.from >= SYNC_SECTIONS_MAX_REQ) {
         eLog("[Dag] network_request_control_section Can't send control from {} to {}",
              control_request.to,
              control_request.from);

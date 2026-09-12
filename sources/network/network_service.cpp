@@ -2014,17 +2014,11 @@ void NetworkService::message_received(const std::string &message,
 
 #ifndef NDEBUG
     if (Network::networkDebug) {
-        msgpack::object_handle oh           = msgpack::unpack(serialized.data(),
-                                                    serialized.size(),
-                                                    nullptr,
-                                                    nullptr,
-                                                    MessagePack::unpack_limits(serialized.size()));
-        msgpack::object        deserialized = oh.get();
-        eLog("[Network Message] Received: type {}, status {}, id {}, body: {}",
+        eLog("[Network Message] Received: type {}, status {}, id {}, bytes {}",
              type,
              status,
              message_id,
-             (std::stringstream() << deserialized).str());
+             serialized.size());
     }
 #endif
 
@@ -2450,21 +2444,16 @@ void NetworkService::message_received(const std::string &message,
         break;
     }
     case MessageType::DfsFileFragment: {
-        // Bulk payload off the dispatch thread: during a replication wave the
-        // MB-sized deserialize + disk write queued for seconds ahead of consensus
-        // messages and delayed transactions fell out of the accept window
-        // (TooSectionDiff). Per-file striped locks serialize disk writes, and
-        // SafePtr guards bookkeeping, so pool execution is safe.
-        node->post_storage([this, serialized = std::string(serialized), identifier]() {
-            auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
-            if (!fragment_data_result.has_value()) {
-                eWarning("[NetworkService] DfsFileFragment deserialization failed");
-                return;
-            }
-            node->dfs_service()->download_manager().file_fragment_achieved(fragment_data_result.value(),
-                                                                           identifier);
-        });
-
+        if (serialized.size() > Dfs::Basic::FRAGMENT_SIZE + 2048) {
+            return;
+        }
+        auto fragment = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
+        if (!fragment.has_value()) {
+            return;
+        }
+        node->dfs_service()->download_manager().file_fragment_achieved(fragment.value(),
+                                                                       identifier,
+                                                                       responder.message_id());
         break;
     }
 
@@ -2817,19 +2806,16 @@ void NetworkService::message_received(const std::string &message,
 
             // SectionRange ids are wire-format strings (hex during the legacy
             // transition), matching how request_file_sections encodes them.
-            bool wire_hex = WireFormat::wire() == WireFormat::Mode::Legacy;
-            if (wire_hex) {
-                node->dag()->network_request_file_sections(BigNumber::from_hex(range->first),
-                                                           BigNumber::from_hex(range->last),
-                                                           responder);
-            } else {
-                auto first = BigNumber::create(range->first);
-                auto last  = BigNumber::create(range->last);
-                if (!first.has_value() || !last.has_value()) {
-                    break;
-                }
-                node->dag()->network_request_file_sections(first.value(), last.value(), responder);
+            const auto base = WireFormat::wire() == WireFormat::Mode::Legacy ? NumeralBase::Hex : NumeralBase::Dec;
+            if (range.value().first.empty() || range.value().last.empty()) {
+                break;
             }
+            const auto first = BigNumber::create(range.value().first, base);
+            const auto last  = BigNumber::create(range.value().last, base);
+            if (!first.has_value() || !last.has_value()) {
+                break;
+            }
+            node->dag()->network_request_file_sections(first.value(), last.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto data = MessagePack::deserialize<std::string>(serialized);
             if (!data.has_value()) {

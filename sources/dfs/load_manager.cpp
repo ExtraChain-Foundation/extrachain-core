@@ -203,10 +203,10 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
     }
     {
         auto amount_file_fragments_requests_locked = *m_amount_file_fragments_requests;
-        auto now                                   = std::chrono::system_clock::now();
+        auto now                                   = std::chrono::steady_clock::now();
         for (auto it = amount_file_fragments_requests_locked->begin();
              it != amount_file_fragments_requests_locked->end();) {
-            auto duration = now - it->second;
+            auto duration = now - it->second.sent;
             // 4s (was 10s): a dead request held the slot, and with slots full the
             // scheduler stalled entirely — one dead peer used to cost 10s.
             if (duration > std::chrono::seconds(4))
@@ -405,6 +405,10 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
                         Responder responder(nullptr);
                         responder.add_identifier(identifier.first);
+                        responder = responder.with_new_message_id();
+                        const FragmentRequest pending { std::chrono::steady_clock::now(),
+                                                        identifier.first,
+                                                        responder.message_id() };
 
                         Dfs::FileLinkFragment output;
                         output.file_link = file_link;
@@ -427,9 +431,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                                 Dfs::FileLinkFragment single;
                                 single.file_link = file_link;
                                 single.fragment_numbers.emplace(number);
-                                if (!m_amount_file_fragments_requests
-                                         ->emplace(single, std::chrono::system_clock::now())
-                                         .second) {
+                                if (!m_amount_file_fragments_requests->emplace(single, pending).second) {
                                     continue; // already in flight
                                 }
                                 output.fragment_numbers.emplace(number);
@@ -438,7 +440,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                             }
                         } else {
                             output.fragment_numbers.emplace(1);
-                            m_amount_file_fragments_requests->emplace(output, std::chrono::system_clock::now());
+                            m_amount_file_fragments_requests->emplace(output, pending);
                             is_setted = true;
                         }
 
@@ -462,7 +464,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                                                                 MessageType::DfsFileRequest,
                                                                 SendMode::Focused,
                                                                 MessageStatus::NoStatus,
-                                                                responder.with_new_message_id());
+                                                                responder);
 
                             // eLog("LoadManager::timer_runner, request source {}, attempt {}", identifier.first,
                             // identifier.second.counter);
@@ -523,9 +525,17 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 }
 
 void LoadManager::remove_active_download(const Dfs::FileLinkFragment& file_link_fragment) {
+    const auto&     file_link = file_link_fragment.file_link;
+    std::lock_guard write_lock(m_write_file_mutexes[file_link.hash() % WRITE_STRIPES]);
     m_active_downloads_priority->erase(file_link_fragment.file_link);
     m_active_downloads->erase(file_link_fragment.file_link);
-    m_amount_file_fragments_requests->erase(file_link_fragment);
+    {
+        auto pending = *m_amount_file_fragments_requests;
+        std::erase_if(*pending, [&](const auto& entry) {
+            return entry.first.file_link == file_link;
+        });
+    }
+    m_active_reads->erase(file_link);
     schedule_watchdog();
 }
 
@@ -644,6 +654,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const std::string& identifier,
                                const bool         notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
+    std::lock_guard write_lock(m_write_file_mutexes[file_link.hash() % WRITE_STRIPES]);
     bool is_forced = node->dfs()->is_forced_file(file_link);
 
     bool is_priority = node->dfs()->is_priority(file_link) || is_forced;
@@ -808,8 +819,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     // seeded upfront: the first scheduler pass fills the whole request window
     // instead of fetching fragment 1 alone and waiting a round-trip to learn
     // the count.
-    if (dir_row.type == Dfs::FileType::File && dir_row.size > 0) {
-        load_info.amount_fragments = (dir_row.size + Dfs::Basic::FRAGMENT_SIZE - 1) / Dfs::Basic::FRAGMENT_SIZE;
+    if (dir_row.type == Dfs::FileType::File) {
+        load_info.amount_fragments = dir_row.size == 0 ? 1 : 1 + (dir_row.size - 1) / Dfs::Basic::FRAGMENT_SIZE;
         for (size_t n = 1; n <= load_info.amount_fragments; ++n) {
             load_info.fragments_left.emplace(n);
         }
@@ -884,7 +895,10 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
 }
 
 void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragment, const Responder& responder) {
-    // eLog("LoadManager::share_stored_file, file_id: {}", file_link_fragment.file_link.file_id);
+    if (responder.identifiers().size() != 1 || file_link_fragment.fragment_numbers.empty()
+        || file_link_fragment.fragment_numbers.size() > 256) {
+        return;
+    }
     auto path = Dfs::Path::file_path(file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
     if (!path.has_value()) {
         // eCritical("LoadManager::share_stored_file, no path. file_id: {}", file_link_fragment.file_link.file_id);
@@ -962,7 +976,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     }
 
     static auto calculate_max_offsets = [](size_t total_size, size_t buffer_size) -> size_t {
-        return (total_size + buffer_size - 1) / buffer_size;
+        return total_size == 0 ? 1 : 1 + (total_size - 1) / buffer_size;
     };
 
     auto max_offsets = calculate_max_offsets(total_size, Dfs::Basic::FRAGMENT_SIZE);
@@ -974,10 +988,20 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
            file_link_fragment.fragment_numbers.size(),
            identifier.substr(0, 8));
     node->post_storage(
-        [this, identifier, max_offsets, total_size, file_link_fragment, path = *path, dir_row]() {
+        [this,
+         identifier,
+         message_id = responder.message_id(),
+         max_offsets,
+         total_size,
+         file_link_fragment,
+         path = path.value(),
+         dir_row]() {
             uint64_t offset = 0;
 
             for (const auto& fragment_number : file_link_fragment.fragment_numbers) {
+                if (fragment_number == 0 || fragment_number > max_offsets) {
+                    continue;
+                }
                 offset     = Dfs::Basic::FRAGMENT_SIZE * (fragment_number - 1);
                 auto chunk = Utils::read_file_chunk(path, offset, Dfs::Basic::FRAGMENT_SIZE);
                 if (!chunk.has_value()) {
@@ -1005,12 +1029,13 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
 
                 Responder responder(nullptr);
                 responder.add_identifier(identifier);
+                responder.set_message_id(message_id);
 
-                auto message_id = this->node->network()->send_message(file_fragment,
-                                                                      MessageType::DfsFileFragment,
-                                                                      SendMode::Focused,
-                                                                      MessageStatus::NoStatus,
-                                                                      responder);
+                auto sent_message_id = this->node->network()->send_message(file_fragment,
+                                                                           MessageType::DfsFileFragment,
+                                                                           SendMode::Focused,
+                                                                           MessageStatus::NoStatus,
+                                                                           responder);
                 // eLog("[Dfs] LoadManager::share_stored_file, file fragment sended (message_id: {}). owner_id: {},
                 // file_id: {}, offset: {}", message_id, file_link_fragment.file_link.owner_id,
                 // file_link_fragment.file_link.file_id, offset);
@@ -1069,7 +1094,7 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
     }
 
     // static auto calculate_max_offsets = [](size_t total_size, size_t buffer_size) -> size_t {
-    //     return (total_size + buffer_size - 1) / buffer_size;
+    //     return total_size == 0 ? 1 : 1 + (total_size - 1) / buffer_size;
     // };
 
     // auto max_offsets = calculate_max_offsets(total_size, Dfs::Basic::FRAGMENT_SIZE);
@@ -1090,12 +1115,17 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
 }
 
 void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_content,
-                                         const std::string&                identifier) {
+                                         const std::string&                identifier,
+                                         const std::string&                message_id) {
+    if (identifier.empty() || message_id.empty() || file_content.data.size() > Dfs::Basic::FRAGMENT_SIZE) {
+        return;
+    }
     Dfs::FileLinkFragment file_link_fragment;
     file_link_fragment.file_link =
         Dfs::FileLink { .owner_id = file_content.owner_id, .file_id = file_content.file_id };
     file_link_fragment.fragment_numbers.emplace(file_content.fragment_number);
-    m_amount_file_fragments_requests->erase(file_link_fragment);
+    std::chrono::system_clock::time_point         download_started;
+    std::shared_ptr<std::counting_semaphore<128>> write_slot;
 
     // Mark the fragment as received synchronously: the disk write runs on a
     // single-thread pool, and while it lags a scheduler refill would re-request
@@ -1107,6 +1137,37 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             if (res == locked->end()) {
                 return false;
             }
+            const auto& row   = res->second.dir_row;
+            const auto  count = row.size == 0 ? 1 : 1 + (row.size - 1) / Dfs::Basic::FRAGMENT_SIZE;
+            if (row.type != Dfs::FileType::File || file_content.fragment_number == 0
+                || file_content.fragment_number > count || file_content.full_amount_fragments != count
+                || !res->second.fragments_left.contains(file_content.fragment_number)) {
+                return false;
+            }
+            const auto offset = (file_content.fragment_number - 1) * Dfs::Basic::FRAGMENT_SIZE;
+            const auto length = std::min<std::uint64_t>(Dfs::Basic::FRAGMENT_SIZE, row.size - offset);
+            if (file_content.offset != offset || file_content.current_size != length
+                || file_content.data.size() != length) {
+                return false;
+            }
+            {
+                auto       pending = *m_amount_file_fragments_requests;
+                const auto request = pending->find(file_link_fragment);
+                if (request == pending->end() || request->second.peer != identifier
+                    || request->second.message_id != message_id
+                    || std::chrono::steady_clock::now() - request->second.sent > std::chrono::seconds(4)) {
+                    return false;
+                }
+                if (!fragment_write_slots_.try_acquire()) {
+                    return false;
+                }
+                write_slot =
+                    std::shared_ptr<std::counting_semaphore<128>>(&fragment_write_slots_, [](auto* slots) {
+                        slots->release();
+                    });
+                pending->erase(request);
+            }
+            download_started = res->second.queued;
             res->second.fragments_left.erase(file_content.fragment_number);
             res->second.last_fragment_received = std::chrono::system_clock::now();
             eDebug("[Load] GOT {}/{} fragment {}/{} from {} left={}",
@@ -1142,14 +1203,30 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             // disk write below can be busy with vector handling for seconds,
             // and by then the retry timeout has already stalled the transfer.
             kick(file_link_fragment.file_link);
+        } else {
+            return;
         }
     }
 
-    node->post_storage([this, file_content, identifier]() {
+    node->post_storage([this, file_content, identifier, download_started, write_slot = std::move(write_slot)]() {
         const auto file_link =
             Dfs::FileLink { .owner_id = file_content.owner_id, .file_id = file_content.file_id };
-        // eLog("[Dfs] LoadManager::file_fragment_achieved, achieved fragment to save. file_link: {}, offset: {},
-        // fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
+        std::lock_guard write_lock(m_write_file_mutexes[file_link.hash() % WRITE_STRIPES]);
+        const auto      current_download = [&](const auto& downloads) {
+            auto       locked = *downloads;
+            const auto item   = locked->find(file_link);
+            return item != locked->end() && item->second.queued == download_started;
+        };
+        if (stopping_.load()
+            || (!current_download(m_active_downloads_priority) && !current_download(m_active_downloads))) {
+            return;
+        }
+        const auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(),
+                                                                        file_link.owner_id,
+                                                                        file_link.file_id);
+        if (!row.has_value() || row.value().state == Dfs::FileState::Removed) {
+            return;
+        }
 
         {
             auto active_reads_locked = *m_active_reads;
@@ -1185,8 +1262,6 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
         }
 
         {
-            auto&                       write_mutex = m_write_file_mutexes[file_link.hash() % WRITE_STRIPES];
-            std::lock_guard<std::mutex> m_lock(write_mutex);
             auto result = Utils::write_file_chunk(path.value(), file_content.data, file_content.offset);
             if (!result.has_value()) {
                 // Disk write failed: the fragment was already erased from
@@ -1256,7 +1331,12 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             return;
         }
 
-        if (!node->dfs()->is_file_already_downloaded(file_link.owner_id, file_link.file_id, completed_row.hash)) {
+        std::error_code resize_error;
+        std::filesystem::resize_file(path.value().native(), completed_row.size, resize_error);
+        if (resize_error
+            || !node->dfs()->is_file_already_downloaded(file_link.owner_id,
+                                                        file_link.file_id,
+                                                        completed_row.hash)) {
             eWarning("[Fragment] File validation failed, retrying all fragments: {}", file_link);
             {
                 auto reads_locked = *m_active_reads;
@@ -1272,6 +1352,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                 if (item == locked->end()) {
                     return false;
                 }
+                item->second.queued = std::chrono::system_clock::now();
                 item->second.fragments_left.clear();
                 for (std::size_t number = 1; number <= item->second.amount_fragments; ++number) {
                     item->second.fragments_left.emplace(number);

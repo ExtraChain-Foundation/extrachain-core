@@ -156,9 +156,9 @@ int main() {
         drain_storage(*node);
     };
 
-    const std::string f1 = Utils::generate_random_hex(32);
-    const std::string f2 = Utils::generate_random_hex(32);
-    const std::string f3 = Utils::generate_random_hex(32);
+    const std::string f1 = Utils::generate_random_hex(64);
+    const std::string f2 = Utils::generate_random_hex(64);
+    const std::string f3 = Utils::generate_random_hex(64);
 
     // 0. The node can verify the remote owner's signature the way the merge will.
     {
@@ -323,7 +323,7 @@ int main() {
     //     tombstone; the receiver must apply it. The sender signs the cleared row
     //     (state Removed, empty hash/name/folder, size 0, new last_modified).
     {
-        const std::string f4 = Utils::generate_random_hex(32);
+        const std::string f4 = Utils::generate_random_hex(64);
         const auto        r4 = file_row(peer, f4, "d.txt", 1000);
         merge(peer.id(), { r4 });
         TEST_REQUIRE(row_of(peer.id(), f4).state != Dfs::FileState::Removed);

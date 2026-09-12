@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <semaphore>
+
 #include <array>
 #include <map>
 #include <queue>
@@ -120,7 +122,9 @@ public:
     void share_stored_file(const Dfs::FileLinkFragment& file_link_fragment, const Responder& responder);
     void broadcast_file_exist(const ActorId& owner_id, const std::string& file_id);
 
-    void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier);
+    void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content,
+                                const std::string&                identifier,
+                                const std::string&                message_id);
 
     void finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row);
 
@@ -156,8 +160,14 @@ private:
 
     SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads;
     SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads_priority;
-    SafePtr<std::map<Dfs::FileLinkFragment, std::chrono::system_clock::time_point>>
-        m_amount_file_fragments_requests;
+    std::counting_semaphore<128>                         fragment_write_slots_ { 128 };
+
+    struct FragmentRequest {
+        std::chrono::steady_clock::time_point sent;
+        std::string                           peer;
+        std::string                           message_id;
+    };
+    SafePtr<std::map<Dfs::FileLinkFragment, FragmentRequest>> m_amount_file_fragments_requests;
 
     struct ReadStorage {
         // uint64_t current_size;

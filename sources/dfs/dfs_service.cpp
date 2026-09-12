@@ -2239,6 +2239,9 @@ void DfsService::network_request_file_existance(const Dfs::FileLink &file_link, 
 }
 
 void DfsService::network_response_file_state(const Dfs::Packets::FileState &data, const Responder &responder) {
+    if (responder.identifiers().size() != 1) {
+        return;
+    }
     auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
                                                                   data.owner_id,
                                                                   data.file_id);
@@ -2253,12 +2256,14 @@ void DfsService::network_response_file_state(const Dfs::Packets::FileState &data
         return;
     }
 
-    if (!dir_row.has_value()) {
+    if (!dir_row.has_value() || dir_row.value().state == Dfs::FileState::Removed) {
         return;
     }
 
-    dir_row->state = data.state;
-    dir_row->hash  = data.hash;
+    if (dir_row.value().type == Dfs::FileType::File && dir_row.value().hash != data.hash) {
+        load_manager_.drop_source(file_link, source);
+        return;
+    }
     load_manager_.add_to_queue(data.owner_id, dir_row.value(), source, data.notify_neighbours);
     // Confirmed holder: ahead of the sources guessed from the connection list.
     load_manager_.prefer_source(file_link, source);
