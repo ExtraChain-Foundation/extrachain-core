@@ -220,7 +220,7 @@ void AccountController::import_old_profile(const ImportedUser &imported_profile,
     }
 
     insert_to_profile_set(actor.id());
-    eLog("[Accounts] Imported profile: {}", imported_profile);
+    eLog("[Accounts] Imported profile: {}", actor.id());
 }
 
 bool AccountController::rename_wallet(const ActorId     &profileActor,
@@ -257,7 +257,7 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
         }
 
         if (!profile.has_value()) {
-            auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
+            auto try_new = SeedProfile::load(actor_id.to_string(), hash);
             if (try_new.has_value()) {
                 count++;
             }
@@ -309,7 +309,7 @@ bool AccountController::load_profile(const ActorId                &actor_id,
         autologin_hash.save(hash); // TODO: add arg
         return true;
     } else {
-        auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
+        auto try_new = SeedProfile::load(actor_id.to_string(), hash);
         if (try_new.has_value()) {
 
             auto profile = PrivateProfile::create(try_new->actors()[0], try_new->actors()[1], hash, node, false);
@@ -361,7 +361,7 @@ std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) 
         if (profile.has_value()) {
             multiple_profiles.insert(actor_id);
         } else {
-            auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
+            auto try_new = SeedProfile::load(actor_id.to_string(), hash);
             if (try_new.has_value()) {
                 multiple_profiles.insert(actor_id);
             }
@@ -527,8 +527,7 @@ std::string AccountController::seed_hex() {
         return "";
     }
 
-    auto encrypt_result =
-        Cryptography::symmetric_encrypt_password(ByteArray(profile_seed.seed()).toBytes(), hash, true);
+    auto encrypt_result = Cryptography::symmetric_encrypt_password(ByteArray(profile_seed.seed()).toBytes(), hash);
     if (!encrypt_result.has_value()) {
         return "";
     }
@@ -573,9 +572,11 @@ bool AccountController::import_seed(const std::string &login,
     // profile_seed.generate_other(node);
     auto hash = Utils::calculate_hash(login + password);
     auto res  = seed_profile.save(hash);
-
+    if (!res.has_value()) {
+        return false;
+    }
     insert_to_profile_set(seed_profile.actors().front().id());
-    return res.has_value();
+    return true;
 }
 
 void AccountController::dogenerate() {

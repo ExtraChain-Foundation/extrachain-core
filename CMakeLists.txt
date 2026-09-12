@@ -200,6 +200,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/chain_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/control_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/file_cipher.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/box_session.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_public.cpp

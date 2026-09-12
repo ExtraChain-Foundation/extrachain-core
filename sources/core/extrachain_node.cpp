@@ -2181,7 +2181,8 @@ namespace ExtraChain::Core {
             if (!file) {
                 return std::unexpected(ImportError::FileError);
             }
-            return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+            const std::string content(std::istreambuf_iterator<char>(file), { });
+            return Utils::to_base64(content);
         }
 
         const auto& current_profile = account_controller_->current_profile();
@@ -2204,7 +2205,7 @@ namespace ExtraChain::Core {
             return std::unexpected(ImportError::CryptoError);
         }
 
-        return ByteArray(encrypted.value()).toString();
+        return Utils::to_base64(encrypted.value());
     }
 
     std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(const std::string& data,
@@ -2221,27 +2222,39 @@ namespace ExtraChain::Core {
 
         auto hash = Utils::calculate_hash(login_password);
 
-        if (data.size() < 100) {
-            auto decrypted = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash, true);
-            if (!decrypted.has_value()) {
-                return std::unexpected(ImportProfileError::DecryptError);
-            }
-
-            account_controller_->import_seed(login, password, ByteArray(decrypted.value()).toArray<32>());
-            return hash;
+        if (data.size() > 16 * 1024 * 1024) {
+            return std::unexpected(ImportProfileError::IncorrectJson);
         }
-
-        auto json = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash, false);
+        const auto decoded = Utils::from_base64(data);
+        if (!decoded.has_value()) {
+            return std::unexpected(ImportProfileError::DecryptError);
+        }
+        const bool legacy_seed = decoded.value().size() == 48 && !decoded.value().starts_with("ECP2");
+        auto       json =
+            Cryptography::symmetric_decrypt_password(ByteArray(decoded.value()).toBytes(), hash, legacy_seed);
         if (!json.has_value()) {
             return std::unexpected(ImportProfileError::DecryptError);
         }
-
-        auto imported_user = Json::deserialize<ImportedUser>(json.value());
-        if (!imported_user.has_value()) {
-            return std::unexpected(ImportProfileError::IncorrectJson);
+        if (json.value().size() == 32) {
+            const auto seed = ByteArray(json.value()).toArray<32>();
+            if (!account_controller_->import_seed(login, password, seed)) {
+                return std::unexpected(ImportProfileError::SaveError);
+            }
+            return hash;
         }
 
-        eLog("imported_user", imported_user.value());
+        auto imported_user = Json::deserialize<ImportedUser>(json.value());
+        if (!imported_user.has_value() || imported_user.value().system.is_zero()
+            || imported_user.value().main.is_zero()
+            || std::ranges::none_of(imported_user.value().actors,
+                                    [&](const auto& actor) {
+                                        return !actor.empty() && actor.id() == imported_user.value().system;
+                                    })
+            || std::ranges::none_of(imported_user.value().actors, [&](const auto& actor) {
+                   return !actor.empty() && actor.id() == imported_user.value().main;
+               })) {
+            return std::unexpected(ImportProfileError::IncorrectJson);
+        }
 
         account_controller_->import_old_profile(imported_user.value(), hash);
         return hash;
@@ -2256,7 +2269,9 @@ namespace ExtraChain::Core {
         case ImportProfileError::LoginPasswordEmpty:
             return "Login and password is empty";
         case ImportProfileError::IncorrectJson:
-            return "Json data is empty";
+            return "Profile data is invalid";
+        case ImportProfileError::SaveError:
+            return "Cannot save the imported profile";
         default:
             return "Unknown import error";
         }
@@ -2290,7 +2305,7 @@ namespace ExtraChain::Core {
             return std::unexpected(ImportProfileFileError::Base64DecodeError);
         }
 
-        auto hash_result = import_profile(from_base64.value(), login, password);
+        auto hash_result = import_profile(file_content, login, password);
         if (!hash_result.has_value()) {
             eInfo("Import operation failed: {}", get_import_error_message(hash_result.error()));
             return std::unexpected(ImportProfileFileError::ImportError);

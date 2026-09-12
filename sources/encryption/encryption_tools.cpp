@@ -28,6 +28,25 @@
 using Cryptography::CryptoError;
 
 namespace {
+    constexpr std::array<std::uint8_t, 10> PASSWORD_ENVELOPE_PREFIX { 'E', 'C', 'P', '2', 2, 2, 4, 0, 0, 0 };
+
+    std::expected<KeyPass, CryptoError> envelope_key(const std::string& password, const Salt& salt) {
+        KeyPass key;
+        if (password.empty()
+            || crypto_pwhash(key.data(),
+                             key.size(),
+                             password.data(),
+                             password.size(),
+                             salt.data(),
+                             2,
+                             64 * 1024 * 1024,
+                             crypto_pwhash_ALG_ARGON2ID13)
+                   != 0) {
+            return std::unexpected(CryptoError::KeyConversionFailed);
+        }
+        return key;
+    }
+
     std::expected<Curve25519Key, CryptoError> curve_public_key(const PublicKey& public_key) {
         thread_local std::map<PublicKey, Curve25519Key> converted_keys;
         const auto                                      found = converted_keys.find(public_key);
@@ -197,40 +216,58 @@ Cryptography::CryptoResult Cryptography::symmetric_decrypt(const Bytes&   encryp
 }
 
 Cryptography::CryptoResult Cryptography::symmetric_encrypt_password(const Bytes&       data,
-                                                                    const std::string& password,
-                                                                    bool               nonce_from_key) {
-    if (data.empty()) {
+                                                                    const std::string& password) {
+    if (data.empty() || password.empty()) {
         return std::unexpected(CryptoError::EmptyData);
     }
-
-    if (password.empty()) {
-        return std::unexpected(CryptoError::EmptyKey);
+    Salt salt;
+    randombytes_buf(salt.data(), salt.size());
+    auto key = envelope_key(password, salt);
+    if (!key.has_value()) {
+        return std::unexpected(key.error());
     }
-
-    auto key_result = key_from_password(password);
-    if (!key_result.has_value()) {
-        return std::unexpected(CryptoError::KeyConversionFailed);
+    auto encrypted = symmetric_encrypt(data, key.value());
+    sodium_memzero(key.value().data(), key.value().size());
+    if (!encrypted.has_value()) {
+        return encrypted;
     }
-
-    return symmetric_encrypt(data, key_result.value(), nonce_from_key);
+    Bytes result(PASSWORD_ENVELOPE_PREFIX.begin(), PASSWORD_ENVELOPE_PREFIX.end());
+    result.insert(result.end(), salt.begin(), salt.end());
+    result.insert(result.end(), encrypted.value().begin(), encrypted.value().end());
+    return result;
 }
 
 Cryptography::CryptoResult Cryptography::symmetric_decrypt_password(const Bytes&       data,
                                                                     const std::string& password,
                                                                     bool               nonce_from_key) {
-    if (data.empty())
+    if (data.empty() || password.empty()) {
         return std::unexpected(CryptoError::EmptyData);
-
-    if (password.empty()) {
-        return std::unexpected(CryptoError::EmptyKey);
     }
-
-    auto key_result = key_from_password(password);
-    if (!key_result.has_value()) {
-        return std::unexpected(CryptoError::KeyConversionFailed);
+    constexpr std::size_t header_size = PASSWORD_ENVELOPE_PREFIX.size() + crypto_pwhash_SALTBYTES;
+    const bool            modern =
+        data.size() >= 4 && std::equal(data.begin(), data.begin() + 4, PASSWORD_ENVELOPE_PREFIX.begin());
+    if (modern) {
+        if (data.size() < header_size + MIN_ENCRYPTED_SIZE_SYMMETRIC
+            || !std::equal(PASSWORD_ENVELOPE_PREFIX.begin(), PASSWORD_ENVELOPE_PREFIX.end(), data.begin())) {
+            return std::unexpected(CryptoError::DecryptionFailed);
+        }
+        Salt salt;
+        std::copy_n(data.begin() + PASSWORD_ENVELOPE_PREFIX.size(), salt.size(), salt.begin());
+        auto key = envelope_key(password, salt);
+        if (!key.has_value()) {
+            return std::unexpected(key.error());
+        }
+        auto result = symmetric_decrypt(Bytes(data.begin() + header_size, data.end()), key.value());
+        sodium_memzero(key.value().data(), key.value().size());
+        return result;
     }
-
-    return symmetric_decrypt(data, key_result.value(), nonce_from_key);
+    auto key = key_from_password(password);
+    if (!key.has_value()) {
+        return std::unexpected(key.error());
+    }
+    auto result = symmetric_decrypt(data, key.value(), nonce_from_key);
+    sodium_memzero(key.value().data(), key.value().size());
+    return result;
 }
 
 std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_create_pair() {
@@ -422,277 +459,29 @@ Cryptography::CryptoResult Cryptography::asymmetric_decrypt_self(const Bytes&   
     return asymmetric_decrypt(data, self_secret_key, self_public_key);
 }
 
-std::expected<bool, FsError> Cryptography::symmetric_encrypt_file(const FsPath&  original_path,
-                                                                  const FsPath&  encrypt_path,
-                                                                  const KeyPass& key,
-                                                                  size_t         block_size) {
-    auto valid = validate_encryption_paths(original_path, encrypt_path);
-    if (!valid) {
-        return valid;
-    }
-
-    try {
-        std::ifstream orig(original_path.native(), std::ios::binary | std::ios::in);
-        std::ofstream encrypt(encrypt_path.native(), std::ios::binary | std::ios::out | std::ios::trunc);
-        if (!orig || !encrypt)
-            return std::unexpected(FsError::IoError);
-
-        block_size = ((block_size / 8) + 1) * 8;
-        std::vector<uint8_t> buffer(block_size);
-
-        while (orig.good()) {
-            orig.read(reinterpret_cast<char*>(buffer.data()), block_size);
-            auto bytes_read = orig.gcount();
-            if (bytes_read <= 0)
-                break;
-
-            buffer.resize(bytes_read);
-            auto encrypted = symmetric_encrypt(buffer, key);
-            if (!encrypted.has_value())
-                return std::unexpected(FsError::IoError);
-
-            if (!encrypt.write(reinterpret_cast<const char*>(encrypted->data()), encrypted->size()))
-                return std::unexpected(FsError::IoError);
-        }
-
-        if (!orig.eof())
-            return std::unexpected(FsError::IoError);
-
-        encrypt.flush();
-        auto size_result = encrypt_path.file_size();
-        if (!size_result) {
-            return std::unexpected(size_result.error());
-        }
-        return *size_result > 0;
-    } catch (...) {
-        return std::unexpected(FsError::IoError);
-    }
-}
-
-std::expected<bool, FsError> Cryptography::symmetric_decrypt_file(const FsPath&  encrypt_path,
-                                                                  const FsPath&  decrypt_path,
-                                                                  const KeyPass& key,
-                                                                  size_t         block_size) {
-    auto valid = validate_encryption_paths(encrypt_path, decrypt_path);
-    if (!valid) {
-        return valid;
-    }
-
-    try {
-        std::ifstream encrypt(encrypt_path.native(), std::ios::binary | std::ios::in);
-        std::ofstream decrypt(decrypt_path.native(), std::ios::binary | std::ios::out | std::ios::trunc);
-        if (!encrypt || !decrypt)
-            return std::unexpected(FsError::IoError);
-
-        block_size                        = ((block_size / 8) + 1) * 8;
-        const size_t encrypted_block_size = block_size + crypto_secretbox_MACBYTES + crypto_secretbox_NONCEBYTES;
-
-        std::vector<uint8_t> buffer(encrypted_block_size);
-        while (encrypt.good()) {
-            encrypt.read(reinterpret_cast<char*>(buffer.data()), encrypted_block_size);
-            auto bytes_read = encrypt.gcount();
-            if (bytes_read <= 0)
-                break;
-
-            if (bytes_read < MIN_ENCRYPTED_SIZE_SYMMETRIC)
-                return std::unexpected(FsError::IoError);
-
-            buffer.resize(bytes_read);
-            auto decrypted = symmetric_decrypt(buffer, key);
-            if (!decrypted.has_value())
-                return std::unexpected(FsError::IoError);
-
-            if (!decrypt.write(reinterpret_cast<const char*>(decrypted->data()), decrypted->size()))
-                return std::unexpected(FsError::IoError);
-        }
-
-        if (!encrypt.eof())
-            return std::unexpected(FsError::IoError);
-
-        decrypt.flush();
-        auto size_result = decrypt_path.file_size();
-        if (!size_result) {
-            return std::unexpected(size_result.error());
-        }
-        return *size_result > 0;
-    } catch (...) {
-        return std::unexpected(FsError::IoError);
-    }
-}
-
-std::expected<bool, FsError> Cryptography::symmetric_encrypt_file_password(const FsPath&      original_path,
-                                                                           const FsPath&      encrypt_path,
-                                                                           const std::string& password,
-                                                                           size_t             block_size) {
-    auto key_result = key_from_password(password);
-    if (!key_result.has_value()) {
-        return std::unexpected(FsError::IoError);
-    }
-    return symmetric_encrypt_file(original_path, encrypt_path, *key_result, block_size);
-}
-
-std::expected<bool, FsError> Cryptography::symmetric_decrypt_file_password(const FsPath&      encrypt_path,
-                                                                           const FsPath&      decrypt_path,
-                                                                           const std::string& password,
-                                                                           size_t             block_size) {
-    auto key_result = key_from_password(password);
-    if (!key_result.has_value()) {
-        return std::unexpected(FsError::IoError);
-    }
-    return symmetric_decrypt_file(encrypt_path, decrypt_path, *key_result, block_size);
-}
-
-std::expected<bool, FsError> Cryptography::asymmetric_encrypt_file(const FsPath&     input_path,
-                                                                   const FsPath&     output_path,
-                                                                   const PrivateKey& sender_secret_key,
-                                                                   const PublicKey&  receiver_public_key,
-                                                                   size_t            block_size) {
-    auto valid = validate_encryption_paths(input_path, output_path);
-    if (!valid.has_value()) {
-        return valid;
-    }
-
-    try {
-        std::ifstream in(input_path.native(), std::ios::binary | std::ios::in);
-        std::ofstream out(output_path.native(), std::ios::binary | std::ios::out | std::ios::trunc);
-        if (!in || !out) {
-            return std::unexpected(FsError::IoError);
-        }
-
-        block_size = ((block_size / 8) + 1) * 8;
-        std::vector<uint8_t> buffer(block_size);
-
-        while (in.good()) {
-            in.read(reinterpret_cast<char*>(buffer.data()), block_size);
-            auto bytes_read = in.gcount();
-            if (bytes_read <= 0) {
-                break;
-            }
-
-            buffer.resize(bytes_read);
-            auto encrypted = asymmetric_encrypt(buffer, sender_secret_key, receiver_public_key);
-            if (!encrypted.has_value()) {
-                return std::unexpected(FsError::IoError);
-            }
-
-            if (!out.write(reinterpret_cast<const char*>(encrypted->data()), encrypted->size())) {
-                return std::unexpected(FsError::IoError);
-            }
-        }
-
-        if (!in.eof()) {
-            return std::unexpected(FsError::IoError);
-        }
-
-        out.flush();
-        auto size_result = output_path.file_size();
-        if (!size_result) {
-            return std::unexpected(size_result.error());
-        }
-        return *size_result > 0;
-    } catch (...) {
-        return std::unexpected(FsError::IoError);
-    }
-}
-
-std::expected<bool, FsError> Cryptography::asymmetric_decrypt_file(const FsPath&     input_path,
-                                                                   const FsPath&     output_path,
-                                                                   const PrivateKey& receiver_secret_key,
-                                                                   const PublicKey&  sender_public_key,
-                                                                   size_t            block_size) {
-    auto valid = validate_encryption_paths(input_path, output_path);
-    if (!valid) {
-        return valid;
-    }
-
-    try {
-        std::ifstream in(input_path.native(), std::ios::binary | std::ios::in);
-        std::ofstream out(output_path.native(), std::ios::binary | std::ios::out | std::ios::trunc);
-        if (!in || !out)
-            return std::unexpected(FsError::IoError);
-
-        block_size                        = ((block_size / 8) + 1) * 8;
-        const size_t encrypted_block_size = block_size + crypto_box_MACBYTES + crypto_box_NONCEBYTES;
-
-        std::vector<uint8_t> encrypted(encrypted_block_size);
-        while (in.good()) {
-            in.read(reinterpret_cast<char*>(encrypted.data()), encrypted_block_size);
-            auto bytes_read = in.gcount();
-            if (bytes_read <= 0)
-                break;
-
-            if (bytes_read < MIN_ENCRYPTED_SIZE_ASYMMETRIC)
-                return std::unexpected(FsError::IoError);
-
-            encrypted.resize(bytes_read);
-            auto decrypted = asymmetric_decrypt(encrypted, receiver_secret_key, sender_public_key);
-            if (!decrypted.has_value())
-                return std::unexpected(FsError::IoError);
-
-            if (!out.write(reinterpret_cast<const char*>(decrypted->data()), decrypted->size()))
-                return std::unexpected(FsError::IoError);
-        }
-
-        if (!in.eof())
-            return std::unexpected(FsError::IoError);
-
-        out.flush();
-        auto size_result = output_path.file_size();
-        if (!size_result) {
-            return std::unexpected(size_result.error());
-        }
-        return *size_result > 0;
-    } catch (...) {
-        return std::unexpected(FsError::IoError);
-    }
-}
-
-std::expected<bool, FsError> Cryptography::asymmetric_encrypt_self_file(const FsPath&     input_path,
-                                                                        const FsPath&     output_path,
-                                                                        const PrivateKey& self_secret_key,
-                                                                        const PublicKey&  self_public_key,
-                                                                        size_t            block_size) {
-    return asymmetric_encrypt_file(input_path, output_path, self_secret_key, self_public_key, block_size);
-}
-
-std::expected<bool, FsError> Cryptography::asymmetric_decrypt_self_file(const FsPath&     input_path,
-                                                                        const FsPath&     output_path,
-                                                                        const PrivateKey& self_secret_key,
-                                                                        const PublicKey&  self_public_key,
-                                                                        size_t            block_size) {
-    return asymmetric_decrypt_file(input_path, output_path, self_secret_key, self_public_key, block_size);
-}
-
 std::expected<bool, FsError> Cryptography::validate_encryption_paths(const FsPath& input_path,
                                                                      const FsPath& output_path) {
-    auto in_exists = input_path.exists();
-    if (!in_exists)
-        return in_exists;
-
-    auto in_is_file = input_path.is_regular_file();
-    if (!in_is_file)
-        return in_is_file;
-
-    auto in_readable = input_path.has_read_permission();
-    if (!in_readable)
-        return in_readable;
-
-    auto out_parent = output_path.parent_path();
-    if (!out_parent.has_value())
-        return std::unexpected(out_parent.error());
-
-    auto parent_exists = out_parent->exists();
-    if (!parent_exists)
-        return parent_exists;
-
-    auto parent_is_dir = out_parent->is_directory();
-    if (!parent_is_dir.has_value())
-        return std::unexpected(FsError::ParentNotDirectory);
-    if (!parent_is_dir.value())
-        return std::unexpected(FsError::ParentNotDirectory);
-
-    if (output_path == input_path)
+    if (!input_path.exists()) {
         return std::unexpected(FsError::ValidationError);
-
+    }
+    const auto regular = input_path.is_regular_file();
+    if (!regular.has_value() || !regular.value()) {
+        return std::unexpected(FsError::ValidationError);
+    }
+    const auto readable = input_path.has_read_permission();
+    if (!readable.has_value() || !readable.value()) {
+        return std::unexpected(FsError::ValidationError);
+    }
+    const auto parent = output_path.parent_path();
+    if (!parent.has_value()) {
+        return std::unexpected(parent.error());
+    }
+    const auto directory = parent.value().is_directory();
+    if (!directory.has_value() || !directory.value()) {
+        return std::unexpected(FsError::ParentNotDirectory);
+    }
+    if (output_path == input_path) {
+        return std::unexpected(FsError::ValidationError);
+    }
     return true;
 }

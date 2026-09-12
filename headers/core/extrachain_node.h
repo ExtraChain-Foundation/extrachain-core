@@ -120,7 +120,8 @@ enum class ImportProfileError {
     DataEmpty,
     LoginPasswordEmpty,
     DecryptError,
-    IncorrectJson
+    IncorrectJson,
+    SaveError
 };
 
 enum class ImportProfileFileError {

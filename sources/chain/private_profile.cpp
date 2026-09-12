@@ -22,6 +22,7 @@
 #include "core/extrachain_node.h"
 #include "encryption/encryption_tools.h"
 #include "utils/exc_utils.h"
+#include "utils/file_io.h"
 
 PrivateProfile PrivateProfile::create(const Actor<KeyPrivate>          &system_actor,
                                       const Actor<KeyPrivate>          &main_actor,
@@ -208,15 +209,9 @@ void PrivateProfile::save(uint64_t modified_date) {
         eFatal("Incorrect private profile save");
     }
 
-    std::ofstream file(path(), std::ios::binary);
-    if (!file) {
-        eFatal("Can't open file for writing");
+    if (!FileIo::write_private_atomic(path(), ByteArray(encrypted.value()).toString()).has_value()) {
+        eFatal("[Accounts] Cannot persist private profile");
     }
-
-    if (!file.write(reinterpret_cast<const char *>(encrypted->data()), encrypted->size())) {
-        eFatal("Can't write");
-    }
-    file.close();
 }
 
 std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const std::optional<KeyPass> &key) {
@@ -226,8 +221,9 @@ std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(cons
     }
     std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
-    auto json_bytes = key.has_value() ? Cryptography::symmetric_decrypt(ByteArray(data).toBytes(), key.value())
-                                      : Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash_);
+    auto json_bytes = key.has_value() && !data.starts_with("ECP2")
+                          ? Cryptography::symmetric_decrypt(ByteArray(data).toBytes(), key.value())
+                          : Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash_);
     if (!json_bytes.has_value()) {
         // eWarning("Incorrect private profile load");
         return std::unexpected(PrivateProfileReadError::Decrypt);
@@ -310,104 +306,69 @@ void PrivateProfile::add_imported_actor(const Actor<KeyPrivate> &imported_actor)
     imports_.push_back(imported_actor);
 }
 
-std::expected<void, bool> SeedProfile::save(const std::string &hash) {
-    if (hash.empty()) {
+std::expected<void, bool> SeedProfile::save(const std::string &password) {
+    if (password.empty() || actors_.empty()) {
         return std::unexpected(false);
     }
-
-    auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(seed_.begin(), seed_.end()), hash, true);
+    const auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(seed_.begin(), seed_.end()), password);
     if (!encrypted.has_value()) {
-        eCritical("Incorrect seed profile save: encryption");
         return std::unexpected(false);
     }
-
-    auto base64 = Utils::to_base64(encrypted.value());
-
-    filename_ = fmt::format("{}/{}{}", Profiles::folder, actors_.front().id(), Profiles::format);
-
-    std::ofstream file(filename_, std::ios::binary);
-    if (!file) {
-        eFatal("Can't open file for writing");
+    const auto filename = fmt::format("{}/{}{}", Profiles::folder, actors_.front().id(), Profiles::format);
+    if (!FileIo::write_private_atomic(filename, ByteArray(encrypted.value()).toString()).has_value()) {
+        return std::unexpected(false);
     }
-
-    if (!file.write(base64.c_str(), base64.size())) {
-        eFatal("Can't write");
-    }
-    file.close();
-
+    filename_ = filename;
     return {};
 }
 
-// std::variant<std::string, KeyPass>
-// std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(const std::string &file_name, const
-// std::string &hash) {
-//     SeedProfile profile;
-//     profile.file_name = Profiles::folder + Utils::platformDelimeter() + "PROFILE_FILE" + Profiles::format;
-
-//     std::ifstream file(profile.file_name, std::ios::binary);
-//     if (!file) {
-//         return std::unexpected(PrivateProfileReadError::File);
-//     }
-//     std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-
-//     auto json_bytes = key.has_value() ? Cryptography::symmetric_decrypt(ByteArray(data).toBytes(), key.value())
-//                                       : Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash_);
-//     if (!json_bytes.has_value()) {
-//         // eWarning("Incorrect private profile load");
-//         return std::unexpected(PrivateProfileReadError::Decrypt);
-//     }
-
-//     auto profile = Json::deserialize<PrivateProfile>(json_bytes.value());
-//     if (!profile.has_value()) {
-//         // eWarning("Incorrect private profile load: incorrect json");
-//         return std::unexpected(PrivateProfileReadError::Json);
-//     }
-
-//     return profile.value();
-// }
-
-std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(
-    const std::string                        &file_name,
-    const std::variant<std::string, KeyPass> &key_or_password) {
+std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(const std::string &file_name,
+                                                                      const std::string &password) {
+    const auto expected_actor = ActorId::create(file_name);
+    if (!expected_actor.has_value() || password.empty()) {
+        return std::unexpected(PrivateProfileReadError::File);
+    }
     SeedProfile profile;
-    profile.filename_ = Profiles::folder + Utils::platformDelimeter() + file_name + Profiles::format;
-
+    profile.filename_ = fmt::format("{}/{}{}", Profiles::folder, file_name, Profiles::format);
     std::ifstream file(profile.filename_, std::ios::binary);
     if (!file) {
         return std::unexpected(PrivateProfileReadError::File);
     }
-    std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    auto        from_base64 = Utils::from_base64(data);
-    if (!from_base64.has_value()) {
+    std::array<char, 1024> buffer;
+    file.read(buffer.data(), buffer.size());
+    if (!file.eof()) {
         return std::unexpected(PrivateProfileReadError::File);
     }
-
-    std::optional<std::string> seed;
-
-    std::visit(
-        [&](const auto &arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, std::string>) {
-                auto result =
-                    Cryptography::symmetric_decrypt_password(ByteArray(from_base64.value()).toBytes(), arg, true);
-                if (result.has_value()) {
-                    seed = ByteArray(result.value()).toString();
-                }
-            } else {
-                auto result = Cryptography::symmetric_decrypt(ByteArray(from_base64.value()).toBytes(), arg, true);
-                if (result.has_value()) {
-                    seed = ByteArray(result.value()).toString();
-                }
-            }
-        },
-        key_or_password);
-
-    if (!seed.has_value()) {
+    const std::string data(buffer.data(), static_cast<std::size_t>(file.gcount()));
+    file.close();
+    if (data.empty()) {
+        return std::unexpected(PrivateProfileReadError::File);
+    }
+    const bool legacy    = !data.starts_with("ECP2");
+    auto       encrypted = ByteArray(data).toBytes();
+    if (legacy) {
+        if (data.size() != 64) {
+            return std::unexpected(PrivateProfileReadError::File);
+        }
+        const auto decoded = Utils::from_base64(data);
+        if (!decoded.has_value()) {
+            return std::unexpected(PrivateProfileReadError::File);
+        }
+        encrypted = ByteArray(decoded.value()).toBytes();
+    }
+    auto seed = Cryptography::symmetric_decrypt_password(encrypted, password, legacy);
+    if (!seed.has_value() || seed.value().size() != profile.seed_.size()) {
         return std::unexpected(PrivateProfileReadError::Decrypt);
     }
-
-    profile.seed_ = ByteArray(seed.value()).toArray<32>();
+    std::copy(seed.value().begin(), seed.value().end(), profile.seed_.begin());
+    sodium_memzero(seed.value().data(), seed.value().size());
     profile.generate();
+    if (profile.actors().front().id() != expected_actor.value()) {
+        return std::unexpected(PrivateProfileReadError::Decrypt);
+    }
+    if (legacy && !profile.save(password).has_value()) {
+        return std::unexpected(PrivateProfileReadError::File);
+    }
     return profile;
 }
 
