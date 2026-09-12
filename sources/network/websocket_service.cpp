@@ -350,6 +350,7 @@ asio::awaitable<void> WebSocketService::write_loop() {
                 data = std::move(low_queue_.front());
                 low_queue_.pop();
             }
+            in_flight_bytes_.store(static_cast<std::int64_t>(data.size()), std::memory_order_relaxed);
             queued_bytes_.fetch_sub(static_cast<std::int64_t>(data.size()), std::memory_order_relaxed);
         }
 
@@ -360,6 +361,12 @@ asio::awaitable<void> WebSocketService::write_loop() {
             continue;
         }
 
+        struct FlightGuard final {
+            std::atomic<std::int64_t>& bytes;
+            ~FlightGuard() {
+                bytes.store(0, std::memory_order_relaxed);
+            }
+        } flight { in_flight_bytes_ };
         Data encrypted;
         try {
             encrypted = co_await prepare_send_async(std::move(data));
@@ -447,48 +454,68 @@ std::uint16_t WebSocketService::server_port() const {
 }
 
 void WebSocketService::send_message(std::span<const std::uint8_t> data, Priority priority) {
-    if (data.empty() || !is_active() || closed_.load(std::memory_order_acquire)) {
+    if (data.empty() || data.size() > MaxMessageBytes || !is_active())
         return;
-    }
-
-    auto       payload = Data(data.begin(), data.end());
-    const auto self    = std::static_pointer_cast<WebSocketService>(shared_from_this());
-    asio::post(strand_, [self, payload = std::move(payload), priority]() mutable {
-        if (!self->running_.load(std::memory_order_acquire)) {
+    bool overflow = false;
+    {
+        std::scoped_lock lock(queue_mutex_);
+        if (!is_active())
             return;
-        }
-        const auto size = payload.size();
-        {
-            std::scoped_lock lock(self->queue_mutex_);
+        const auto in_flight = in_flight_bytes_.load(std::memory_order_relaxed);
+        const auto bytes     = static_cast<std::size_t>(queued_bytes_.load(std::memory_order_relaxed) + in_flight);
+        const auto messages =
+            high_queue_.size() + normal_queue_.size() + low_queue_.size() + (in_flight > 0 ? 1 : 0);
+        const auto byte_limit    = priority == Priority::High ? MaxPendingBytes : MaxBulkPendingBytes;
+        const auto message_limit = priority == Priority::High ? MaxPendingMessages : MaxBulkPendingMessages;
+        overflow = bytes > byte_limit || data.size() > byte_limit - bytes || messages >= message_limit;
+        if (!overflow) {
+            // Bound memory before copying the payload or posting work to the strand.
+            Data payload(data.begin(), data.end());
             switch (priority) {
             case Priority::High:
-                self->high_queue_.push(std::move(payload));
+                high_queue_.push(std::move(payload));
                 break;
             case Priority::Normal:
-                self->normal_queue_.push(std::move(payload));
+                normal_queue_.push(std::move(payload));
                 break;
             case Priority::Low:
-                self->low_queue_.push(std::move(payload));
+                low_queue_.push(std::move(payload));
                 break;
+            default:
+                return;
             }
-            self->queued_bytes_.fetch_add(static_cast<std::int64_t>(size), std::memory_order_relaxed);
+            queued_bytes_.fetch_add(static_cast<std::int64_t>(data.size()), std::memory_order_relaxed);
         }
-        self->queue_signal_.cancel();
-    });
+    }
+    if (overflow) {
+        if (priority == Priority::High)
+            close_connection();
+        return;
+    }
+    flush();
 }
 
 void WebSocketService::flush() {
-    if (!is_active()) {
-        return;
+    {
+        std::scoped_lock lock(queue_mutex_);
+        if (!is_active() || signal_pending_)
+            return;
+        signal_pending_ = true;
     }
     const auto self = std::static_pointer_cast<WebSocketService>(shared_from_this());
     asio::post(strand_, [self] {
+        {
+            std::scoped_lock lock(self->queue_mutex_);
+            self->signal_pending_ = false;
+        }
         self->queue_signal_.cancel();
     });
 }
 
 std::int64_t WebSocketService::pending_bytes() const noexcept {
-    return queued_bytes_.load(std::memory_order_relaxed) + socket_pending_bytes_.load(std::memory_order_relaxed);
+    return queued_bytes_.load(std::memory_order_relaxed)
+           + std::max(in_flight_bytes_.load(std::memory_order_relaxed),
+                      socket_pending_bytes_.load(std::memory_order_relaxed));
 }
 
 void WebSocketService::close_connection() {
@@ -500,10 +527,9 @@ void WebSocketService::close_connection() {
     activated_.store(false, std::memory_order_release);
     {
         std::scoped_lock lock(queue_mutex_);
-        std::queue<Data> empty;
-        high_queue_.swap(empty);
-        normal_queue_.swap(empty);
-        low_queue_.swap(empty);
+        high_queue_   = { };
+        normal_queue_ = { };
+        low_queue_    = { };
         queued_bytes_.store(0, std::memory_order_relaxed);
     }
 

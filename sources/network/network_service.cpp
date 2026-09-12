@@ -17,6 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include "utils/msgpack_limits.h"
 #include "chain/actor_index.h"
 #include "chain/dag.h"
 #include "consensus/consensus_service.h"
@@ -1268,9 +1269,9 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
     const bool high_priority_shadow_control =
         message_type == MessageType::ConsensusBootstrapRequest || message_type == MessageType::ConsensusRecovery
         || (message_type == MessageType::ConsensusRelay && non_serialized_message.data.size() <= 1024 * 1024);
-    if (message_type == MessageType::Custom || message_type == MessageType::NewActor
-        || message_type == MessageType::DagTransactionResult || message_type == MessageType::DagIntervalHash
-        || message_type == MessageType::DagSyncLastInfo || message_type == MessageType::DagControlRangeRequest
+    if (message_type == MessageType::NewActor || message_type == MessageType::DagTransactionResult
+        || message_type == MessageType::DagIntervalHash || message_type == MessageType::DagSyncLastInfo
+        || message_type == MessageType::DagControlRangeRequest
         || message_type == MessageType::DagControlRangeResponse || message_type == MessageType::DagPackList
         || message_type == MessageType::DagPackRequest || message_type == MessageType::DagCacheSnapshotRequest
         || message_type == MessageType::TokenMigrationReadiness || high_priority_dag_sync || high_priority_shadow
@@ -1940,6 +1941,8 @@ void NetworkService::message_received(const std::string &message,
     const std::string_view msg(message.data(), message.size() - crypto_sign_BYTES);
     const std::string_view sign(message.data() + msg.size(), crypto_sign_BYTES);
 
+    if (!MessagePack::has_bounded_structure(msg, 4096, 1024, 8))
+        return;
     auto message_body_expected = MessagePack::deserialize<MessageBody>(msg);
     if (!message_body_expected.has_value()) {
         eWarning("[NetworkService] message_received: can't deserialize message body");
@@ -1947,6 +1950,28 @@ void NetworkService::message_received(const std::string &message,
     }
 
     MessageBody message_body = std::move(message_body_expected).value();
+    std::size_t payload_limit = 0;
+    switch (message_body.message_type) {
+    case MessageType::Custom:
+    case MessageType::DfsVectorAdd:
+        payload_limit = 1024 * 1024;
+        break;
+    case MessageType::DfsStoreFile:
+        payload_limit = 64 * 1024;
+        break;
+    case MessageType::DfsFileRemove:
+        payload_limit = 4096;
+        break;
+    case MessageType::DfsVectorCreation:
+        payload_limit = 256 * 1024;
+        break;
+    default:
+        break;
+    }
+    if (payload_limit != 0
+        && (message_body.data.size() > payload_limit
+            || !MessagePack::has_bounded_structure(message_body.data, 8192, 2048, 16)))
+        return;
     const auto  node_id =
         NodeId { .actor_id = message_body.init_sender_id, .node_identifier = message_body.init_sender_identifier };
 

@@ -59,6 +59,12 @@ public:
                                                                Tcp::socket                       socket,
                                                                PeerContext&                      context);
 
+    static constexpr std::size_t MaxMessageBytes        = 72 * 1024 * 1024;
+    static constexpr std::size_t MaxPendingBytes        = 96 * 1024 * 1024;
+    static constexpr std::size_t MaxBulkPendingBytes    = 80 * 1024 * 1024;
+    static constexpr std::size_t MaxPendingMessages     = 1024;
+    static constexpr std::size_t MaxBulkPendingMessages = 896;
+
     ~WebSocketService() override;
 
     boost::asio::awaitable<void> run(bool accepted_socket);
@@ -100,6 +106,8 @@ private:
     std::atomic_bool                                  running_ { false };
     std::atomic_bool                                  write_running_ { false };
     std::atomic<std::int64_t>                         socket_pending_bytes_ { 0 };
+    std::atomic<std::int64_t>                         in_flight_bytes_ { 0 };
+    bool                                              signal_pending_ = false;
     std::mutex                                        close_mutex_;
     std::condition_variable                           close_condition_;
     std::atomic_bool                                  transport_closed_ { false };
