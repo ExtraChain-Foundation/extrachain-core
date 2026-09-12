@@ -1,4 +1,7 @@
 #include "network/websocket_service.h"
+#include "core/extrachain_node.h"
+#include "managers/account_controller.h"
+#include <boost/asio/post.hpp>
 #include "network/network_runtime.h"
 #include "network/peer_identity.h"
 #include "utils/exc_utils.h"
@@ -167,6 +170,72 @@ namespace {
         checked_future.get();
         TEST_REQUIRE_EQ(pending, std::int64_t(0));
     }
+
+    void check_ingress() {
+        const auto original  = std::filesystem::current_path();
+        const auto directory = std::filesystem::temp_directory_path()
+                               / ("extrachain-network-ingress-" + Utils::generate_random_hex(8));
+        std::filesystem::create_directories(directory);
+        std::filesystem::current_path(directory);
+        auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, true, 0);
+        node->process();
+        Actor<KeyPrivate> owner;
+        owner.create(ActorType::User);
+        node->account_controller()->create_profile("network-ingress", ActorType::User, owner);
+        const auto listening_deadline = std::chrono::steady_clock::now() + 5s;
+        while (!node->network_runtime().listening() && std::chrono::steady_clock::now() < listening_deadline)
+            std::this_thread::sleep_for(10ms);
+        TEST_REQUIRE(node->network_runtime().listening());
+        const auto     port = node->network_runtime().listen({ }, { }).value();
+        Context        peer;
+        NetworkRuntime remote({ .io_threads = 2, .storage_threads = 1, .compute_threads = 1 });
+        std::promise<WebSocketService::Service> connection;
+        auto                                    connection_future = connection.get_future();
+        std::promise<void>                      activated;
+        auto                                    activated_future = activated.get_future();
+        auto                                    connect          = [&]() -> asio::awaitable<void> {
+            auto result = co_await WebSocketService::connect(remote, "127.0.0.1", port, peer);
+            TEST_REQUIRE(result.has_value());
+            auto service          = result.value();
+            service->on_activated = [&](SocketService::Ptr) {
+                activated.set_value();
+            };
+            connection.set_value(service);
+            co_await service->run(false);
+        };
+        remote.spawn(connect());
+        TEST_REQUIRE(connection_future.wait_for(5s) == std::future_status::ready);
+        auto service = connection_future.get();
+        TEST_REQUIRE(activated_future.wait_for(5s) == std::future_status::ready);
+        std::promise<void> frozen, resume;
+        auto               frozen_future = frozen.get_future();
+        asio::post(node->serial_executor(), [signal = resume.get_future().share(), &frozen] {
+            frozen.set_value();
+            signal.wait();
+        });
+        TEST_REQUIRE(frozen_future.wait_for(5s) == std::future_status::ready);
+        const SocketService::Data payload(128, 'x');
+        for (unsigned batch = 0; batch < 128 && service->is_active(); ++batch) {
+            for (unsigned i = 0; i < 16; ++i)
+                service->send_message(payload, SocketService::Priority::Normal);
+            const auto deadline = std::chrono::steady_clock::now() + 1s;
+            while (service->pending_bytes() != 0 && service->is_active()
+                   && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(1ms);
+        }
+        const auto deadline = std::chrono::steady_clock::now() + 3s;
+        while (service->is_active() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(10ms);
+        const bool overflow_closed = !service->is_active();
+        resume.set_value();
+        service->close_connection();
+        TEST_REQUIRE(service->wait_closed(5s));
+        remote.stop();
+        node.reset();
+        std::filesystem::current_path(original);
+        std::filesystem::remove_all(directory);
+        TEST_REQUIRE(overflow_closed);
+    }
 } // namespace
 
 int main() {
@@ -180,6 +249,9 @@ int main() {
     });
     runner.run("queue drain and byte accounting", [] {
         check_queue(false, true);
+    });
+    runner.run("bounded inbound dispatch while the consumer is stalled", [] {
+        check_ingress();
     });
     return runner.result();
 }

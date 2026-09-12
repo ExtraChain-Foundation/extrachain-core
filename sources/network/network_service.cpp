@@ -618,10 +618,19 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
             }
         });
     };
-    service->on_message = [this](SocketService::Ptr, std::string message, std::string ip, std::string identifier) {
+    service->on_message = [this](SocketService::Ptr socket,
+                                 std::string        message,
+                                 std::string        ip,
+                                 std::string        identifier) {
+        const auto ticket = incoming_budget_.reserve(identifier, message.size());
+        if (!ticket) {
+            socket->close_connection();
+            return;
+        }
         dispatch_serial(
-            [this, message = std::move(message), ip = std::move(ip), identifier = std::move(identifier)] {
-                message_received(message, ip, identifier);
+            [this, ticket, message = std::move(message), ip = std::move(ip), identifier = std::move(identifier)] {
+                if (!ticket->stopped())
+                    message_received(message, ip, identifier);
             });
     };
     service->on_share_connections = [this](SocketService::Ptr,
@@ -752,6 +761,7 @@ NetworkService::~NetworkService() {
 }
 
 void NetworkService::prepare_shutdown() {
+    incoming_budget_.stop();
     if (stopping_.exchange(true, std::memory_order_acq_rel)) {
         return;
     }

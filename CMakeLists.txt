@@ -238,6 +238,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/legacy_compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/version.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/work_budget.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/deadline_task.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/periodic_task.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/runtime.cpp

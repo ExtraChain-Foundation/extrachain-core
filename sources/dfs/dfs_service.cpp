@@ -32,6 +32,7 @@
 #include "dfs/load_manager.h"
 
 #include "runtime/deadline_task.h"
+#include "runtime/work_budget.h"
 
 #include <algorithm>
 #include <charconv>
@@ -61,49 +62,12 @@ namespace {
     }
 } // namespace
 
-struct DfsService::VectorWriteBudget : std::enable_shared_from_this<VectorWriteBudget> {
-    struct Ticket {
-        std::shared_ptr<VectorWriteBudget> budget;
-        std::string                        peer;
-        std::size_t                        bytes  = 0;
-        bool                               active = false;
-        ~Ticket() {
-            if (!active)
-                return;
-            std::lock_guard lock(budget->mutex);
-            budget->bytes -= bytes;
-            --budget->jobs;
-            const auto found = budget->peers.find(peer);
-            if (--found->second == 0)
-                budget->peers.erase(found);
-        }
-    };
+struct DfsService::VectorWriteBudget {
     explicit VectorWriteBudget(boost::asio::any_io_executor executor)
         : strand(boost::asio::make_strand(executor)) {
     }
     boost::asio::strand<boost::asio::any_io_executor> strand;
-    std::atomic_bool                                  stopped { false };
-    std::mutex                                        mutex;
-    std::size_t                                       bytes = 0;
-    std::size_t                                       jobs  = 0;
-    std::map<std::string, unsigned>                   peers;
-
-    std::shared_ptr<Ticket> acquire(std::string_view peer, std::size_t size) {
-        auto ticket    = std::make_shared<Ticket>();
-        ticket->budget = shared_from_this();
-        ticket->peer   = peer;
-        ticket->bytes  = size;
-        std::lock_guard lock(mutex);
-        const auto      found = peers.find(ticket->peer);
-        if (stopped || jobs >= 32 || size > 8 * 1024 * 1024 - bytes
-            || (found != peers.end() && found->second >= 8))
-            return { };
-        ++peers[ticket->peer];
-        bytes += size;
-        ++jobs;
-        ticket->active = true;
-        return ticket;
-    }
+    ExtraChain::Core::WorkBudget                      budget { { 8 * 1024 * 1024, 32, 8 * 1024 * 1024, 8 } };
 };
 
 DfsService::DfsService(ExtraChain::Core::ExtraChainNode *node)
@@ -298,7 +262,7 @@ void DfsService::notify_vector_row_removed(const ActorId &owner_id, const Dfs::D
 }
 
 void DfsService::prepare_shutdown() {
-    vector_write_budget_->stopped.store(true);
+    vector_write_budget_->budget.stop();
     vector_sync_->stop();
     load_manager_.stop();
     std::lock_guard lock(delayed_tasks_mutex_);
@@ -2155,17 +2119,20 @@ bool DfsService::network_vector_add(const ActorId        &owner_id,
             return false;
         bytes += value.size();
     }
-    const auto ticket = vector_write_budget_->acquire(peer, bytes);
+    const auto ticket = vector_write_budget_->budget.reserve(peer, bytes);
     if (!ticket)
         return false;
     auto work = [this, owner_id, file_id, row, timestamp, ticket, on_accepted = std::move(on_accepted)]() mutable {
-        if (ticket->budget->stopped)
+        if (ticket->stopped())
             return;
         auto res = make_vector(owner_id, file_id);
         if (!res.has_value()) {
-            boost::asio::post(node->serial_executor(), [this, owner_id, file_id] {
-                request_vector_content(owner_id, file_id);
-            });
+            auto repair = [this, owner_id, file_id, ticket] {
+                if (!ticket->stopped())
+                    request_vector_content(owner_id, file_id);
+            };
+            boost::asio::post(node->serial_executor(),
+                              ExtraChain::Core::Runtime::guard_handler("vector repair", std::move(repair)));
             return;
         }
         auto &[dir_row, dfs_vector] = res.value();
@@ -2192,7 +2159,7 @@ bool DfsService::network_vector_add(const ActorId        &owner_id,
         node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
         if (on_accepted) {
             auto accepted = [ticket, on_accepted = std::move(on_accepted)] {
-                if (!ticket->budget->stopped)
+                if (!ticket->stopped())
                     on_accepted();
             };
             boost::asio::post(node->serial_executor(),
