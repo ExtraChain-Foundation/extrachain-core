@@ -91,33 +91,11 @@ dfs_published() {
         # A file whose publisher died may never have reached anyone: not required.
         is_dead "$index" && continue
         sed -E "s/$(printf '\033')\[[0-9;]*m//g" "$WORK/node-$index.log" 2>/dev/null \
-            | sed -n "s/^\[node-run\] DFS stored owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\) size=\([0-9]*\).*/$index \1 \2 \3/p"
+            | sed -n "s/.*\[node-run\] DFS stored owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\) size=\([0-9]*\).*/$index \1 \2 \3/p"
     done
 }
 
-# Row count of a vector's sqlite file, read through the backup API so a live WAL
-# database is never opened directly (a direct read gives torn or stale rows).
-# The table name differs between vector versions, so count the first user table.
-vector_rows() {
-    python3 - "$1" <<'PYVEC'
-import sqlite3, sys
-try:
-    source = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
-    snapshot = sqlite3.connect(":memory:")
-    source.backup(snapshot)
-    source.close()
-    names = [row[0] for row in snapshot.execute(
-        "select name from sqlite_master where type='table' and name not like 'sqlite_%'")]
-    total = 0
-    for name in names:
-        total += snapshot.execute(f'select count(*) from "{name}"').fetchone()[0]
-    print(total)
-except Exception:
-    print(0)
-PYVEC
-}
-
-# Catalog state of one row, read through the backup API like vector_rows.
+# Catalog state of one row, read through a SQLite backup snapshot.
 # Prints the numeric state (0 = Removed) or "none".
 dirs_state() {
     python3 - "$1" "$2" "$3" <<'PYDIRS'
@@ -156,7 +134,7 @@ PYROW
 dfs_doomed() {
     for index in $(seq 0 $((NODE_COUNT - 1))); do
         is_dead "$index" && continue
-        sed -n "s/^\[node-run\] DFS doomed owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\).*/$index \1 \2/p" \
+        sed -n "s/.*\[node-run\] DFS doomed owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\).*/$index \1 \2/p" \
             "$WORK/node-$index.log" 2>/dev/null
     done
 }
@@ -164,10 +142,12 @@ dfs_doomed() {
 # Removal audit: every doomed file must be a tombstone (state Removed) with no
 # payload on every live node, and its owner must have logged the removal.
 remove_audit() {
-    local report="$1" complete=1 doomed total
+    local report="$1" complete=1 doomed total expected_publishers
     doomed="$(dfs_doomed)"
     total="$(printf '%s\n' "$doomed" | grep -c .)"
     [ "$total" -gt 0 ] || { [ "$report" = 1 ] && echo "removed: no doomed files published"; return 1; }
+    expected_publishers=$((NODE_COUNT - $(wc -w <<<"$DEAD_NODES")))
+    [ "$total" -eq "$expected_publishers" ] || complete=0
     for index in $(seq 0 $((NODE_COUNT - 1))); do
         if is_dead "$index"; then
             [ "$report" = 1 ] && printf 'removed: node %s died during the run; not audited\n' "$index"
@@ -200,42 +180,19 @@ remove_audit() {
 vectors_published() {
     for index in $(seq 0 $((NODE_COUNT - 1))); do
         is_dead "$index" && continue
-        sed -n "s/^\\[node-run\\] DFS vector owner=\\([0-9a-f]*\\) file_id=\\([0-9a-f]*\\).*/$index \\1 \\2/p" \
+        sed -n "s/.*\\[node-run\\] DFS vector owner=\\([0-9a-f]*\\) file_id=\\([0-9a-f]*\\).*/$index \\1 \\2/p" \
             "$WORK/node-$index.log" 2>/dev/null
     done
 }
 
-# ExDFS vector replication audit: a vector lives in its own sqlite file, and rows
-# arrive one gossiped message at a time, so this checks row COUNT per node rather
-# than bytes: two nodes can hold the same rows in a different physical order.
 vector_audit() {
-    local report="$1" complete=1 published total
-    published="$(vectors_published)"
-    total="$(printf '%s\n' "$published" | grep -c .)"
-    if [ "$total" -eq 0 ]; then
-        [ "$VECTOR_ROWS" -eq 0 ] && return 0
-        [ "$report" = 1 ] && echo "vectors: no node published a vector"
-        return 1
+    local report="$1"
+    [ "$VECTOR_ROWS" -eq 0 ] && return 0
+    if [ "$report" = 1 ]; then
+        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES"
+    else
+        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" >/dev/null
     fi
-    for index in $(seq 0 $((NODE_COUNT - 1))); do
-        if is_dead "$index"; then
-            [ "$report" = 1 ] && printf 'vectors: node %s died during the run; not audited\n' "$index"
-            continue
-        fi
-        local have=0 publisher owner file_id db rows min_rows=-1
-        while read -r publisher owner file_id; do
-            [ -n "$file_id" ] || continue
-            db="${NODE_HOMES[$index]}/dfs/$owner/$file_id"
-            [ -f "$db" ] || continue
-            rows="$(vector_rows "$db")"
-            [ "${rows:-0}" -ge $(( VECTOR_ROWS + VECTOR_CROSS * (NODE_COUNT - 1) )) ] && have=$((have + 1))
-            [ "$min_rows" -lt 0 ] || [ "${rows:-0}" -lt "$min_rows" ] && min_rows="${rows:-0}"
-        done <<<"$published"
-        [ "$have" -eq "$total" ] || complete=0
-        [ "$report" = 1 ] && printf 'vectors: node %s has %s/%s complete (min rows %s, need %s)\n' \
-            "$index" "$have" "$total" "$min_rows" $(( VECTOR_ROWS + VECTOR_CROSS * (NODE_COUNT - 1) ))
-    done
-    [ "$complete" -eq 1 ]
 }
 
 # ExDFS replication audit: every file a committee node published has to sit on

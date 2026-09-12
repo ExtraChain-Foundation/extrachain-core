@@ -21,6 +21,7 @@
 
 #include "dfs/dfs_utils.h"
 #include "dfs/vector_index.h"
+#include "dfs/vector_descriptor.h"
 
 namespace ExtraChain::Core {
     class ExtraChainNode;
@@ -53,6 +54,7 @@ private:
     bool                    is_encrypted_;
 
     DfsVector() = default;
+    std::expected<Dfs::VectorDescriptor, DfsVectorError> load_descriptor();
     DfsVector(ExtraChain::Core::ExtraChainNode* node,
               const Actor<KeyPrivate>&          actor,
               const ActorId&                    file_actor_id,

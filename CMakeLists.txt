@@ -187,6 +187,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/vector_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/vector_snapshot.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/vector_sync.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/vector_descriptor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/actor_id.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/actor_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/transaction.cpp

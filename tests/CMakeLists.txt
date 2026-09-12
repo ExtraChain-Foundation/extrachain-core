@@ -8,6 +8,8 @@ string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" EXTRACHAIN_VERSION "${EXTRACHAIN_V
 project(extrachain-tests LANGUAGES C CXX VERSION ${EXTRACHAIN_VERSION})
 
 enable_testing()
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME shadow-vector-audit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/shadow_vector_audit.py)
 
 set(EXTRACHAIN_STATIC_BUILD true)
 option(EXTRACHAIN_BUILD_QT_COMPAT_TESTS "Build tests for the optional Qt compatibility library" OFF)
@@ -49,6 +51,9 @@ add_core_test_executable(extrachain-audit-admission audit_admission.cpp)
 add_test(NAME audit-admission COMMAND extrachain-audit-admission)
 set_tests_properties(audit-admission PROPERTIES TIMEOUT 30)
 add_core_test_executable(extrachain-vector-index-migration vector_index_migration.cpp)
+add_core_test_executable(extrachain-vector-descriptor vector_descriptor.cpp)
+add_test(NAME vector-descriptor COMMAND extrachain-vector-descriptor)
+set_tests_properties(vector-descriptor PROPERTIES TIMEOUT 20)
 add_core_test_executable(extrachain-messagepack-budget messagepack_budget.cpp)
 add_test(NAME messagepack-budget COMMAND extrachain-messagepack-budget)
 add_core_test_executable(extrachain-vector-snapshot vector_snapshot.cpp)
@@ -144,7 +149,6 @@ set_tests_properties(contract-depth-replay PROPERTIES
 )
 add_test(NAME relay COMMAND extrachain-relay-tests)
 if(EXTRACHAIN_BUILD_CBINDINGS)
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME cbindings-lifecycle COMMAND ${Python3_EXECUTABLE}
              ${CMAKE_CURRENT_LIST_DIR}/cbindings_lifecycle.py $<TARGET_FILE:extrachainc>)
     add_test(NAME cbindings-dfs-json COMMAND ${Python3_EXECUTABLE}

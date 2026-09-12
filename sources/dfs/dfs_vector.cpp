@@ -23,12 +23,39 @@
 #include "dfs/dfs_service.h"
 #include "core/extrachain_node.h"
 #include "utils/exc_utils.h"
+#include "utils/file_io.h"
 
 #include <charconv>
 
 namespace {
     constexpr std::size_t MAX_PACKAGE_ROWS  = 100000;
     constexpr std::size_t MAX_PACKAGE_BYTES = 64ULL * 1024ULL * 1024ULL;
+
+    std::expected<std::string, DfsVectorError> read_companion(const FsPath &path) {
+        std::ifstream input(path.native(), std::ios::binary);
+        if (!input)
+            return std::unexpected(DfsVectorError::Unknown);
+        std::string            content;
+        std::array<char, 4096> buffer;
+        while (input) {
+            input.read(buffer.data(), buffer.size());
+            const auto count = static_cast<std::size_t>(input.gcount());
+            if (count > Dfs::VectorDescriptorLimit - content.size())
+                return std::unexpected(DfsVectorError::Unknown);
+            content.append(buffer.data(), count);
+        }
+        if (!input.eof())
+            return std::unexpected(DfsVectorError::Unknown);
+        return content;
+    }
+
+    void cache_companion(const FsPath &path, const std::string &content) {
+        const auto current = read_companion(path);
+        if (current.has_value() && current.value() == content)
+            return;
+        if (!FileIo::write_atomic(path.native(), content).has_value())
+            eWarning("[DfsVector] Cannot refresh template cache: {}", path.native());
+    }
 
     std::optional<std::uint64_t> row_timestamp(const DbRow &row) {
         const auto it = row.find("timestamp");
@@ -172,6 +199,8 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChain::Core::Ext
                                                            Dfs::DataSecurity                 data_security,
                                                            const Dfs::DataSecurityData      &security_data,
                                                            Dfs::FileType                     file_type) {
+    if (!Dfs::Path::file_path(file_actor_id, file_id).has_value())
+        return std::unexpected(DfsVectorError::Unknown);
     DfsVector dfs_vector(node, main_actor, file_actor_id, file_id, data_security, security_data, file_type);
 
     // Own the directory this vector lives in rather than relying on someone having
@@ -197,67 +226,35 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChain::Core::Ext
     auto [vector_template, is_link] = from_template_result.value();
     dfs_vector.collection_template_ = vector_template;
 
-    if (dfs_vector.is_encrypted_) {
-        vector_template.set_to_blob();
-    }
-
-    // Save original template for file before adding service fields
-    auto original_template = vector_template;
-
-    if (vector_template.primary.has_value()) {
-        const auto &primary = vector_template.primary.value();
-        vector_template.preadd_fields({ primary,
-                                        Dfs::Field::ActorId("actor").not_null(),
-                                        Dfs::Field::Blob("sign").not_null(),
-                                        Dfs::Field::Timestamp("timestamp").not_null(),
-                                        Dfs::Field::Integer("status").not_null() });
-    } else {
-        vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                        Dfs::Field::Blob("sign").not_null(),
-                                        Dfs::Field::Timestamp("timestamp").not_null(),
-                                        Dfs::Field::Integer("status").not_null() });
-    }
-
-    auto schema = vector_template.to_db_schema();
-    if (!schema.has_value()) {
+    const auto storage = Dfs::vector_storage_template(vector_template, dfs_vector.is_encrypted_);
+    if (!storage.has_value())
         return std::unexpected(DfsVectorError::StructuralCreation);
+    auto schema = storage.value().to_db_schema();
+    if (!schema.has_value())
+        return std::unexpected(DfsVectorError::StructuralCreation);
+    schema.value().set_table_name("Vector");
+    std::string companion = Json::serialize(vector_template);
+    if (is_link && std::holds_alternative<Dfs::CollectionTemplateLink>(variant_template)) {
+        auto link = std::get<Dfs::CollectionTemplateLink>(variant_template);
+        link.name = vector_template.name();
+        companion = Json::serialize(link);
     }
-
-    schema->set_table_name("Vector");
-
-    // Dictionary uses static template from dictionary_template(), no need to write file
-    if (file_type != Dfs::FileType::Dictionary) {
-        if (!is_link) {
-            // Write original template without service fields to file
-            auto json     = Json::serialize(original_template);
-            auto res_json = Utils::write_file_content(dfs_vector.vector_path_, std::move(json));
-            if (!res_json.has_value()) {
-                return std::unexpected(DfsVectorError::Unknown);
-            }
-        } else {
-            if (std::holds_alternative<Dfs::CollectionTemplateLink>(variant_template)) {
-                auto link = std::get<Dfs::CollectionTemplateLink>(variant_template);
-                link.name = vector_template.name();
-
-                auto json     = Json::serialize(link);
-                auto res_json = Utils::write_file_content(dfs_vector.vector_path_, std::move(json));
-                if (!res_json.has_value()) {
-                    return std::unexpected(DfsVectorError::Unknown);
-                }
-            }
-        }
-    }
-
     DbConnector db(dfs_vector.file_path_);
-    if (!db.open()) {
-        eWarning("[DfsVector] Can't open vector db {}", dfs_vector.file_path_.string());
+    if (!db.open() || !db.query("BEGIN IMMEDIATE"))
+        return std::unexpected(DfsVectorError::Unknown);
+    if (!db.create_table(schema.value()).has_value()
+        || !Dfs::store_vector_descriptor(db,
+                                         { .schema = vector_template, .companion = companion },
+                                         dfs_vector.is_encrypted_)
+                .has_value()
+        || !db.query("COMMIT")) {
+        db.query("ROLLBACK");
         return std::unexpected(DfsVectorError::Unknown);
     }
-    auto res_create = db.create_table(schema.value());
-    db.close();
-
-    if (!res_create.has_value()) {
-        return std::unexpected(DfsVectorError::Unknown);
+    if (file_type != Dfs::FileType::Dictionary) {
+        const auto saved = Dfs::read_vector_descriptor(db);
+        if (saved.has_value() && saved.value().has_value())
+            cache_companion(dfs_vector.vector_path_, saved.value().value().companion);
     }
 
     return dfs_vector;
@@ -274,6 +271,8 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChain::Core::Extra
         return std::unexpected(DfsVectorError::Unknown);
     }
 
+    if (!Dfs::Path::file_path(file_actor_id, file_id).has_value())
+        return std::unexpected(DfsVectorError::Unknown);
     DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data, file_type);
 
     // Dictionary uses static template, no need to read from file
@@ -298,6 +297,8 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load_network(ExtraChain::Cor
                                                                  Dfs::DataSecurity                 data_security,
                                                                  const Dfs::DataSecurityData      &security_data,
                                                                  Dfs::FileType                     file_type) {
+    if (!Dfs::Path::file_path(file_actor_id, file_id).has_value())
+        return std::unexpected(DfsVectorError::Unknown);
     DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data, file_type);
     return dfs_vector;
 }
@@ -373,110 +374,93 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std
     return db_rows;
 }
 
-std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template() {
-    // Dictionary uses static template, no file needed
+std::expected<Dfs::VectorDescriptor, DfsVectorError> DfsVector::load_descriptor() {
+    DbConnector database(file_path_);
+    const bool  opened = database.open(false);
+    if (opened) {
+        const auto stored = Dfs::read_vector_descriptor(database);
+        if (!stored.has_value())
+            return std::unexpected(DfsVectorError::Unknown);
+        if (stored.value().has_value())
+            return stored.value().value();
+    }
+    Dfs::VectorDescriptor descriptor;
     if (file_type_ == Dfs::FileType::Dictionary) {
-        return Dfs::dictionary_template();
-    }
-
-    auto content = Utils::read_file_content(vector_path_);
-    if (!content.has_value()) {
-        // Companion file lost (interrupted write) — recover via two paths together: direct
-        // content package + the normal state->queue (REPAIR in add_to_queue skips "already
-        // downloaded" for an unreadable vector). Both are throttled.
-        node->dfs()->request_vector_content(file_actor_id_, file_id_);
-        node->dfs()->request_file(file_actor_id_, file_id_);
-        eCritical("[DfsVector] Can't find {}", vector_path_.native());
-        return std::unexpected(DfsVectorError::Unknown);
-    }
-
-    auto vector_template = Json::deserialize<Dfs::CollectionTemplate>(content.value());
-
-    if (vector_template.has_value()) {
-        if (vector_template->fields().size() != 0) {
-            return vector_template.value();
+        descriptor.schema    = Dfs::dictionary_template();
+        descriptor.companion = Json::serialize(descriptor.schema);
+    } else {
+        const auto content = read_companion(vector_path_);
+        if (!content.has_value())
+            return std::unexpected(content.error());
+        descriptor.companion = content.value();
+        const auto schema    = Json::deserialize<Dfs::CollectionTemplate>(content.value());
+        if (schema.has_value() && !schema.value().fields().empty()) {
+            descriptor.schema = schema.value();
+        } else {
+            const auto link = Json::deserialize<Dfs::CollectionTemplateLink>(content.value());
+            if (!link.has_value()
+                || !Dfs::Path::file_path(link.value().owner_id, link.value().file_id).has_value())
+                return std::unexpected(DfsVectorError::Unknown);
+            const auto resolved =
+                Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(link.value().owner_id,
+                                                                                   link.value().file_id);
+            if (!resolved.has_value())
+                return std::unexpected(DfsVectorError::Unknown);
+            descriptor.schema = resolved.value();
         }
-
-        auto vector_template_link = Json::deserialize<Dfs::CollectionTemplateLink>(content.value());
-        if (!vector_template_link.has_value()) {
+    }
+    if (!Dfs::vector_storage_template(descriptor.schema, is_encrypted_).has_value())
+        return std::unexpected(DfsVectorError::StructuralCreation);
+    if (opened && database.table_exists("Vector")) {
+        if (!database.query("BEGIN IMMEDIATE"))
+            return std::unexpected(DfsVectorError::Unknown);
+        if (!Dfs::store_vector_descriptor(database, descriptor, is_encrypted_).has_value()
+            || !database.query("COMMIT")) {
+            database.query("ROLLBACK");
             return std::unexpected(DfsVectorError::Unknown);
         }
-
-        auto vector_template_file_id =
-            Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(vector_template_link->owner_id,
-                                                                               vector_template_link->file_id);
-
-        if (!vector_template_file_id.has_value()) {
-            return std::unexpected(DfsVectorError::Unknown);
-        }
-
-        return vector_template_file_id.value();
     }
+    return descriptor;
+}
 
-    if (!vector_template.has_value()) {
-        eCritical("[DfsVector] Can't parse {}", vector_path_.native());
-        return std::unexpected(DfsVectorError::Unknown);
-    }
-
-    return vector_template.value();
+std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template() {
+    const auto descriptor = load_descriptor();
+    if (descriptor.has_value())
+        return descriptor.value().schema;
+    node->dfs()->request_vector_content(file_actor_id_, file_id_);
+    node->dfs()->request_file(file_actor_id_, file_id_);
+    return std::unexpected(descriptor.error());
 }
 
 std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::generate_content_package(
     const std::string &where_statement) {
-
-    auto rows = read_rows("");
-
-    auto vector_template = read_template();
-    if (!vector_template.has_value()) {
-        return std::unexpected(DfsVectorError::Unknown);
-    }
-
-    // Dictionary uses static template, no file to read
-    std::string vector_file_content;
-    if (file_type_ != Dfs::FileType::Dictionary) {
-        auto res = Utils::read_file_content(vector_path_);
-        if (!res.has_value()) {
-            return std::unexpected(DfsVectorError::Unknown);
-        }
-        vector_file_content = ByteArray(res.value()).toString();
-    }
-
-    return Dfs::Packets::DfsVectorContentPackage { .owner_id        = file_actor_id_,
-                                                   .file_id         = file_id_,
-                                                   .vector_template = vector_template.value(),
-                                                   .vector_file     = vector_file_content,
-                                                   .content =
-                                                       rows.has_value() ? rows.value() : std::vector<DbRow> {} };
+    auto package = generate_content_package_empty();
+    if (!package.has_value())
+        return std::unexpected(package.error());
+    const auto rows = read_rows(where_statement);
+    if (rows.has_value())
+        package.value().content = rows.value();
+    else if (rows.error() != DfsVectorError::CollectionEmpty)
+        return std::unexpected(rows.error());
+    return package;
 }
 
 std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError>
 DfsVector::generate_content_package_empty() {
-    // Same payload as generate_content_package minus the rows: a vector with no rows yet
-    // still has a template and a .vector file, and the receiver needs both — without the
-    // template handle_package rejects the package outright.
-    auto vector_template = read_template();
-    if (!vector_template.has_value()) {
-        return std::unexpected(DfsVectorError::Unknown);
-    }
-
-    std::string vector_file_content;
-    if (file_type_ != Dfs::FileType::Dictionary) {
-        auto res = Utils::read_file_content(vector_path_);
-        if (!res.has_value()) {
-            return std::unexpected(DfsVectorError::Unknown);
-        }
-        vector_file_content = ByteArray(res.value()).toString();
-    }
-
+    const auto descriptor = load_descriptor();
+    if (!descriptor.has_value())
+        return std::unexpected(descriptor.error());
     return Dfs::Packets::DfsVectorContentPackage { .owner_id        = file_actor_id_,
                                                    .file_id         = file_id_,
-                                                   .vector_template = vector_template.value(),
-                                                   .vector_file     = vector_file_content,
-                                                   .content         = std::vector<DbRow> {} };
+                                                   .vector_template = descriptor.value().schema,
+                                                   .vector_file     = file_type_ == Dfs::FileType::Dictionary
+                                                                          ? ""
+                                                                          : descriptor.value().companion };
 }
 
 bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
     if (dfs_vector_content.owner_id != file_actor_id_ || dfs_vector_content.file_id != file_id_
+        || dfs_vector_content.vector_file.size() > Dfs::VectorDescriptorLimit
         || !package_size_is_valid(dfs_vector_content.content)) {
         eWarning("[DfsVector] handle_package: package is for another vector: {} / {}", file_actor_id_, file_id_);
         return false;
@@ -488,16 +472,24 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         return false;
     }
 
-    collection_template_ = vector_template;
+    if (!Dfs::vector_storage_template(vector_template, is_encrypted_).has_value())
+        return false;
+    if (file_path_.exists()) {
+        const auto existing = load_descriptor();
+        if (existing.has_value() && Json::serialize(existing.value().schema) != Json::serialize(vector_template))
+            return false;
+    }
+    auto verifier                 = *this;
+    verifier.collection_template_ = vector_template;
 
     std::string primary_field = "actor";
-    if (collection_template_.primary.has_value()) {
-        primary_field = collection_template_.primary->name();
+    if (vector_template.primary.has_value()) {
+        primary_field = vector_template.primary.value().name();
     }
 
     std::unordered_set<std::string> allowed_fields { "actor", "sign", "timestamp", "status" };
     allowed_fields.insert(primary_field);
-    for (const auto &field : collection_template_.fields()) {
+    for (const auto &field : vector_template.fields()) {
         allowed_fields.insert(field.name());
     }
 
@@ -510,7 +502,7 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
                                    [&](const auto &field) {
                                        return !allowed_fields.contains(field.first);
                                    })
-            || !verify(row)) {
+            || !verifier.verify(row)) {
             eWarning("[DfsVector] handle_package: a row failed validation, package dropped: {} / {} ({} rows)",
                      file_actor_id_,
                      file_id_,
@@ -519,31 +511,13 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         }
     }
 
-    auto storage_template = vector_template;
-    if (is_encrypted_) {
-        storage_template.set_to_blob();
-    }
-
-    if (storage_template.primary.has_value()) {
-        const auto &primary = storage_template.primary.value();
-        storage_template.preadd_fields({ primary,
-                                         Dfs::Field::ActorId("actor").not_null(),
-                                         Dfs::Field::Blob("sign").not_null(),
-                                         Dfs::Field::Timestamp("timestamp").not_null(),
-                                         Dfs::Field::Integer("status").not_null() });
-    } else {
-        storage_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                         Dfs::Field::Blob("sign").not_null(),
-                                         Dfs::Field::Timestamp("timestamp").not_null(),
-                                         Dfs::Field::Integer("status").not_null() });
-    }
-
-    auto schema = storage_template.to_db_schema();
-    if (!schema.has_value()) {
+    const auto storage_template = Dfs::vector_storage_template(vector_template, is_encrypted_);
+    if (!storage_template.has_value())
         return false;
-    }
-
-    schema->set_table_name("Vector");
+    auto schema = storage_template.value().to_db_schema();
+    if (!schema.has_value())
+        return false;
+    schema.value().set_table_name("Vector");
 
     // The owner's directory may not exist yet: vector content can arrive before anything
     // else has created it, and sqlite then fails to open the file — 300 such failures on
@@ -561,10 +535,21 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         eWarning("[DfsVector] Can't open vector db {}, package will be retried", file_path_.string());
         return false;
     }
-    if (!db.create_table(schema.value()).has_value() || !db.query("BEGIN IMMEDIATE")) {
+    if (!db.query("BEGIN IMMEDIATE")) {
+        return false;
+    }
+    if (!db.create_table(schema.value()).has_value()) {
+        db.query("ROLLBACK");
         return false;
     }
 
+    const auto companion =
+        dfs_vector_content.vector_file.empty() ? Json::serialize(vector_template) : dfs_vector_content.vector_file;
+    if (!Dfs::store_vector_descriptor(db, { .schema = vector_template, .companion = companion }, is_encrypted_)
+             .has_value()) {
+        db.query("ROLLBACK");
+        return false;
+    }
     Dfs::VectorIndex index(db, primary_field);
     if (!index.root().has_value()) {
         db.query("ROLLBACK");
@@ -578,14 +563,15 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         if (!existing.empty() && compare_row_revisions(db_row, existing.front()) <= 0) {
             continue;
         }
-        if (!db.replace("Vector", db_row)) {
+        if (!Dfs::upsert_vector_row(db, primary_field, db_row)) {
             db.query("ROLLBACK");
             return false;
         }
         const auto stored = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", primary_field),
                                       "Vector",
                                       { { primary_field, db_row.at(primary_field) } });
-        if (stored.size() != 1 || !verify(stored.front()) || !index.update(db_row.at(primary_field)).has_value()) {
+        if (stored.size() != 1 || !verifier.verify(stored.front())
+            || !index.update(db_row.at(primary_field)).has_value()) {
             db.query("ROLLBACK");
             return false;
         }
@@ -596,21 +582,13 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         return false;
     }
 
-    // Write the companion template only after the complete database package is valid.
-    // An empty companion file is normal for a freshly created vector and must not sink
-    // the package: write_file_content rejects empty content outright (EmptyContent),
-    // which made every answer about a new vector undeliverable — 2081 rejections in one
-    // minute of seeding, and the receiving node never got the vector at all.
-    if (file_type_ != Dfs::FileType::Dictionary && !dfs_vector_content.vector_file.empty()) {
-        auto res_json = Utils::write_file_content(vector_path_, dfs_vector_content.vector_file);
-        if (!res_json.has_value()) {
-            eWarning("[DfsVector] handle_package: cannot write {} ({} bytes)",
-                     vector_path_.string(),
-                     dfs_vector_content.vector_file.size());
-            return false;
-        }
+    if (file_type_ != Dfs::FileType::Dictionary) {
+        const auto saved = Dfs::read_vector_descriptor(db);
+        if (saved.has_value() && saved.value().has_value())
+            cache_companion(vector_path_, saved.value().value().companion);
     }
 
+    collection_template_ = std::move(vector_template);
     return true;
 }
 
@@ -688,7 +666,7 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
             return db.query("COMMIT");
         }
     }
-    if (!db.replace("Vector", row)) {
+    if (!Dfs::upsert_vector_row(db, field, row)) {
         db.query("ROLLBACK");
         return false;
     }
@@ -795,26 +773,11 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
 }
 
 std::optional<std::pair<std::string, std::size_t>> DfsVector::calculate_template_file_hash() {
-    // Dictionary uses static template, calculate hash from JSON serialization
-    if (file_type_ == Dfs::FileType::Dictionary) {
-        auto json = Json::serialize(Dfs::dictionary_template());
-        auto hash = Utils::calculate_hash(json);
-        return std::pair { hash, json.size() };
-    }
-
-    auto hash_result = Utils::calculate_hash_file(vector_path_);
-    if (!hash_result.has_value()) {
+    const auto descriptor = load_descriptor();
+    if (!descriptor.has_value())
         return std::nullopt;
-    }
-
-    std::size_t size        = 1;
-    auto        size_result = vector_path_.file_size();
-
-    if (size_result.has_value()) {
-        size = size_result.value();
-    }
-
-    return std::pair { hash_result.value(), size };
+    const auto &content = descriptor.value().companion;
+    return std::pair { Utils::calculate_hash(content), content.size() };
 }
 
 std::expected<Dfs::VectorIndexRoot, std::string> DfsVector::index_root() {

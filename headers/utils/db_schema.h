@@ -166,6 +166,13 @@ public:
     std::expected<std::string, SqlCreateError> to_sql() const;
     const std::optional<SqlCreateError>&       validation_error() const;
 
+    std::string_view name() const {
+        return m_name;
+    }
+    std::string_view type_name() const {
+        return get_type_name();
+    }
+
 private:
     std::string_view get_type_name() const;
 

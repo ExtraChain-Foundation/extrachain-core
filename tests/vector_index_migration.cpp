@@ -46,7 +46,9 @@ int main() {
                                        "DROP TRIGGER IF EXISTS ExVectorUpdate",
                                        "DROP TRIGGER IF EXISTS ExVectorDelete",
                                        "DROP TABLE IF EXISTS ExVectorNodes",
-                                       "DROP TABLE IF EXISTS ExVectorIndex" }) {
+                                       "DROP TABLE IF EXISTS ExVectorIndex",
+                                       "DROP TABLE IF EXISTS ExVectorDescriptor",
+                                       "DROP INDEX IF EXISTS ExVectorPrimary" }) {
             TEST_REQUIRE(database.query(statement));
         }
         return database.hash_size("id").first;

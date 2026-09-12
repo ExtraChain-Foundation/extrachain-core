@@ -386,7 +386,7 @@ std::expected<Dfs::VectorIndexRoot, std::string> Dfs::VectorIndex::root() {
         if (!database_.query("SAVEPOINT vector_index_rebuild"))
             throw std::runtime_error("Cannot start vector index rebuild");
         try {
-            if (!database_.table_exists("ExVectorIndex")) {
+            if (!database_.table_exists("ExVectorIndex") && !database_.table_exists("ExVectorDescriptor")) {
                 legacy_hash = database_.hash_size(primary_).first;
             }
             prepare();
