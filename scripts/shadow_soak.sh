@@ -624,6 +624,20 @@ fi
 # Optional hold: keep the converged committee serving for a while so an outside
 # node can join it live (see shadow_live_join.sh). On a fast host the whole load
 # finalizes in seconds, so without this there is nothing left to join.
+# Publishing a large vector takes minutes, and until every node has finished, a
+# peer's snapshot is legitimately short and the catalog hash of a growing vector
+# changes with every row. Auditing before that measures the publication, not the
+# replication, so wait for the load markers first (they are written once a node
+# has finished all of its ExDFS load phases).
+if [ "$VECTOR_ROWS" -gt 0 ] || [ "$DFS_BYTES" -gt 0 ]; then
+    settle_deadline=$(( $(date +%s) + 300 ))
+    while [ "$(find "$BARRIER" -maxdepth 1 -name 'loaded-*' | wc -l)" -lt "$NODE_COUNT" ]; do
+        [ "$(date +%s)" -ge "$settle_deadline" ] && { log "load phases did not finish within 300s"; break; }
+        sleep 2
+    done
+    log "all load phases finished; letting replication settle"
+fi
+
 if [ "$verdict" = "pass" ] && [ "${EXC_SHADOW_HOLD_S:-0}" -gt 0 ]; then
     log "holding the committee for ${EXC_SHADOW_HOLD_S}s"
     # Lets a chaos agent leave a quiet tail before the final audits.
