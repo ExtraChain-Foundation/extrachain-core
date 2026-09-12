@@ -2853,6 +2853,8 @@ void NetworkService::message_received(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
+        if (status != MessageStatus::Response)
+            break;
 #ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
         if (!is_luminance) {
             return;

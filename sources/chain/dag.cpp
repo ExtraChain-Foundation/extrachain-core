@@ -724,8 +724,13 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
     //
 
     eLog("[Dag] Send {}", tx.value());
-    this->add_transaction_sended(tx.value());
-    node->network()->send_message(tx.value(), MessageType::DagTransaction, SendMode::Broadcast);
+    const auto request = Responder(nullptr).with_new_message_id();
+    this->add_transaction_sended(tx.value(), request);
+    node->network()->send_message(tx.value(),
+                                  MessageType::DagTransaction,
+                                  SendMode::Broadcast,
+                                  MessageStatus::NoStatus,
+                                  request);
 
     return tx;
 }
@@ -893,60 +898,56 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
 }
 
 void Dag::network_transaction_result(const TransactionResult &tx_result, const Responder &responder) {
-    if (sended_transactions_.find(tx_result.hash) == sended_transactions_.end()) {
-        // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
+    // A peer's rejection is advisory. It cannot cancel a local operation or its
+    // staged contract state. Approval only requests the normal local admission path.
+    if (tx_result.result != TransactionProveError::NoError || responder.identifiers().size() != 1)
         return;
+    Transaction transaction;
+    {
+        std::lock_guard lock(sent_transactions_mutex_);
+        const auto      sent    = sended_transactions_.find(tx_result.hash);
+        const auto      pending = pending_transaction_responses_.find(tx_result.hash);
+        if (sent == sended_transactions_.end() || pending == pending_transaction_responses_.end()
+            || pending->second.processing || pending->second.message_id != responder.message_id()
+            || !pending->second.peers.contains(*responder.identifiers().begin())
+            || sent->second.section() != tx_result.section_id)
+            return;
+        transaction                = sent->second;
+        pending->second.processing = true;
     }
 
-    // map of
-
-    auto transaction = this->sended_transactions_[tx_result.hash];
-    // this->sended_transactions.erase(hash);
-
-    if (tx_result.result != TransactionProveError::NoError) {
-        if (is_contract_transaction(transaction.type())) {
+    const auto result   = network_transaction(transaction, Responder(nullptr));
+    const auto section  = read_section(transaction.section());
+    const bool stored   = (result.has_value() || result.error() == TransactionProveError::Duplicate)
+                          && section.has_value() && section.value().transactions.contains(transaction);
+    const bool rejected = !result.has_value() && result.error() != TransactionProveError::Duplicate
+                          && result.error() != TransactionProveError::TooOften
+                          && result.error() != TransactionProveError::TooSectionDiff
+                          && result.error() != TransactionProveError::StateUnavailable
+                          && result.error() != TransactionProveError::AdmissionBusy
+                          && result.error() != TransactionProveError::ContractDependencyMissing
+                          && result.error() != TransactionProveError::NoSectionAdded;
+    {
+        std::lock_guard lock(sent_transactions_mutex_);
+        const auto      pending = pending_transaction_responses_.find(tx_result.hash);
+        if (pending == pending_transaction_responses_.end())
+            return;
+        pending->second.processing = false;
+        if (!stored && !rejected)
+            return;
+        pending_transaction_responses_.erase(pending);
+        sended_transactions_.erase(tx_result.hash);
+        if (rejected)
+            failed_transactions_.insert_or_assign(tx_result.hash, transaction);
+    }
+    if (rejected) {
+        if (is_contract_transaction(transaction.type()))
             node->finalize_contract_change(transaction.hash(), false);
-        }
-        eLog("[Dag] Our transaction not approved: {} / {}, {}",
-             transaction.section().to_string(),
-             transaction.hash(),
-             tx_result.result);
-
-        // if not approved > min (connections, 5)
-        this->sended_transactions_.erase(tx_result.hash);
-        this->failed_transactions_.insert({ tx_result.hash, transaction });
-        transaction_rejected_event_.publish(transaction.section(), tx_result.hash);
-        return;
-    } else {
-        eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
-        this->sended_transactions_.erase(tx_result.hash);
-        transaction_approved_event_.publish(transaction.section(), tx_result.hash);
-    }
-
-    auto save_result = this->save_transaction(transaction);
-    if (!save_result) {
-        eLog("[Dag] Can't save our approved transaction {} in section {}",
-             transaction.hash(),
-             transaction.section());
-        if (is_contract_transaction(transaction.type())) {
-            node->finalize_contract_change(transaction.hash(), false);
-        }
+        transaction_rejected_event_.publish(transaction.section(), transaction.hash());
         return;
     }
-
-    this->set_current_section(transaction.section());
-
-    if (is_contract_transaction(transaction.type())) {
-        node->finalize_contract_change(transaction.hash(), true);
-    }
-
-    // The first broadcast is a proposal. A peer can approve it after another peer
-    // starts joining, so announce the stored transaction again. This lets a hub pass
-    // the committed value to peers that missed the proposal. Their live-DAG hash cache
-    // and section duplicate check stop further rebroadcast loops.
+    transaction_approved_event_.publish(transaction.section(), transaction.hash());
     node->network()->send_message(transaction, MessageType::DagTransaction, SendMode::Broadcast);
-
-    this->check_self(transaction);
 }
 
 void Dag::check_self(const Transaction &transaction) {
@@ -3141,9 +3142,16 @@ void Dag::invalidate_token_allocations() {
     token_allocations_cache_loaded_ = false;
 }
 
-void Dag::add_transaction_sended(const Transaction &transaction) {
-    // eLog("[Dag] Add to sended: {}", transaction.hash());
-    sended_transactions_.insert({ transaction.hash(), transaction });
+void Dag::add_transaction_sended(const Transaction &transaction, const Responder &request) {
+    const auto peers = node->network()->active_connection_identifiers();
+    {
+        std::lock_guard lock(sent_transactions_mutex_);
+        sended_transactions_.insert_or_assign(transaction.hash(), transaction);
+        pending_transaction_responses_.insert_or_assign(transaction.hash(),
+                                                        PendingTransactionResponse {
+                                                            request.message_id(),
+                                                            { peers.begin(), peers.end() } });
+    }
     transaction_sent_event_.publish(transaction.section(), transaction.hash());
 }
 

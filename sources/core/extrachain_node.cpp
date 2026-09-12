@@ -1521,8 +1521,13 @@ namespace ExtraChain::Core {
             eWarning("[Contract] Cannot stage transaction artifacts: {}", staged.error().detail);
             return std::unexpected(TransactionError::Unknown);
         }
-        dag_->add_transaction_sended(*prepared);
-        network_service_->send_message(*prepared, MessageType::DagTransaction, SendMode::Broadcast);
+        const auto request = Responder(nullptr).with_new_message_id();
+        dag_->add_transaction_sended(prepared.value(), request);
+        network_service_->send_message(prepared.value(),
+                                       MessageType::DagTransaction,
+                                       SendMode::Broadcast,
+                                       MessageStatus::NoStatus,
+                                       request);
         return *prepared;
     }
 

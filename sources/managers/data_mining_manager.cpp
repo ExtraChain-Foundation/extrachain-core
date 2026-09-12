@@ -119,13 +119,14 @@ void DataMiningManager::request_reward() {
                                                       .sections_stored  = node->dag()->current_section(),
                                                       .transaction      = tx_result.value() };
 
-    node->dag()->add_transaction_sended(tx_result.value());
-    // node->dag()->add_transaction_sended(tx_result2.value());
+    const auto request = Responder(nullptr).with_new_message_id();
+    node->dag()->add_transaction_sended(tx_result.value(), request);
 
     node->network()->send_message(requestReward,
                                   MessageType::CoinReward,
                                   SendMode::Broadcast,
-                                  MessageStatus::Request);
+                                  MessageStatus::Request,
+                                  request);
 
     auto data_serialized = MessagePack::serialize(requestReward);
     auto des             = MessagePack::deserialize<Dfs::Reward::RequestReward>(data_serialized);

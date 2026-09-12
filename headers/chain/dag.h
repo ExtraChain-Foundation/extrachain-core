@@ -573,7 +573,7 @@ public:
      *
      * @param transaction The transaction that was sent
      */
-    void add_transaction_sended(const Transaction &transaction);
+    void add_transaction_sended(const Transaction &transaction, const Responder &request);
 
     /**
      * @brief Update the chain range information
@@ -759,17 +759,21 @@ public:
     void request_contract_section(const SectionId &section_id);
 
     std::unordered_map<std::string, Transaction> sended_transactions() {
+        std::lock_guard lock(sent_transactions_mutex_);
         return sended_transactions_;
     }
 
     std::unordered_map<std::string, Transaction> failed_transactions() {
+        std::lock_guard lock(sent_transactions_mutex_);
         return failed_transactions_;
     }
 
     size_t sended_transactions_size() const {
+        std::lock_guard lock(sent_transactions_mutex_);
         return sended_transactions_.size();
     }
     size_t failed_transactions_size() const {
+        std::lock_guard lock(sent_transactions_mutex_);
         return failed_transactions_.size();
     }
     size_t last_txs_size() const {
@@ -852,6 +856,13 @@ private:
     ExtraChain::Core::Event<>                             control_search_ended_event_;
     ExtraChain::Core::ExtraChainNode                     *node;               // Parent node reference
     TransactionCache                                      transaction_cache_; // Transaction cache for fast lookups
+    struct PendingTransactionResponse {
+        std::string           message_id;
+        std::set<std::string> peers;
+        bool                  processing = false;
+    };
+    mutable std::mutex                                          sent_transactions_mutex_;
+    std::unordered_map<std::string, PendingTransactionResponse> pending_transaction_responses_;
     std::unordered_map<std::string, Transaction>          sended_transactions_; // Transactions sent but not yet
     std::unordered_map<std::string, Transaction>          failed_transactions_; // Transactions failed
     std::unordered_map<NodeId, std::uint64_t>             last_txs_;
