@@ -82,8 +82,11 @@ int main() {
     const auto digest_empty = owner_digest();
 
     // A genuine row through the local path: the baseline.
+    // Ids are inserted out of their sort order on purpose: "row_1" first, then
+    // "row_0". Hashing the rows in insertion order and in primary-key order must
+    // then give different results, which is exactly what #80 was about.
     DbRow genuine;
-    genuine["id"]       = "row_0";
+    genuine["id"]       = "row_1";
     genuine["payload"]  = "hello";
     genuine["position"] = "0";
     TEST_REQUIRE(node->dfs()->add_vector_row(owner_id, file_id, genuine));
@@ -95,7 +98,7 @@ int main() {
     TEST_REQUIRE(digest_one != digest_empty);
 
     DbRow second;
-    second["id"]       = "row_1";
+    second["id"]       = "row_0";
     second["payload"]  = "world";
     second["position"] = "1";
     TEST_REQUIRE(node->dfs()->add_vector_row(owner_id, file_id, second));

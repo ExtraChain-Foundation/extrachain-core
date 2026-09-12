@@ -586,8 +586,10 @@ std::pair<std::string, uint64_t> Dfs::Tables::DirsFile::ActorSpace::calculate_co
     // lives next to the vector database in the ".vector" companion file.
     std::string order_by = sort_field;
     if (order_by == "actor") {
-        const auto companion = dfs_path->native() + ".vector";
-        if (auto content = Utils::read_file_content(companion); content.has_value()) {
+        const auto companion = FsPath::create(dfs_path->native().string() + ".vector");
+        if (auto content = companion.has_value() ? Utils::read_file_content(companion.value())
+                                                 : std::unexpected(Utils::ContentError::ReadError);
+            content.has_value()) {
             if (auto collection_template = Json::deserialize<Dfs::CollectionTemplate>(content.value());
                 collection_template.has_value() && collection_template->primary.has_value()) {
                 order_by = collection_template->primary->name();
