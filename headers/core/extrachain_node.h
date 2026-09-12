@@ -202,6 +202,9 @@ namespace ExtraChain::Core {
         std::string                                   renames_file_id_waiting_;
         std::unordered_map<ActorId, std::string>      renames_todo_;
         std::string                                   node_identifier_;
+        std::string                                   node_nonce_;
+        ActorId                                       node_identity_actor_;
+        std::mutex                                    node_identity_mutex_;
         std::string                                   application_version_;
         std::string                                   bind_address_;
         RuntimeProfile                                runtime_profile_;
@@ -339,6 +342,7 @@ namespace ExtraChain::Core {
 
         std::string generate_node_identifier();
         std::string node_identifier();
+        std::string node_nonce();
 
         TokenManager*                             token_manager() const;
         ExtraChain::Contracts::ContractManager*   contract_manager() const;

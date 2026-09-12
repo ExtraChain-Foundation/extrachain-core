@@ -218,6 +218,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/responder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/traffic_meter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/peer_identity.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/wire_format.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp

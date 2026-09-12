@@ -239,6 +239,24 @@ std::string NetworkService::local_node_identifier() const {
     return node->node_identifier();
 }
 
+std::optional<Actor<KeyPublic>> NetworkService::local_system_actor() const {
+    if (node->account_controller()->empty()) {
+        return std::nullopt;
+    }
+    return node->account_controller()->system_actor().to_public();
+}
+
+std::string NetworkService::local_node_nonce() const {
+    return node->node_nonce();
+}
+
+std::expected<Signature, Cryptography::CryptoError> NetworkService::sign_handshake(const Bytes &transcript) const {
+    if (node->account_controller()->empty()) {
+        return std::unexpected(Cryptography::CryptoError::EmptyKey);
+    }
+    return node->account_controller()->system_actor().key().sign(transcript);
+}
+
 DfsMode NetworkService::local_dfs_mode() const {
     return node->dfs_service()->mode();
 }

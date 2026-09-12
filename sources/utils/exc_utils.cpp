@@ -18,6 +18,7 @@
  */
 
 #include "utils/exc_utils.h"
+#include "utils/file_io.h"
 
 #include <boost/asio/ip/address.hpp>
 #include <chrono>
@@ -1007,18 +1008,7 @@ ExtraChainSettings Utils::read_settings() {
 }
 
 bool Utils::write_settings(const ExtraChainSettings &settings) {
-    auto json = Json::serialize(settings);
-    auto path = FsPath::create(std::string(".settings"));
-    if (!path.has_value()) {
-        return false;
-    }
-
-    auto res = Utils::write_file_content(path.value(), json);
-    if (!res.has_value()) {
-        return false;
-    }
-
-    return true;
+    return FileIo::write_atomic(".settings", Json::serialize(settings)).has_value();
 }
 
 void Utils::prepare_extrachain() {

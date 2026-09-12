@@ -11,11 +11,19 @@
 #include "network/isocket_service.h"
 
 #include "encryption/box_session.h"
+#include "network/peer_identity.h"
 
 #include "extrachain_version.h"
 #include "utils/exc_logs.h"
 #include "utils/serialization.h"
 #include "utils/version.h"
+
+namespace {
+    Bytes handshake_transcript(SocketService::HandshakeMessage message) {
+        message.signature = { };
+        return ByteArray("extrachain-peer-handshake-v1:" + Json::serialize(message)).toBytes();
+    }
+} // namespace
 
 SocketService::SocketService(PeerContext& context)
     : context_(context) {
@@ -102,6 +110,21 @@ std::int64_t SocketService::pending_bytes() const noexcept {
 
 bool SocketService::check_first_message(const HandshakeMessage& handshake) {
     eLog("[Socket] First message: {} | IP: {} | network id: {}", direction_, ip_, context_.local_network_id());
+
+    if (handshake.system_actor.empty() || !handshake.system_actor.has_valid_id()
+        || handshake.session_key != public_key_.public_key()
+        || handshake.peer_session_key != private_key_.public_key()) {
+        return false;
+    }
+    const auto claimed = Network::peer_identifier(handshake.system_actor.key().public_key(), handshake.node_nonce);
+    if (!claimed.has_value() || claimed.value() != handshake.identifier) {
+        return false;
+    }
+    const auto verified =
+        handshake.system_actor.key().verify(handshake_transcript(handshake), handshake.signature);
+    if (!verified.has_value() || !verified.value()) {
+        return false;
+    }
 
     identifier_      = handshake.identifier;
     dfs_mode_socket_ = handshake.dfs_mode;
@@ -251,12 +274,25 @@ SocketService::Data SocketService::generate_first_message() {
             continue;
         }
         message.connections.insert(peer);
-        if (message.connections.size() == 16) {
+        if (message.connections.size() == 8) {
             break;
         }
     }
 
-    message.is_available  = context_.active_peer_count() < context_.peer_limit();
+    const auto actor = context_.local_system_actor();
+    if (!actor.has_value()) {
+        return { };
+    }
+    message.system_actor     = actor.value();
+    message.node_nonce       = context_.local_node_nonce();
+    message.session_key      = private_key_.public_key();
+    message.peer_session_key = public_key_.public_key();
+    message.is_available     = context_.active_peer_count() < context_.peer_limit();
+    const auto signature     = context_.sign_handshake(handshake_transcript(message));
+    if (!signature.has_value()) {
+        return { };
+    }
+    message.signature     = signature.value();
     const auto serialized = Json::serialize(message);
     return { serialized.begin(), serialized.end() };
 }

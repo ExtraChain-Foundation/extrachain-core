@@ -14,6 +14,34 @@
 #include "utils/db_iterator.h"
 
 namespace {
+    class VerificationSocket final : public SocketService {
+    public:
+        explicit VerificationSocket(PeerContext& context)
+            : SocketService(context) {
+            ip_ = "127.0.0.2";
+        }
+        using SocketService::check_first_message;
+        using SocketService::generate_first_message;
+        bool is_active() const override {
+            return activated_.load();
+        }
+        std::string protocol_string() const override {
+            return "verification-test";
+        }
+        Network::Protocol protocol() const override {
+            return Network::Protocol::WebSocket;
+        }
+        std::uint16_t port() const override {
+            return 0;
+        }
+        std::uint16_t server_port() const override {
+            return 0;
+        }
+        void flush() override {
+        }
+        void send_message(std::span<const std::uint8_t>, Priority) override {
+        }
+    };
     class CapturingSender final : public ResponseSender {
     public:
         std::size_t responses = 0;
@@ -173,6 +201,21 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(decoded.has_value());
         TEST_REQUIRE_EQ(decoded.value().dfs_mode, DfsMode::Light);
         TEST_REQUIRE(decoded.value().is_constant);
+    });
+
+    run("unsigned peer identity cannot reserve an identifier", [&] {
+        auto                            socket = std::make_shared<VerificationSocket>(*node->network());
+        const auto                      local  = Json::deserialize<SocketService::HandshakeMessage>(
+                                                     ByteArray(socket->generate_first_message()).toString())
+                                                     .value();
+        SocketService::HandshakeMessage claim;
+        claim.version      = local.version;
+        claim.network_id   = local.network_id;
+        claim.identifier   = Utils::generate_random_hex(64);
+        claim.is_available = true;
+        TEST_REQUIRE(!socket->check_first_message(claim));
+        TEST_REQUIRE(socket->identifier().empty());
+        TEST_REQUIRE(!socket->is_active());
     });
 
     run("conversion checks source balance including pending debits", [&] {

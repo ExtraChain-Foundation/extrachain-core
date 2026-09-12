@@ -68,6 +68,11 @@ public:
         std::optional<int>                   dag_version;
         std::optional<std::string>           node_version;
         std::optional<std::set<std::string>> capabilities;
+        Actor<KeyPublic>                     system_actor;
+        std::string                          node_nonce;
+        PublicKey                            session_key { };
+        PublicKey                            peer_session_key { };
+        Signature                            signature { };
     };
 
     enum class Priority {
@@ -182,6 +187,11 @@ BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
                        dfs_mode,
                        dag_version,
                        node_version,
-                       capabilities))
+                       capabilities,
+                       system_actor,
+                       node_nonce,
+                       session_key,
+                       peer_session_key,
+                       signature))
 
 BOOST_DESCRIBE_STRUCT(PeerConnection, (), (ip, identifier))

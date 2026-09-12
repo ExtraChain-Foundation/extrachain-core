@@ -117,6 +117,7 @@ int main(int argc, char* argv[]) {
         auto settings            = Utils::read_settings();
         settings.first_node      = std::string(argv[3]);
         settings.node_identifier = std::nullopt;
+        settings.node_nonce      = std::nullopt;
         Utils::write_settings(settings);
     }
 

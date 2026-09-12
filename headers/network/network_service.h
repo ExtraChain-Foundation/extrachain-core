@@ -426,6 +426,9 @@ public:
     void                      adopt_network_id(const ActorId& network_id) override;
     [[nodiscard]] std::string local_node_identifier() const override;
     [[nodiscard]] DfsMode     local_dfs_mode() const override;
+    [[nodiscard]] std::optional<Actor<KeyPublic>>       local_system_actor() const override;
+    [[nodiscard]] std::string                           local_node_nonce() const override;
+    std::expected<Signature, Cryptography::CryptoError> sign_handshake(const Bytes& transcript) const override;
     [[nodiscard]] bool has_active_duplicate(std::string_view identifier, const SocketService* candidate) override;
     [[nodiscard]] int  active_peer_count() const override;
     [[nodiscard]] int  peer_limit() const override;

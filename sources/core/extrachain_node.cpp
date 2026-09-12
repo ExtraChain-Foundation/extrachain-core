@@ -51,6 +51,7 @@
 #include "managers/janus_manager.h"
 #include "dfs/collection_template.h"
 #include "network/network_service.h"
+#include "network/peer_identity.h"
 #include "network/network_runtime.h"
 #include "network/wire_format.h"
 #include "runtime/deadline_task.h"
@@ -1073,6 +1074,7 @@ namespace ExtraChain::Core {
     }
 
     void ExtraChainNode::start() {
+        static_cast<void>(node_identifier());
         if (consensus_service_ && !actor_index_->network_id().is_zero()) {
             auto activated = consensus_service_->activate(actor_index_->network_id());
             if (!activated.has_value() && activated.error() == Consensus::ConsensusError::BootstrapIncomplete) {
@@ -2528,30 +2530,57 @@ namespace ExtraChain::Core {
     }
 
     std::string ExtraChainNode::generate_node_identifier() {
-        std::string node_identifier = Utils::generate_random_hex(64);
-
-        auto settings            = Utils::read_settings();
-        settings.node_identifier = node_identifier;
-        Utils::write_settings(settings);
-        node_identifier_ = node_identifier;
-
-        return node_identifier;
+        {
+            std::scoped_lock lock(node_identity_mutex_);
+            auto             settings = Utils::read_settings();
+            node_nonce_               = Utils::generate_random_hex(64);
+            settings.node_nonce       = node_nonce_;
+            settings.node_identifier  = node_nonce_;
+            if (!Utils::write_settings(settings)) {
+                throw std::runtime_error("Cannot persist the node identity");
+            }
+            node_identifier_     = node_nonce_;
+            node_identity_actor_ = ActorId();
+        }
+        return node_identifier();
     }
 
     std::string ExtraChainNode::node_identifier() {
-        if (!node_identifier_.empty()) {
-            return node_identifier_;
+        std::scoped_lock lock(node_identity_mutex_);
+        if (node_nonce_.empty()) {
+            auto settings            = Utils::read_settings();
+            node_nonce_              = settings.node_nonce.value_or(Utils::generate_random_hex(64));
+            node_identifier_         = settings.node_identifier.value_or(node_nonce_);
+            settings.node_nonce      = node_nonce_;
+            settings.node_identifier = node_identifier_;
+            if (!Utils::write_settings(settings)) {
+                throw std::runtime_error("Cannot persist the node identity");
+            }
         }
-
-        auto settings = Utils::read_settings();
-
-        if (!settings.node_identifier.has_value()) {
-            auto new_node_identifier = this->generate_node_identifier();
-            return new_node_identifier;
+        if (account_controller_ && !account_controller_->empty()) {
+            const auto& actor = account_controller_->system_actor();
+            if (node_identity_actor_ != actor.id()) {
+                const auto identifier = Network::peer_identifier(actor.key().public_key(), node_nonce_);
+                if (!identifier.has_value()) {
+                    throw std::runtime_error("Invalid node identity nonce");
+                }
+                auto settings            = Utils::read_settings();
+                settings.node_identifier = identifier.value();
+                settings.node_nonce      = node_nonce_;
+                if (!Utils::write_settings(settings)) {
+                    throw std::runtime_error("Cannot persist the node identity");
+                }
+                node_identifier_     = identifier.value();
+                node_identity_actor_ = actor.id();
+            }
         }
-
-        node_identifier_ = settings.node_identifier.value();
         return node_identifier_;
+    }
+
+    std::string ExtraChainNode::node_nonce() {
+        static_cast<void>(node_identifier());
+        std::scoped_lock lock(node_identity_mutex_);
+        return node_nonce_;
     }
 
     void ExtraChainNode::notification_token(std::string os, std::string actor_id, std::string token) {
