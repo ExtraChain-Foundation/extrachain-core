@@ -654,6 +654,9 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
 
     if (check) {
         if (!db.query("BEGIN IMMEDIATE")) {
+            eWarning("[DfsVector] local_add refused, cannot begin a write transaction (busy?): {} / {}",
+                     file_actor_id_,
+                     file_id_);
             return false;
         }
         auto existing = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field),

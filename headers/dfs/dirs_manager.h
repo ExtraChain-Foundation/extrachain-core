@@ -21,6 +21,7 @@
 
 #include <string>
 #include <expected>
+#include <map>
 #include <mutex>
 #include <set>
 
@@ -88,7 +89,7 @@ private:
     std::shared_ptr<DbConnector> db_;
 
     std::mutex            digest_mutex_;
-    std::set<std::string> digest_answered_;
-    std::set<std::string> digest_unanswered_;
+    std::set<std::string>      digest_answered_;
+    std::map<std::string, int> digest_unanswered_;
     ExtraChain::Core::ExtraChainNode* node;
 };

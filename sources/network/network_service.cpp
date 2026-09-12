@@ -2606,6 +2606,13 @@ void NetworkService::message_received(const std::string &message,
             return;
         }
 
+        {
+            static std::atomic<std::uint64_t> received_rows { 0 };
+            const auto count = received_rows.fetch_add(1) + 1;
+            if (count % 500 == 0) {
+                eLog("[NetworkService] DfsVectorAdd received so far: {}", count);
+            }
+        }
         node->dfs_service()->network_vector_add(db_content_result->owner_id,
                                                 db_content_result->file_id,
                                                 db_content_result->row);

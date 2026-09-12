@@ -751,10 +751,18 @@ bool DirsManager::digest_answered(const std::string& identifier) {
 
 void DirsManager::note_digest_unanswered(const std::string& identifier) {
     std::lock_guard lock(digest_mutex_);
-    digest_unanswered_.insert(identifier);
+    ++digest_unanswered_[identifier];
 }
 
 bool DirsManager::digest_unsupported(const std::string& identifier) {
+    // One missed reply is not an old peer: under a write burst the storage thread
+    // answers late and every peer looked "old" at once, which silenced the periodic
+    // reconcile for the rest of the run (seen on the stand with 2000-row vectors).
+    // Three unanswered requests and never a reply — that is an old peer.
     std::lock_guard lock(digest_mutex_);
-    return digest_unanswered_.contains(identifier) && !digest_answered_.contains(identifier);
+    if (digest_answered_.contains(identifier)) {
+        return false;
+    }
+    const auto it = digest_unanswered_.find(identifier);
+    return it != digest_unanswered_.end() && it->second >= 3;
 }

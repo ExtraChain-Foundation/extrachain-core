@@ -3096,6 +3096,8 @@ void DfsService::reconcile_tick() {
         const auto &pick = identifiers[reconcile_round_++ % identifiers.size()];
         eLog("[Dfs] Periodic catalog reconcile: identifier={}, peers={}", pick, identifiers.size());
         sync(pick);
+    } else {
+        eLog("[Dfs] Periodic catalog reconcile: no eligible peer");
     }
     schedule_after(reconcile_period(), [this]() { reconcile_tick(); });
 }
