@@ -107,6 +107,12 @@ int main() {
     // The catalog row's own signature did not change: only hash (and date) moved.
     TEST_REQUIRE(catalog_row().sign == vector->sign);
 
+    // The catalog hash and the "is my copy complete" check must agree on the same
+    // content: this is what lets a peer (the owner included) serve the vector and
+    // what stops every reconcile tick from re-requesting it. They used to hash the
+    // rows in different orders (primary key vs actor) and never agreed (#80).
+    TEST_REQUIRE(node->dfs()->is_file_already_downloaded(owner_id, file_id, catalog_row().hash));
+
     // A value that does not fit its column: rejected, not fatal. Before, the
     // INTEGER bind threw std::invalid_argument straight through add_vector_row.
     DbRow bad_number;

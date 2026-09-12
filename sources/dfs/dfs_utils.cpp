@@ -576,10 +576,28 @@ std::pair<std::string, uint64_t> Dfs::Tables::DirsFile::ActorSpace::calculate_co
     const ActorId     &owner_id,
     const std::string &file_id,
     const std::string &sort_field) {
-    auto        dfs_path = Dfs::Path::file_path(owner_id, file_id);
+    auto dfs_path = Dfs::Path::file_path(owner_id, file_id);
+
+    // Hash the rows in the same order DfsVector::data_hash_size uses for the catalog
+    // column: the vector's primary field when it has one. The default "actor" put
+    // rows of one writer in insertion order, so for any vector with a primary key
+    // and two or more rows this hash never matched the catalog, the owner refused to
+    // serve its own vector and every reconcile re-requested it (#80). The template
+    // lives next to the vector database in the ".vector" companion file.
+    std::string order_by = sort_field;
+    if (order_by == "actor") {
+        const auto companion = dfs_path->native() + ".vector";
+        if (auto content = Utils::read_file_content(companion); content.has_value()) {
+            if (auto collection_template = Json::deserialize<Dfs::CollectionTemplate>(content.value());
+                collection_template.has_value() && collection_template->primary.has_value()) {
+                order_by = collection_template->primary->name();
+            }
+        }
+    }
+
     DbConnector db(dfs_path->native());
     db.open();
-    auto res = db.hash_size(sort_field);
+    auto res = db.hash_size(order_by);
     db.close();
     return res;
 }
