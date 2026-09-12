@@ -32,10 +32,12 @@
 #include "utils/thread_pool_boost.h"
 
 #include <filesystem>
+#include <exception>
 #include <fstream>
 #include <vector>
 
 #include <QJsonObject>
+#include <QThread>
 
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
@@ -748,6 +750,21 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               const std::string &receiver_identifier,
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
+    if (QThread::currentThread() != thread()) {
+        // Socket state and routing must be inspected on their owning event loop.
+        QMetaObject::invokeMethod(this,
+                                  [this, serialized_message, non_serialized_message, send_mode,
+                                   receiver_identifier, message_type, status_info]() {
+            try {
+                send_message_connections(serialized_message, non_serialized_message, send_mode,
+                                         receiver_identifier, message_type, status_info);
+            } catch (const std::exception &) {
+                eWarning("[Network] Deferred message dispatch failed");
+            }
+        }, Qt::QueuedConnection);
+        return;
+    }
+
     if (!is_active_connection_exists()) {
         // eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         save_to_cache(serialized_message, send_mode, receiver_identifier);
