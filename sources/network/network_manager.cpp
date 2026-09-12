@@ -1182,11 +1182,14 @@ void NetworkManager::message_received(const std::string &message,
     responder.set_node_id(node_id);
     responder.set_ip(ip);
 
-    int luminance = node->luminance_manager()->read_luminance(node_id);
-    responder.set_luminance(luminance == -1 ? 1 : luminance);
+    // Custom dispatch never passes the responder or consumes its reputation
+    if (type != MessageType::Custom) {
+        int luminance = node->luminance_manager()->read_luminance(node_id);
+        responder.set_luminance(luminance == -1 ? 1 : luminance);
 
-    if (is_luminance) {
-        responder.set_luminance(responder.luminance() * 10); //
+        if (is_luminance) {
+            responder.set_luminance(responder.luminance() * 10);
+        }
     }
 
 #ifdef QT_DEBUG
