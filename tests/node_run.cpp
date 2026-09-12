@@ -671,6 +671,14 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // Every ExDFS load phase (file, vector, cross-writes) is over: tell the
+        // stand. A chaos agent that hits before this cuts a publication short, and
+        // a node it relaunches has none of the load knobs, so the vector would
+        // never exist anywhere — a harness artifact, not a finding.
+        if (!barrier_directory.empty()) {
+            (void)FileIo::write_atomic(barrier_directory / ("loaded-" + std::to_string(node_index)), "ok");
+        }
+
         std::vector<std::string> submitted_hashes;
         if (intent_count > 0) {
             const auto&              sender   = node->account_controller()->system_actor();
