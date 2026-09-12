@@ -1065,6 +1065,11 @@ void NetworkManager::message_received(const std::string &message,
         return;
     }
 
+    if (message.size() <= 64) {
+        eWarning("[NetworkManager] Signed message has no body or a truncated signature");
+        return;
+    }
+
     if (!check_message_count(message)) {
         eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
         return;
