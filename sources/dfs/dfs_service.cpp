@@ -983,7 +983,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsService::store_vector_impl(
     }
     auto [visual_name_new, _] = names_result.value();
 
-    auto vector_hash = dfs_vector->calculate_template_file_hash();
+    auto vector_hash = dfs_vector->data_hash_size();
     if (!vector_hash.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -1447,8 +1447,15 @@ bool DfsService::is_file_already_downloaded(const ActorId     &owner_id,
             // }
         }
 
-        if (dir_row->type == Dfs::FileType::Collection || dir_row->type == Dfs::FileType::Vector
-            || dir_row->type == Dfs::FileType::Dictionary) {
+        if (dir_row.value().type == Dfs::FileType::Vector || dir_row.value().type == Dfs::FileType::Dictionary) {
+            auto vector = make_vector(owner_id, file_id);
+            if (vector.has_value()) {
+                const auto root = vector.value().second.data_hash_size();
+                return root.has_value() && root.value().first == hash;
+            }
+            return false;
+        }
+        if (dir_row.value().type == Dfs::FileType::Collection) {
             auto [collection_hash, collection_size] =
                 Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(owner_id, file_id);
             if (collection_hash == hash) {
@@ -3043,10 +3050,16 @@ void DfsService::check_all_files(std::string identifier) {
                     if (row.type == Dfs::FileType::File) {
                         const auto size = file_path->file_size();
                         intact          = size.has_value() && size.value() == row.size;
+                    } else if (row.type == Dfs::FileType::Vector || row.type == Dfs::FileType::Dictionary) {
+                        auto vector = make_vector(dir.actor_id, row.file_id);
+                        if (vector.has_value()) {
+                            const auto root = vector.value().second.data_hash_size();
+                            intact          = root.has_value() && root.value().first == row.hash;
+                        }
                     } else {
                         const auto [hash, size] =
                             Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(dir.actor_id,
-                                                                                             row.file_id);
+                                                                                              row.file_id);
                         intact = hash == row.hash;
                     }
                 }

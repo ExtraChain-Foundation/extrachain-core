@@ -18,6 +18,7 @@
  */
 
 #include "dfs/dfs_utils.h"
+#include "dfs/vector_index.h"
 
 #include <limits>
 
@@ -578,32 +579,22 @@ std::pair<std::string, uint64_t> Dfs::Tables::DirsFile::ActorSpace::calculate_co
     const ActorId     &owner_id,
     const std::string &file_id,
     const std::string &sort_field) {
-    auto dfs_path = Dfs::Path::file_path(owner_id, file_id);
-
-    // Hash the rows in the same order DfsVector::data_hash_size uses for the catalog
-    // column: the vector's primary field when it has one. The default "actor" put
-    // rows of one writer in insertion order, so for any vector with a primary key
-    // and two or more rows this hash never matched the catalog, the owner refused to
-    // serve its own vector and every reconcile re-requested it (#80). The template
-    // lives next to the vector database in the ".vector" companion file.
-    std::string order_by = sort_field;
-    if (order_by == "actor") {
-        const auto companion = FsPath::create(dfs_path->native().string() + ".vector");
-        if (auto content = companion.has_value() ? Utils::read_file_content(companion.value())
-                                                 : std::unexpected(Utils::ContentError::ReadError);
-            content.has_value()) {
-            if (auto collection_template = Json::deserialize<Dfs::CollectionTemplate>(content.value());
-                collection_template.has_value() && collection_template->primary.has_value()) {
-                order_by = collection_template->primary->name();
-            }
-        }
+    const auto dfs_path = Dfs::Path::file_path(owner_id, file_id);
+    if (!dfs_path.has_value())
+        return { { }, 0 };
+    DbConnector db(dfs_path.value().native());
+    if (!db.open(false))
+        return { { }, 0 };
+    if (db.table_exists("Vector")) {
+        const auto columns = db.table_columns("Vector");
+        if (columns.empty())
+            return { { }, 0 };
+        Dfs::VectorIndex index(db, columns.front().name);
+        const auto       root = index.root();
+        return root.has_value() ? std::pair { root.value().hash, root.value().tree.bytes }
+                                : std::pair<std::string, std::uint64_t> { { }, 0 };
     }
-
-    DbConnector db(dfs_path->native());
-    db.open();
-    auto res = db.hash_size(order_by);
-    db.close();
-    return res;
+    return db.hash_size(sort_field);
 }
 
 bool Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(const std::shared_ptr<DbConnector> db,

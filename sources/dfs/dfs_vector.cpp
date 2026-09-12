@@ -18,6 +18,7 @@
  */
 
 #include "dfs/dfs_vector.h"
+#include "dfs/vector_index.h"
 
 #include "dfs/dfs_service.h"
 #include "core/extrachain_node.h"
@@ -564,6 +565,12 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         return false;
     }
 
+    Dfs::VectorIndex index(db, primary_field);
+    if (!index.root().has_value()) {
+        db.query("ROLLBACK");
+        return false;
+    }
+
     for (const auto &db_row : dfs_vector_content.content) {
         auto existing = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", primary_field),
                                   "Vector",
@@ -572,6 +579,13 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
             continue;
         }
         if (!db.replace("Vector", db_row)) {
+            db.query("ROLLBACK");
+            return false;
+        }
+        const auto stored = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", primary_field),
+                                      "Vector",
+                                      { { primary_field, db_row.at(primary_field) } });
+        if (stored.size() != 1 || !verify(stored.front()) || !index.update(db_row.at(primary_field)).has_value()) {
             db.query("ROLLBACK");
             return false;
         }
@@ -658,13 +672,15 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
         return false;
     }
 
+    if (!db.query("BEGIN IMMEDIATE")) {
+        return false;
+    }
+    Dfs::VectorIndex index(db, field);
+    if (!index.root().has_value()) {
+        db.query("ROLLBACK");
+        return false;
+    }
     if (check) {
-        if (!db.query("BEGIN IMMEDIATE")) {
-            eWarning("[DfsVector] local_add refused, cannot begin a write transaction (busy?): {} / {}",
-                     file_actor_id_,
-                     file_id_);
-            return false;
-        }
         auto existing = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field),
                                   "Vector",
                                   { { field, row.at(field) } });
@@ -672,12 +688,14 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
             return db.query("COMMIT");
         }
     }
-
-    const bool result = db.replace("Vector", row);
-    if (!check) {
-        return result;
+    if (!db.replace("Vector", row)) {
+        db.query("ROLLBACK");
+        return false;
     }
-    if (!result || !db.query("COMMIT")) {
+    const auto stored =
+        db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field), "Vector", { { field, row.at(field) } });
+    if (stored.size() != 1 || !verify(stored.front()) || !index.update(row.at(field)).has_value()
+        || !db.query("COMMIT")) {
         db.query("ROLLBACK");
         return false;
     }
@@ -805,9 +823,34 @@ std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
         return std::nullopt;
     }
 
-    auto hash_size =
-        db.hash_size(collection_template_.primary.has_value() ? collection_template_.primary->name() : "actor");
-    return hash_size;
+    const auto field =
+        collection_template_.primary.has_value() ? collection_template_.primary.value().name() : "actor";
+    Dfs::VectorIndex index(db, field);
+    const auto       root = index.root();
+    if (!root.has_value()) {
+        eWarning("[DfsVector] Cannot read the content index: {} / {}", file_actor_id_, file_id_);
+        return std::nullopt;
+    }
+    const auto catalog  = node->dfs()->dirs_manager().get_db_instance();
+    const auto metadata = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(catalog, file_actor_id_, file_id_);
+    if (metadata.has_value() && metadata.value().state != Dfs::FileState::Removed) {
+        bool migrate = !root.value().legacy_hash.empty() && metadata.value().hash == root.value().legacy_hash;
+        if (!migrate && root.value().tree.rows == 0) {
+            const auto companion = calculate_template_file_hash();
+            migrate              = companion.has_value() && metadata.value().hash == companion.value().first;
+        }
+        if (migrate && metadata.value().hash != root.value().hash) {
+            if (!catalog->update(Dfs::Tables::DirsFile::TableNameActorsFiles,
+                                 { { "hash", root.value().hash },
+                                   { "size", std::to_string(root.value().tree.bytes) } },
+                                 { { "owner_id", file_actor_id_.to_string() },
+                                   { "file_id", file_id_ },
+                                   { "hash", metadata.value().hash } })) {
+                return std::nullopt;
+            }
+        }
+    }
+    return std::pair { root.value().hash, root.value().tree.bytes };
 }
 
 bool DfsVector::verify(const DbRow &row) {

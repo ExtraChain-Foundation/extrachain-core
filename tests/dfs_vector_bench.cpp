@@ -13,6 +13,7 @@
 #include "chain/actor.h"
 #include "core/extrachain_node.h"
 #include "dfs/dfs_service.h"
+#include "dfs/vector_index.h"
 #include "dfs/dfs_utils.h"
 #include "dfs/dirs_manager.h"
 #include "managers/account_controller.h"
@@ -42,7 +43,8 @@ int main() {
         { Dfs::Field::String("payload").not_null(), Dfs::Field::Integer("position").not_null() });
     const auto stored_template = node->dfs()->store_template(owner_id, vector_template);
     TEST_REQUIRE(stored_template.has_value());
-    const auto vector = node->dfs()->store_vector(owner_id, owner_id, "bench_vector", owner_id, stored_template->file_id);
+    const auto vector =
+        node->dfs()->store_vector(owner_id, owner_id, "bench_vector", owner_id, stored_template->file_id);
     TEST_REQUIRE(vector.has_value());
 
     const std::string payload(120, 'm'); // a chat-message-sized row
@@ -59,12 +61,13 @@ int main() {
             const auto now    = std::chrono::steady_clock::now();
             const auto window = std::chrono::duration<double, std::milli>(now - window_start).count();
             // Time one hash_size on its own at this size.
-            const auto path   = Dfs::Path::file_path(owner_id, vector->file_id);
+            const auto path = Dfs::Path::file_path(owner_id, vector->file_id);
             TEST_REQUIRE(path.has_value());
             DbConnector db(path->native());
             TEST_REQUIRE(db.open(false));
-            const auto h0 = std::chrono::steady_clock::now();
-            (void)db.hash_size("id");
+            const auto       h0 = std::chrono::steady_clock::now();
+            Dfs::VectorIndex vector_index(db, "id");
+            TEST_REQUIRE(vector_index.root().has_value());
             const auto h1 = std::chrono::steady_clock::now();
             std::printf("%llu,%.3f,%.1f\n",
                         static_cast<unsigned long long>(index),
