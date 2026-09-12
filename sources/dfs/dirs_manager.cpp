@@ -29,8 +29,41 @@
 #include "network/network_service.h"
 #include "dfs/dfs_service.h"
 #include "dfs/load_manager.h"
+#include "dfs/vector_index.h"
 #include "utils/exc_logs.h"
 #include "chain/actor_index.h"
+
+namespace {
+    std::pair<std::string, std::uint64_t> local_vector_content(const ActorId& owner, const std::string& file_id) {
+        const auto path = Dfs::Path::file_path(owner, file_id);
+        if (!path.has_value())
+            return { { }, 0 };
+        DbConnector database(path.value());
+        if (!database.open(false) || !database.table_exists("Vector"))
+            return { { }, 0 };
+        const auto columns = database.table_columns("Vector");
+        if (columns.empty())
+            return { { }, 0 };
+        Dfs::VectorIndex index(database, columns.front().name);
+        const auto       root = index.root();
+        return root.has_value() ? std::pair { root.value().hash, root.value().tree.bytes }
+                                : std::pair<std::string, std::uint64_t> { { }, 0 };
+    }
+
+    void use_local_vector_content(const ActorId& owner, Dfs::DirRow& row) {
+        if (row.state == Dfs::FileState::Removed
+            || (row.type != Dfs::FileType::Vector && row.type != Dfs::FileType::Dictionary))
+            return;
+        const auto [hash, bytes] = local_vector_content(owner, row.file_id);
+        if (hash.empty()) {
+            row.state = Dfs::FileState::Known;
+            return;
+        }
+        row.hash  = hash;
+        row.size  = bytes;
+        row.state = Dfs::FileState::Ready;
+    }
+} // namespace
 
 DirsManager::DirsManager(ExtraChain::Core::ExtraChainNode* node)
     : node(node) {
@@ -531,6 +564,8 @@ void DirsManager::network_request_all(const Responder& responder, const std::vec
             if (!dir_rows.has_value() || dir_rows->empty())
                 continue;
 
+            for (auto& row : dir_rows.value())
+                use_local_vector_content(actor, row);
             rows_count += dir_rows->size();
             response_data.emplace_back(actor, dir_rows.value());
 
@@ -559,19 +594,11 @@ std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std:
     std::vector<Dfs::Packets::CatalogDigest> digests;
     const std::set<ActorId>                  filter(only.begin(), only.end());
 
-    // One pass over the catalog: rows arrive grouped by owner and ordered by file_id, so
-    // every node hashes the same material for the same set of rows whatever the order
-    // the rows were inserted in.
-    // (file_id, sign, hash) per row. The signature covers what the owner published;
-    // the hash column is the same thing for a File but for a Vector or Dictionary it
-    // is the current content hash, maintained on every node as rows arrive. Leaving
-    // it out made two catalogs equal while one of them still lacked vector rows —
-    // and the re-request of incomplete vector content lives in the row handler,
-    // which equal digests never reach (seen on the stand after a chaos restart:
-    // 6/7 vectors, digests equal, nothing re-requested).
-    const auto rows =
-        db_->select(fmt::format("SELECT owner_id, file_id, sign, hash FROM {} ORDER BY owner_id, file_id",
-                                Dfs::Tables::DirsFile::TableNameActorsFiles));
+    // The catalog can retain a remote repair target after a snapshot merge. Advertise
+    // the local index root: equal target hashes do not prove equal vector contents.
+    const auto rows = db_->select(
+        fmt::format("SELECT owner_id, file_id, sign, hash, type, state FROM {} ORDER BY owner_id, file_id",
+                    Dfs::Tables::DirsFile::TableNameActorsFiles));
 
     std::string   current_owner;
     std::string   material;
@@ -580,9 +607,10 @@ std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std:
         if (current_owner.empty()) {
             return;
         }
-        const ActorId owner(current_owner);
-        if (filter.empty() || filter.contains(owner)) {
-            digests.push_back({ .owner_id = owner, .rows = count, .digest = Utils::calculate_hash(material) });
+        const auto owner = ActorId::create(current_owner);
+        if (owner.has_value()) {
+            digests.push_back(
+                { .owner_id = owner.value(), .rows = count, .digest = Utils::calculate_hash(material) });
         }
         material.clear();
         count = 0;
@@ -593,8 +621,20 @@ std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std:
         const auto file_id = row.find("file_id");
         const auto sign    = row.find("sign");
         const auto hash    = row.find("hash");
-        if (owner == row.end() || file_id == row.end() || sign == row.end() || hash == row.end()) {
+        const auto type    = row.find("type");
+        const auto state   = row.find("state");
+        if (owner == row.end() || file_id == row.end() || sign == row.end() || hash == row.end()
+            || type == row.end() || state == row.end()) {
             continue;
+        }
+        const auto owner_id = ActorId::create(owner->second);
+        if (!owner_id.has_value() || (!filter.empty() && !filter.contains(owner_id.value())))
+            continue;
+        auto content_hash = hash->second;
+        if (state->second != std::to_string(std::to_underlying(Dfs::FileState::Removed))
+            && (type->second == std::to_string(std::to_underlying(Dfs::FileType::Vector))
+                || type->second == std::to_string(std::to_underlying(Dfs::FileType::Dictionary)))) {
+            content_hash = local_vector_content(owner_id.value(), file_id->second).first;
         }
         if (owner->second != current_owner) {
             flush();
@@ -604,7 +644,7 @@ std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std:
         material += '\0';
         material += sign->second;
         material += '\0';
-        material += hash->second;
+        material += content_hash;
         material += '\n';
         ++count;
     }
@@ -639,6 +679,8 @@ void DirsManager::send_rows_for_owners(const std::vector<ActorId>& owners, const
         if (!dir_rows.has_value() || dir_rows->empty()) {
             continue;
         }
+        for (auto& row : dir_rows.value())
+            use_local_vector_content(owner, row);
         rows_count += dir_rows->size();
         response_data.emplace_back(owner, std::move(dir_rows.value()));
     }

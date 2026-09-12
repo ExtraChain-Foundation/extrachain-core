@@ -534,6 +534,34 @@ if [ -n "$DEAD_NODES" ]; then
     fi
 fi
 
+# Publication and cross-writes must finish before the recovery audit starts.
+if { [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; } \
+   && { [ "$VECTOR_ROWS" -gt 0 ] || [ "$DFS_BYTES" -gt 0 ]; }; then
+    load_deadline=$(( $(date +%s) + 300 ))
+    [ "$load_deadline" -le "$deadline" ] || load_deadline="$deadline"
+    while :; do
+        loaded=1
+        for index in $(seq 0 $((NODE_COUNT - 1))); do
+            is_dead "$index" && continue
+            if ! kill -0 "$(node_pid "$index")" 2>/dev/null; then
+                verdict="unexpected-death"
+                break
+            fi
+            [ -f "$BARRIER/loaded-$index" ] || loaded=0
+        done
+        [ "$verdict" != "unexpected-death" ] || break
+        if [ "$loaded" -eq 1 ]; then
+            log "all surviving nodes finished load; checking replication"
+            break
+        fi
+        if [ "$(date +%s)" -ge "$load_deadline" ]; then
+            verdict="load-incomplete"
+            break
+        fi
+        sleep 1
+    done
+fi
+
 # A receipt proves that the submitting node applied the checkpoint. Other nodes
 # can still be importing the same certified height. Keep the committee alive
 # until every node reports the seed node's finalized count, so the audits test a
@@ -544,6 +572,7 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
         # Fault recovery uses the remaining portion of its total 300-second budget.
         convergence_deadline="$deadline"
     fi
+    [ "$convergence_deadline" -le "$deadline" ] || convergence_deadline="$deadline"
     while :; do
         # Every surviving node has to report one finalized count; the first
         # survivor (the seed, unless it died) is the reference.
@@ -581,20 +610,6 @@ fi
 # Optional hold: keep the converged committee serving for a while so an outside
 # node can join it live (see shadow_live_join.sh). On a fast host the whole load
 # finalizes in seconds, so without this there is nothing left to join.
-# Publishing a large vector takes minutes, and until every node has finished, a
-# peer's snapshot is legitimately short and the catalog hash of a growing vector
-# changes with every row. Auditing before that measures the publication, not the
-# replication, so wait for the load markers first (they are written once a node
-# has finished all of its ExDFS load phases).
-if [ "$VECTOR_ROWS" -gt 0 ] || [ "$DFS_BYTES" -gt 0 ]; then
-    settle_deadline=$(( $(date +%s) + 300 ))
-    while [ "$(find "$BARRIER" -maxdepth 1 -name 'loaded-*' | wc -l)" -lt "$NODE_COUNT" ]; do
-        [ "$(date +%s)" -ge "$settle_deadline" ] && { log "load phases did not finish within 300s"; break; }
-        sleep 2
-    done
-    log "all load phases finished; letting replication settle"
-fi
-
 if [ "$verdict" = "pass" ] && [ "${EXC_SHADOW_HOLD_S:-0}" -gt 0 ]; then
     log "holding the committee for ${EXC_SHADOW_HOLD_S}s"
     # Lets a chaos agent leave a quiet tail before the final audits.
@@ -703,6 +718,7 @@ case "$verdict" in
         # within their window. Say which one it was, they need different fixes.
         fail "nodes finished their ${RUN_SECONDS}s window with $done_nodes/$SENDERS senders finalized" ;;
     deadline) fail "harness deadline reached with $done_nodes/$SENDERS senders finalized" ;;
+    load-incomplete) fail "load phases did not finish before the deadline" ;;
     convergence) fail "committee did not converge on one finalized height before the recovery deadline" ;;
     dfs-incomplete)
         dfs_audit 1 >&2

@@ -339,6 +339,61 @@ int main() {
         TEST_REQUIRE(row_of(peer.id(), f4).sign == t4.sign);
     }
 
+    {
+        auto schema = Dfs::CollectionTemplate::create("catalog_root").value();
+        schema.use_id().add_fields({ Dfs::Field::String("payload").not_null() });
+        const auto stored = node->dfs()->store_template(owner.id(), schema).value();
+        const auto file =
+            node->dfs()->store_vector(owner.id(), owner.id(), "catalog_root", owner.id(), stored.file_id).value();
+        auto       vector     = node->dfs()->make_vector(owner.id(), file.file_id).value().second;
+        const auto old_digest = dirs.catalog_digests({ owner.id() }).front().digest;
+        const auto old_hash   = row_of(owner.id(), file.file_id).hash;
+
+        auto  package = vector.generate_content_package_empty().value();
+        DbRow row { { "id", "snapshot-row" },
+                    { "payload", "committed" },
+                    { "actor", owner.id().to_string() },
+                    { "status", "1" },
+                    { "timestamp", std::to_string(Utils::current_date_ms()) } };
+        row["sign"] = ByteArray(owner.key().sign(vector.calculate_hash(row).first).value()).toString();
+        package.content.push_back(row);
+        TEST_REQUIRE(vector.handle_package(package));
+        const auto root = vector.index_root().value();
+        TEST_REQUIRE(root.hash != old_hash);
+        TEST_REQUIRE(row_of(owner.id(), file.file_id).hash == old_hash);
+        const auto new_digest = dirs.catalog_digests({ owner.id() }).front().digest;
+        TEST_REQUIRE_MESSAGE(new_digest != old_digest,
+                             "a snapshot merge must change the digest even when the stored target is unchanged");
+
+        const auto advertised = [&]() {
+            Capture   capture;
+            Responder target(&capture);
+            target.add_identifier("peer-node");
+            dirs.send_rows_for_owners({ owner.id() }, target);
+            const auto rows = MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(
+                capture.payload(MessageType::DfsSyncDirRows));
+            TEST_REQUIRE(rows.has_value() && rows.value().size() == 1);
+            for (const auto &candidate : rows.value().front().second) {
+                if (candidate.file_id == file.file_id)
+                    return candidate;
+            }
+            TEST_REQUIRE_MESSAGE(false, "vector is missing from catalog response");
+            return Dfs::DirRow { };
+        };
+        const auto response = advertised();
+        TEST_REQUIRE(response.hash == root.hash && response.size == root.tree.bytes);
+        TEST_REQUIRE(response.sign == file.sign && response.state == Dfs::FileState::Ready);
+        TEST_REQUIRE(row_of(owner.id(), file.file_id).hash == old_hash);
+
+        const auto path       = Dfs::Path::file_path(owner.id(), file.file_id).value().native();
+        const auto saved_path = std::filesystem::path(path.string() + ".saved");
+        std::filesystem::rename(path, saved_path);
+        TEST_REQUIRE(dirs.catalog_digests({ owner.id() }).front().digest != new_digest);
+        TEST_REQUIRE(advertised().state == Dfs::FileState::Known);
+        std::filesystem::rename(saved_path, path);
+        TEST_REQUIRE(dirs.catalog_digests({ owner.id() }).front().digest == new_digest);
+    }
+
     node->cleanUp();
     node.reset();
     std::error_code ignored;
