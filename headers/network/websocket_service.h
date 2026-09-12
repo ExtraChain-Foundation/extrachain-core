@@ -96,6 +96,7 @@ private:
     ExtraChain::Core::NetworkRuntime&                 runtime_;
     std::unique_ptr<WebSocket>                        websocket_;
     boost::asio::steady_timer                         queue_signal_;
+    boost::asio::steady_timer                         handshake_deadline_;
     std::atomic_bool                                  running_ { false };
     std::atomic_bool                                  write_running_ { false };
     std::atomic<std::int64_t>                         socket_pending_bytes_ { 0 };

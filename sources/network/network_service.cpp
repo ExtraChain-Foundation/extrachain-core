@@ -813,8 +813,29 @@ void NetworkService::start_network() {
         network_runtime_->listen(ExtraChain::Core::NetworkConfig { .bind_address = node->bind_address(),
                                                                    .port         = ws_port_ },
                                  [this](ExtraChain::Core::NetworkRuntime::Tcp::socket socket) {
-                                     if (active_connections_count() >= max_connections()) {
-                                         boost::system::error_code error;
+                                     boost::system::error_code error;
+                                     const auto                endpoint = socket.remote_endpoint(error);
+                                     if (error) {
+                                         socket.close(error);
+                                         return;
+                                     }
+                                     const auto  ip              = endpoint.address().to_string();
+                                     std::size_t pending         = 0;
+                                     std::size_t pending_from_ip = 0;
+                                     std::size_t active          = 0;
+                                     for (const auto &connection : connection_snapshot()) {
+                                         if (connection->is_closed()) {
+                                             continue;
+                                         }
+                                         if (connection->is_active()) {
+                                             ++active;
+                                         } else {
+                                             ++pending;
+                                             pending_from_ip += connection->ip() == ip ? 1 : 0;
+                                         }
+                                     }
+                                     if (active >= static_cast<std::size_t>(max_connections()) || pending >= 32
+                                         || pending_from_ip >= 4) {
                                          socket.close(error);
                                          return;
                                      }

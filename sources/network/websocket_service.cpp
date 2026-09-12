@@ -35,6 +35,7 @@ namespace beast     = boost::beast;
 namespace websocket = beast::websocket;
 
 namespace {
+    constexpr std::size_t MAX_HANDSHAKE_BYTES          = 8 * 1024;
     constexpr std::size_t MAX_INBOUND_MESSAGE_BYTES    = 72 * 1024 * 1024;
     constexpr std::size_t ASYNC_CRYPTO_THRESHOLD_BYTES = 64 * 1024;
 
@@ -49,7 +50,8 @@ WebSocketService::WebSocketService(ExtraChain::Core::NetworkRuntime& runtime, Pe
     : SocketService(context)
     , strand_(asio::make_strand(runtime.executor()))
     , runtime_(runtime)
-    , queue_signal_(strand_) {
+    , queue_signal_(strand_)
+    , handshake_deadline_(strand_, std::chrono::seconds(10)) {
 }
 
 WebSocketService::~WebSocketService() {
@@ -115,7 +117,7 @@ asio::awaitable<std::expected<void, std::string>> WebSocketService::open(std::st
 
         port_ = endpoint.port();
         websocket_->set_option(websocket::stream_base::timeout::suggested(beast::role_type::client));
-        websocket_->read_message_max(MAX_INBOUND_MESSAGE_BYTES);
+        websocket_->read_message_max(MAX_HANDSHAKE_BYTES);
         stream.expires_never();
         co_await websocket_->async_handshake(host, "/", asio::redirect_error(asio::use_awaitable, error));
         if (error) {
@@ -152,9 +154,18 @@ asio::awaitable<void> WebSocketService::run_on_strand(bool accepted_socket) {
     }
 
     running_.store(true, std::memory_order_release);
+    const std::weak_ptr<WebSocketService> pending = std::static_pointer_cast<WebSocketService>(shared_from_this());
+    handshake_deadline_.async_wait([pending](const boost::system::error_code& error) {
+        if (error) {
+            return;
+        }
+        if (const auto service = pending.lock(); service && !service->activated_.load(std::memory_order_acquire)) {
+            service->report_error(Network::SocketServiceError::IncorrectHandshake, "handshake deadline exceeded");
+        }
+    });
     if (accepted_socket) {
         websocket_->set_option(websocket::stream_base::timeout::suggested(beast::role_type::server));
-        websocket_->read_message_max(MAX_INBOUND_MESSAGE_BYTES);
+        websocket_->read_message_max(MAX_HANDSHAKE_BYTES);
         boost::system::error_code error;
         co_await websocket_->async_accept(asio::redirect_error(asio::use_awaitable, error));
         if (error) {
@@ -167,6 +178,9 @@ asio::awaitable<void> WebSocketService::run_on_strand(bool accepted_socket) {
         close_connection();
         co_return;
     }
+
+    handshake_deadline_.cancel();
+    websocket_->read_message_max(MAX_INBOUND_MESSAGE_BYTES);
 
     const auto self = std::static_pointer_cast<WebSocketService>(shared_from_this());
     active_operations_.fetch_add(1, std::memory_order_acq_rel);
@@ -508,6 +522,7 @@ bool WebSocketService::wait_closed(std::chrono::milliseconds timeout) {
 }
 
 void WebSocketService::finish_close() {
+    handshake_deadline_.cancel();
     queue_signal_.cancel();
     if (websocket_) {
         boost::system::error_code ignored;

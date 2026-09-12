@@ -246,7 +246,15 @@ SocketService::Data SocketService::generate_first_message() {
                                                 std::string(SHADOW_RELAY_CAPABILITY) },
     };
 
-    message.connections = context_.shareable_peers(ip_);
+    for (const auto& peer : context_.shareable_peers(ip_)) {
+        if (peer.ip.size() > 253 || peer.identifier.size() != 64) {
+            continue;
+        }
+        message.connections.insert(peer);
+        if (message.connections.size() == 16) {
+            break;
+        }
+    }
 
     message.is_available  = context_.active_peer_count() < context_.peer_limit();
     const auto serialized = Json::serialize(message);
