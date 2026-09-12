@@ -1746,21 +1746,40 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
 void DfsController::network_request_file_state(const ActorId     &owner_id,
                                                const std::string &file_id,
                                                const Responder   &responder) {
-    auto dir_row =
-        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
-
-    if (!dir_row.has_value()) {
-        auto file_state =
-            Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = Dfs::FileState::Unknown };
-        responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
+    if (!node_enabled.load()) {
         return;
     }
 
-    auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
-                                                .file_id  = file_id,
-                                                .state    = dir_row->state,
-                                                .hash     = dir_row->hash };
-    responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
+    // Own reply routing across the metadata wait; the DFS pool joins before node destruction
+    ThreadPoolBoost::instance_dfs()->post([this, owner_id, file_id, responder] {
+        if (!node_enabled.load()) {
+            return;
+        }
+        try {
+            auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
+                                                                        owner_id, file_id);
+            if (!node_enabled.load()) {
+                return;
+            }
+            if (!dir_row.has_value()) {
+                auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
+                                                           .file_id = file_id,
+                                                           .state = Dfs::FileState::Unknown };
+                responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused,
+                                        MessageStatus::Response);
+                return;
+            }
+
+            auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
+                                                       .file_id = file_id,
+                                                       .state = dir_row->state,
+                                                       .hash = dir_row->hash };
+            responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused,
+                                    MessageStatus::Response);
+        } catch (const std::exception &) {
+            eWarning("[Dfs] File-state request processing failed");
+        }
+    });
 }
 
 void DfsController::network_request_file_existance(const Dfs::FileLink &file_link, const Responder &responder) {

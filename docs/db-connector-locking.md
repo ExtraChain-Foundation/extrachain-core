@@ -43,3 +43,18 @@ create only temporary databases, restore their working directory and never
 instantiate a node or touch a retained profile. Captured runtime stacks establish
 the blocked metadata path, not the cause of every slow VPN connection. Collection
 hash reads can still wait on the default lock and need separate investigation.
+
+File-state request metadata reads are dispatched through the existing DFS pool,
+as are file-state response preparation tasks. The request owns its actor/file
+arguments and full responder context across dispatch, reads fresh state under
+the unchanged connector lock and suppresses replies when shutdown has begun.
+The node wrapper joins the pool before destroying node-owned managers. This
+keeps a queued metadata write from blocking this request handler on the network
+event loop; it does not remove contention within the metadata connection or
+claim that every other synchronous metadata caller has been converted.
+
+`tests/dfs_file_state_request.py` compiles the actual request handler with
+controlled executor/DB boundaries. It covers deferred reads, copied reply
+correlation and recipients, known/removed/unknown state, multiple pending request
+ownership, shutdown boundaries and contained read/send exceptions. Native
+workload qualification remains separate from this source-level regression.
