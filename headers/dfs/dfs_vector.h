@@ -125,7 +125,7 @@ public:
     bool handle_package(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
     bool                 store_add(DbRow& row);
-    bool                 local_add(const DbRow& row, bool check);
+    std::expected<bool, DfsVectorError> local_add(const DbRow& row, bool check);
     std::optional<DbRow> remove(const std::string& primary_data);
 
     std::pair<std::string, bool> calculate_hash(const DbRow& row);

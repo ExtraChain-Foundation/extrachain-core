@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "network/broadcast_budget.h"
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -182,6 +183,7 @@ private:
     std::string first_node_;
     // Envelope verification: actors of message origins, misses and pending
     // actor requests, all keyed by actor id (see verify_envelope).
+    Network::BroadcastBudget                broadcast_budget_;
     std::mutex                              envelope_actors_mutex_;
     std::map<std::string, Actor<KeyPublic>> envelope_actors_;
     std::map<std::string, std::int64_t>     envelope_actor_misses_;

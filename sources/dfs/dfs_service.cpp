@@ -34,6 +34,7 @@
 #include "runtime/deadline_task.h"
 
 #include <algorithm>
+#include <charconv>
 
 #include <boost/asio/post.hpp>
 
@@ -60,9 +61,55 @@ namespace {
     }
 } // namespace
 
+struct DfsService::VectorWriteBudget : std::enable_shared_from_this<VectorWriteBudget> {
+    struct Ticket {
+        std::shared_ptr<VectorWriteBudget> budget;
+        std::string                        peer;
+        std::size_t                        bytes  = 0;
+        bool                               active = false;
+        ~Ticket() {
+            if (!active)
+                return;
+            std::lock_guard lock(budget->mutex);
+            budget->bytes -= bytes;
+            --budget->jobs;
+            const auto found = budget->peers.find(peer);
+            if (--found->second == 0)
+                budget->peers.erase(found);
+        }
+    };
+    explicit VectorWriteBudget(boost::asio::any_io_executor executor)
+        : strand(boost::asio::make_strand(executor)) {
+    }
+    boost::asio::strand<boost::asio::any_io_executor> strand;
+    std::atomic_bool                                  stopped { false };
+    std::mutex                                        mutex;
+    std::size_t                                       bytes = 0;
+    std::size_t                                       jobs  = 0;
+    std::map<std::string, unsigned>                   peers;
+
+    std::shared_ptr<Ticket> acquire(std::string_view peer, std::size_t size) {
+        auto ticket    = std::make_shared<Ticket>();
+        ticket->budget = shared_from_this();
+        ticket->peer   = peer;
+        ticket->bytes  = size;
+        std::lock_guard lock(mutex);
+        const auto      found = peers.find(ticket->peer);
+        if (stopped || jobs >= 32 || size > 8 * 1024 * 1024 - bytes
+            || (found != peers.end() && found->second >= 8))
+            return { };
+        ++peers[ticket->peer];
+        bytes += size;
+        ++jobs;
+        ticket->active = true;
+        return ticket;
+    }
+};
+
 DfsService::DfsService(ExtraChain::Core::ExtraChainNode *node)
     : node(node)
     , vector_sync_(std::make_unique<Dfs::VectorSync>(node))
+    , vector_write_budget_(std::make_shared<VectorWriteBudget>(node->storage_executor()))
     , dirs_manager_(DirsManager(node))
     , load_manager_(LoadManager(node)) {
     // Default download rank for the raccoon actor (vectors and files) is 1.
@@ -251,6 +298,7 @@ void DfsService::notify_vector_row_removed(const ActorId &owner_id, const Dfs::D
 }
 
 void DfsService::prepare_shutdown() {
+    vector_write_budget_->stopped.store(true);
     vector_sync_->stop();
     load_manager_.stop();
     std::lock_guard lock(delayed_tasks_mutex_);
@@ -2083,13 +2131,36 @@ void DfsService::network_response_content_vector(
     });
 }
 
-void DfsService::network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
-    // Off the dispatch thread, like network_response_content_vector next door. This path
-    // writes sqlite, and since the connection now waits for a contended write lock
-    // instead of dropping the row, doing it inline could stall message dispatch for
-    // seconds — the same starvation that used to push consensus traffic out of the
-    // acceptance window behind bulk transfers.
-    node->post_storage([this, owner_id, file_id, row] {
+bool DfsService::network_vector_add(const ActorId        &owner_id,
+                                    const std::string    &file_id,
+                                    const DbRow          &row,
+                                    std::string_view      peer,
+                                    std::function<void()> on_accepted) {
+    if (owner_id.is_zero() || !Dfs::Path::file_path(owner_id, file_id).has_value() || peer.size() > 64
+        || row.size() > 2048 || !row.contains("actor") || !row.contains("sign") || !row.contains("timestamp")
+        || !row.contains("status") || row.at("sign").size() != crypto_sign_BYTES
+        || (row.at("status") != "0" && row.at("status") != "1") || !ActorId::create(row.at("actor")).has_value())
+        return false;
+    const auto   &text      = row.at("timestamp");
+    std::uint64_t timestamp = 0;
+    const auto    parsed    = std::from_chars(text.data(), text.data() + text.size(), timestamp);
+    if (text.empty() || parsed.ec != std::errc() || parsed.ptr != text.data() + text.size())
+        return false;
+    std::size_t bytes = 0;
+    for (const auto &[name, value] : row) {
+        if (name.size() > 1024 * 1024 - bytes)
+            return false;
+        bytes += name.size();
+        if (value.size() > 1024 * 1024 - bytes)
+            return false;
+        bytes += value.size();
+    }
+    const auto ticket = vector_write_budget_->acquire(peer, bytes);
+    if (!ticket)
+        return false;
+    auto work = [this, owner_id, file_id, row, timestamp, ticket, on_accepted = std::move(on_accepted)]() mutable {
+        if (ticket->budget->stopped)
+            return;
         auto res = make_vector(owner_id, file_id);
         if (!res.has_value()) {
             boost::asio::post(node->serial_executor(), [this, owner_id, file_id] {
@@ -2097,45 +2168,41 @@ void DfsService::network_vector_add(const ActorId &owner_id, const std::string &
             });
             return;
         }
-
         auto &[dir_row, dfs_vector] = res.value();
-        auto operation_res          = dfs_vector.local_add(row, true);
-        // load_manager_.finish_him(owner_id, dir_row);
-
-        if (!operation_res) {
-            // Was silent before: a row rejected here is a chat message the user never
-            // sees, and nothing re-requests it (docs/TODO.md 0.45).
-            eWarning("[Dfs] Vector row not stored: {} / {}", owner_id, file_id);
-        }
-
-        if (!operation_res) {
-            // Nothing was stored, so the catalog row is unchanged. Touching it here also
-            // read row.at("timestamp") on a row local_add may have rejected precisely
-            // for lacking a timestamp — std::out_of_range on the storage thread, and
-            // the node is gone.
+        if (dir_row.state == Dfs::FileState::Removed)
             return;
-        }
-
-        auto hash_size = dfs_vector.data_hash_size();
-        if (hash_size.has_value()) {
-            dir_row.hash = hash_size.value().first;
-            dir_row.size = hash_size.value().second;
-            // local_add verified the row, so the timestamp is present and numeric.
-            dir_row.last_modified = std::stoull(row.at("timestamp"));
-            Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
-                                                                    owner_id,
-                                                                    dir_row,
-                                                                    false);
-        }
-
-        // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
-        if (row.at("status") == "1") {
+        const auto result = dfs_vector.local_add(row, true);
+        if (!result.has_value() || !result.value())
+            return;
+        const auto hash_size = dfs_vector.data_hash_size();
+        if (!hash_size.has_value())
+            return;
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::max(dir_row.last_modified, timestamp);
+        if (!Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
+                                                                     owner_id,
+                                                                     dir_row,
+                                                                     false))
+            return;
+        if (row.at("status") == "1")
             notify_vector_row_added(owner_id, dir_row, row);
-        } else {
+        else
             notify_vector_row_removed(owner_id, dir_row, row);
-        }
         node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
-    });
+        if (on_accepted) {
+            auto accepted = [ticket, on_accepted = std::move(on_accepted)] {
+                if (!ticket->budget->stopped)
+                    on_accepted();
+            };
+            boost::asio::post(node->serial_executor(),
+                              ExtraChain::Core::Runtime::guard_handler("accepted vector row",
+                                                                       std::move(accepted)));
+        }
+    };
+    boost::asio::post(vector_write_budget_->strand,
+                      ExtraChain::Core::Runtime::guard_handler("vector row ingress", std::move(work)));
+    return true;
 }
 
 void DfsService::network_request_file_state(const ActorId     &owner_id,

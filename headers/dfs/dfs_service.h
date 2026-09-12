@@ -132,6 +132,8 @@ public:
 private:
     ExtraChain::Core::ExtraChainNode *node;
     std::unique_ptr<Dfs::VectorSync>  vector_sync_;
+    struct VectorWriteBudget;
+    std::shared_ptr<VectorWriteBudget> vector_write_budget_;
 
     FileEvent                                       stored_event_;
     FileEvent                                       added_event_;
@@ -598,7 +600,11 @@ public:
 
     void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
     void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
-    void network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+    bool network_vector_add(const ActorId        &owner_id,
+                            const std::string    &file_id,
+                            const DbRow          &row,
+                            std::string_view      peer        = { },
+                            std::function<void()> on_accepted = { });
 
     void network_request_file_state(const ActorId     &owner_id,
                                     const std::string &file_id,

@@ -1935,7 +1935,7 @@ void NetworkService::message_received(const std::string &message,
         return;
     }
 
-    if (message.size() < crypto_sign_BYTES) {
+    if (message.size() < crypto_sign_BYTES || message.size() > 72 * 1024 * 1024) {
         return;
     }
     const std::string_view msg(message.data(), message.size() - crypto_sign_BYTES);
@@ -1950,6 +1950,13 @@ void NetworkService::message_received(const std::string &message,
     }
 
     MessageBody message_body = std::move(message_body_expected).value();
+    const auto  bounded_identifier = [](const std::string &value) {
+        return value.size() <= 64;
+    };
+    if (!bounded_identifier(message_body.init_sender_identifier)
+        || !std::ranges::all_of(message_body.nodes_identifiers_to_ignore, bounded_identifier)
+        || !std::ranges::all_of(message_body.nodes_identifiers_to_ignore_later, bounded_identifier))
+        return;
     std::size_t payload_limit = 0;
     switch (message_body.message_type) {
     case MessageType::Custom:
@@ -1970,7 +1977,8 @@ void NetworkService::message_received(const std::string &message,
     }
     if (payload_limit != 0
         && (message_body.data.size() > payload_limit
-            || !MessagePack::has_bounded_structure(message_body.data, 8192, 2048, 16)))
+            || !MessagePack::has_bounded_structure(message_body.data, 8192, 2048, 16)
+            || !broadcast_budget_.accept(identifier, message.size())))
         return;
     const auto  node_id =
         NodeId { .actor_id = message_body.init_sender_id, .node_identifier = message_body.init_sender_identifier };
@@ -2673,11 +2681,14 @@ void NetworkService::message_received(const std::string &message,
                 eLog("[NetworkService] DfsVectorAdd received so far: {}", count);
             }
         }
-        node->dfs_service()->network_vector_add(db_content_result->owner_id,
-                                                db_content_result->file_id,
-                                                db_content_result->row);
-
-        send_broadcast_message_further(package_data);
+        const auto relay = std::make_shared<NetworkPackageStorage>(package_data);
+        node->dfs_service()->network_vector_add(db_content_result.value().owner_id,
+                                                db_content_result.value().file_id,
+                                                db_content_result.value().row,
+                                                identifier,
+                                                [this, relay] {
+                                                    send_broadcast_message_further(*relay);
+                                                });
         break;
     }
 

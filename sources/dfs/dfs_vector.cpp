@@ -626,13 +626,13 @@ bool DfsVector::store_add(DbRow &row) {
     row["actor"] = actor_.id().to_string();
     row["sign"]  = ByteArray(sign.value()).toString();
     auto res     = local_add(row, false);
-    return res;
+    return res.has_value();
 }
 
-bool DfsVector::local_add(const DbRow &row, bool check) {
+std::expected<bool, DfsVectorError> DfsVector::local_add(const DbRow &row, bool check) {
     if (!this->verify(row)) {
         eWarning("[DfsVector] local_add refused, row does not verify: {} / {}", file_actor_id_, file_id_);
-        return false;
+        return std::unexpected(DfsVectorError::Adding);
     }
 
     std::string field = "actor";
@@ -641,41 +641,43 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
     }
     if (!row.contains(field) || !row_timestamp(row).has_value()) {
         eWarning("[DfsVector] local_add refused, no primary field or timestamp: {} / {}", file_actor_id_, file_id_);
-        return false;
+        return std::unexpected(DfsVectorError::Adding);
     }
 
     DbConnector db(file_path_);
     if (!db.open()) {
         eWarning("[DfsVector] local_add refused, cannot open {}", file_path_.string());
-        return false;
+        return std::unexpected(DfsVectorError::Adding);
     }
 
     if (!db.query("BEGIN IMMEDIATE")) {
-        return false;
+        return std::unexpected(DfsVectorError::Adding);
     }
     Dfs::VectorIndex index(db, field);
     if (!index.root().has_value()) {
         db.query("ROLLBACK");
-        return false;
+        return std::unexpected(DfsVectorError::Adding);
     }
     if (check) {
         auto existing = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field),
                                   "Vector",
                                   { { field, row.at(field) } });
         if (!existing.empty() && compare_row_revisions(row, existing.front()) <= 0) {
-            return db.query("COMMIT");
+            if (!db.query("COMMIT"))
+                return std::unexpected(DfsVectorError::Adding);
+            return false;
         }
     }
     if (!Dfs::upsert_vector_row(db, field, row)) {
         db.query("ROLLBACK");
-        return false;
+        return std::unexpected(DfsVectorError::Adding);
     }
     const auto stored =
         db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field), "Vector", { { field, row.at(field) } });
     if (stored.size() != 1 || !verify(stored.front()) || !index.update(row.at(field)).has_value()
         || !db.query("COMMIT")) {
         db.query("ROLLBACK");
-        return false;
+        return std::unexpected(DfsVectorError::Adding);
     }
     return true;
 }
