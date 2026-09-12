@@ -20,6 +20,8 @@
 #pragma once
 
 #include <algorithm>
+#include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -165,13 +167,15 @@ protected:
     sqlite3        *db     = nullptr;
     DbConnectorType m_type = DbConnectorType::Regular;
 
-    // Opt in only when this connector is the process-local owner of its database.
-    std::unique_ptr<std::recursive_mutex> connection_mutex_;
+    // Independent owners use one mutex; cooperating connectors share an explicit group
+    std::shared_ptr<std::recursive_mutex> connection_mutex_;
     std::recursive_mutex &operation_mutex();
 
 public:
     explicit DbConnector(const std::string &filePath, DbConnectorType type = DbConnectorType::Regular);
     DbConnector(const std::string &filePath, DbConnectorType type, DbConnectorLockScope lockScope);
+    DbConnector(const std::string &filePath, DbConnectorType type,
+                std::shared_ptr<std::recursive_mutex> lockGroup);
     explicit DbConnector(const std::filesystem::path &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(const FsPath &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(const char *filePath, DbConnectorType type = DbConnectorType::Regular);

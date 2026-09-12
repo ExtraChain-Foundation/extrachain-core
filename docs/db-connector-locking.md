@@ -21,9 +21,29 @@ databases keep their existing shared scope because independent connectors may
 access the same collection. Neither opt-in bypasses checks, caches stale values,
 changes authorization, or changes DAG synchronization.
 
+## Cooperating Connections
+
+The explicit non-null `shared_ptr<recursive_mutex>` constructor groups multiple
+cooperating connectors under one retained SQL-operation lock. All four ActorIndex
+connections use the same group: construction, batch save, individual index save
+and ID enumeration. Unrelated database work no longer acquires the actor-store
+lock, while actor-store SQL retains its original serialization and recursive
+behavior. The lock covers the same SQL operations as before, not the surrounding
+Qt signals, filesystem work or whole batch transactions. No schema, journal,
+busy handling, actor counters, validation or owner-thread dispatch was changed.
+
+Each connector retains the group's lifetime, including after a move. Every
+cooperating connection to the same store must use that same group; do not create
+independent per-connection locks for them. The default global shared scope and
+the single-owner `Connection` opt-in keep their existing contracts. Groups also
+require thread-safe SQLite. This C++ class-layout change requires rebuilding
+dependent core/application targets together; it is not a drop-in ABI-compatible
+replacement for an old binary.
+
 This scope does not make concurrent connector destruction, `open`/`close`, escaped
 raw SQLite handles or returned iterators safe. Their existing lifetime contracts
-still apply. Do not opt multiple connectors to the same file into this mode.
+still apply. Do not opt multiple connectors to the same file into independent
+`Connection` scopes; use an explicitly shared group only after auditing ownership.
 
 ## Regression Tests
 
@@ -35,6 +55,15 @@ Coverage: unrelated connection progress, serialization within one connection,
 unchanged default shared locking, recursive bound operations and a moved
 connector. The baseline shared-lock implementation fails unrelated progress.
 Native application/load qualification remains separate from these unit tests.
+
+Actor-store regressions instantiate the real `ActorIndex` with no node/network
+inside temporary directories. Three controls reproduce unrelated SQL blocking
+in construction, ID reads and owner-thread saves. A commit hook on the actual
+actor connection checks that a concurrent actor reader still waits for the
+actor commit. Save/reopen bytes, duplicate handling and owner-thread signals
+are checked. Additional tests retain group ownership/serialization across moves
+and distinguish independent groups. Passing them does not remove synchronous
+actor-file/SQLite writes or qualify full-load latency; task 185 remains separate.
 
 The actual DFS factory is additionally tested against an unrelated blocked SQL
 operation, plus concurrent consumers of its one shared connector. The first
