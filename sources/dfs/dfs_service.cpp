@@ -2056,28 +2056,37 @@ void DfsService::network_response_content_vector(
                 // size; a retry that adds nothing ends the repair.
                 const Dfs::FileLink link { .owner_id = dfs_vector_content.owner_id,
                                            .file_id  = dfs_vector_content.file_id };
-                const auto          rows = rows_now.has_value() ? rows_now->size() : 0;
+                const auto          rows  = rows_now.has_value() ? rows_now->size() : 0;
                 bool                retry = false;
+                std::chrono::seconds delay { 5 };
                 {
                     std::lock_guard lock(vector_repair_mutex_);
                     auto           &state = vector_repair_[link];
-                    if (state.last_rows == 0 && state.attempts_left == 0) {
-                        state.attempts_left = 6;
-                    } else if (rows <= state.last_rows) {
-                        state.attempts_left = 0; // no progress from that source
+                    if (rows > state.last_rows) {
+                        // Progress: keep asking briskly, the source has more to give.
+                        state.idle_rounds = 0;
+                        delay             = std::chrono::seconds(5);
+                    } else {
+                        // No progress: back off rather than give up. The peer may be
+                        // mid-publication and complete a minute from now; a copy that
+                        // stopped asking stays short for the life of the process.
+                        state.idle_rounds = std::min(state.idle_rounds + 1, 5);
+                        delay             = std::chrono::seconds(15 * state.idle_rounds);
                     }
                     state.last_rows = rows;
-                    if (state.attempts_left > 0) {
-                        --state.attempts_left;
-                        retry = true;
+                    const auto now  = std::chrono::steady_clock::now();
+                    if (now >= state.next_attempt) {
+                        state.next_attempt = now + delay;
+                        retry              = true;
                     }
                 }
                 if (retry) {
-                    eLog("[Dfs] Vector still short after merge, asking another source: {} / {} ({} rows)",
+                    eLog("[Dfs] Vector still short after merge, will ask again in {}s: {} / {} ({} rows)",
+                         delay.count(),
                          dfs_vector_content.owner_id,
                          dfs_vector_content.file_id,
                          rows);
-                    schedule_after(std::chrono::seconds(15),
+                    schedule_after(delay,
                                    [this, owner_id = dfs_vector_content.owner_id,
                                     file_id = dfs_vector_content.file_id] {
                                        request_vector_content(owner_id, file_id, /*force=*/true);

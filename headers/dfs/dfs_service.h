@@ -281,8 +281,10 @@ public:
     // How many forced snapshot retries a short vector may still ask for, and what
     // it looked like last time: a retry that does not grow the copy is pointless.
     struct VectorRepair {
-        int         attempts_left = 0;
-        std::size_t last_rows     = 0;
+        int                                   attempts_left = 0;
+        std::size_t                           last_rows     = 0;
+        std::chrono::steady_clock::time_point next_attempt {};
+        int                                   idle_rounds = 0;
     };
     std::mutex                                     vector_repair_mutex_;
     std::map<Dfs::FileLink, VectorRepair>           vector_repair_;
