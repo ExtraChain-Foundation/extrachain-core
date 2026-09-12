@@ -39,7 +39,7 @@ DbConnector::DbConnector(const std::string &filePath, DbConnectorType type)
 DbConnector::DbConnector(const std::string &filePath, DbConnectorType type, DbConnectorLockScope lockScope)
 {
     if (lockScope == DbConnectorLockScope::Connection) {
-        connection_mutex_ = std::make_unique<std::recursive_mutex>();
+        connection_mutex_ = std::make_shared<std::recursive_mutex>();
     }
     if (filePath.empty()) {
         eFatal("[DbConnector] Empty file name");
@@ -64,6 +64,16 @@ DbConnector::DbConnector(const std::string &filePath, DbConnectorType type, DbCo
     }
 
     this->m_file = filePath;
+}
+
+DbConnector::DbConnector(const std::string &filePath, DbConnectorType type,
+                         std::shared_ptr<std::recursive_mutex> lockGroup)
+    : DbConnector(filePath, type, DbConnectorLockScope::Shared)
+{
+    if (!lockGroup) {
+        eFatal("[DbConnector] Empty lock group");
+    }
+    connection_mutex_ = std::move(lockGroup);
 }
 
 DbConnector::DbConnector(const std::filesystem::path &filePath, DbConnectorType type)
@@ -109,7 +119,7 @@ QString DbConnector::sqlite_version() {
 
 bool DbConnector::open() {
     if (connection_mutex_ && sqlite3_threadsafe() == 0) {
-        eWarning("[DbConnector] Connection-local locking requires a thread-safe SQLite build");
+        eWarning("[DbConnector] Independent locking requires a thread-safe SQLite build");
         return false;
     }
     if (is_open()) {

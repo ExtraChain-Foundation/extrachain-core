@@ -25,6 +25,10 @@
 #include "network/network_manager.h"
 #include "utils/thread_pool_boost.h"
 
+namespace {
+const auto actorDatabaseLock = std::make_shared<std::recursive_mutex>();
+}
+
 ActorId ActorIndex::network_id() {
     /*
     if (network_id_.is_zero()) {
@@ -49,7 +53,7 @@ ActorId ActorIndex::network_id() {
 ActorIndex::ActorIndex(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
-    DbConnector db(folder_path_ + "actors");
+    DbConnector db(folder_path_ + "actors", DbConnectorType::Regular, actorDatabaseLock);
     bool        isDbOpen   = db.open();
     bool        isDbCreate = db.create_table(Config::DataStorage::actorsTableCreate);
 
@@ -389,7 +393,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic
 }
 
 std::expected<void, ActorSaveError> ActorIndex::save_actors() {
-    DbConnector db(folder_path_ + "actors");
+    DbConnector db(folder_path_ + "actors", DbConnectorType::Regular, actorDatabaseLock);
     if (!db.open()) {
         return std::unexpected(ActorSaveError::NotOpened);
     }
@@ -435,7 +439,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actors() {
 bool ActorIndex::save_actor_index(const Actor<KeyPublic> &actor) {
     this->records_++;
 
-    DbConnector db(folder_path_ + "actors");
+    DbConnector db(folder_path_ + "actors", DbConnectorType::Regular, actorDatabaseLock);
     if (!db.open()) {
         return false;
     }
@@ -453,7 +457,7 @@ bool ActorIndex::save_actor_index(const Actor<KeyPublic> &actor) {
 std::vector<ActorId> ActorIndex::read_all_actors_ids() {
     std::vector<ActorId> result;
 
-    DbConnector db(folder_path_ + "actors");
+    DbConnector db(folder_path_ + "actors", DbConnectorType::Regular, actorDatabaseLock);
     db.open();
     auto actors = db.select("SELECT id FROM Actors ORDER by id");
     for (auto &actor : actors) {
