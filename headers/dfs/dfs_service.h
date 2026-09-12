@@ -278,6 +278,14 @@ public:
     }
 
     void request_vector_content(const ActorId &owner_id, const std::string &file_id, bool force = false);
+    // How many forced snapshot retries a short vector may still ask for, and what
+    // it looked like last time: a retry that does not grow the copy is pointless.
+    struct VectorRepair {
+        int         attempts_left = 0;
+        std::size_t last_rows     = 0;
+    };
+    std::mutex                                     vector_repair_mutex_;
+    std::map<Dfs::FileLink, VectorRepair>           vector_repair_;
 
     // Per-actor filename overrides win over per-actor ranks; used to pull a specific vector
     // off the critical path (e.g. the large network Usernames vector -> RANK_OTHER_VECTORS).

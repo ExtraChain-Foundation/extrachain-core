@@ -2050,14 +2050,43 @@ void DfsService::network_response_content_vector(
                 Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(dfs_vector_content.owner_id,
                                                                                   dfs_vector_content.file_id);
             if (!dir_row.hash.empty() && content_hash != dir_row.hash) {
-                eLog("[Dfs] Vector still short after merge, asking another source: {} / {}",
-                     dfs_vector_content.owner_id,
-                     dfs_vector_content.file_id);
-                schedule_after(std::chrono::seconds(5),
-                               [this, owner_id = dfs_vector_content.owner_id,
-                                file_id = dfs_vector_content.file_id] {
-                                   request_vector_content(owner_id, file_id, /*force=*/true);
-                               });
+                // Bounded, and only while the copy keeps growing: each retry pulls a
+                // whole snapshot, so an unbounded loop ate gigabytes and the nodes
+                // were OOM-killed on the stand. Six attempts cover a committee this
+                // size; a retry that adds nothing ends the repair.
+                const Dfs::FileLink link { .owner_id = dfs_vector_content.owner_id,
+                                           .file_id  = dfs_vector_content.file_id };
+                const auto          rows = rows_now.has_value() ? rows_now->size() : 0;
+                bool                retry = false;
+                {
+                    std::lock_guard lock(vector_repair_mutex_);
+                    auto           &state = vector_repair_[link];
+                    if (state.last_rows == 0 && state.attempts_left == 0) {
+                        state.attempts_left = 6;
+                    } else if (rows <= state.last_rows) {
+                        state.attempts_left = 0; // no progress from that source
+                    }
+                    state.last_rows = rows;
+                    if (state.attempts_left > 0) {
+                        --state.attempts_left;
+                        retry = true;
+                    }
+                }
+                if (retry) {
+                    eLog("[Dfs] Vector still short after merge, asking another source: {} / {} ({} rows)",
+                         dfs_vector_content.owner_id,
+                         dfs_vector_content.file_id,
+                         rows);
+                    schedule_after(std::chrono::seconds(15),
+                                   [this, owner_id = dfs_vector_content.owner_id,
+                                    file_id = dfs_vector_content.file_id] {
+                                       request_vector_content(owner_id, file_id, /*force=*/true);
+                                   });
+                }
+            } else {
+                std::lock_guard lock(vector_repair_mutex_);
+                vector_repair_.erase(
+                    Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id });
             }
         }
         if (!res_handle) {
