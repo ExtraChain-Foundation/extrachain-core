@@ -18,6 +18,7 @@
  */
 
 #include "dfs/load_manager.h"
+#include "dfs/vector_sync.h"
 
 #include "core/extrachain_node.h"
 #include "network/network_service.h"
@@ -460,11 +461,16 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                                    identifier.second.counter,
                                    m_amount_file_fragments_requests->size(),
                                    active_request_limit);
-                            this->node->network()->send_message(output,
-                                                                MessageType::DfsFileRequest,
-                                                                SendMode::Focused,
-                                                                MessageStatus::NoStatus,
-                                                                responder);
+                            if (load_info.dir_row.type == Dfs::FileType::Vector
+                                || load_info.dir_row.type == Dfs::FileType::Dictionary) {
+                                node->dfs()->vector_sync().request(file_link, identifier.first);
+                            } else {
+                                node->network()->send_message(output,
+                                                              MessageType::DfsFileRequest,
+                                                              SendMode::Focused,
+                                                              MessageStatus::NoStatus,
+                                                              responder);
+                            }
 
                             // eLog("LoadManager::timer_runner, request source {}, attempt {}", identifier.first,
                             // identifier.second.counter);

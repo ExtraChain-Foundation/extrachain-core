@@ -53,6 +53,9 @@ namespace ExtraChain::Core {
 }
 class DirsManager;
 class LoadManager;
+namespace Dfs {
+    class VectorSync;
+}
 namespace ExtraChain::Core {
     class DeadlineTask;
 }
@@ -128,6 +131,7 @@ public:
 
 private:
     ExtraChain::Core::ExtraChainNode *node;
+    std::unique_ptr<Dfs::VectorSync>  vector_sync_;
 
     FileEvent                                       stored_event_;
     FileEvent                                       added_event_;
@@ -160,6 +164,7 @@ private:
 
 public:
     explicit DfsService(ExtraChain::Core::ExtraChainNode *node);
+    Dfs::VectorSync &vector_sync();
     virtual ~DfsService();
 
     DfsService(const DfsService &)            = delete;

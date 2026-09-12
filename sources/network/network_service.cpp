@@ -27,6 +27,7 @@
 #include "core/extrachain_node.h"
 #include "managers/luminance_manager.h"
 #include "network/network_service.h"
+#include "dfs/vector_sync.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
 #include "utils/msgpack_limits.h"
@@ -1248,7 +1249,8 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
 
     if (message_type == MessageType::DfsFileExistNotification || message_type == MessageType::DfsFileFragment
         || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows
-        || message_type == MessageType::DfsSyncDigest || message_type == MessageType::DfsSyncDigestReply) {
+        || message_type == MessageType::DfsSyncDigest || message_type == MessageType::DfsSyncDigestReply
+        || message_type == MessageType::DfsVectorSyncReply) {
         // The digest reply must not overtake the rows it announces (#75): same lane.
         priority = SocketService::Priority::Low;
     }
@@ -2611,21 +2613,26 @@ void NetworkService::message_received(const std::string &message,
         break;
     }
 
-    case MessageType::DfsVectorCreation:
-    case MessageType::DfsVectorContent: {
-        auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
-        if (!db_content_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for vector content", type);
-            return;
-        }
-
-        node->dfs_service()->network_response_content_vector(db_content_result.value());
-
-        if (type == MessageType::DfsVectorCreation) {
-            send_broadcast_message_further(package_data);
-        }
+    case MessageType::DfsVectorSyncRequest: {
+        if (status == MessageStatus::Request)
+            node->dfs_service()->vector_sync().receive_request(serialized, responder);
         break;
     }
+    case MessageType::DfsVectorSyncReply: {
+        if (status == MessageStatus::Response)
+            node->dfs_service()->vector_sync().receive_reply(serialized, responder);
+        break;
+    }
+    case MessageType::DfsVectorCreation: {
+        if (serialized.size() > 256 * 1024)
+            return;
+        const auto metadata = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
+        if (metadata.has_value() && metadata.value().content.empty())
+            node->dfs_service()->request_vector_content(metadata.value().owner_id, metadata.value().file_id);
+        break;
+    }
+    case MessageType::DfsVectorContent:
+        break;
 
     case MessageType::DfsVectorAdd: {
         auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowAdd>(serialized);

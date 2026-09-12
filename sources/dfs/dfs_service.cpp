@@ -18,6 +18,7 @@
  */
 
 #include "dfs/dfs_service.h"
+#include "dfs/vector_sync.h"
 
 #include "chain/actor_index.h"
 #include "dfs/dfs_utils.h"
@@ -61,6 +62,7 @@ namespace {
 
 DfsService::DfsService(ExtraChain::Core::ExtraChainNode *node)
     : node(node)
+    , vector_sync_(std::make_unique<Dfs::VectorSync>(node))
     , dirs_manager_(DirsManager(node))
     , load_manager_(LoadManager(node)) {
     // Default download rank for the raccoon actor (vectors and files) is 1.
@@ -115,6 +117,10 @@ DfsService::DfsService(ExtraChain::Core::ExtraChainNode *node)
 DfsService::~DfsService() {
     prepare_shutdown();
     eLog("DfsService::~DfsService()");
+}
+
+Dfs::VectorSync &DfsService::vector_sync() {
+    return *vector_sync_;
 }
 
 DfsService::FileEvent &DfsService::stored_event() noexcept {
@@ -245,6 +251,7 @@ void DfsService::notify_vector_row_removed(const ActorId &owner_id, const Dfs::D
 }
 
 void DfsService::prepare_shutdown() {
+    vector_sync_->stop();
     load_manager_.stop();
     std::lock_guard lock(delayed_tasks_mutex_);
     for (const auto &task : delayed_tasks_) {
@@ -1584,9 +1591,6 @@ int DfsService::download_rank(const ActorId &owner_id, const Dfs::DirRow &dir_ro
     return is_vector ? RANK_OTHER_VECTORS : RANK_FILES;
 }
 
-// Direct request for full vector content (DfsFileRequest -> peer replies with a
-// DfsVectorContent package): handle_package restores both the DB and the .vector companion.
-// Used to repair vectors with a lost template (read_template).
 void DfsService::request_vector_content(const ActorId &owner_id, const std::string &file_id, bool force) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
 
@@ -1604,14 +1608,7 @@ void DfsService::request_vector_content(const ActorId &owner_id, const std::stri
         request_vector_times_[file_link] = now;
     }
 
-    eLog("[Dfs] Request vector content: {} / {}", owner_id, file_id);
-    Dfs::FileLinkFragment request;
-    request.file_link = file_link;
-    request.fragment_numbers.emplace(1);
-    node->network()->send_message(request,
-                                  MessageType::DfsFileRequest,
-                                  SendMode::Neighbours,
-                                  MessageStatus::NoStatus);
+    vector_sync_->request(file_link);
 }
 
 void DfsService::request_file(const ActorId &owner_id, const std::string &file_id) {
@@ -1930,50 +1927,8 @@ void DfsService::network_change_collection(const ActorId                 &owner_
 void DfsService::network_request_vector(const ActorId     &owner_id,
                                         const std::string &file_id,
                                         const Responder   &responder) {
-    auto dirRowExp =
-        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
-    if (!dirRowExp.has_value()) {
-        return;
-    }
-    auto dirRow = dirRowExp.value();
-
-    auto main_actor = node->account_controller()->current_profile().main()->get();
-    auto encryption = dirRow.encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
-    auto dfs_vector =
-        DfsVector::load(node, main_actor, owner_id, file_id, encryption, Dfs::DataSecurityData(), dirRow.type);
-
-    if (!dfs_vector.has_value()) {
-        return;
-    }
-
-    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows =
-        dfs_vector->generate_content_package();
-    if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
-        eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
-        return;
-    }
-    // An empty vector still has to be answered: staying silent left the requester
-    // without the vector files forever (the dir row replicates, the payload never
-    // does, and nothing retries). Freshly created vectors are exactly this case.
-    //
-    // The answer must carry the template even when there are no rows. A package with
-    // only owner_id/file_id set is undeliverable: handle_package rejects it at
-    // `vector_template.fields().size() == 0` and the receiver drops it — 952 such
-    // rejections in the first three minutes of a run. Rebuild the package with an
-    // explicitly empty row set instead of hand-rolling a stub.
-    Dfs::Packets::DfsVectorContentPackage package;
-    if (rows.has_value()) {
-        package = rows.value();
-    } else {
-        auto empty = dfs_vector->generate_content_package_empty();
-        if (!empty.has_value()) {
-            eWarning("[DfsCollection] Can't build empty package for {} / {}", owner_id, file_id);
-            return;
-        }
-        package = empty.value();
-    }
-
-    responder.send_response(package, MessageType::DfsVectorContent, SendMode::Focused, MessageStatus::Response);
+    vector_sync_->receive_request(MessagePack::serialize(Dfs::VectorSyncRequest { .link = { owner_id, file_id } }),
+                                  responder);
 }
 
 std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsService::make_vector(
@@ -2040,12 +1995,12 @@ void DfsService::network_response_content_vector(
 
         bool res_handle = dfs_vector.handle_package(dfs_vector_content);
         if (res_handle) {
-            const auto rows_now = dfs_vector.read_rows("");
+            const auto index_now = dfs_vector.index_root();
             eLog("[Dfs] Vector content package merged: {} / {} package={} rows, local={} rows",
                  dfs_vector_content.owner_id,
                  dfs_vector_content.file_id,
                  dfs_vector_content.content.size(),
-                 rows_now.has_value() ? rows_now->size() : 0);
+                 index_now.has_value() ? index_now.value().tree.rows : 0);
 
             // A snapshot from a peer that is itself short leaves us short: merging
             // 1670 rows into a vector whose owner has 2000 is progress, not an end
@@ -2057,13 +2012,11 @@ void DfsService::network_response_content_vector(
                 Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(dfs_vector_content.owner_id,
                                                                                   dfs_vector_content.file_id);
             if (!dir_row.hash.empty() && content_hash != dir_row.hash) {
-                // Bounded, and only while the copy keeps growing: each retry pulls a
-                // whole snapshot, so an unbounded loop ate gigabytes and the nodes
-                // were OOM-killed on the stand. Six attempts cover a committee this
-                // size; a retry that adds nothing ends the repair.
+                // A source can be publishing while this snapshot is transferred.
+                // Back off when a new snapshot adds no rows.
                 const Dfs::FileLink link { .owner_id = dfs_vector_content.owner_id,
                                            .file_id  = dfs_vector_content.file_id };
-                const auto          rows  = rows_now.has_value() ? rows_now->size() : 0;
+                const auto           rows  = index_now.has_value() ? index_now.value().tree.rows : 0;
                 bool                retry = false;
                 std::chrono::seconds delay { 5 };
                 {

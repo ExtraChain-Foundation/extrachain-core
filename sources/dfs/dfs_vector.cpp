@@ -817,16 +817,20 @@ std::optional<std::pair<std::string, std::size_t>> DfsVector::calculate_template
     return std::pair { hash_result.value(), size };
 }
 
-std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
+std::expected<Dfs::VectorIndexRoot, std::string> DfsVector::index_root() {
     DbConnector db(file_path_.native());
     if (!db.open(/*create_if_missing*/ false)) {
-        return std::nullopt;
+        return std::unexpected("Cannot open vector index");
     }
 
     const auto field =
         collection_template_.primary.has_value() ? collection_template_.primary.value().name() : "actor";
     Dfs::VectorIndex index(db, field);
-    const auto       root = index.root();
+    return index.root();
+}
+
+std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
+    const auto root = index_root();
     if (!root.has_value()) {
         eWarning("[DfsVector] Cannot read the content index: {} / {}", file_actor_id_, file_id_);
         return std::nullopt;

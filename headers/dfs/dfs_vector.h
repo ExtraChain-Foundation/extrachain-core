@@ -20,6 +20,7 @@
 #pragma once
 
 #include "dfs/dfs_utils.h"
+#include "dfs/vector_index.h"
 
 namespace ExtraChain::Core {
     class ExtraChainNode;
@@ -130,6 +131,7 @@ public:
     std::optional<std::pair<std::string, std::size_t>> calculate_template_file_hash();
 
     std::optional<std::pair<std::string, uint64_t>> data_hash_size();
+    std::expected<Dfs::VectorIndexRoot, std::string> index_root();
 
     bool verify(const DbRow& row);
 

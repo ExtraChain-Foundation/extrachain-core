@@ -96,6 +96,8 @@ enum class MessageType {
     DfsDictionaryContent   = 77,
     DfsDictionaryAdd       = 78,
     DfsDictionaryRemove    = 79,
+    DfsVectorSyncRequest   = 80,
+    DfsVectorSyncReply     = 81,
 
     DfsTempSyncAll = 89,
 
