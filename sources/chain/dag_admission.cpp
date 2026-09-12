@@ -190,7 +190,8 @@ private:
     }
 
     bool can_batch(const Request &request) const {
-        return owner->status_ == DagStatus::Ready && owner->mode_ == DagMode::Full
+        return !owner->shadow_transition_sealed_.load(std::memory_order_acquire)
+               && owner->status_ == DagStatus::Ready && owner->mode_ == DagMode::Full
                && !is_contract_transaction(request.transaction.type())
                && !is_token_migration_transaction(request.transaction.type())
                && request.transaction.type() != TransactionType::Genesis
@@ -400,6 +401,19 @@ private:
 
     void process_batch(const std::vector<std::shared_ptr<Request>> &requests) {
         const auto                                prevalidated = prevalidate(requests);
+        std::unique_lock<std::recursive_mutex>    save_lock(owner->save_mutex_);
+        if (!std::ranges::all_of(requests, [this](const auto &request) {
+                return can_batch(*request);
+            })) {
+            save_lock.unlock();
+            for (const auto &request : requests) {
+                bool committed = false;
+                auto result =
+                    owner->network_transaction_immediate(request->transaction, request->responder, &committed);
+                complete(request->completion, std::move(result), committed);
+            }
+            return;
+        }
         std::map<SectionId, Section>              sections;
         std::unordered_set<std::string>           pending_hashes;
         std::unordered_map<NodeId, std::uint64_t> reservations;
@@ -515,6 +529,7 @@ private:
             cache_catchup_due     = std::chrono::steady_clock::now() + AdmissionCacheIdleDelay;
         }
         condition.notify_all();
+        save_lock.unlock();
         for (const auto &request : accepted) {
             send_result(*request, TransactionProveError::NoError);
             complete(request->completion, {}, true);

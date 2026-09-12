@@ -2871,24 +2871,8 @@ void NetworkService::message_received(const std::string &message,
         break;
     }
 
-    case MessageType::DagSections: {
-        if (status == MessageStatus::Request) {
-            auto range = MessagePack::deserialize<SectionRange>(serialized);
-            if (!range.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for dag sync vector", type);
-                break;
-            }
-
-            auto first = BigNumber::create(range->first);
-            auto last  = BigNumber::create(range->last);
-            if (!first.has_value() || !last.has_value()) {
-                break;
-            }
-
-            node->dag()->network_request_sections(first.value(), last.value(), responder);
-        }
+    case MessageType::DagSections:
         break;
-    }
 
     case MessageType::DagFileSections: {
         if (status == MessageStatus::Request) {

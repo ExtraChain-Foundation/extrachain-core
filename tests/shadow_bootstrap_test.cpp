@@ -134,6 +134,18 @@ int main(int argc, char** argv) {
     const auto snapshot = dag->cache().read_cached_balances();
     TEST_REQUIRE_EQ(snapshot.second.at({ actor.id(), actor.id() }), BigNumberFloat("21"));
     TEST_REQUIRE(dag->read_section(SectionId(45)).has_value());
+    Transaction legacy;
+    legacy.set_type(TransactionType::Reward);
+    legacy.set_sender(actor.id());
+    legacy.set_receiver(actor.id());
+    legacy.set_token(actor.id());
+    legacy.set_section(SectionId(46));
+    legacy.set_amount(BigNumberFloat(1));
+    TEST_REQUIRE(legacy.sign(actor));
+    const auto legacy_result = dag->network_transaction(legacy, Responder(nullptr));
+    TEST_REQUIRE(!legacy_result.has_value());
+    TEST_REQUIRE_EQ(legacy_result.error(), TransactionProveError::IntentRequired);
+    TEST_REQUIRE(!dag->read_section(SectionId(46)).has_value());
     node->cleanUp();
     node.reset();
     std::filesystem::current_path(original);

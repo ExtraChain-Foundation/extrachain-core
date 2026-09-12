@@ -42,6 +42,7 @@
 #include "chain/pack_registry.h"
 #include "chain/hot_section_store.h"
 #include "runtime/event.h"
+#include "runtime/work_budget.h"
 
 #include "3rdparty/rustex.h"
 
@@ -195,14 +196,6 @@ struct DagControl {
     std::string control;
 };
 BOOST_DESCRIBE_STRUCT(DagControl, (), (section_id, control))
-
-struct SectionSync {
-    SectionId               to;
-    std::set<Transaction>   txs;
-    std::vector<DagControl> controls; // need map?
-    SectionId               last_section;
-};
-BOOST_DESCRIBE_STRUCT(SectionSync, (), (to, txs, controls))
 
 struct SectionFileData {
     SectionId   section_id;
@@ -675,23 +668,6 @@ public:
      */
     void network_status_sync_response(const DagLastInfo &last_info, const Responder &responder);
 
-    /**
-     * @brief Request specific sections from the network
-     *
-     * @param from The starting section ID
-     * @param to The ending section ID
-     * @param responder The responder to send the request to
-     */
-    void network_request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
-
-    /**
-     * @brief Process a sections response from the network
-     *
-     * @param compressed The compressed sections data
-     * @param responder The responder that sent the data
-     */
-    void network_request_sections_response(const std::string &compressed, const Responder &responder);
-
     void network_request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder);
     void network_file_sections_response(const std::string &compressed, const Responder &responder);
 
@@ -941,6 +917,7 @@ private:
     std::atomic_uint64_t                           history_revision_    = 0;
     std::map<SectionId, std::string>               pack_hot_cache_;
     std::mutex                                     file_sync_response_mutex_;
+    ExtraChain::Core::WorkBudget file_sync_budget_ { { 384 * 1024 * 1024, 3, 320 * 1024 * 1024, 1 } };
     std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;
     std::recursive_mutex                           sync_last_info_mutex_;
 
@@ -1035,9 +1012,9 @@ private:
                                      bool                file_response,
                                      bool                repair_response = false,
                                      SyncRequestPriority priority        = SyncRequestPriority::Tip);
-    std::optional<std::pair<SectionId, SectionId>> pending_sync_range(const Responder &responder,
-                                                                      const SectionId &to,
-                                                                      bool             file_response) const;
+    std::optional<std::pair<SectionId, SectionId>> pending_sync_range(const Responder                &responder,
+                                                                      const std::optional<SectionId> &to,
+                                                                      bool file_response) const;
     void                     consume_pending_sync_response(const Responder &responder, bool file_response);
     bool                     pending_sync_is_repair(const Responder &responder) const;
     void                     set_state_projection(StateProjectionStatus status,
@@ -1061,6 +1038,9 @@ private:
     /// @param prior transactions already committed by certified-but-unfinalized
     ///        ancestors; they are not in the canonical chain yet, so balance proofs
     ///        must account for them explicitly. Empty for ordinary repair traffic.
+    TransactionProveError validate_initial_transaction(const Transaction &transaction) const;
+    std::optional<std::map<SectionId, std::string>> validated_sync_candidate(
+        const std::map<SectionId, std::string> &peer_sections);
     std::optional<std::map<SectionId, std::string>> validated_repair_candidate(
         const std::map<SectionId, std::string> &peer_sections,
         const std::set<Transaction>            &prior = {});
@@ -1108,7 +1088,6 @@ private:
      * @param to Ending section ID
      * @param responder Responder to send the request to
      */
-    void request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
 
     void request_file_sections(const SectionId &from,
                                const SectionId &to,

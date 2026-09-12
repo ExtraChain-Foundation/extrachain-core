@@ -309,29 +309,11 @@ bool Transaction::operator<(const Transaction &other) const {
 }
 
 bool Transaction::operator==(const Transaction &transaction) const {
-    if (this->section_ != transaction.section())
-        return false;
-    if (this->type() != transaction.type())
-        return false;
-    if (this->sender_ != transaction.sender())
-        return false;
-    if (this->receiver_ != transaction.receiver())
-        return false;
-    if (this->token_ != transaction.token())
-        return false;
-    if (this->amount_ != transaction.amount()) {
-        // return false; // must be commented
-    }
-    if (this->timestamp_ != transaction.timestamp())
-        return false;
-    if (this->meta_ != transaction.meta())
-        return false;
-    if (this->consensus_intent_ != transaction.consensus_intent())
-        return false;
-    if (this->prev_hashs_ != transaction.prev_hashs())
-        return false;
-
-    return true;
+    return section_ == transaction.section_ && type_ == transaction.type_ && sender_ == transaction.sender_
+           && receiver_ == transaction.receiver_ && token_ == transaction.token_ && amount_ == transaction.amount_
+           && timestamp_ == transaction.timestamp_ && meta_ == transaction.meta_
+           && consensus_intent_ == transaction.consensus_intent_ && prev_hashs_ == transaction.prev_hashs_
+           && hash_ == transaction.hash_ && signature_ == transaction.signature_;
 }
 
 void Transaction::operator=(const Transaction &other) {

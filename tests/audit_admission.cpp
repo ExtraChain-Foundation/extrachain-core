@@ -323,7 +323,6 @@ int main(int argc, char** argv) {
         for (const auto& range : { std::pair { SectionId(-20), SectionId(0) },
                                    std::pair { SectionId(0), SectionId(-1) },
                                    std::pair { SectionId(0), SectionId(1000000) } }) {
-            node->dag()->network_request_sections(range.first, range.second, responder);
             node->dag()->network_request_file_sections(range.first, range.second, responder);
             node->dag()->network_request_control_section({ .from = range.first, .to = range.second }, responder);
             TEST_REQUIRE(!node->dag()->hash_interval(range.first, range.second).has_value());

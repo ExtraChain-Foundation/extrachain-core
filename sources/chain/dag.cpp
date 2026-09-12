@@ -356,6 +356,7 @@ void Dag::stop() {
     bool was_started = started_.exchange(false);
     accepting_messages_.store(false);
     set_admission_accepting(false);
+    file_sync_budget_.stop();
 
     // Before anything else it might touch: the watchdog calls start_check().
     if (watchdog_.joinable()) {
@@ -514,17 +515,20 @@ bool Dag::track_pending_sync_response(const Responder    &responder,
     return true;
 }
 
-std::optional<std::pair<SectionId, SectionId>> Dag::pending_sync_range(const Responder &responder,
-                                                                       const SectionId &to,
-                                                                       bool             file_response) const {
+std::optional<std::pair<SectionId, SectionId>> Dag::pending_sync_range(const Responder                &responder,
+                                                                       const std::optional<SectionId> &to,
+                                                                       bool file_response) const {
+    if (responder.identifiers().size() != 1) {
+        return std::nullopt;
+    }
     std::lock_guard lock(sync_response_request_mutex_);
     const auto      pending = pending_sync_responses_.find(responder.message_id());
+    const auto      now     = Utils::current_date_ms();
     if (pending == pending_sync_responses_.end() || pending->second.file_response != file_response
-        || to != pending->second.to
+        || (to.has_value() && to.value() != pending->second.to) || now < pending->second.created_at_ms
+        || now - pending->second.created_at_ms >= 30'000
         || (!pending->second.identifiers.empty()
-            && !std::ranges::any_of(responder.identifiers(), [&](const auto &identifier) {
-                   return pending->second.identifiers.contains(identifier);
-               }))) {
+            && !pending->second.identifiers.contains(*responder.identifiers().begin()))) {
         return std::nullopt;
     }
     return std::pair { pending->second.from, pending->second.to };
@@ -780,23 +784,9 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
             }
             return {};
         }
-
-        /*
-        if (sync_timeout && transaction.section() > current_section_ + 5) {
-            if (!sync_timeout)
-                this->add_to_cached_tx(transaction);
-            this->set_status(DagStatus::Sync);
-            sync_last_index_             = transaction.section();
-            timestamp_bigger_sync_start_ = Utils::current_date_ms();
-            eLog("[Dag] Section bigger: {}", sync_last_index_);
-            this->request_sections(current_section_,
-                                   std::min(sync_last_index_, current_section_ + 100),
-                                   responder);
-            return {};
-        }
-        */
     }
 
+    std::unique_lock<std::recursive_mutex> save_lock(save_mutex_);
     if (transaction.type() == TransactionType::Regular) {
         const auto      sender       = NodeId { .actor_id = transaction.sender(), .node_identifier = "" };
         const auto      current_time = Utils::current_date_ms();
@@ -882,6 +872,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
         }
     }
 
+    save_lock.unlock();
     if (!responder.empty()) {
         responder.send_response(transaction_result,
                                 MessageType::DagTransactionResult,
@@ -1124,7 +1115,7 @@ void Dag::retry_contract_transactions() {
 }
 
 void Dag::request_contract_section(const SectionId &section_id) {
-    request_sections(section_id, section_id, Responder(node->network()));
+    schedule_section_repair(section_id);
 }
 
 std::optional<Section> Dag::read_section(const SectionId &section_id) const {
@@ -2148,7 +2139,7 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
         }
         candidate.value().id = section_id;
 
-        candidate->control.reset();
+        candidate.value().control.reset();
         for (const auto &transaction : candidate->transactions) {
             if (transaction.section() != section_id) {
                 return std::nullopt;
@@ -2166,6 +2157,72 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
     WireFormat::Scope                canonical_scope(WireFormat::Mode::Canonical);
     for (const auto &[section_id, section] : candidate_sections) {
         result.insert_or_assign(section_id, Json::serialize(section));
+    }
+    return result;
+}
+
+TransactionProveError Dag::validate_initial_transaction(const Transaction &transaction) const {
+    const bool genesis = transaction.type() == TransactionType::Genesis;
+    if (transaction.section() != SectionId(genesis ? 0 : 1)
+        || (genesis && (transaction.amount() != 0 || transaction.receiver() != transaction.sender()))) {
+        return genesis ? TransactionProveError::GenesisOnlyZeroSection
+                       : TransactionProveError::BalanceOnlyFirstSection;
+    }
+    if (transaction.amount() < 0) {
+        return TransactionProveError::AmountLessZero;
+    }
+    if (node->network_id().is_zero() || transaction.sender() != node->network_id()) {
+        return TransactionProveError::InvalidSignature;
+    }
+    if (transaction.receiver().is_zero()) {
+        return TransactionProveError::ReceiverZero;
+    }
+    if (transaction.hash() != transaction.calculate_hash()
+        && transaction.hash() != transaction.calculate_hash_hex()) {
+        return TransactionProveError::WrongHash;
+    }
+    const auto signer = node->actor_index()->read_actor_old(transaction.sender());
+    if (signer.empty() || !transaction.verify(signer)) {
+        return TransactionProveError::InvalidSignature;
+    }
+    return TransactionProveError::NoError;
+}
+
+std::optional<std::map<SectionId, std::string>> Dag::validated_sync_candidate(
+    const std::map<SectionId, std::string> &peer_sections) {
+    std::set<Transaction>            pending;
+    std::map<SectionId, std::string> result;
+    WireFormat::Scope                scope(WireFormat::Mode::Canonical);
+    for (const auto &[section_id, bytes] : peer_sections) {
+        auto candidate = Json::deserialize<Section>(bytes);
+        if (!candidate.has_value()) {
+            return std::nullopt;
+        }
+        auto local = read_section(section_id);
+        if (local.has_value() && local.value().transactions == candidate.value().transactions) {
+            continue;
+        }
+        if (local.has_value()
+            && (!transaction_section_is_open(current_section_, section_id)
+                || !std::ranges::includes(candidate.value().transactions,
+                                          local.value().transactions,
+                                          std::less<Transaction> { }))) {
+            return std::nullopt;
+        }
+        for (const auto &transaction : candidate.value().transactions) {
+            if (transaction.section() != section_id) {
+                return std::nullopt;
+            }
+            if (local.has_value() && local.value().transactions.contains(transaction)) {
+                continue;
+            }
+            if (!validate_repair_transaction(transaction, pending)) {
+                return std::nullopt;
+            }
+            pending.insert(transaction);
+        }
+        candidate.value().control.reset();
+        result.emplace(section_id, Json::serialize(candidate.value()));
     }
     return result;
 }
@@ -2772,33 +2829,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
                                                         const SectionId                       *validation_frontier,
                                                         const TransactionValidationFacts      *facts,
                                                         bool stage_contract_change) {
-    // Check Genesis transactions
-    if (tx.type() == TransactionType::Genesis) {
-        if (tx.section() != SectionId(0)) {
-            return TransactionProveError::GenesisOnlyZeroSection;
-        }
-
-        if (tx.amount() != 0) {
-            return TransactionProveError::GenesisOnlyZeroSection;
-        }
-
-        if (!node->network_id().is_zero() && tx.sender() != tx.receiver() && tx.sender() != node->network_id()) {
-            return TransactionProveError::GenesisOnlyZeroSection;
-        }
-
-        return TransactionProveError::NoError;
-    }
-
-    if (tx.type() == TransactionType::Balance) {
-        if (tx.section() != SectionId(1)) {
-            return TransactionProveError::BalanceOnlyFirstSection;
-        }
-
-        if (!node->network_id().is_zero() && tx.sender() != tx.receiver() && tx.sender() != node->network_id()) {
-            return TransactionProveError::GenesisOnlyZeroSection;
-        }
-
-        return TransactionProveError::NoError;
+    if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance) {
+        return validate_initial_transaction(tx);
     }
 
     // Keep the same bounded admission window for the stored or staged frontier.
@@ -3470,199 +3502,6 @@ void Dag::continue_with_collected_peer_info() {
     }
 }
 
-void Dag::request_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
-    // TODO: auto add sync_last_index = to, also auto from, from + 100
-
-    auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
-    auto responder_new = responder.with_new_message_id();
-    if (!track_pending_sync_response(responder_new, from, to, false)) {
-        eWarning("[Dag] Skip section request because the pending response table is full");
-        schedule_sync_check();
-        return;
-    }
-    responder_new.send_response(range, MessageType::DagSections, SendMode::Focused, MessageStatus::Request);
-
-    // if (status_ != DagStatus::Sync) {
-    eTemp("[Dag] Request sections from {} to {}", range.first, range.last);
-    // }
-}
-
-void Dag::network_request_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
-    if (from < 0 || to < from || to > current_section_ || to - from >= SYNC_SECTIONS_MAX_REQ) {
-        return;
-    }
-    if (from < first_saved_section_) {
-        // eLog("sysync 1 {} {}", from, first_saved_section_);
-        return;
-    }
-
-    std::set<Transaction>   txs;
-    std::vector<DagControl> controls;
-
-    for (SectionId i = from; i <= to; i++) {
-        auto section = this->read_section(i);
-        if (!section.has_value()) {
-            continue;
-        }
-
-        if (section->control.has_value()) {
-            controls.push_back(DagControl { .section_id = section->id, .control = section->control.value() });
-        }
-
-        if (section->transactions.empty()) {
-            continue;
-        }
-
-        for (const auto &tx : section->transactions) {
-            txs.insert(tx);
-        }
-    }
-
-    // if (txs.empty()) {
-    //     return;
-    // }
-
-    // eLog("[Dag] Send sections from {} to {}", from, to);
-
-    auto section_sync =
-        SectionSync { .to = to, .txs = txs, .controls = controls, .last_section = current_section_ };
-
-    const auto serialized = MessagePack::serialize(section_sync);
-    const auto compressed = LegacyCompression::compress(serialized);
-    if (!compressed.has_value()) {
-        eWarning("[Dag] Failed to compress section response");
-        return;
-    }
-    responder.send_response(compressed.value(),
-                            MessageType::DagSections,
-                            SendMode::Focused,
-                            MessageStatus::Response);
-}
-
-void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    // Same reasoning as network_file_sections_response: the retry clock stays running
-    // until the answer proves usable, so a corrupt or undecodable one does not silently
-    // cancel the retry it should have caused.
-    node->post_storage([this, compressed, responder]() {
-        const auto uncompressed = LegacyCompression::decompress(compressed, FILE_SYNC_MAX_UNCOMPRESSED_BYTES);
-        if (!uncompressed.has_value()) {
-            eWarning("[Dag] Failed to decompress section response");
-            return;
-        }
-        const auto section_sync = MessagePack::deserialize<SectionSync>(uncompressed.value());
-
-        if (!section_sync.has_value()) {
-            // eLog("network_request_sections_response 1");
-            // eLog("sysync 2");
-            return;
-        }
-
-        const auto expected_range = pending_sync_range(responder, section_sync->to, false);
-        if (!expected_range.has_value()
-            || std::ranges::any_of(section_sync->txs,
-                                   [&](const auto &transaction) {
-                                       return transaction.section() < expected_range.value().first
-                                              || transaction.section() > expected_range.value().second;
-                                   })
-            || std::ranges::any_of(section_sync->controls, [&](const auto &control) {
-                   return control.section_id < expected_range.value().first
-                          || control.section_id > expected_range.value().second;
-               })) {
-            eWarning("[Dag] Reject stale or out-of-range section response {}", responder.message_id());
-            return;
-        }
-
-        if (!section_sync->txs.empty()) {
-            auto res = this->save_transactions(section_sync->txs);
-            if (!res.has_value()) {
-                // eLog("network_request_sections_response 2");
-                // eLog("sysync 3");
-                return;
-            }
-
-            boost::asio::post(node->runtime_executor(), [this] {
-                retry_contract_transactions();
-            });
-
-            const auto &[min, max] = res.value();
-        }
-
-        consume_pending_sync_response(responder, false);
-        node->luminance_manager()->increment(responder.node_id());
-        timer_stop_event_.publish();
-
-        if (section_sync->last_section > sync_last_index_) {
-            sync_last_index_ = section_sync->last_section;
-            sync_start_event_.publish(current_section_, sync_last_index_);
-        }
-
-        // for (const auto &[section_id, control] : section_sync->controls) {
-        //     if (section_id % 20 == 0) {
-        //         auto existing_section = this->read_section(section_id);
-        //         if (existing_section.has_value()) {
-        //             if (existing_section->control.has_value()) {
-        //                 continue;
-        //             }
-
-        //             if (!existing_section->control.has_value()) {
-        //                 // eTemp("[Dag] Control changed for section {}: {} -> {}",
-        //                 //      section_id,
-        //                 //      existing_section->control.value_or("none"),
-        //                 //      control);
-
-        //                 // auto removed = this->remove_control(section_id);
-        //                 // if (removed.has_value()) {
-        //                 // if (removed.value() == WriteResult::Write) {
-        //                 this->start_control(Force::Active, false);
-        //                 // }
-        //                 // }
-        //             }
-        //         }
-        //     }
-        //     // this->write_control(section_id, control);
-        // }
-
-        if (section_sync->to >= sync_last_index_ - 1) {
-            eLog("[Dag] Sync completed, processing cached transactions");
-
-            if (this->status_ != DagStatus::Ready) {
-                this->start_control();
-
-                if (mode_ == DagMode::Light) {
-                    this->process_cached_transactions();
-                    return;
-                }
-
-#ifdef IS_APP_CLIENT // only for clients for first correction and integration
-                this->process_cached_transactions(true);
-                cache_.reset_db();
-                auto responder_new = responder.with_new_message_id();
-                node->network()->send_message(true,
-                                              MessageType::DagLightData,
-                                              SendMode::Focused,
-                                              MessageStatus::Request,
-                                              responder_new);
-                light_requested_ = true;
-#else
-                this->process_cached_transactions();
-#endif
-            }
-            return;
-        }
-
-        sync_progress_event_.publish(section_sync->to);
-        this->set_current_section(section_sync->to);
-        // eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ +
-        // 100);
-
-        // timer_sync->start();
-        timer_start_event_.publish(15002);
-        this->request_file_sections(section_sync->to,
-                                    std::min(sync_last_index_, section_sync->to + SYNC_SECTIONS_BATCH),
-                                    responder);
-    });
-}
-
 void Dag::network_request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
     if (from < 0 || to < from || to > current_section_ || to - from >= SYNC_SECTIONS_MAX_REQ) {
         return;
@@ -3734,6 +3573,9 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         eWarning("[Dag] Reject file sections with invalid compressed size {}", compressed.size());
         return;
     }
+    if (!pending_sync_range(responder, std::nullopt, true).has_value()) {
+        return;
+    }
     const auto declared_size = LegacyCompression::declared_size(compressed);
     if (!declared_size.has_value() || declared_size.value() > FILE_SYNC_MAX_UNCOMPRESSED_BYTES) {
         eWarning("[Dag] Reject file sections with invalid declared size");
@@ -3750,7 +3592,14 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
     }
     bool peer_legacy = meta->is_legacy_dag();
 
-    node->post_storage([this, compressed, responder, peer_legacy]() {
+    auto reservation = file_sync_budget_.reserve(peer_id, compressed.size() + declared_size.value());
+    if (!reservation) {
+        return;
+    }
+    node->post_storage([this, compressed, responder, peer_legacy, reservation = std::move(reservation)]() {
+        if (reservation->stopped()) {
+            return;
+        }
         // Dense paths can deliver the same response more than once. Serialize
         // state mutation so two workers cannot write sections and finish the
         // same sync at the same time.
@@ -3769,10 +3618,13 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             eWarning("[Dag] File sections exceed the uncompressed size limit");
             return;
         }
+        if (!MessagePack::has_bounded_structure(uncompressed.value(), 20'000, SYNC_SECTIONS_MAX_REQ, 8)) {
+            return;
+        }
         const auto file_sync = MessagePack::deserialize<FileSectionsSync>(uncompressed.value());
 
-        if (!file_sync.has_value()) {
-            eLog("[Dag] File sections sync: failed to deserialize");
+        if (!file_sync.has_value() || file_sync.value().sections.size() > SYNC_SECTIONS_MAX_REQ) {
+            eLog("[Dag] File sections sync: failed to deserialize or exceeded section limit");
             return;
         }
 
@@ -3848,7 +3700,34 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 disk_bytes = Json::serialize(section.value());
             }
 
-            received_sections.insert_or_assign(section_data.section_id, std::move(disk_bytes));
+            if (!received_sections.emplace(section_data.section_id, std::move(disk_bytes)).second) {
+                eWarning("[Dag] Reject duplicate section in a sync batch");
+                return;
+            }
+        }
+
+        for (const auto &[section_id, bytes] : received_sections) {
+            const auto    text   = section_id.to_string();
+            std::uint64_t number = 0;
+            const auto    parsed = std::from_chars(text.data(), text.data() + text.size(), number);
+            if (parsed.ec != std::errc { } || parsed.ptr != text.data() + text.size()) {
+                return;
+            }
+            if (node->consensus() != nullptr && node->consensus()->controls_section(number)) {
+                eWarning("[Dag] Section sync requires Shadow finality verification at {}", section_id);
+                return;
+            }
+        }
+
+        flush_admission();
+        std::unique_lock<std::recursive_mutex> save_lock(save_mutex_);
+        if (!repair_response) {
+            auto validated = validated_sync_candidate(received_sections);
+            if (!validated.has_value()) {
+                eWarning("[Dag] Reject section sync after history validation");
+                return;
+            }
+            received_sections = std::move(validated.value());
         }
 
         std::vector<DagRecoveryIncident> recovery_incidents;
@@ -3915,12 +3794,15 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
         const auto &sections_to_store = repair_response ? changed_sections : received_sections;
 
-        if (!sections_to_store.empty() && hot_section_store_ && hot_section_store_->is_open()) {
+        if (!sections_to_store.empty() && (!hot_section_store_ || !hot_section_store_->is_open())) {
+            eWarning("[Dag] Cannot apply section sync without atomic storage");
+            return;
+        }
+        if (!sections_to_store.empty()) {
             // Whole sections go in here, so this has to serialize against
             // save_transaction the same way write_section_diff does: that path
             // read-modify-writes a section, and a sync write landing in between
             // silently drops whichever side wrote second.
-            std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
             const auto                            received_first  = sections_to_store.begin()->first;
             const auto                            received_last   = sections_to_store.rbegin()->first;
             const auto                            committed_first = first_saved_section_ < SectionId(0)
@@ -3933,6 +3815,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 return;
             }
         }
+        save_lock.unlock();
         history_revision_.fetch_add(1, std::memory_order_release);
         // The answer survived every check and is about to be applied — only now is it
         // safe to stop the retry clock. See the note at the top of this function.
@@ -3940,15 +3823,6 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             consume_pending_sync_response(responder, true);
             node->luminance_manager()->increment(responder.node_id());
             timer_stop_event_.publish();
-        }
-
-        if (!received_sections.empty() && (!hot_section_store_ || !hot_section_store_->is_open())) {
-            for (const auto &[section_id, disk_bytes] : received_sections) {
-                auto path = FsPath::create(this->file_path(section_id));
-                if (path.has_value()) {
-                    static_cast<void>(Utils::write_file_content(path.value(), disk_bytes));
-                }
-            }
         }
 
         if (control_index_) {
@@ -3995,6 +3869,9 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             }
             start_control(Force::Active);
             eLog("[Dag] Repaired section range {}..{}", expected_range->first, expected_range->second);
+            boost::asio::post(node->runtime_executor(), [this] {
+                retry_contract_transactions();
+            });
             return;
         }
 
@@ -5259,8 +5136,12 @@ bool Dag::validate_received_pack(Pack::PackId id, const Pack::Reader &reader) co
                 return reject("transaction section mismatch");
             if (tx.hash() != tx.calculate_hash() && tx.hash() != tx.calculate_hash_hex())
                 return reject("transaction hash mismatch");
-            if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance)
+            if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance) {
+                if (validate_initial_transaction(tx) != TransactionProveError::NoError) {
+                    return reject("invalid network initialization transaction");
+                }
                 continue;
+            }
             if (tx.signature().empty())
                 return reject("missing transaction signature");
 
