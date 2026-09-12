@@ -312,7 +312,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                             }
                         }
                         auto hash_size = dfs_vector.data_hash_size();
-                        if (dir_row.hash == hash_size->first) {
+                        if (hash_size.has_value() && dir_row.hash == hash_size->first) {
                             return;
                         }
                     }
