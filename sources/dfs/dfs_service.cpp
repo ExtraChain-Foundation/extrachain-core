@@ -264,6 +264,7 @@ void DfsService::notify_vector_row_removed(const ActorId &owner_id, const Dfs::D
 }
 
 void DfsService::prepare_shutdown() {
+    dirs_manager_.stop();
     vector_write_budget_->budget.stop();
     vector_sync_->stop();
     load_manager_.stop();
@@ -3050,17 +3051,11 @@ void DfsService::sync(const std::string &identifier) {
         // download) gets re-offered on every sync until it actually lands.
         check_all_files(identifier);
 
-        // #75: reconcile the catalog by content first. Only owners whose digests differ
-        // travel; equal catalogs cost one small request and an empty reply. A peer that
-        // predates digest sync logs the unknown type and stays silent, so after 3 s
-        // without a reply this falls back to the full-catalog path, exactly as the
-        // staged sync below already does for peers without staged support.
+        // Equal catalogs need no row transfer. A timed-out digest exchange
+        // can use the same authenticated page protocol to recover.
         const auto allowed = mode() == DfsMode::Selective ? startup_sync_actors() : std::vector<ActorId> { };
         dirs_manager_.sync_digest(identifier, allowed);
 
-        // Per peer: with mixed peers the new ones answer within the window, and a global
-        // response counter would hide the old peer that never will (seen on the stand:
-        // 5 new + 2 old nodes, zero fallbacks).
         constexpr auto digestFallbackDelay = std::chrono::seconds(3);
         schedule_after(digestFallbackDelay, [this, identifier]() {
             node->post_storage([this, identifier]() {
@@ -3068,8 +3063,7 @@ void DfsService::sync(const std::string &identifier) {
                     return;
                 }
                 eWarning("[Dfs] Catalog digest sync unanswered, full sync: identifier={}", identifier);
-                dirs_manager_.note_digest_unanswered(identifier);
-                legacy_sync(identifier);
+                request_catalog(identifier);
             });
         });
     });
@@ -3100,9 +3094,7 @@ void DfsService::reconcile_tick() {
         return;
     }
     auto identifiers = node->network()->active_connection_identifiers();
-    std::erase_if(identifiers, [this](const std::string &identifier) {
-        return dirs_manager_.digest_unsupported(identifier);
-    });
+
     if (!identifiers.empty()) {
         const auto &pick = identifiers[reconcile_round_++ % identifiers.size()];
         eLog("[Dfs] Periodic catalog reconcile: identifier={}, peers={}", pick, identifiers.size());
@@ -3115,7 +3107,7 @@ void DfsService::reconcile_tick() {
     });
 }
 
-void DfsService::legacy_sync(const std::string &identifier) {
+void DfsService::request_catalog(const std::string &identifier) {
     node->post_storage([this, identifier]() {
         // Light pulls the whole catalogue exactly like Full: it saves on payloads, not
         // on knowing what exists. Only Selective asks for a narrowed actor list.

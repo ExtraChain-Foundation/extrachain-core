@@ -2414,95 +2414,35 @@ void NetworkService::message_received(const std::string &message,
         //     break;
         // }
 
-    case MessageType::DfsSyncDirs: {
-        if (status == MessageStatus::Request) {
-            node->dfs_service()->dirs_manager().network_request_sync(responder);
-        } else if (status == MessageStatus::Response) {
-            auto last_modified_result = MessagePack::deserialize<std::uint64_t>(serialized);
-
-            if (!last_modified_result.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for last modified", type);
-                break;
-            }
-
-            node->dfs_service()->dirs_manager().network_response_sync(last_modified_result.value(), responder);
-        }
-
+    case MessageType::DfsSyncDirs:
+    case MessageType::DfsSyncDirsRows:
+    case MessageType::DfsTempSyncAll:
         break;
-    }
-
-    case MessageType::DfsSyncDirsRows: {
-        auto dirs_rows_result =
-            MessagePack::deserialize<std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>>(serialized);
-        if (!dirs_rows_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for dirs rows", type);
-            break;
-        }
-
-        node->dfs_service()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value(),
-                                                                                responder);
-
-        break;
-    }
-
     case MessageType::DfsSyncDirRows: {
         if (status == MessageStatus::Request) {
-            auto dirs_row_result = MessagePack::deserialize<Dfs::Tables::DirsFile::DirsSpace::DirsRow>(serialized);
-            if (!dirs_row_result.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for dirs row", type);
+            if (serialized.size() > 256 * 1024 || !MessagePack::has_bounded_structure(serialized, 16384, 8192, 8))
                 return;
-            }
-
-            node->dfs_service()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), responder);
+            const auto request = MessagePack::deserialize<Dfs::CatalogRowsRequest>(serialized);
+            if (request.has_value())
+                node->dfs_service()->dirs_manager().network_request_catalog_rows(request.value(), responder);
         } else if (status == MessageStatus::Response) {
-            auto dirs_row_result =
-                MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(serialized);
-            if (!dirs_row_result.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for dir rows", type);
-                return;
-            }
-
-            node->dfs_service()->dirs_manager().network_response_dir_rows(dirs_row_result.value(), responder);
+            node->dfs_service()->dirs_manager().network_response_dir_rows(serialized, responder);
         }
         break;
     }
-
     case MessageType::DfsSyncDigest: {
-        auto request = MessagePack::deserialize<Dfs::Packets::CatalogDigestRequest>(serialized);
-        if (!request.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for catalog digest request", type);
-            break;
-        }
-        node->dfs_service()->dirs_manager().network_request_digest(request.value(), responder);
+        if (status != MessageStatus::Request || serialized.size() > 1024 * 1024
+            || !MessagePack::has_bounded_structure(serialized, 65536, 8192, 8))
+            return;
+        const auto request = MessagePack::deserialize<Dfs::Packets::CatalogDigestRequest>(serialized);
+        if (request.has_value())
+            node->dfs_service()->dirs_manager().network_request_digest(request.value(), responder);
         break;
     }
-
-    case MessageType::DfsSyncDigestReply: {
-        auto reply = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(serialized);
-        if (!reply.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for catalog digest reply", type);
-            break;
-        }
-        node->dfs_service()->dirs_manager().network_response_digest(reply.value(), responder);
+    case MessageType::DfsSyncDigestReply:
+        if (status == MessageStatus::Response)
+            node->dfs_service()->dirs_manager().network_response_digest(serialized, responder);
         break;
-    }
-
-    case MessageType::DfsTempSyncAll: {
-        auto res = MessagePack::deserialize<bool>(serialized);
-        if (res.has_value()) {
-            node->dfs_service()->dirs_manager().network_request_all(responder);
-            break;
-        }
-
-        auto actors_result = MessagePack::deserialize<std::vector<ActorId>>(serialized);
-        if (!actors_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for startup DFS sync request", type);
-            break;
-        }
-
-        node->dfs_service()->dirs_manager().network_request_all(responder, actors_result.value());
-        break;
-    }
 
     case MessageType::DfsStoreFile: {
         auto file_link_result = MessagePack::deserialize<Dfs::FileData>(serialized);

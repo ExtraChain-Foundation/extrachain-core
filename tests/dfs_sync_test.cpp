@@ -1,3 +1,5 @@
+#include <condition_variable>
+#include <mutex>
 // Content-based catalog sync (tracker #75) and the merge rules it depends on.
 //
 // Before: every handshake pulled the whole catalog (DfsTempSyncAll), the receiver
@@ -32,18 +34,29 @@
 
 namespace {
     struct Capture : ResponseSender {
+        mutable std::mutex                               mutex;
+        std::condition_variable                          ready;
         std::vector<std::pair<MessageType, std::string>> sent;
+        void                                             wait_messages(std::size_t count) {
+            std::unique_lock lock(mutex);
+            TEST_REQUIRE(ready.wait_for(lock, std::chrono::seconds(5), [&] {
+                return sent.size() >= count;
+            }));
+        }
 
         std::string send_response(const std::string &data,
                                   MessageType        type,
                                   SendMode,
                                   MessageStatus,
                                   const Responder &) override {
+            std::lock_guard lock(mutex);
             sent.emplace_back(type, data);
+            ready.notify_all();
             return "captured";
         }
 
         std::size_t count(MessageType type) const {
+            std::lock_guard lock(mutex);
             std::size_t n = 0;
             for (const auto &[sent_type, _] : sent) {
                 n += sent_type == type;
@@ -51,7 +64,8 @@ namespace {
             return n;
         }
 
-        const std::string &payload(MessageType type) const {
+        std::string payload(MessageType type) const {
+            std::lock_guard lock(mutex);
             for (const auto &[sent_type, data] : sent) {
                 if (sent_type == type) {
                     return data;
@@ -61,18 +75,6 @@ namespace {
             return none;
         }
     };
-
-    // The storage executor is a thread pool, so a barrier job only proves the pool is
-    // alive, not that the job posted before it has finished. Barrier, then settle.
-    void drain_storage(ExtraChain::Core::ExtraChainNode &node) {
-        std::promise<void> done;
-        auto               future = done.get_future();
-        node.post_storage([&done] {
-            done.set_value();
-        });
-        TEST_REQUIRE(future.wait_for(std::chrono::seconds(30)) == std::future_status::ready);
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
 
     Dfs::DirRow file_row(const Actor<KeyPrivate> &owner,
                          const std::string       &file_id,
@@ -143,7 +145,8 @@ int main() {
     impostor.create(ActorType::User);
 
     auto     &dirs = node->dfs_service()->dirs_manager();
-    Responder from_peer(nullptr);
+    Capture   requests;
+    Responder from_peer(&requests);
     from_peer.add_identifier("peer-node");
 
     const auto rows_of = [&](const ActorId &who) -> std::size_t {
@@ -156,8 +159,18 @@ int main() {
         return row.value();
     };
     const auto merge = [&](const ActorId &who, std::vector<Dfs::DirRow> rows) {
-        dirs.network_response_dir_rows({ { who, std::move(rows) } }, from_peer);
-        drain_storage(*node);
+        std::ranges::sort(rows, { }, &Dfs::DirRow::file_id);
+        auto response = from_peer;
+        response.set_message_id(dirs.request_catalog_rows({ .owners = { who } }, from_peer));
+        TEST_REQUIRE(!response.message_id().empty());
+        const auto before = node->dfs()->staged_startup_response_count();
+        dirs.network_response_dir_rows(MessagePack::serialize(Dfs::CatalogRowsPage { .rows = std::move(rows) }),
+                                       response);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (node->dfs()->staged_startup_response_count() == before
+               && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        TEST_REQUIRE(node->dfs()->staged_startup_response_count() > before);
     };
 
     const std::string f1 = Utils::generate_random_hex(64);
@@ -233,9 +246,9 @@ int main() {
     {
         Capture   capture;
         Responder to_peer(&capture);
-        to_peer.add_identifier("peer-node");
+        to_peer.add_identifier(Utils::generate_random_hex(64));
         dirs.network_request_digest({ .owners = digests, .allowed = { } }, to_peer);
-        drain_storage(*node);
+        capture.wait_messages(1);
         TEST_REQUIRE_EQ(capture.count(MessageType::DfsSyncDirRows), std::size_t(0));
         TEST_REQUIRE_EQ(capture.count(MessageType::DfsSyncDigestReply), std::size_t(1));
         const auto reply = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(
@@ -251,21 +264,19 @@ int main() {
         auto stale = digests;
         for (auto &digest : stale) {
             if (digest.owner_id == peer.id()) {
-                digest.digest = "0000";
+                digest.digest = std::string(64, '0');
             }
         }
         Capture   capture;
         Responder to_peer(&capture);
-        to_peer.add_identifier("peer-node");
+        to_peer.add_identifier(Utils::generate_random_hex(64));
         dirs.network_request_digest({ .owners = stale, .allowed = { } }, to_peer);
-        drain_storage(*node);
+        capture.wait_messages(2);
         TEST_REQUIRE_EQ(capture.count(MessageType::DfsSyncDirRows), std::size_t(1));
-        const auto rows = MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(
-            capture.payload(MessageType::DfsSyncDirRows));
-        TEST_REQUIRE(rows.has_value());
-        TEST_REQUIRE_EQ(rows->size(), std::size_t(1));
-        TEST_REQUIRE(rows->front().first == peer.id());
-        TEST_REQUIRE_EQ(rows->front().second.size(), std::size_t(2));
+        const auto request =
+            MessagePack::deserialize<Dfs::CatalogRowsRequest>(capture.payload(MessageType::DfsSyncDirRows));
+        TEST_REQUIRE(request.has_value());
+        TEST_REQUIRE(request.value().owners == std::vector<ActorId> { peer.id() });
         const auto reply = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(
             capture.payload(MessageType::DfsSyncDigestReply));
         TEST_REQUIRE(reply.has_value());
@@ -280,15 +291,17 @@ int main() {
         stranger.create(ActorType::User);
         Capture   capture;
         Responder to_peer(&capture);
-        to_peer.add_identifier("peer-node");
-        dirs.network_request_digest({ .owners  = { { .owner_id = stranger.id(), .rows = 1, .digest = "abcd" } },
+        to_peer.add_identifier(Utils::generate_random_hex(64));
+        dirs.network_request_digest({ .owners  = { { .owner_id = stranger.id(),
+                                                     .rows     = 1,
+                                                     .digest   = std::string(64, 'b') } },
                                       .allowed = { } },
                                     to_peer);
-        drain_storage(*node);
-        const auto rows = MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(
-            capture.payload(MessageType::DfsSyncDirRows));
-        TEST_REQUIRE(rows.has_value());
-        TEST_REQUIRE_EQ(rows->size(), digests.size());
+        capture.wait_messages(2);
+        const auto request =
+            MessagePack::deserialize<Dfs::CatalogRowsRequest>(capture.payload(MessageType::DfsSyncDirRows));
+        TEST_REQUIRE(request.has_value());
+        TEST_REQUIRE(request.value().owners == std::vector<ActorId> { stranger.id() });
         const auto reply = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(
             capture.payload(MessageType::DfsSyncDigestReply));
         TEST_REQUIRE(reply.has_value());
@@ -300,14 +313,14 @@ int main() {
     {
         Capture   capture;
         Responder to_peer(&capture);
-        to_peer.add_identifier("peer-node");
+        to_peer.add_identifier(Utils::generate_random_hex(64));
         dirs.network_request_digest({ .owners = { }, .allowed = { peer.id() } }, to_peer);
-        drain_storage(*node);
-        const auto rows = MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(
-            capture.payload(MessageType::DfsSyncDirRows));
-        TEST_REQUIRE(rows.has_value());
-        TEST_REQUIRE_EQ(rows->size(), std::size_t(1));
-        TEST_REQUIRE(rows->front().first == peer.id());
+        capture.wait_messages(1);
+        TEST_REQUIRE_EQ(capture.count(MessageType::DfsSyncDirRows), std::size_t(0));
+        const auto reply = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(
+            capture.payload(MessageType::DfsSyncDigestReply));
+        TEST_REQUIRE(reply.has_value() && reply.value().mismatched.size() == 1);
+        TEST_REQUIRE(reply.value().mismatched.front().owner_id == peer.id());
     }
 
     // 12. The gossiped removal (DfsFileRemove) carries the same signature as the
@@ -360,11 +373,12 @@ int main() {
             Capture   capture;
             Responder target(&capture);
             target.add_identifier("peer-node");
-            dirs.send_rows_for_owners({ owner.id() }, target);
-            const auto rows = MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(
-                capture.payload(MessageType::DfsSyncDirRows));
-            TEST_REQUIRE(rows.has_value() && rows.value().size() == 1);
-            for (const auto &candidate : rows.value().front().second) {
+            dirs.network_request_catalog_rows({ .owners = { owner.id() } }, target);
+            capture.wait_messages(1);
+            const auto rows =
+                MessagePack::deserialize<Dfs::CatalogRowsPage>(capture.payload(MessageType::DfsSyncDirRows));
+            TEST_REQUIRE(rows.has_value());
+            for (const auto &candidate : rows.value().rows) {
                 if (candidate.file_id == file.file_id)
                     return candidate;
             }

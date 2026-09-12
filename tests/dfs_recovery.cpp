@@ -148,13 +148,16 @@ int main() {
         if (variant == 2) {
             std::filesystem::remove(Dfs::Path::filePath(actor, remote.file_id));
         }
-        Responder responder;
+        Responder responder(node->network());
         responder.add_identifier(std::string(64, 'c'));
         if (variant == 3) {
             manager.update_dirs(actor, remote.last_modified);
             node->dfs()->sync(std::string(64, 'c'));
         } else {
-            manager.network_response_dir_rows({ { actor, { remote } } }, responder);
+            responder.set_message_id(manager.request_catalog_rows({ .owners = { actor } }, responder));
+            TEST_REQUIRE(!responder.message_id().empty());
+            manager.network_response_dir_rows(MessagePack::serialize(Dfs::CatalogRowsPage { .rows = { remote } }),
+                                              responder);
         }
         const Dfs::FileLink link { .owner_id = actor, .file_id = remote.file_id };
         const auto          deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);

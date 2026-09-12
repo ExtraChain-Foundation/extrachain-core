@@ -412,17 +412,18 @@ namespace Dfs {
             std::vector<CatalogDigest> owners;
             // A Selective requester narrows the reply to these owners; empty means all.
             std::vector<ActorId> allowed;
+            bool                 complete = true;
         };
-        BOOST_DESCRIBE_STRUCT(CatalogDigestRequest, (), (owners, allowed))
+        BOOST_DESCRIBE_STRUCT(CatalogDigestRequest, (), (owners, allowed, complete))
 
         struct CatalogDigestReply {
-            // The responder's digests for owners that differed; their rows travel in a
-            // DfsSyncDirRows message sent just before this reply.
+            // Each difference starts a separate bounded row request.
             std::vector<CatalogDigest> mismatched;
             // Owners the requester listed that the responder has no rows for at all.
             std::vector<ActorId> unknown;
+            bool                 full_catalog = false;
         };
-        BOOST_DESCRIBE_STRUCT(CatalogDigestReply, (), (mismatched, unknown))
+        BOOST_DESCRIBE_STRUCT(CatalogDigestReply, (), (mismatched, unknown, full_catalog))
 
         struct VectorRowRemove {
             ActorId     owner_id;

@@ -4,6 +4,8 @@
 #include "test_support.h"
 
 #include <thread>
+#include <future>
+#include <boost/asio/post.hpp>
 
 using namespace std::chrono_literals;
 
@@ -87,7 +89,21 @@ int main() {
     while (accepted < 33 && std::chrono::steady_clock::now() < next_deadline)
         std::this_thread::sleep_for(10ms);
     TEST_REQUIRE_EQ(accepted.load(), 33u);
+    std::promise<void> entered, resume, drained;
+    const auto         release = resume.get_future().share();
+    boost::asio::post(node->serial_executor(), [&] {
+        entered.set_value();
+        release.wait();
+    });
+    TEST_REQUIRE(entered.get_future().wait_for(5s) == std::future_status::ready);
+    node->dfs()->download_manager().remove_active_download(
+        { .file_link = { .owner_id = owner.id(), .file_id = file.file_id } });
     node->dfs()->prepare_shutdown();
+    resume.set_value();
+    boost::asio::post(node->serial_executor(), [&] {
+        drained.set_value();
+    });
+    TEST_REQUIRE(drained.get_future().wait_for(5s) == std::future_status::ready);
     TEST_REQUIRE(!node->dfs()->network_vector_add(owner.id(), file.file_id, sample));
     TEST_REQUIRE(blocker.close());
     node.reset();

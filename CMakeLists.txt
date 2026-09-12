@@ -183,6 +183,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_collection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/catalog_metadata.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/catalog_sync.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_vector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/vector_index.cpp

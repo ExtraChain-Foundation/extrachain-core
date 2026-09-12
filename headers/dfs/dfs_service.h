@@ -664,7 +664,7 @@ public:
 
     // Full-catalog sync as it was before #75; the fallback for peers without digest sync.
 
-    void legacy_sync(const std::string &identifier);
+    void request_catalog(const std::string &identifier);
     // Catalog reconciliation is otherwise a handshake-only event; a row lost to
     // gossip while the connection survived (a partition healed before TCP gave
     // up) was never repaired. One peer per tick, round-robin.

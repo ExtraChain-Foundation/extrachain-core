@@ -69,10 +69,10 @@ void LoadManager::stop() {
         return;
     }
     activity_connection_.disconnect();
-    if (watchdog_) {
-        watchdog_->cancel();
-        watchdog_.reset();
-    }
+    // Keep the timer alive while queued scheduler callbacks drain.
+    boost::asio::dispatch(node->serial_executor(), [watchdog = watchdog_] {
+        watchdog->cancel();
+    });
 }
 
 std::size_t LoadManager::max_concurrent_downloads() const {
@@ -95,8 +95,10 @@ bool LoadManager::downloads_empty() const {
 
 void LoadManager::schedule_watchdog() {
     boost::asio::dispatch(node->serial_executor(), [this] {
-        if (stopping_.load(std::memory_order_acquire) || node->runtime_activity() == RuntimeActivity::Background
-            || max_concurrent_downloads() == 0 || downloads_empty()) {
+        if (stopping_.load(std::memory_order_acquire))
+            return;
+        if (node->runtime_activity() == RuntimeActivity::Background || max_concurrent_downloads() == 0
+            || downloads_empty()) {
             watchdog_->cancel();
             return;
         }

@@ -319,3 +319,11 @@ add_custom_target(extrachain-tests-qt-boundary-check ALL
 add_core_test_executable(extrachain-catalog-ingress catalog_ingress.cpp)
 add_test(NAME catalog-ingress COMMAND extrachain-catalog-ingress)
 set_tests_properties(catalog-ingress PROPERTIES TIMEOUT 30)
+
+add_core_test_executable(extrachain-catalog-pages catalog_pages.cpp)
+add_test(NAME catalog-pages COMMAND extrachain-catalog-pages)
+set_tests_properties(catalog-pages PROPERTIES TIMEOUT 30)
+
+add_core_test_executable(extrachain-catalog-protocol catalog_protocol.cpp)
+add_test(NAME catalog-protocol COMMAND extrachain-catalog-protocol)
+set_tests_properties(catalog-protocol PROPERTIES TIMEOUT 60)

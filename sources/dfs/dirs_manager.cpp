@@ -18,6 +18,9 @@
  */
 
 #include "dfs/dirs_manager.h"
+#include "runtime/work_budget.h"
+#include "runtime/runtime.h"
+#include <boost/asio/post.hpp>
 
 #include <algorithm>
 #include <map>
@@ -34,7 +37,7 @@
 #include "chain/actor_index.h"
 
 namespace {
-    std::pair<std::string, std::uint64_t> local_vector_content(const ActorId& owner, const std::string& file_id) {
+    std::pair<std::string, std::uint64_t> local_vector_content(const ActorId &owner, const std::string &file_id) {
         const auto path = Dfs::Path::file_path(owner, file_id);
         if (!path.has_value())
             return { { }, 0 };
@@ -50,7 +53,7 @@ namespace {
                                 : std::pair<std::string, std::uint64_t> { { }, 0 };
     }
 
-    void use_local_vector_content(const ActorId& owner, Dfs::DirRow& row) {
+    void use_local_vector_content(const ActorId &owner, Dfs::DirRow &row) {
         if (row.state == Dfs::FileState::Removed
             || (row.type != Dfs::FileType::Vector && row.type != Dfs::FileType::Dictionary))
             return;
@@ -65,8 +68,72 @@ namespace {
     }
 } // namespace
 
-DirsManager::DirsManager(ExtraChain::Core::ExtraChainNode* node)
-    : node(node) {
+struct DirsManager::CatalogWork {
+    enum class Kind {
+        Rows,
+        Digest
+    };
+    struct Pending {
+        Kind                                  kind;
+        std::string                           peer;
+        Dfs::CatalogRowsRequest               request;
+        std::chrono::steady_clock::time_point expires;
+        bool                                  in_flight = false;
+    };
+    explicit CatalogWork(boost::asio::any_io_executor executor)
+        : strand(boost::asio::make_strand(executor)) {
+    }
+    boost::asio::strand<boost::asio::any_io_executor> strand;
+    ExtraChain::Core::WorkBudget                      budget { { 16 * 1024 * 1024, 32, 8 * 1024 * 1024, 8 } };
+    std::mutex                                        mutex;
+    std::map<std::string, Pending>                    pending;
+    std::map<std::string, std::size_t>                scope_cursor;
+    std::atomic_bool                                  stopped { false };
+    bool track(const std::string &id, Kind kind, const std::string &peer, const Dfs::CatalogRowsRequest &request) {
+        std::lock_guard lock(mutex);
+        const auto      now = std::chrono::steady_clock::now();
+        std::erase_if(pending, [&](const auto &entry) {
+            return !entry.second.in_flight && entry.second.expires <= now;
+        });
+        if (stopped.load() || pending.size() >= 64)
+            return false;
+        std::size_t same_peer = 0;
+        for (const auto &[key, item] : pending) {
+            if (item.peer != peer)
+                continue;
+            ++same_peer;
+            if (item.kind == kind && item.request.owners == request.owners)
+                return false;
+        }
+        if (same_peer >= 8)
+            return false;
+        return pending.emplace(id, Pending { kind, peer, request, now + std::chrono::seconds(30) }).second;
+    }
+    std::optional<Pending> begin(const std::string &id, Kind kind, const std::string &peer) {
+        std::lock_guard lock(mutex);
+        const auto      found = pending.find(id);
+        if (stopped.load() || found == pending.end() || found->second.kind != kind || found->second.peer != peer
+            || found->second.in_flight || found->second.expires <= std::chrono::steady_clock::now())
+            return std::nullopt;
+        found->second.in_flight = true;
+        return found->second;
+    }
+    void finish(const std::string &id) {
+        std::lock_guard lock(mutex);
+        pending.erase(id);
+    }
+    struct Finish {
+        CatalogWork &state;
+        std::string  id;
+        ~Finish() {
+            state.finish(id);
+        }
+    };
+};
+
+DirsManager::DirsManager(ExtraChain::Core::ExtraChainNode *node)
+    : work_(std::make_shared<CatalogWork>(node->storage_executor()))
+    , node(node) {
     // create dfs folder
     std::filesystem::create_directories(DfsB::DFS_FOLDER);
 
@@ -82,11 +149,19 @@ DirsManager::DirsManager(ExtraChain::Core::ExtraChainNode* node)
 }
 
 DirsManager::~DirsManager() {
+    stop();
     db_->close();
 }
 
+void DirsManager::stop() {
+    work_->budget.stop();
+    std::lock_guard lock(work_->mutex);
+    work_->stopped.store(true);
+    work_->pending.clear();
+}
+
 void DirsManager::old_dfs_to_new_dfs_converter() {
-    auto copy_data = [&](const std::string& dir_file, const std::string& owner_id) -> bool {
+    auto copy_data = [&](const std::string &dir_file, const std::string &owner_id) -> bool {
         std::unique_ptr<DbConnector> db_old = std::make_unique<DbConnector>(dir_file);
         if (!db_old->open()) {
             eCritical("DirsManager::old_dfs_to_new_dfs_converter, Can't open .dir file");
@@ -101,7 +176,7 @@ void DirsManager::old_dfs_to_new_dfs_converter() {
         db_old->close();
 
         db_->query("BEGIN TRANSACTION");
-        for (auto& db_row : old_db_data) {
+        for (auto &db_row : old_db_data) {
             db_row.emplace("owner_id", owner_id);
             if (auto it = db_row.find("prev_file_id"); it != db_row.end() && it->second.empty()) {
                 db_row.erase(it);
@@ -128,10 +203,10 @@ void DirsManager::old_dfs_to_new_dfs_converter() {
         int    processed_files = 0;
         int    deleted_files   = 0;
         size_t total           = std::distance(std::filesystem::directory_iterator(Dfs::Basic::DFS_FOLDER),
-                                     std::filesystem::directory_iterator {});
+                                               std::filesystem::directory_iterator { });
         eLog("Total entries: {}", total);
 
-        for (const auto& entry : std::filesystem::directory_iterator(Dfs::Basic::DFS_FOLDER)) {
+        for (const auto &entry : std::filesystem::directory_iterator(Dfs::Basic::DFS_FOLDER)) {
             if (entry.is_directory()) {
                 std::string sub_dir      = entry.path().string();
                 std::string sub_dir_name = entry.path().filename().string();
@@ -145,7 +220,7 @@ void DirsManager::old_dfs_to_new_dfs_converter() {
                             std::filesystem::remove(dir_file);
                             eLog("DirsManager::old_dfs_to_new_dfs_converter, file deleted {}.", dir_file);
                             deleted_files++;
-                        } catch (const std::filesystem::filesystem_error& e) {
+                        } catch (const std::filesystem::filesystem_error &e) {
                             eCritical("DirsManager::old_dfs_to_new_dfs_converter, file deletion '{}' error: {}",
                                       dir_file,
                                       e.what());
@@ -176,263 +251,13 @@ void DirsManager::old_dfs_to_new_dfs_converter() {
              processed_files,
              deleted_files);
 
-    } catch (const std::filesystem::filesystem_error& e) {
+    } catch (const std::filesystem::filesystem_error &e) {
         eCritical("DirsManager::old_dfs_to_new_dfs_converter, filesystem error: {}", e.what());
     }
 }
 
-void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) {
+void DirsManager::update_dirs(const ActorId &actor_id, uint64_t last_modified) {
     Dfs::Tables::DirsFile::DirsSpace::update_row(db_, actor_id, last_modified);
-}
-
-void DirsManager::sync(const std::string& identifier) {
-    return;
-    if (identifier.empty()) {
-        return;
-    }
-
-    Responder responder(nullptr);
-    responder.add_identifier(identifier);
-    node->network()->send_message(0,
-                                  MessageType::DfsSyncDirs,
-                                  SendMode::Focused,
-                                  MessageStatus::Request,
-                                  responder);
-}
-
-void DirsManager::network_request_sync(const Responder& responder) {
-    auto max_last_modified = Dfs::Tables::DirsFile::DirsSpace::max_last_modified(db_);
-    if (!max_last_modified.has_value()) {
-        eFatal("[Dfs] Sync error");
-    }
-
-    responder.send_response(max_last_modified.value(),
-                            MessageType::DfsSyncDirs,
-                            SendMode::Focused,
-                            MessageStatus::Response);
-}
-
-void DirsManager::network_response_sync(uint64_t max_last_modified, const Responder& responder) {
-    // eTemp("--------------- {} ", max_last_modified);
-    send_from_last_modified(max_last_modified, responder);
-}
-
-void DirsManager::send_from_last_modified(uint64_t last_modified, const Responder& responder) {
-    if (last_modified > 300'000)
-        last_modified -= 300'000;
-    auto allall = Dfs::Tables::DirsFile::DirsSpace::load_from_modified(db_, last_modified);
-    if (!allall.has_value()) {
-        return;
-    }
-
-    if (allall.value().empty()) {
-        return;
-    }
-
-    // std::vector<ActorId> actors;
-    // for (const auto& dirs_row : allall.value()) {
-    //     actors.push_back(dirs_row.actor_id);
-    // }
-    responder.send_response(allall.value(),
-                            MessageType::DfsSyncDirsRows,
-                            SendMode::Focused,
-                            MessageStatus::Response);
-}
-
-void DirsManager::network_response_from_last_modified(
-    const std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>& dirs_rows,
-    const Responder&                                              responder) {
-    return;
-
-    // eTemp("!_!_!_! {}", dirs_rows);
-    std::vector<ActorId> actors;
-    actors.reserve(dirs_rows.size());
-
-    for (const auto& dirs_row : dirs_rows) {
-        // actors.push_back(dirs_row.actor_id);
-        auto last_modified = Dfs::Tables::DirsFile::DirsSpace::last_modified(db_, dirs_row.actor_id);
-        if (!last_modified.has_value()) {
-            return;
-        }
-        if (dirs_row.last_modified == last_modified) {
-            continue;
-        }
-
-        responder.send_response(Dfs::Tables::DirsFile::DirsSpace::DirsRow { .actor_id = dirs_row.actor_id,
-                                                                            .last_modified =
-                                                                                last_modified.value() },
-                                MessageType::DfsSyncDirRows,
-                                SendMode::Focused,
-                                MessageStatus::Request);
-    }
-}
-
-void DirsManager::network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpace::DirsRow& dirs_row,
-                                           const Responder&                                 responder) {
-    return;
-
-    auto dir_rows =
-        Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, dirs_row.actor_id, dirs_row.last_modified);
-
-    if (!dir_rows.has_value()) {
-        return;
-    }
-
-    responder.send_response(std::make_pair(dirs_row.actor_id, dir_rows.value()),
-                            MessageType::DfsSyncDirRows,
-                            SendMode::Focused,
-                            MessageStatus::Response);
-}
-
-void DirsManager::network_response_dir_rows(
-    std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
-    const Responder&                                          responder) {
-    // An empty response still proves that the peer understands staged sync.
-    // Do not fall back to a full metadata transfer merely because a requested
-    // actor currently has no DFS rows.
-    node->dfs()->mark_startup_sync_response();
-
-    // Only Selective narrows the catalogue. Light keeps every dir row it is offered —
-    // it economises on payloads, not on knowing what exists.
-    if (node->dfs()->mode() == DfsMode::Selective) {
-        const auto              startup_actors = node->dfs()->startup_sync_actors();
-        const std::set<ActorId> allowed_actors(startup_actors.begin(), startup_actors.end());
-        const auto              received_actor_count = response_data.size();
-        std::erase_if(response_data, [&allowed_actors](const auto& actor_rows) {
-            return !allowed_actors.contains(actor_rows.first);
-        });
-        if (response_data.size() != received_actor_count) {
-            eLog("[Dfs] Light startup response filtered: received={}, retained={}",
-                 received_actor_count,
-                 response_data.size());
-        }
-    }
-
-    std::stable_sort(response_data.begin(), response_data.end(), [this](const auto& left, const auto& right) {
-        return node->dfs()->is_priority(left.first) && !node->dfs()->is_priority(right.first);
-    });
-
-    if (responder.identifiers().size() != 1)
-        return;
-    node->post_storage([this, response_data = std::move(response_data), responder]() {
-        for (const auto& [owner_id, rows] : response_data) {
-            if (!node_enabled.load())
-                return;
-            std::vector<Dfs::DirRow> downloads;
-            for (const auto& row : rows) {
-                const auto accepted = node->dfs()->accept_catalog_row(owner_id, row);
-                if (!accepted.has_value())
-                    continue;
-                const auto& stored = accepted.value().current;
-                if (stored.state == Dfs::FileState::Removed)
-                    continue;
-                const bool vector =
-                    stored.type == Dfs::FileType::Vector || stored.type == Dfs::FileType::Dictionary;
-                if (stored.type == Dfs::FileType::File || vector) {
-                    // Content roots for mutable vectors are peer hints. The
-                    // signed metadata and downloaded rows establish authority.
-                    const auto& target = vector ? row : stored;
-                    if (!node->dfs()->is_file_already_downloaded(owner_id, stored.file_id, target.hash))
-                        downloads.push_back(target);
-                }
-                if (accepted.value().changed && node->dfs()->mode() == DfsMode::Full)
-                    node->dfs()->broadcast_stored(owner_id, stored);
-            }
-            Dfs::Tables::DirsFile::DirsSpace::update_from_files(db_, owner_id);
-            node->dfs()->download_manager().add_to_queue(owner_id, downloads, *responder.identifiers().begin());
-        }
-    });
-}
-
-void DirsManager::temp_sync_all(const std::string& identifier) {
-    Responder responder(nullptr);
-    responder.add_identifier(identifier);
-    node->network()->send_message(true,
-                                  MessageType::DfsTempSyncAll,
-                                  SendMode::Focused,
-                                  MessageStatus::Response,
-                                  responder);
-}
-
-void DirsManager::temp_sync_actors(const std::string& identifier, const std::vector<ActorId>& actors) {
-    if (actors.empty()) {
-        eLog("[Dfs] Staged startup sync skipped: no actors for {}", identifier);
-        return;
-    }
-
-    Responder responder(nullptr);
-    responder.add_identifier(identifier);
-    node->network()->send_message(actors,
-                                  MessageType::DfsTempSyncAll,
-                                  SendMode::Focused,
-                                  MessageStatus::Response,
-                                  responder);
-}
-
-void DirsManager::network_request_all(const Responder& responder, const std::vector<ActorId>& requested_actors) {
-    node->post_storage([this, responder, requested_actors] {
-        std::vector<ActorId> actors;
-
-        auto network_id = node->actor_index()->network_id();
-        auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
-
-        if (requested_actors.empty()) {
-            if (node->dfs()->mode() == DfsMode::Selective) {
-                actors = node->dfs()->startup_sync_actors();
-                eLog("[Dfs] Legacy startup sync limited for selective node: actors={}", actors.size());
-            } else {
-                actors = node->actor_index()->read_all_actors_ids();
-                std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
-                    return actor == network_id || actor == raccoon_id;
-                });
-
-                actors.insert(actors.begin(), network_id);
-                actors.insert(actors.begin(), raccoon_id);
-                eLog("[Dfs] Full startup sync request: actors={}", actors.size());
-            }
-        } else {
-            std::set<ActorId> unique_actors;
-            unique_actors.insert(network_id);
-            unique_actors.insert(raccoon_id);
-
-            for (const auto& actor : requested_actors) {
-                if (!actor.is_zero()) {
-                    unique_actors.insert(actor);
-                }
-            }
-
-            actors.assign(unique_actors.begin(), unique_actors.end());
-            eLog("[Dfs] Staged startup sync request: requested={}, actors={}",
-                 requested_actors.size(),
-                 actors.size());
-        }
-
-        std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
-        response_data.reserve(actors.size());
-        std::size_t rows_count = 0;
-
-        for (const auto& actor : actors) {
-            auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, actor, 0);
-
-            if (!dir_rows.has_value() || dir_rows->empty())
-                continue;
-
-            for (auto& row : dir_rows.value())
-                use_local_vector_content(actor, row);
-            rows_count += dir_rows->size();
-            response_data.emplace_back(actor, dir_rows.value());
-
-            if (!node_enabled.load()) {
-                return;
-            }
-        }
-
-        responder.send_response(response_data,
-                                MessageType::DfsSyncDirRows,
-                                SendMode::Focused,
-                                MessageStatus::Response);
-        eLog("[Dfs] Startup sync response: actors={}, rows={}", response_data.size(), rows_count);
-    });
 }
 
 std::shared_ptr<DbConnector> DirsManager::get_db_instance() {
@@ -443,221 +268,365 @@ std::shared_ptr<DbConnector> DirsManager::get_db_instance() {
 // Content-based catalog sync (#75)
 // ---------------------------------------------------------------------------
 
-std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std::vector<ActorId>& only) {
+std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std::vector<ActorId> &only) {
     std::vector<Dfs::Packets::CatalogDigest> digests;
     const std::set<ActorId>                  filter(only.begin(), only.end());
-
-    // The catalog can retain a remote repair target after a snapshot merge. Advertise
-    // the local index root: equal target hashes do not prove equal vector contents.
-    const auto rows = db_->select(
-        fmt::format("SELECT owner_id, file_id, sign, hash, type, state FROM {} ORDER BY owner_id, file_id",
-                    Dfs::Tables::DirsFile::TableNameActorsFiles));
-
-    std::string   current_owner;
-    std::string   material;
-    std::uint64_t count = 0;
-    const auto    flush = [&]() {
-        if (current_owner.empty()) {
+    DbConnector                              reader(db_->file());
+    if (!reader.open(false))
+        return digests;
+    auto rows = reader.select_while(
+        "SELECT owner_id,file_id,sign,hash,type,state FROM ActorsFiles "
+        "WHERE metadata_revision > 0 ORDER BY owner_id,file_id",
+        "ActorsFiles");
+    if (!rows)
+        return digests;
+    std::optional<ActorId> current;
+    std::uint64_t          count = 0;
+    blake3_hasher          hasher;
+    blake3_hasher_init(&hasher);
+    const auto flush = [&] {
+        if (!current.has_value())
             return;
-        }
-        const auto owner = ActorId::create(current_owner);
-        if (owner.has_value()) {
-            digests.push_back(
-                { .owner_id = owner.value(), .rows = count, .digest = Utils::calculate_hash(material) });
-        }
-        material.clear();
+        std::array<std::uint8_t, BLAKE3_OUT_LEN> digest;
+        blake3_hasher_finalize(&hasher, digest.data(), digest.size());
+        digests.push_back({ .owner_id = current.value(),
+                            .rows     = count,
+                            .digest   = fmt::format("{:02x}", fmt::join(digest, "")) });
+        blake3_hasher_init(&hasher);
         count = 0;
     };
-
-    for (const auto& row : rows) {
-        const auto owner   = row.find("owner_id");
-        const auto file_id = row.find("file_id");
-        const auto sign    = row.find("sign");
-        const auto hash    = row.find("hash");
-        const auto type    = row.find("type");
-        const auto state   = row.find("state");
-        if (owner == row.end() || file_id == row.end() || sign == row.end() || hash == row.end()
-            || type == row.end() || state == row.end()) {
+    const auto append = [&](std::string_view value) {
+        blake3_hasher_update(&hasher, value.data(), value.size());
+    };
+    while (rows->next()) {
+        if (work_->stopped.load())
+            return { };
+        const auto owner = ActorId::create(rows->getString(0));
+        if (!owner.has_value() || owner.value().is_zero() || (!filter.empty() && !filter.contains(owner.value())))
             continue;
-        }
-        const auto owner_id = ActorId::create(owner->second);
-        if (!owner_id.has_value() || (!filter.empty() && !filter.contains(owner_id.value())))
-            continue;
-        auto content_hash = hash->second;
-        if (state->second != std::to_string(std::to_underlying(Dfs::FileState::Removed))
-            && (type->second == std::to_string(std::to_underlying(Dfs::FileType::Vector))
-                || type->second == std::to_string(std::to_underlying(Dfs::FileType::Dictionary)))) {
-            content_hash = local_vector_content(owner_id.value(), file_id->second).first;
-        }
-        if (owner->second != current_owner) {
+        if (current.has_value() && current.value() != owner.value()) {
             flush();
-            current_owner = owner->second;
+            if (digests.size() > Dfs::CatalogOwnerLimit)
+                return digests;
         }
-        material += file_id->second;
-        material += '\0';
-        material += sign->second;
-        material += '\0';
-        material += content_hash;
-        material += '\n';
+        current            = owner.value();
+        const auto file_id = rows->getString(1);
+        auto       hash    = rows->getString(3);
+        const auto type    = rows->getString(4);
+        if (rows->getString(5) != std::to_string(std::to_underlying(Dfs::FileState::Removed))
+            && (type == std::to_string(std::to_underlying(Dfs::FileType::Vector))
+                || type == std::to_string(std::to_underlying(Dfs::FileType::Dictionary))))
+            hash = local_vector_content(owner.value(), file_id).first;
+        append(file_id);
+        append(std::string_view("\0", 1));
+        append(rows->getString(2));
+        append(std::string_view("\0", 1));
+        append(hash);
+        append("\n");
         ++count;
     }
     flush();
-
     return digests;
 }
 
-void DirsManager::sync_digest(const std::string& identifier, const std::vector<ActorId>& allowed) {
-    Responder responder(nullptr);
-    responder.add_identifier(identifier);
-
-    const Dfs::Packets::CatalogDigestRequest request { .owners = catalog_digests(allowed), .allowed = allowed };
-    eLog("[Dfs] Catalog digest sync request: identifier={}, owners={}, allowed={}",
-         identifier,
-         request.owners.size(),
-         allowed.size());
-    node->network()->send_message(request,
-                                  MessageType::DfsSyncDigest,
-                                  SendMode::Focused,
-                                  MessageStatus::Response,
-                                  responder);
-}
-
-void DirsManager::send_rows_for_owners(const std::vector<ActorId>& owners, const Responder& responder) {
-    std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
-    response_data.reserve(owners.size());
-    std::size_t rows_count = 0;
-
-    for (const auto& owner : owners) {
-        auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, owner, 0);
-        if (!dir_rows.has_value() || dir_rows->empty()) {
-            continue;
-        }
-        for (auto& row : dir_rows.value())
-            use_local_vector_content(owner, row);
-        rows_count += dir_rows->size();
-        response_data.emplace_back(owner, std::move(dir_rows.value()));
-    }
-
-    if (response_data.empty()) {
-        return;
-    }
-
-    responder.send_response(response_data, MessageType::DfsSyncDirRows, SendMode::Focused, MessageStatus::Response);
-    eLog("[Dfs] Catalog digest rows sent: owners={}, rows={}", response_data.size(), rows_count);
-}
-
-void DirsManager::network_request_digest(const Dfs::Packets::CatalogDigestRequest& request,
-                                         const Responder&                          responder) {
-    node->post_storage([this, request, responder] {
-        // Same narrowing as network_request_all: a Selective responder only ever offers
-        // the actors it follows.
-        std::vector<ActorId> only = request.allowed;
-        if (only.empty() && node->dfs()->mode() == DfsMode::Selective) {
-            only = node->dfs()->startup_sync_actors();
-        }
-
-        std::map<ActorId, const Dfs::Packets::CatalogDigest*> remote;
-        for (const auto& digest : request.owners) {
-            remote.emplace(digest.owner_id, &digest);
-        }
-
-        Dfs::Packets::CatalogDigestReply reply;
-        std::vector<ActorId>             to_send;
-        std::set<ActorId>                seen;
-        for (const auto& digest : catalog_digests(only)) {
-            seen.insert(digest.owner_id);
-            const auto it = remote.find(digest.owner_id);
-            if (it != remote.end() && it->second->digest == digest.digest) {
-                continue;
-            }
-            to_send.push_back(digest.owner_id);
-            reply.mismatched.push_back(digest);
-        }
-        for (const auto& [owner, digest] : remote) {
-            if (!seen.contains(owner)) {
-                reply.unknown.push_back(owner);
-            }
-        }
-
-        if (!node_enabled.load()) {
-            return;
-        }
-
-        // Rows first, then the reply: the reply tells the requester the comparison is
-        // over and whose rows it may have to push back.
-        send_rows_for_owners(to_send, responder);
-        responder.send_response(reply, MessageType::DfsSyncDigestReply, SendMode::Focused, MessageStatus::Response);
-        eLog("[Dfs] Catalog digest compared: requested={}, local={}, differ={}, unknown_to_us={}",
-             request.owners.size(),
-             seen.size(),
-             to_send.size(),
-             reply.unknown.size());
-    });
-}
-
-void DirsManager::network_response_digest(const Dfs::Packets::CatalogDigestReply& reply, const Responder& responder) {
-    // The peer speaks digest sync: no full-catalog fallback needed for this handshake.
-    node->dfs()->mark_startup_sync_response();
-    {
-        std::lock_guard lock(digest_mutex_);
-        for (const auto& identifier : responder.identifiers()) {
-            digest_answered_.insert(identifier);
-        }
-    }
-
-    // Owners the peer has never heard of: it cannot ask for them, so push them now.
-    if (!reply.unknown.empty()) {
-        node->post_storage([this, unknown = reply.unknown, responder] { send_rows_for_owners(unknown, responder); });
-    }
-
-    if (reply.mismatched.empty()) {
-        return;
-    }
-
-    // Owners that differed: the peer's rows are on their way (sent before this reply).
-    // Once they have been merged, whatever still differs is ours that the peer lacks —
-    // push it. One round, no ping-pong: the peer does not answer rows with a digest.
-    node->dfs()->schedule_delayed(std::chrono::seconds(2), [this, mismatched = reply.mismatched, responder] {
-        node->post_storage([this, mismatched, responder] {
-            std::vector<ActorId>           owners;
-            std::map<ActorId, std::string> remote;
-            for (const auto& digest : mismatched) {
-                owners.push_back(digest.owner_id);
-                remote.emplace(digest.owner_id, digest.digest);
-            }
-            std::vector<ActorId> to_push;
-            for (const auto& local : catalog_digests(owners)) {
-                if (remote[local.owner_id] != local.digest) {
-                    to_push.push_back(local.owner_id);
-                }
-            }
-            if (!to_push.empty()) {
-                eLog("[Dfs] Catalog digest still differs after merge, pushing ours: owners={}", to_push.size());
-                send_rows_for_owners(to_push, responder);
-            }
-        });
-    });
-}
-
-bool DirsManager::digest_answered(const std::string& identifier) {
+bool DirsManager::digest_answered(const std::string &identifier) {
     std::lock_guard lock(digest_mutex_);
     return digest_answered_.contains(identifier);
 }
 
-void DirsManager::note_digest_unanswered(const std::string& identifier) {
-    std::lock_guard lock(digest_mutex_);
-    ++digest_unanswered_[identifier];
+namespace {
+    bool catalog_peer(const Responder &responder) {
+        return responder.identifiers().size() == 1 && !responder.identifiers().begin()->empty()
+               && responder.identifiers().begin()->size() <= 64;
+    }
+    bool valid_digests(const std::vector<Dfs::Packets::CatalogDigest> &digests) {
+        if (digests.size() > Dfs::CatalogOwnerLimit)
+            return false;
+        std::set<ActorId> owners;
+        for (const auto &digest : digests)
+            if (digest.owner_id.is_zero() || !owners.insert(digest.owner_id).second || digest.digest.size() != 64
+                || !std::ranges::all_of(digest.digest, [](char c) {
+                       return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+                   }))
+                return false;
+        return true;
+    }
+} // namespace
+
+std::vector<ActorId> DirsManager::bounded_scope(const std::string &peer, const std::vector<ActorId> &owners) {
+    auto ordered = owners;
+    std::sort(ordered.begin(), ordered.end());
+    ordered.erase(std::unique(ordered.begin(), ordered.end()), ordered.end());
+    std::erase_if(ordered, [](const auto &owner) {
+        return owner.is_zero();
+    });
+    if (ordered.size() <= Dfs::CatalogOwnerLimit)
+        return ordered;
+    std::lock_guard lock(work_->mutex);
+    if (work_->scope_cursor.size() >= 128 && !work_->scope_cursor.contains(peer))
+        work_->scope_cursor.clear();
+    auto &position = work_->scope_cursor[peer];
+    position %= ordered.size();
+    const auto           end = std::min(ordered.size(), position + Dfs::CatalogOwnerLimit);
+    std::vector<ActorId> result(ordered.begin() + position, ordered.begin() + end);
+    position = end == ordered.size() ? 0 : end;
+    return result;
 }
 
-bool DirsManager::digest_unsupported(const std::string& identifier) {
-    // One missed reply is not an old peer: under a write burst the storage thread
-    // answers late and every peer looked "old" at once, which silenced the periodic
-    // reconcile for the rest of the run (seen on the stand with 2000-row vectors).
-    // Three unanswered requests and never a reply — that is an old peer.
-    std::lock_guard lock(digest_mutex_);
-    if (digest_answered_.contains(identifier)) {
-        return false;
+std::string DirsManager::request_catalog_rows(const Dfs::CatalogRowsRequest &request, const Responder &target) {
+    if (!catalog_peer(target) || !Dfs::valid_catalog_request(request))
+        return { };
+    auto canonical = request;
+    std::sort(canonical.owners.begin(), canonical.owners.end());
+    const auto peer      = *target.identifiers().begin();
+    const auto responder = target.with_new_message_id();
+    if (!work_->track(responder.message_id(), CatalogWork::Kind::Rows, peer, canonical))
+        return { };
+    WireFormat::Scope scope(WireFormat::wire());
+    if (responder.send_response(canonical, MessageType::DfsSyncDirRows, SendMode::Focused, MessageStatus::Request)
+            .empty()) {
+        work_->finish(responder.message_id());
+        return { };
     }
-    const auto it = digest_unanswered_.find(identifier);
-    return it != digest_unanswered_.end() && it->second >= 3;
+    return responder.message_id();
+}
+
+std::string DirsManager::request_catalog_digest(const std::vector<ActorId> &allowed, const Responder &target) {
+    if (!catalog_peer(target) || !Dfs::valid_catalog_request({ .owners = allowed }))
+        return { };
+    auto owners = allowed;
+    std::sort(owners.begin(), owners.end());
+    const auto peer      = *target.identifiers().begin();
+    const auto responder = target.with_new_message_id();
+    if (!work_->track(responder.message_id(), CatalogWork::Kind::Digest, peer, { .owners = owners }))
+        return { };
+    auto       digests  = catalog_digests(owners);
+    const bool complete = digests.size() <= Dfs::CatalogOwnerLimit;
+    if (!complete)
+        digests.clear();
+    const Dfs::Packets::CatalogDigestRequest request { .owners   = std::move(digests),
+                                                       .allowed  = owners,
+                                                       .complete = complete };
+    WireFormat::Scope                        scope(WireFormat::wire());
+    if (responder.send_response(request, MessageType::DfsSyncDigest, SendMode::Focused, MessageStatus::Request)
+            .empty()) {
+        work_->finish(responder.message_id());
+        return { };
+    }
+    return responder.message_id();
+}
+
+void DirsManager::sync_digest(const std::string &identifier, const std::vector<ActorId> &allowed) {
+    Responder target(node->network());
+    target.add_identifier(identifier);
+    request_catalog_digest(bounded_scope(identifier, allowed), target);
+}
+
+void DirsManager::temp_sync_all(const std::string &identifier) {
+    Responder target(node->network());
+    target.add_identifier(identifier);
+    request_catalog_rows({ }, target);
+}
+
+void DirsManager::temp_sync_actors(const std::string &identifier, const std::vector<ActorId> &actors) {
+    if (actors.empty())
+        return;
+    Responder target(node->network());
+    target.add_identifier(identifier);
+    request_catalog_rows({ .owners = bounded_scope(identifier, actors) }, target);
+}
+
+void DirsManager::network_request_catalog_rows(const Dfs::CatalogRowsRequest &request,
+                                               const Responder               &responder) {
+    if (!catalog_peer(responder) || !Dfs::valid_catalog_request(request))
+        return;
+    const auto ticket = work_->budget.reserve(*responder.identifiers().begin(), 256 * 1024);
+    if (!ticket)
+        return;
+    auto work = [this, request, responder, ticket] {
+        if (ticket->stopped())
+            return;
+        auto page = Dfs::read_catalog_page(db_, request);
+        if (!page.has_value())
+            return;
+        for (auto &row : page.value().rows) {
+            if (ticket->stopped())
+                return;
+            use_local_vector_content(row.owner_id, row);
+        }
+        WireFormat::Scope scope(WireFormat::wire());
+        responder.send_response(page.value(),
+                                MessageType::DfsSyncDirRows,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    };
+    boost::asio::post(work_->strand,
+                      ExtraChain::Core::Runtime::guard_handler("catalog page request", std::move(work)));
+}
+
+void DirsManager::merge_catalog_rows(const std::vector<Dfs::DirRow> &rows, const Responder &responder) {
+    std::map<ActorId, std::vector<Dfs::DirRow>> downloads;
+    const bool                                  selective = node->dfs()->mode() == DfsMode::Selective;
+    const auto              allowed = selective ? node->dfs()->startup_sync_actors() : std::vector<ActorId> { };
+    const std::set<ActorId> filter(allowed.begin(), allowed.end());
+    for (const auto &row : rows) {
+        if (!node_enabled.load())
+            return;
+        if (selective && !filter.contains(row.owner_id))
+            continue;
+        const auto accepted = node->dfs()->accept_catalog_row(row.owner_id, row);
+        if (!accepted.has_value())
+            continue;
+        auto       &todo   = downloads[row.owner_id];
+        const auto &stored = accepted.value().current;
+        if (stored.state == Dfs::FileState::Removed)
+            continue;
+        const bool vector = stored.type == Dfs::FileType::Vector || stored.type == Dfs::FileType::Dictionary;
+        if (stored.type == Dfs::FileType::File || vector) {
+            const auto &target = vector ? row : stored;
+            if (!node->dfs()->is_file_already_downloaded(row.owner_id, stored.file_id, target.hash))
+                todo.push_back(target);
+        }
+        if (accepted.value().changed && node->dfs()->mode() == DfsMode::Full)
+            node->dfs()->broadcast_stored(row.owner_id, stored);
+    }
+    for (const auto &[owner, todo] : downloads) {
+        Dfs::Tables::DirsFile::DirsSpace::update_from_files(db_, owner);
+        node->dfs()->download_manager().add_to_queue(owner, todo, *responder.identifiers().begin());
+    }
+}
+
+void DirsManager::network_response_dir_rows(std::string_view data, const Responder &responder) {
+    if (!catalog_peer(responder) || data.size() > Dfs::CatalogPageBytes)
+        return;
+    const auto pending =
+        work_->begin(responder.message_id(), CatalogWork::Kind::Rows, *responder.identifiers().begin());
+    if (!pending.has_value())
+        return;
+    const auto ticket = work_->budget.reserve(*responder.identifiers().begin(), data.size());
+    if (!ticket) {
+        work_->finish(responder.message_id());
+        return;
+    }
+    auto work = [this, state = work_, pending = pending.value(), responder, ticket, data = std::string(data)] {
+        CatalogWork::Finish finish { *state, responder.message_id() };
+        if (ticket->stopped() || !MessagePack::has_bounded_structure(data, 32768, 4096, 8))
+            return;
+        const auto page = MessagePack::deserialize<Dfs::CatalogRowsPage>(data);
+        if (!page.has_value() || !Dfs::valid_catalog_page(page.value(), pending.request))
+            return;
+        merge_catalog_rows(page.value().rows, responder);
+        if (ticket->stopped())
+            return;
+        state->finish(responder.message_id());
+        node->dfs()->mark_startup_sync_response();
+        if (page.value().next.has_value())
+            request_catalog_rows({ .owners = pending.request.owners, .after = page.value().next.value() },
+                                 responder);
+    };
+    boost::asio::post(work_->strand,
+                      ExtraChain::Core::Runtime::guard_handler("catalog page response", std::move(work)));
+}
+
+void DirsManager::network_request_digest(const Dfs::Packets::CatalogDigestRequest &request,
+                                         const Responder                          &responder) {
+    if (!catalog_peer(responder) || !valid_digests(request.owners)
+        || !Dfs::valid_catalog_request({ .owners = request.allowed })
+        || (!request.complete && !request.owners.empty()))
+        return;
+    const std::set<ActorId> allowed(request.allowed.begin(), request.allowed.end());
+    for (const auto &digest : request.owners)
+        if (!allowed.empty() && !allowed.contains(digest.owner_id))
+            return;
+    const auto ticket = work_->budget.reserve(*responder.identifiers().begin(), 1024 * 1024);
+    if (!ticket)
+        return;
+    auto work = [this, request, responder, ticket] {
+        if (ticket->stopped())
+            return;
+        const auto                       local = catalog_digests(request.allowed);
+        Dfs::Packets::CatalogDigestReply reply;
+        std::vector<ActorId>             pull;
+        const bool                       full_pull = !request.complete || local.size() > Dfs::CatalogOwnerLimit;
+        if (local.size() > Dfs::CatalogOwnerLimit) {
+            reply.full_catalog = true;
+        } else {
+            std::map<ActorId, std::string> remote;
+            std::map<ActorId, std::string> own;
+            for (const auto &digest : request.owners)
+                remote.emplace(digest.owner_id, digest.digest);
+            for (const auto &digest : local) {
+                own.emplace(digest.owner_id, digest.digest);
+                const auto found = remote.find(digest.owner_id);
+                if (found == remote.end() || found->second != digest.digest)
+                    reply.mismatched.push_back(digest);
+            }
+            for (const auto &digest : request.owners) {
+                const auto found = own.find(digest.owner_id);
+                if (found == own.end())
+                    reply.unknown.push_back(digest.owner_id);
+                if (found == own.end() || found->second != digest.digest)
+                    pull.push_back(digest.owner_id);
+            }
+        }
+        if (ticket->stopped())
+            return;
+        WireFormat::Scope scope(WireFormat::wire());
+        responder.send_response(reply,
+                                MessageType::DfsSyncDigestReply,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+        if (full_pull)
+            request_catalog_rows({ .owners = request.allowed }, responder);
+        else if (!pull.empty())
+            request_catalog_rows({ .owners = std::move(pull) }, responder);
+    };
+    boost::asio::post(work_->strand,
+                      ExtraChain::Core::Runtime::guard_handler("catalog digest request", std::move(work)));
+}
+
+void DirsManager::network_response_digest(std::string_view data, const Responder &responder) {
+    if (!catalog_peer(responder) || data.size() > 1024 * 1024)
+        return;
+    const auto pending =
+        work_->begin(responder.message_id(), CatalogWork::Kind::Digest, *responder.identifiers().begin());
+    if (!pending.has_value())
+        return;
+    const auto ticket = work_->budget.reserve(*responder.identifiers().begin(), data.size());
+    if (!ticket) {
+        work_->finish(responder.message_id());
+        return;
+    }
+    auto work = [this, state = work_, pending = pending.value(), responder, ticket, data = std::string(data)] {
+        CatalogWork::Finish finish { *state, responder.message_id() };
+        if (ticket->stopped() || !MessagePack::has_bounded_structure(data, 65536, 8192, 8))
+            return;
+        const auto decoded = MessagePack::deserialize<Dfs::Packets::CatalogDigestReply>(data);
+        if (!decoded.has_value())
+            return;
+        const auto &reply = decoded.value();
+        if (!valid_digests(reply.mismatched) || !Dfs::valid_catalog_request({ .owners = reply.unknown })
+            || (reply.full_catalog && (!reply.mismatched.empty() || !reply.unknown.empty())))
+            return;
+        const std::set<ActorId> allowed(pending.request.owners.begin(), pending.request.owners.end());
+        std::vector<ActorId>    owners;
+        for (const auto &digest : reply.mismatched) {
+            if (!allowed.empty() && !allowed.contains(digest.owner_id))
+                return;
+            owners.push_back(digest.owner_id);
+        }
+        {
+            std::lock_guard lock(digest_mutex_);
+            if (digest_answered_.size() >= 128)
+                digest_answered_.clear();
+            digest_answered_.insert(pending.peer);
+        }
+        node->dfs()->mark_startup_sync_response();
+        if (reply.full_catalog)
+            request_catalog_rows({ .owners = pending.request.owners }, responder);
+        else if (!owners.empty())
+            request_catalog_rows({ .owners = std::move(owners) }, responder);
+    };
+    boost::asio::post(work_->strand,
+                      ExtraChain::Core::Runtime::guard_handler("catalog digest response", std::move(work)));
 }
