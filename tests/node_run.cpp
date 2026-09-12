@@ -184,6 +184,15 @@ int main(int argc, char* argv[]) {
             return 2;
         }
         node->dag()->set_mode(DagMode::Full);
+        // ExDFS runs Light by default (DfsService hard-codes it): a Light node never
+        // pulls a payload it only knows from the catalog, so replication under
+        // message loss rests on gossip alone. EXC_DFS_MODE=full makes the committee
+        // pull every Known row too, which is what a storage node has to do.
+        if (const char* dfs_mode = std::getenv("EXC_DFS_MODE");
+            dfs_mode != nullptr && std::string(dfs_mode) == "full") {
+            node->dfs()->set_mode(DfsMode::Full);
+            std::printf("[node-run] DFS mode: full\n");
+        }
         std::printf("[node-run] local node identifier=%s network=%s\n",
                     node->node_identifier().c_str(),
                     node->network_id().to_string().c_str());

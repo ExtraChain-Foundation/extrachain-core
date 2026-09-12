@@ -24,6 +24,8 @@
 #                                node's vector (multi-writer); audited together
 #        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
 #                                the run passes only if it reaches every node (default 0)
+#        EXC_SHADOW_DFS_MODE     "full" puts the committee's ExDFS into Full mode (pull
+#                                every Known payload); default is the core's Light
 #        EXC_SHADOW_REMOVE_AFTER_S every node also publishes a small file and removes it
 #                                this many seconds later; the run passes only if every
 #                                node ends with the row Removed and no payload on disk
@@ -56,6 +58,9 @@ VECTOR_CROSS="${EXC_SHADOW_VECTOR_CROSS:-0}"
 export EXC_DFS_VECTOR_CROSS="$VECTOR_CROSS"
 REMOVE_AFTER="${EXC_SHADOW_REMOVE_AFTER_S:-0}"
 export EXC_DFS_REMOVE_AFTER_S="$REMOVE_AFTER"
+# "full" makes every committee node pull Known payloads (storage-node behaviour);
+# default keeps the ExDFS Light mode the core hard-codes.
+export EXC_DFS_MODE="${EXC_SHADOW_DFS_MODE:-light}"
 ALLOWED_DEAD="${EXC_SHADOW_ALLOWED_DEAD:-0}"
 # Nodes found dead when the watch loop ends (chaos kills); set once, before cleanup.
 DEAD_NODES=""
