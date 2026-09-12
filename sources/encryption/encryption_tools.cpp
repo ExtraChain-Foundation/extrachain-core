@@ -472,7 +472,11 @@ std::expected<bool, FsError> Cryptography::validate_encryption_paths(const FsPat
     if (!readable.has_value() || !readable.value()) {
         return std::unexpected(FsError::ValidationError);
     }
-    const auto parent = output_path.parent_path();
+    const auto absolute = output_path.absolute();
+    if (!absolute.has_value()) {
+        return std::unexpected(absolute.error());
+    }
+    const auto parent = absolute.value().parent_path();
     if (!parent.has_value()) {
         return std::unexpected(parent.error());
     }
