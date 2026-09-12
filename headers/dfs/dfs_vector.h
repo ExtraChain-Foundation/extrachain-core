@@ -109,7 +109,8 @@ public:
     std::expected<DbRow, DfsVectorError> read_row(const std::string& primary_data);
 
     std::expected<std::vector<DbRow>, DfsVectorError> read_rows(
-        const std::string& where_statement = "where status = '1'");
+        const std::string& where_statement = "where status = '1'",
+        const DbRow&       binds           = { });
 
     std::expected<Dfs::CollectionTemplate, DfsVectorError> read_template();
 

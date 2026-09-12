@@ -34,6 +34,11 @@ bool is_valid_chat_link(const Chat::Chat& chat) {
     return !chat.owner_id.is_zero() && !chat.file_id.empty();
 }
 
+bool row_is_from_owner(const DbRow& row, const ActorId& owner) {
+    const auto author = row.find("actor");
+    return author != row.end() && author->second == owner.to_string();
+}
+
 bool same_chat_link(const Chat::Chat& lhs, const Chat::Chat& rhs) {
     return lhs.owner_id == rhs.owner_id && lhs.file_id == rhs.file_id;
 }
@@ -72,6 +77,10 @@ void ChatManager::on_vector_row_added(const ActorId& owner_id, const Dfs::DirRow
             continue;
         }
 
+        if (chat.chat.chat_type == Chat::ChatType::Channel && !row_is_from_owner(row, chat.owner_id)) {
+            continue;
+        }
+
         bool encryption = chat.chat_key.has_value();
         if (chat.chat.chat_type == Chat::ChatType::Channel) {
             encryption = false;
@@ -83,7 +92,9 @@ void ChatManager::on_vector_row_added(const ActorId& owner_id, const Dfs::DirRow
         }
 
         auto message_row = node->dfs()->read_vector_row(owner_id, dir_row.file_id, id->second, security);
-        if (!message_row.has_value()) {
+        if (!message_row.has_value()
+            || (chat.chat.chat_type == Chat::ChatType::Channel
+                && !row_is_from_owner(message_row.value(), chat.owner_id))) {
             continue;
         }
 
@@ -119,11 +130,15 @@ void ChatManager::on_vector_row_added(const ActorId& owner_id, const Dfs::DirRow
 
 void ChatManager::on_vector_row_removed(const ActorId& owner_id, const Dfs::DirRow& dir_row, const DbRow& row) {
     const auto id = row.find("id");
-    if (id == row.end()) {
+    const auto status = row.find("status");
+    if (id == row.end() || status == row.end() || status->second != "0") {
         return;
     }
     for (const auto& chat : std::as_const(chats_)) {
         if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id) && chat.file_id == dir_row.file_id) {
+            if (chat.chat.chat_type == Chat::ChatType::Channel && !row_is_from_owner(row, chat.owner_id)) {
+                continue;
+            }
             message_removed_event_.publish(owner_id, dir_row.file_id, id->second);
         }
     }
@@ -231,10 +246,6 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     }
 
     auto db_instance = node->dfs()->get_db_instance();
-    auto rows        = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, chat_actor_id);
-    if (!rows.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
 
     auto network_id = node->actor_index()->network_id();
     if (network_id.is_zero()) {
@@ -422,10 +433,6 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
     }
 
     auto db_instance = node->dfs()->get_db_instance();
-    auto rows        = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, chat_actor_id);
-    if (!rows.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
 
     // Without the synced Channels vector the channel would never appear publicly.
     if (!channels_vector_row().has_value()) {
@@ -539,7 +546,12 @@ std::expected<std::vector<Chat::ChannelInfo>, ChatError> ChatManager::read_chann
     std::vector<Chat::ChannelInfo> channels;
     for (auto &row : rows.value()) {
         // Only the channel owner may list it (signature already verified by DFS).
-        if (row.count("actor") && row["actor"] != row["owner_id"]) {
+        const auto owner = row.find("owner_id");
+        if (owner == row.end() || !row.contains("file_id")) {
+            continue;
+        }
+        const auto owner_id = ActorId::create(owner->second);
+        if (!owner_id.has_value() || owner_id.value().is_zero() || !row_is_from_owner(row, owner_id.value())) {
             continue;
         }
         channels.push_back(Chat::ChannelInfo { .owner_id = ActorId(row["owner_id"]),
@@ -728,7 +740,11 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_mess
     std::vector<Chat::Message> messages;
     messages.reserve(db_rows->size());
 
+    const bool owner_only = !chat.has_value() || chat.value().chat.chat_type == Chat::ChatType::Channel;
     for (const auto& db_row : db_rows.value()) {
+        if (owner_only && !row_is_from_owner(db_row, owner_id)) {
+            continue;
+        }
         auto rown = db_row;
         rown.erase("sign");
         rown.erase("status");
@@ -770,14 +786,26 @@ std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const Act
                                                          : current_chat_actor_id();
 
     for (int offset = 0; offset < 100; offset += batch_size) {
-        auto query   = fmt::format("where status = '1' ORDER by timestamp DESC LIMIT {} OFFSET {}", batch_size, offset);
-        auto db_rows = node->dfs()->read_vector_rows(owner_id, file_id, query,
-                                                     encryption ? security_key : Dfs::DataSecurityData());
-        if (!db_rows.has_value() || db_rows->empty()) {
+        const bool  owner_only = chat.value().chat.chat_type == Chat::ChatType::Channel;
+        const auto  query      = fmt::format("where status = '1' {} ORDER by timestamp DESC LIMIT {} OFFSET {}",
+                                             owner_only ? "AND actor = :actor" : "",
+                                             batch_size,
+                                             offset);
+        const DbRow binds      = owner_only ? DbRow { { "actor", owner_id.to_string() } } : DbRow { };
+        auto        db_rows    = node->dfs()->read_vector_rows(owner_id,
+                                                               file_id,
+                                                               query,
+                                                               encryption ? security_key : Dfs::DataSecurityData(),
+                                                               Dfs::FileType::Vector,
+                                                               binds);
+        if (!db_rows.has_value()) {
             break;
         }
 
         for (auto &db_row : db_rows.value()) {
+            if (chat.value().chat.chat_type == Chat::ChatType::Channel && !row_is_from_owner(db_row, owner_id)) {
+                continue;
+            }
             db_row.erase("sign");
             db_row.erase("status");
 
@@ -803,10 +831,6 @@ std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const Act
         }
 
         if (found_non_edited) {
-            break;
-        }
-
-        if (static_cast<int>(db_rows->size()) < batch_size) {
             break;
         }
     }

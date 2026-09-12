@@ -1227,7 +1227,8 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsService::read_vector_rows(
     const std::string           &file_id,
     const std::string           &where_statement,
     const Dfs::DataSecurityData &security_data,
-    Dfs::FileType                file_type) {
+    Dfs::FileType                file_type,
+    const DbRow                 &binds) {
     if (!node_enabled.load()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
@@ -1244,7 +1245,7 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsService::read_vector_rows(
         return std::unexpected(DfsVectorError::Unknown);
     }
 
-    auto row = where_statement.empty() ? v->read_rows() : v->read_rows(where_statement);
+    auto row = v->read_rows(where_statement.empty() ? "where status = '1'" : where_statement, binds);
     if (!row.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }

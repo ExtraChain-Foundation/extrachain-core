@@ -501,7 +501,8 @@ public:
         const std::string           &file_id,
         const std::string           &where_statement = "",
         const Dfs::DataSecurityData &security_data   = Dfs::DataSecurityData(),
-        Dfs::FileType                file_type       = Dfs::FileType::Vector);
+        Dfs::FileType                file_type       = Dfs::FileType::Vector,
+        const DbRow                 &binds           = { });
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_dictionary(
         const ActorId               &owner_id,

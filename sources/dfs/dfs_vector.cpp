@@ -337,7 +337,8 @@ std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &prim
     return row;
 }
 
-std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std::string &where_statement) {
+std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std::string &where_statement,
+                                                                       const DbRow       &binds) {
     DbConnector db(file_path_);
     db.open(/*create_if_missing*/ false);
     if (!db.is_open()) {
@@ -345,33 +346,44 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std
     }
 
     auto               query   = fmt::format("SELECT * FROM {} {}", "Vector", where_statement);
-    std::vector<DbRow> db_rows = db.select(query);
+    std::vector<DbRow> db_rows = db.select(query, "Vector", binds);
     db.close();
 
     if (db_rows.empty()) {
         return std::unexpected(DfsVectorError::CollectionEmpty);
     }
 
+    std::vector<DbRow> readable;
+    readable.reserve(db_rows.size());
     for (auto &row : db_rows) {
         // TODO: make security_data_ unique for actor / current (security_data_.receiver)
         Dfs::DataSecurityData adjusted_security_data = security_data_;
 
         if (auto *actor_data = std::get_if<Dfs::DataSecurityActor>(&adjusted_security_data)) {
             if (actor_data->sender_id.is_zero()) {
-                actor_data->sender_id = ActorId(row["actor"]);
+                const auto author = row.find("actor");
+                if (author == row.end()) {
+                    continue;
+                }
+                const auto actor = ActorId::create(author->second);
+                if (!actor.has_value()) {
+                    continue;
+                }
+                actor_data->sender_id = actor.value();
             }
         }
 
         auto decryption_res = decrypt_data(row, adjusted_security_data);
         if (!decryption_res.has_value()) {
-            return std::unexpected(DfsVectorError::CollectionEmpty);
+            continue;
         }
         if (!decryption_res.value().empty()) {
-            row = decryption_res.value();
+            row = std::move(decryption_res.value());
         }
+        readable.push_back(std::move(row));
     }
 
-    return db_rows;
+    return readable;
 }
 
 std::expected<Dfs::VectorDescriptor, DfsVectorError> DfsVector::load_descriptor() {
