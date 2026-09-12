@@ -8,8 +8,13 @@
 
 #include "consensus/consensus_engine.h"
 #include "consensus/light_client.h"
+#include "consensus/balance_snapshot.h"
 #include "consensus/validator_set.h"
 #include "utils/exc_utils.h"
+
+bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV1& snapshot,
+                                   const ExtraChain::Consensus::BalanceSnapshotV1& newer,
+                                   const ExtraChain::Consensus::ValidatorSet&      validators);
 
 namespace {
     using namespace ExtraChain::Consensus;
@@ -160,10 +165,11 @@ namespace {
             .height                    = height,
             .previous_state_commitment = std::move(previous),
             .section_root              = std::move(section_root),
-            .account_state_root        = "account-root-" + std::to_string(height),
-            .contract_state_root       = "contract-root-" + std::to_string(height),
-            .token_registry_root       = "token-root-" + std::to_string(height),
-            .validator_set_hash        = engine.validators().hash(),
+            .account_state_root        = balance_snapshot_root(
+                { { { engine.validators().document().network_id, ActorId { } }, BigNumberFloat(25) } }),
+            .contract_state_root = "contract-root-" + std::to_string(height),
+            .token_registry_root = "token-root-" + std::to_string(height),
+            .validator_set_hash  = engine.validators().hash(),
         };
     }
 } // namespace
@@ -350,6 +356,33 @@ int main() {
     check("light client verifies finality and transaction inclusion without DAG state",
           light_client.has_value() && inclusion.has_value() && inclusion.value().has_value()
               && light_client.value().verify_transaction_proof(inclusion.value().value()));
+    BalanceSnapshotV1 balance_snapshot {
+        .balances = { { { committee.governance.id(), ActorId { } }, BigNumberFloat(25) } },
+        .proof    = inclusion.value().value().finality_proof,
+    };
+    check("light client verifies balances against the certified state root",
+          verify_balance_snapshot(balance_snapshot, light_client.value()));
+    auto altered_balance = balance_snapshot;
+    altered_balance.balances.begin()->second += BigNumberFloat(1);
+    check("light client rejects a changed balance",
+          !verify_balance_snapshot(altered_balance, light_client.value()));
+    altered_balance.balances.clear();
+    check("light client rejects omitted balances",
+          !verify_balance_snapshot(altered_balance, light_client.value()));
+    altered_balance                                                   = balance_snapshot;
+    altered_balance.proof.finalized_proposal.state.account_state_root = balance_snapshot_root({ });
+    altered_balance.balances.clear();
+    check("light client rejects a replaced root", !verify_balance_snapshot(altered_balance, light_client.value()));
+    altered_balance = balance_snapshot;
+    altered_balance.proof.decision_certificate.signatures.clear();
+    check("light client rejects a missing finality signature",
+          !verify_balance_snapshot(altered_balance, light_client.value()));
+    const auto newer_proofs =
+        engines.front()->finality_proofs_after(balance_snapshot.proof.finalized_proposal.header.height, 1);
+    check("newer finalized snapshot is available", newer_proofs.has_value() && !newer_proofs.value().empty());
+    BalanceSnapshotV1 newer_snapshot { balance_snapshot.balances, newer_proofs.value().front() };
+    check("runtime accepts only requested certified light balances and rejects rollback",
+          test_balance_snapshot_runtime(balance_snapshot, newer_snapshot, committee.document));
     auto changed_inclusion             = inclusion.value().value();
     changed_inclusion.transaction_hash = "network-transaction-changed";
     check("light client rejects a changed transaction proof",

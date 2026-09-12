@@ -46,6 +46,7 @@
 #include <vector>
 
 #include "chain/dag.h"
+#include "chain/actor_index.h"
 #include "consensus/consensus_protocol.h"
 #include "consensus/consensus_service.h"
 #include "core/extrachain_node.h"
@@ -93,6 +94,8 @@ int main(int argc, char* argv[]) {
         listen_port = static_cast<std::uint16_t>(std::atoi(argv[3]));
     } else if (mode == "join" && argc > 5) {
         listen_port = static_cast<std::uint16_t>(std::atoi(argv[5]));
+    } else if (mode == "light" && argc > 4) {
+        listen_port = static_cast<std::uint16_t>(std::atoi(argv[4]));
     } else if (mode == "committee" && argc > 5) {
         listen_port = static_cast<std::uint16_t>(std::atoi(argv[5]));
     }
@@ -109,12 +112,15 @@ int main(int argc, char* argv[]) {
 
     // For a joining node, point first_node at the peer and force a fresh node id
     // BEFORE the node initialises (initialize_first_node reads settings on init).
-    if (mode == "join") {
+    if (mode == "join" || mode == "light") {
         if (argc < 5) {
             std::printf("usage: %s join <home> <peer-ip> <target-section> [listen-port] [peer-port]\n", argv[0]);
             return 64;
         }
         auto settings            = Utils::read_settings();
+        if (mode == "light") {
+            settings.dag_mode = DagMode::Light;
+        }
         settings.first_node      = std::string(argv[3]);
         settings.node_identifier = std::nullopt;
         settings.node_nonce      = std::nullopt;
@@ -147,6 +153,55 @@ int main(int argc, char* argv[]) {
                                                                    bind_ip == nullptr ? std::string {}
                                                                                       : std::string(bind_ip));
     node->process();
+
+    if (mode == "light") {
+        using namespace ExtraChain::Consensus;
+        if (argc < 6) {
+            std::printf("usage: %s light <home> <peer-ip> <listen-port> <peer-port> [minimum-height]\n", argv[0]);
+            return 64;
+        }
+        const auto bytes = FileIo::read_all("consensus/validator-set.msgpack");
+        if (!bytes.has_value()) {
+            return 65;
+        }
+        const auto validators = MessagePack::deserialize<ValidatorSet>(bytes.value());
+        if (!validators.has_value() || !LightClientVerifier::create(validators.value()).has_value()) {
+            return 65;
+        }
+        node->actor_index()->set_network_id(validators.value().network_id);
+        node->account_controller()->create_profile(joiner_login_hash(), ActorType::User);
+        const auto peer_port      = static_cast<std::uint16_t>(std::atoi(argv[5]));
+        const auto minimum_height = argc > 6 ? std::strtoull(argv[6], nullptr, 10) : 1;
+        const auto deadline       = std::chrono::steady_clock::now() + std::chrono::seconds(150);
+        int        result         = 1;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (node->dag()->state_projection_ready()) {
+                const auto verifier = LightClientVerifier::load("consensus/light-client.msgpack");
+                if (verifier.has_value() && verifier.value().trusted_height() >= minimum_height
+                    && !node->dag()->read_section(SectionId(0)).has_value()
+                    && !node->dag()->cache().read_cached_balances().second.empty()) {
+                    std::printf("PASS: Light snapshot verified height=%llu section=%s without DAG history\n",
+                                static_cast<unsigned long long>(verifier.value().trusted_height()),
+                                node->dag()->cache().section().to_string().c_str());
+                    result = 0;
+                    break;
+                }
+            }
+            if (node->network()->active_connections_count() == 0) {
+                node->network()->request_endpoint(argv[3], peer_port, true, true);
+            } else {
+                node->dag()->start_check();
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+        }
+        if (result != 0) {
+            std::printf("FAIL: Light snapshot timeout status=%d section=%s\n",
+                        static_cast<int>(node->dag()->state_projection().status),
+                        node->dag()->cache().section().to_string().c_str());
+        }
+        node->cleanUp();
+        return result;
+    }
 
     if (mode == "committee") {
         using namespace ExtraChain::Consensus;

@@ -90,6 +90,14 @@ int main(int argc, char** argv) {
         }
     });
 
+    run("wire actor identifiers reject malformed values without coercion", [] {
+        for (const auto& invalid : { std::string(4096, 'a'), std::string("bad-id") }) {
+            TEST_REQUIRE(!MessagePack::deserialize<ActorId>(MessagePack::serialize(invalid)).has_value());
+        }
+        const auto valid = MessagePack::deserialize<ActorId>(MessagePack::serialize(ActorId { }));
+        TEST_REQUIRE(valid.has_value() && valid.value().is_zero());
+    });
+
     Actor<KeyPrivate> owner;
     Actor<KeyPrivate> wallet;
     owner.create(ActorType::User);

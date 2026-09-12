@@ -218,16 +218,28 @@ Dag::Dag(ExtraChain::Core::ExtraChainNode *node)
                              verified_section,
                              failed == incidents.end() ? incidents.front().reason : failed->reason);
     } else {
-        set_state_projection(StateProjectionStatus::Ready, cache_.section());
+        set_state_projection(mode_ == DagMode::Light ? StateProjectionStatus::RepairPending
+                                                     : StateProjectionStatus::Ready,
+                             cache_.section(),
+                             mode_ == DagMode::Light ? "light-finality-proof-required" : "");
     }
 
     timestamp_bigger_sync_start_ = 0;
 
     auto section = this->read_section(SectionId(0));
     if (section.has_value() && section->transactions.size() == 1) {
-        // prove_transaction()
-        auto network_id = section->transactions.begin()->sender();
-        node->actor_index()->set_network_id(network_id);
+        const auto &genesis = *section->transactions.begin();
+        const auto  root    = node->network_id();
+        const auto  signer  = node->actor_index()->read_actor_old(genesis.sender());
+        if ((!root.is_zero() && root != genesis.sender()) || genesis.type() != TransactionType::Genesis
+            || genesis.section() != SectionId(0) || genesis.amount() != 0 || genesis.receiver() != genesis.sender()
+            || (genesis.hash() != genesis.calculate_hash() && genesis.hash() != genesis.calculate_hash_hex())
+            || signer.empty() || !genesis.verify(signer)) {
+            set_state_projection(StateProjectionStatus::Failed, SectionId(-1), "invalid-local-genesis");
+            eCritical("[Dag] Local genesis does not match the configured network or its signature");
+        } else {
+            node->actor_index()->set_network_id(genesis.sender());
+        }
     }
 
     if (mode_ == DagMode::Light && cache_.section() == SectionId(-1) && !storage_reset) {
@@ -407,7 +419,8 @@ void Dag::watchdog_tick() {
 
     eLog("[Dag] Watchdog: info timer active={}", node->info_timer_active());
 
-    if (mode_ != DagMode::Full) {
+    if (mode_ == DagMode::Light) {
+        start_check();
         return;
     }
     resume_state_recovery();
@@ -452,7 +465,7 @@ void Dag::schedule_sync_check() {
 
 void Dag::sync_check() {
     sync_check_pending_.store(false);
-    if (started_.load() && mode_ == DagMode::Full && status_ == DagStatus::Ready) {
+    if (started_.load() && (mode_ == DagMode::Light || status_ == DagStatus::Ready)) {
         start_check();
     }
 }
@@ -577,6 +590,11 @@ void Dag::set_mode(DagMode mode) {
     // }
 
     this->mode_ = mode;
+    if (mode == DagMode::Light) {
+        set_state_projection(StateProjectionStatus::RepairPending,
+                             cache_.section(),
+                             "light-finality-proof-required");
+    }
 
     auto settings     = Utils::read_settings();
     settings.dag_mode = this->mode_;
@@ -619,7 +637,8 @@ TransactionCache &Dag::transaction_cache() {
 }
 
 bool Dag::should_queue_network_transaction() {
-    return status_ == DagStatus::Ready || cached_txs_size() < node->runtime_limits().sync_transactions;
+    return mode_ == DagMode::Full
+           && (status_ == DagStatus::Ready || cached_txs_size() < node->runtime_limits().sync_transactions);
 }
 
 DagCache &Dag::cache() {
@@ -715,7 +734,7 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
                  current_section_.to_string());
         return std::unexpected(TransactionError::NotReady);
     }
-    if (shadow_transition_sealed_.load(std::memory_order_acquire)
+    if (mode_ == DagMode::Light || shadow_transition_sealed_.load(std::memory_order_acquire)
         || (node->consensus() != nullptr && node->consensus()->requires_intent_v2())) {
         return std::unexpected(TransactionError::IntentRequired);
     }
@@ -748,7 +767,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction_immediate(co
     if (!state_projection_ready()) {
         return std::unexpected(TransactionProveError::StateUnavailable);
     }
-    if (shadow_transition_sealed_.load(std::memory_order_acquire)
+    if (mode_ == DagMode::Light || shadow_transition_sealed_.load(std::memory_order_acquire)
         || (node->consensus() != nullptr && node->consensus()->requires_intent_v2())) {
         return std::unexpected(TransactionProveError::IntentRequired);
     }
@@ -3334,6 +3353,17 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
+    if (mode_ == DagMode::Light) {
+        Responder peers(node->network());
+        for (const auto &identifier : node->network()->active_full_peer_identifiers()) {
+            peers.add_identifier(identifier);
+            if (peers.identifiers().size() == 3) {
+                break;
+            }
+        }
+        request_light(peers);
+        return;
+    }
     std::lock_guard sync_lock(sync_last_info_mutex_);
 #ifndef IS_APP_CLIENT
     if (status_ == DagStatus::Ready) {
@@ -3910,17 +3940,6 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             if (this->status_ != DagStatus::Ready) {
                 this->start_control();
 
-#ifdef IS_APP_CLIENT
-                this->process_cached_transactions(true);
-                cache_.reset_db();
-                auto responder_new = responder.with_new_message_id();
-                node->network()->send_message(true,
-                                              MessageType::DagLightData,
-                                              SendMode::Focused,
-                                              MessageStatus::Request,
-                                              responder_new);
-                light_requested_ = true;
-#else
                 this->process_cached_transactions();
                 set_status(DagStatus::Ready);
                 set_sync_status(DagSyncStatus::None);
@@ -3932,7 +3951,6 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 cache_.init_db();
                 cache_.check_and_update_cache_thread(current_section_);
                 repair_control_chain();
-#endif
             }
 
             // Sync is done — now do the deferred bookkeeping once: seal the cold
@@ -3984,161 +4002,112 @@ void Dag::request_file_sections(const SectionId &from,
     eTemp("[Dag] Request file sections from {} to {}", range.first, range.last);
 }
 
+bool Dag::matches_light_response(const Responder &responder) const {
+    if (!pending_light_response_.has_value() || responder.identifiers().size() != 1) {
+        return false;
+    }
+    const auto &request = pending_light_response_.value();
+    const auto  now     = Utils::current_date_ms();
+    return request.message_id == responder.message_id() && request.peers.contains(*responder.identifiers().begin())
+           && now >= request.created_at_ms && now - request.created_at_ms < 30'000;
+}
+
+void Dag::request_light(const Responder &responder) {
+    if (mode_ != DagMode::Light || responder.identifiers().empty()) {
+        return;
+    }
+    const auto request = responder.with_new_message_id();
+    {
+        std::lock_guard lock(light_response_mutex_);
+        const auto      now = Utils::current_date_ms();
+        if (pending_light_response_.has_value() && now >= pending_light_response_.value().created_at_ms
+            && now - pending_light_response_.value().created_at_ms < 5'000) {
+            return;
+        }
+        pending_light_response_ =
+            PendingLightResponse { request.message_id(), request.identifiers(), Utils::current_date_ms() };
+    }
+    node->network()->send_message(true,
+                                  MessageType::DagLightData,
+                                  SendMode::Focused,
+                                  MessageStatus::Request,
+                                  request);
+}
+
 void Dag::network_request_light(const Responder &responder) {
-    node->post_storage([this, responder]() {
-        const auto                                     started_at = std::chrono::steady_clock::now();
-        std::set<Transaction>                          txs;
-        std::vector<std::pair<SectionId, std::string>> controls;
-
-        if (cache().section() == SectionId(-1) && current_section_ > 100) {
+    if (mode_ != DagMode::Full || status_ != DagStatus::Ready || responder.identifiers().size() != 1) {
+        return;
+    }
+    auto reservation = file_sync_budget_.reserve(*responder.identifiers().begin(), 1);
+    if (!reservation) {
+        return;
+    }
+    node->post_storage([this, responder, reservation = std::move(reservation)] {
+        if (reservation->stopped() || node->consensus() == nullptr) {
             return;
         }
-
-        auto [cache_section, cached_balances] = this->cache().read_cached_balances();
-        // txs.reserve(20);
-
-        auto section = this->read_section(SectionId(0));
-        if (section.has_value()) {
-            if (section->control.has_value()) {
-                controls.push_back({ SectionId(0), section->control.value() });
-            }
-
-            for (const auto &tx : section->transactions) {
-                txs.insert(tx);
-            }
-        }
-
-        for (SectionId i = cache_section; i <= current_section_; i++) {
-            auto section = this->read_section(i);
-            if (!section.has_value()) {
-                continue;
-            }
-
-            if (section->control.has_value()) {
-                controls.push_back({ i, section->control.value() });
-            }
-
-            for (const auto &tx : section->transactions) {
-                txs.insert(tx);
-            }
-        }
-
-        ExtraChain::Contracts::ContractCatalogFilter catalog_filter;
-        catalog_filter.limit = 100;
-        do {
-            const auto catalog_page = cache().list_contracts(catalog_filter);
-            for (const auto &contract : catalog_page.items) {
-                const auto add_evidence = [this, &txs](std::uint64_t      section_number,
-                                                       const std::string &transaction_hash) {
-                    const auto evidence_section = read_section(SectionId(section_number));
-                    if (!evidence_section.has_value()) {
-                        return;
-                    }
-                    const auto evidence =
-                        std::ranges::find_if(evidence_section->transactions,
-                                             [&transaction_hash](const Transaction &transaction) {
-                                                 return transaction.hash() == transaction_hash;
-                                             });
-                    if (evidence != evidence_section->transactions.end()) {
-                        txs.insert(*evidence);
-                    }
-                };
-                add_evidence(contract.deploy_section, contract.deploy_transaction_hash);
-                add_evidence(contract.section, contract.transaction_hash);
-            }
-            catalog_filter.cursor = catalog_page.next_cursor;
-        } while (catalog_filter.cursor.has_value());
-
-        auto section_before = this->read_section(cache_section - CONTROL_INTERVAL);
-        if (section_before.has_value()) {
-            if (section_before->control.has_value()) {
-                controls.push_back({ cache_section - CONTROL_INTERVAL, section_before->control.value() });
-            }
-        }
-
-        if (txs.empty()) {
-            eLog("[Dag] No transactions to send in light mode");
+        auto snapshot = node->consensus()->balance_snapshot();
+        if (!snapshot.has_value()) {
             return;
         }
-
-        auto dag_light = DagLightPackage { .cache         = cached_balances,
-                                           .cache_section = cache_section,
-                                           .txs           = txs,
-                                           .controls      = controls };
-
-        node->network()->send_message(dag_light,
-                                      MessageType::DagLightData,
-                                      SendMode::Focused,
-                                      MessageStatus::Response,
-                                      responder);
-
-        eLog("[Dag] Sent light data: cache section {}, transactions count: {}, time: {}",
-             cache_section,
-             txs.size(),
-             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started_at)
-                 .count());
+        WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+        const auto        bytes = MessagePack::serialize(snapshot.value());
+        if (bytes.size() > ExtraChain::Consensus::MaximumBalanceSnapshotBytes) {
+            return;
+        }
+        node->network()->send_message_send(bytes,
+                                           bytes,
+                                           MessageType::DagLightData,
+                                           SendMode::Focused,
+                                           MessageStatus::Response,
+                                           responder);
     });
 }
 
-void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
-    // eLog("network_response_light {}", dag_light);
-
-    node->post_storage([this, responder, dag_light]() {
-        // TIMER_START(network_response_light)
-        cache_.reset_db();
-        cache_.init_db();
-
-        if (!cache_.write_cached_balances(dag_light.cache, dag_light.cache_section)) {
-            eCritical("[Dag] Failed to install light balance snapshot at {}", dag_light.cache_section);
+void Dag::network_response_light(const std::string &serialized, const Responder &responder) {
+    using namespace ExtraChain::Consensus;
+    if (mode_ != DagMode::Light || serialized.empty() || serialized.size() > MaximumBalanceSnapshotBytes) {
+        return;
+    }
+    {
+        std::unique_lock lock(light_response_mutex_, std::try_to_lock);
+        if (!lock.owns_lock() || !matches_light_response(responder)) {
             return;
         }
-
-        // auto min = SectionId(-1), max = SectionId(-1);
-        // for (const auto &tx : std::as_const(dag_light.txs)) {
-        //     min = min != -1 ? std::min(tx.section(), min) : tx.section();
-        //     max = std::max(tx.section(), max);
-        //     save_transaction(tx);
-        // }
-        this->save_transactions(dag_light.txs);
-
-        // if (first_saved_section_ == SectionId(-1) && min >= SectionId(0)) {
-        //     first_saved_section_ = min;
-        //     eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
-        // }
-
-        if (dag_light.cache_section == -1 || dag_light.cache_section == 0) {
-            this->first_saved_section_ = 0;
+    }
+    auto reservation = file_sync_budget_.reserve(*responder.identifiers().begin(), serialized.size());
+    if (!reservation) {
+        return;
+    }
+    node->post_storage([this, serialized, responder, reservation = std::move(reservation)] {
+        if (reservation->stopped()) {
+            return;
         }
-
-        if (mode_ == DagMode::Light) {
-            for (const auto &[section_id, control] : dag_light.controls) {
-                this->write_control(section_id, control);
-            }
+        std::unique_lock lock(light_response_mutex_);
+        if (mode_ != DagMode::Light || !matches_light_response(responder)
+            || !MessagePack::has_bounded_structure(serialized, 1'000'000, MaximumSnapshotBalances, 16)) {
+            return;
         }
-
-        this->update_range(true);
-
-        if (mode_ == DagMode::Light) {
-            eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
-                 dag_light.cache_section,
-                 this->first_saved_section_,
-                 this->current_section_);
-        } else {
-            eLog("[Dag] Balances updated");
+        WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+        const auto        snapshot = MessagePack::deserialize<BalanceSnapshotV1>(serialized);
+        if (!snapshot.has_value()) {
+            return;
         }
-
-        if (mode_ == DagMode::Full) {
-            this->start_control(Force::Active);
+        const auto section = SectionId(snapshot.value().proof.finalized_proposal.header.dag_section);
+        if (section < cache_.section() || node->consensus() == nullptr
+            || !node->consensus()->accept_balance_snapshot(snapshot.value())
+            || !cache_.write_cached_balances(snapshot.value().balances, section)) {
+            return;
         }
-
-        light_requested_ = false;
-        this->process_cached_transactions();
-
+        current_section_ = section;
+        set_state_projection(StateProjectionStatus::Ready, section);
+        pending_light_response_.reset();
+        lock.unlock();
+        update_range(true);
+        timer_stop_event_.publish();
         set_status(DagStatus::Ready);
         set_sync_status(DagSyncStatus::None);
         sync_finish_event_.publish();
-        // start check hash
-        // TIMER_END(network_response_light)
     });
 }
 
@@ -4534,13 +4503,7 @@ void Dag::handle_sync_request() {
             }
         }
     } else {
-        auto responder_new = responder.with_new_message_id();
-        node->network()->send_message(true,
-                                      MessageType::DagLightData,
-                                      SendMode::Focused,
-                                      MessageStatus::Request,
-                                      responder_new);
-        light_requested_ = true;
+        request_light(responder);
     }
 
     // request from to

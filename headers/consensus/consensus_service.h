@@ -22,6 +22,7 @@
 #include <boost/signals2/connection.hpp>
 
 #include "consensus/peer_authenticator.h"
+#include "consensus/balance_snapshot.h"
 #include "consensus/relay_transport.h"
 #include "consensus/intent_store.h"
 #include "consensus/shadow_consensus.h"
@@ -92,6 +93,9 @@ namespace ExtraChain::Consensus {
                                                                    std::uint64_t             now_ms);
         std::expected<std::size_t, ConsensusError> request_bootstrap_history(const TrustAnchorV1& anchor,
                                                                              std::uint64_t        after_epoch);
+
+        std::expected<BalanceSnapshotV1, ConsensusError> balance_snapshot() const;
+        bool accept_balance_snapshot(const BalanceSnapshotV1& snapshot);
 
         [[nodiscard]] bool active() const noexcept;
         [[nodiscard]] bool voting() const noexcept;
@@ -191,7 +195,12 @@ namespace ExtraChain::Consensus {
         void                                schedule_recovery_activation();
         [[nodiscard]] std::uint64_t         intent_height() const noexcept;
 
+        bool accept_light_history(const BootstrapHistoryPageV1& page);
+        void request_light_history();
+        std::expected<LightClientVerifier, ConsensusError> load_light_verifier() const;
+
         Core::ExtraChainNode&                                         node_;
+        std::optional<LightClientVerifier>                            light_verifier_;
         std::filesystem::path                                         directory_;
         std::unique_ptr<ShadowConsensus>                              consensus_;
         std::unique_ptr<IntentStore>                                  intent_store_;
@@ -209,6 +218,7 @@ namespace ExtraChain::Consensus {
         /// sync request: a lagging node used to re-ask on every reply it got.
         std::map<std::string, std::chrono::steady_clock::time_point>  ancestor_requests_;
         std::chrono::steady_clock::time_point                         last_sync_request_ {};
+        std::chrono::steady_clock::time_point                         last_light_history_request_ { };
         std::shared_ptr<Core::DeadlineTask>                           timeout_task_;
         std::shared_ptr<Core::DeadlineTask>                           recovery_task_;
         std::shared_ptr<Core::DeadlineTask>                           intent_batch_task_;

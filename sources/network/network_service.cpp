@@ -1261,13 +1261,16 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
     if (message_type == MessageType::DfsFileExistNotification || message_type == MessageType::DfsFileFragment
         || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows
         || message_type == MessageType::DfsSyncDigest || message_type == MessageType::DfsSyncDigestReply
-        || message_type == MessageType::DfsVectorSyncReply) {
+        || message_type == MessageType::DfsVectorSyncReply
+        || (message_type == MessageType::DagLightData
+            && non_serialized_message.status == MessageStatus::Response)) {
         // The digest reply must not overtake the rows it announces (#75): same lane.
         priority = SocketService::Priority::Low;
     }
 
     const bool high_priority_dag_sync =
-        message_type == MessageType::DagSections || message_type == MessageType::DagLightData
+        message_type == MessageType::DagSections
+        || (message_type == MessageType::DagLightData && non_serialized_message.status == MessageStatus::Request)
         || message_type == MessageType::DagFileSections || message_type == MessageType::DagPackData
         || message_type == MessageType::DagCacheSnapshotData;
     const bool high_priority_shadow =
@@ -2980,13 +2983,7 @@ void NetworkService::message_received(const std::string &message,
 
             node->dag()->network_request_light(responder);
         } else if (status == MessageStatus::Response) {
-            auto light = MessagePack::deserialize<DagLightPackage>(serialized);
-            if (!light.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for dag sync light", type);
-                break;
-            }
-
-            node->dag()->network_response_light(light.value(), responder);
+            node->dag()->network_response_light(serialized, responder);
         }
         break;
     }

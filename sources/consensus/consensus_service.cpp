@@ -26,6 +26,7 @@
 #include "utils/exc_utils.h"
 #include "utils/exc_utils_base64.h"
 #include "utils/serialization.h"
+#include "utils/file_io.h"
 
 namespace ExtraChain::Consensus {
     namespace {
@@ -118,6 +119,9 @@ namespace ExtraChain::Consensus {
 
     std::expected<bool, ConsensusError> ConsensusService::activate(const ActorId& network_id) {
         std::lock_guard lock(mutex_);
+        if (node_.dag()->mode() == DagMode::Light) {
+            return false;
+        }
         if (consensus_) {
             return true;
         }
@@ -464,6 +468,11 @@ namespace ExtraChain::Consensus {
             }
             const auto value = MessagePack::deserialize<ShadowBootstrapResponse>(serialized);
             if (status == MessageStatus::Response && value.has_value()) {
+                if (accept_light_history(value.value().page)) {
+                    boost::asio::post(node_.serial_executor(), [this, responder] {
+                        node_.dag()->request_light(responder);
+                    });
+                }
                 bootstrap_event_.publish(value.value(), peer_identifier);
             }
             break;
@@ -1493,6 +1502,133 @@ namespace ExtraChain::Consensus {
         reset_timeout();
         // A new leader must materialize a checkpoint for the engine's current round.
         queue_next_checkpoint();
+        return true;
+    }
+
+    std::expected<BalanceSnapshotV1, ConsensusError> ConsensusService::balance_snapshot() const {
+        std::lock_guard lock(mutex_);
+        if (!consensus_ || node_.dag()->mode() != DagMode::Full) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        const auto height = consensus_->engine().safety_state().finalized_height;
+        if (height == 0) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        const auto proofs = consensus_->engine().finality_proofs_after(height - 1, 1);
+        if (!proofs.has_value() || proofs.value().empty()) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
+        const auto& proof = proofs.value().front();
+        if (proof.finalized_proposal.header.height != height) {
+            return std::unexpected(ConsensusError::InvalidHeight);
+        }
+        auto balances =
+            node_.dag()->calculate_actors_balance(node_.actor_index()->read_all_actors_ids(),
+                                                  SectionId(proof.finalized_proposal.header.dag_section));
+        if (balances.size() > MaximumSnapshotBalances
+            || balance_snapshot_root(balances) != proof.finalized_proposal.state.account_state_root) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        return BalanceSnapshotV1 { std::move(balances), proof };
+    }
+
+    std::expected<LightClientVerifier, ConsensusError> ConsensusService::load_light_verifier() const {
+        std::error_code error;
+        if (std::filesystem::exists(directory_ / "light-client.msgpack", error)) {
+            return LightClientVerifier::load(directory_ / "light-client.msgpack");
+        }
+        if (error) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        if (std::filesystem::exists(directory_ / "trust-anchor.msgpack", error)) {
+            const auto bytes = FileIo::read_all(directory_ / "trust-anchor.msgpack");
+            if (!bytes.has_value()) {
+                return std::unexpected(ConsensusError::StorageUnavailable);
+            }
+            const auto anchor = MessagePack::deserialize<TrustAnchorV1>(bytes.value());
+            if (!anchor.has_value() || anchor.value().network_id != node_.network_id()) {
+                return std::unexpected(ConsensusError::InvalidNetwork);
+            }
+            return LightClientVerifier::bootstrap(anchor.value());
+        }
+        if (error) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        const auto bytes = FileIo::read_all(directory_ / "validator-set.msgpack");
+        if (!bytes.has_value()) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        const auto validators = MessagePack::deserialize<ValidatorSet>(bytes.value());
+        if (!validators.has_value() || validators.value().network_id != node_.network_id()) {
+            return std::unexpected(ConsensusError::InvalidNetwork);
+        }
+        return LightClientVerifier::create(validators.value());
+    }
+
+    bool ConsensusService::accept_balance_snapshot(const BalanceSnapshotV1& snapshot) {
+        std::lock_guard lock(mutex_);
+        if (node_.dag()->mode() != DagMode::Light
+            || snapshot.proof.finalized_proposal.header.network_id != node_.network_id()) {
+            return false;
+        }
+        if (!light_verifier_.has_value()) {
+            auto loaded = load_light_verifier();
+            if (!loaded.has_value()) {
+                return false;
+            }
+            light_verifier_ = std::move(loaded.value());
+        }
+        const auto trusted = light_verifier_.value().snapshot();
+        if (snapshot.proof.finalized_proposal.header.epoch > trusted.active_validators.epoch
+            && trusted.trust_anchor.has_value()) {
+            request_light_history();
+            return false;
+        }
+        auto candidate = light_verifier_.value();
+        if (!verify_balance_snapshot(snapshot, candidate) || !candidate.advance(snapshot.proof).has_value()
+            || !candidate.save(directory_ / "light-client.msgpack").has_value()) {
+            return false;
+        }
+        light_verifier_ = std::move(candidate);
+        return true;
+    }
+
+    void ConsensusService::request_light_history() {
+        const auto now = std::chrono::steady_clock::now();
+        if (!light_verifier_.has_value() || now - last_light_history_request_ < std::chrono::seconds(5)) {
+            return;
+        }
+        const auto trusted = light_verifier_.value().snapshot();
+        if (trusted.trust_anchor.has_value()) {
+            last_light_history_request_ = now;
+            static_cast<void>(
+                request_bootstrap_history(trusted.trust_anchor.value(), trusted.active_validators.epoch));
+        }
+    }
+
+    bool ConsensusService::accept_light_history(const BootstrapHistoryPageV1& page) {
+        std::lock_guard lock(mutex_);
+        if (node_.dag()->mode() != DagMode::Light || page.network_id != node_.network_id()
+            || page.entries.empty()) {
+            return false;
+        }
+        if (!light_verifier_.has_value()) {
+            auto loaded = load_light_verifier();
+            if (!loaded.has_value()) {
+                return false;
+            }
+            light_verifier_ = std::move(loaded.value());
+        }
+        auto candidate = light_verifier_.value();
+        if (!candidate.apply_history_page(page).has_value()
+            || !candidate.save(directory_ / "light-client.msgpack").has_value()) {
+            return false;
+        }
+        light_verifier_ = std::move(candidate);
+        if (page.next_after_epoch.has_value()) {
+            request_light_history();
+            return false;
+        }
         return true;
     }
 

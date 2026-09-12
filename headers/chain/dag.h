@@ -307,20 +307,6 @@ BOOST_DESCRIBE_STRUCT(DagLastInfo,
                       (),
                       (last_section_id, last_control_hash, last_control_section_id, zero_date, status))
 
-/**
- * @brief Package of data for light mode synchronization
- *
- * Contains cached balances, the ID of the cached section,
- * and transactions needed for light mode synchronization
- */
-struct DagLightPackage {
-    Balances                                       cache;         // Cached account balances
-    SectionId                                      cache_section; // Id of the section corresponding to the cache
-    std::set<Transaction>                          txs;           // Transactions since the cached section
-    std::vector<std::pair<SectionId, std::string>> controls;      // Control hashs
-};
-BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs, controls))
-
 struct DagControlRangeRequest {
     SectionId from;
     SectionId to; // to >= from
@@ -694,21 +680,22 @@ public:
     /**
      * @brief Request light mode data from the network
      *
-     * Requests cached balances and recent transactions for light mode operation.
+     * Returns balances with a finality proof for Light mode.
      *
      * @param responder The responder to send the request to
      */
     void network_request_light(const Responder &responder);
+    void request_light(const Responder &responder);
 
     /**
      * @brief Process light mode data received from the network
      *
-     * Stores cached balances and processes recent transactions for light mode operation.
+     * Verifies a requested finality proof before the atomic balance cache update.
      *
-     * @param dag_light The light mode data package
+     * @param serialized The canonical balance snapshot and its finality proof
      * @param responder The responder that sent the data
      */
-    void network_response_light(const DagLightPackage &dag_light, const Responder &responder);
+    void network_response_light(const std::string &serialized, const Responder &responder);
 
     /**
      * @brief network_hash_interval
@@ -883,7 +870,14 @@ private:
     std::uint64_t                                historical_audit_started_ms_  = 0;
     bool                                         historical_recent_audit_done_ = false;
     bool                                         pending_audit_recent_         = false;
-    bool                                         light_requested_              = false;
+    struct PendingLightResponse {
+        std::string                     message_id;
+        std::unordered_set<std::string> peers;
+        std::uint64_t                   created_at_ms = 0;
+    };
+    std::mutex                          light_response_mutex_;
+    std::optional<PendingLightResponse> pending_light_response_;
+    bool                                matches_light_response(const Responder &responder) const;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
     std::mutex                           cached_tx_responders_mutex_;
