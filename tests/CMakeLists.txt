@@ -359,3 +359,7 @@ set_tests_properties(storage-proof PROPERTIES TIMEOUT 30)
 add_test(NAME funded-sync COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/funded_sync.py
     $<TARGET_FILE:extrachain-gen-sections> $<TARGET_FILE:extrachain-node-run>)
 set_tests_properties(funded-sync PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
+
+add_core_test_executable(extrachain-mining-epoch mining_epoch.cpp)
+add_test(NAME mining-epoch COMMAND extrachain-mining-epoch)
+set_tests_properties(mining-epoch PROPERTIES TIMEOUT 30)

@@ -8,6 +8,7 @@
 
 #include "consensus/consensus_engine.h"
 #include "consensus/light_client.h"
+#include "consensus/mining_epoch.h"
 #include "consensus/balance_snapshot.h"
 #include "consensus/validator_set.h"
 #include "utils/exc_utils.h"
@@ -381,6 +382,43 @@ int main() {
         engines.front()->finality_proofs_after(balance_snapshot.proof.finalized_proposal.header.height, 1);
     check("newer finalized snapshot is available", newer_proofs.has_value() && !newer_proofs.value().empty());
     BalanceSnapshotV1 newer_snapshot { balance_snapshot.balances, newer_proofs.value().front() };
+    const auto        storage_reader = [](std::uint64_t) -> std::expected<std::string, ConsensusError> {
+        return "a";
+    };
+    const auto dataset    = commit_storage_dataset(1, storage_reader).value();
+    const auto dataset_id = storage_dataset_id(committee.governance.id(), dataset).value();
+    auto       mining =
+        freeze_mining_epoch(committee.governance.id(), 0, 10, { { committee.governance.id(), dataset, 0 } })
+            .value();
+    check("mining rejects a checkpoint from the wrong section",
+          !open_mining_proof_window(mining, balance_snapshot.proof, light_client.value()).has_value());
+    auto bad_mining_checkpoint = newer_snapshot.proof;
+    bad_mining_checkpoint.decision_certificate.signatures.clear();
+    check("mining rejects an unauthenticated challenge checkpoint",
+          !open_mining_proof_window(mining, bad_mining_checkpoint, light_client.value()).has_value());
+    check("mining opens its fixed window from authenticated Shadow finality",
+          open_mining_proof_window(mining, newer_snapshot.proof, light_client.value()).has_value()
+              && mining.proof_first_section == 81 && mining.proof_last_section == 120);
+    const auto storage_proof = make_storage_proof(committee.governance.id(),
+                                                  committee.governance.id(),
+                                                  dataset,
+                                                  mining.challenge.value(),
+                                                  storage_reader)
+                                   .value();
+    check("mining accepts the registered provider within the verified window",
+          accept_mining_proof(mining, committee.governance.id(), dataset_id, 81, storage_proof).has_value());
+    const auto closing_proofs = engines.front()->finality_proofs_after(5, 1);
+    check("mining window closure has a finality proof",
+          closing_proofs.has_value() && closing_proofs.value().size() == 1);
+    check("mining rejects finality before the window closes",
+          !settle_mining_epoch(mining, newer_snapshot.proof, light_client.value()).has_value());
+    auto bad_closing_checkpoint = closing_proofs.value().front();
+    bad_closing_checkpoint.decision_certificate.signatures.clear();
+    check("mining rejects a forged settlement certificate",
+          !settle_mining_epoch(mining, bad_closing_checkpoint, light_client.value()).has_value());
+    check("mining settles only after authenticated window finality",
+          settle_mining_epoch(mining, closing_proofs.value().front(), light_client.value()).has_value()
+              && mining.rewards.at(committee.governance.id().to_string()) == 10);
     check("runtime accepts only requested certified light balances and rejects rollback",
           test_balance_snapshot_runtime(balance_snapshot, newer_snapshot, committee.document));
     auto changed_inclusion             = inclusion.value().value();
