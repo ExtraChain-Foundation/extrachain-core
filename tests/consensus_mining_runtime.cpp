@@ -216,15 +216,18 @@ int main() {
         const auto               first = (height - 1) * ShadowSectionInterval + 1;
         std::vector<Transaction> transactions;
         if (height == 7) {
+            node->data_mining_manager()->set_enabled(false);
             // Loss of the derived index and one alias must not withdraw a dataset with another valid copy.
             TEST_REQUIRE(std::filesystem::remove(local_path.native()));
             for (const auto& index : std::filesystem::directory_iterator("consensus/mining-index"))
                 TEST_REQUIRE(std::filesystem::remove(index.path()));
             node->dfs()->notify_local_removed(provider.id(), file_row.file_id);
         }
+        if (height == 8)
+            node->data_mining_manager()->set_enabled(true);
         node->data_mining_manager()->consensus_progress();
         auto ready = ConsensusStateTestFixture::ready(service);
-        if (height == 2 || height == 7) {
+        if (height == 2 || height == 8) {
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
             while (ready.empty() && std::chrono::steady_clock::now() < deadline) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -234,6 +237,14 @@ int main() {
             TEST_REQUIRE_EQ(ready.size(), std::size_t(1));
             TEST_REQUIRE(ready.front().intent.operation
                          == (height == 2 ? IntentOperation::StorageRegister : IntentOperation::StorageProof));
+        }
+        if (height == 8) {
+            TEST_REQUIRE_EQ(ready.front().intent.valid_after_height, std::uint64_t(7));
+            TEST_REQUIRE_EQ(ready.front().intent.expires_after_height, std::uint64_t(8));
+            IntentPool proof_pool;
+            TEST_REQUIRE(
+                proof_pool.submit(ready.front(), Utils::to_base64(provider.key().public_key()), 1, 8).has_value());
+            TEST_REQUIRE(proof_pool.ready({ { provider.id(), 1 } }, 9, 10, 1024 * 1024).empty());
         }
         for (const auto& envelope : ready)
             transactions.push_back(materialize_intent(envelope, first, height, { }).value());
@@ -388,14 +399,19 @@ int main() {
             }
             const auto full_window = ConsensusStateTestFixture::next_nonce(service, provider.id());
             TEST_REQUIRE(!full_window.has_value() && full_window.error() == ConsensusError::PoolFull);
+            const auto blocked_mining =
+                service.submit_mining_request(IntentOperation::StorageUnregister,
+                                              Utils::to_base64(MessagePack::serialize(dataset_id)),
+                                              provider);
+            TEST_REQUIRE(!blocked_mining.has_value() && blocked_mining.error() == ConsensusError::PoolFull);
             for (const auto& hash : window_requests)
                 ConsensusStateTestFixture::expire(service, hash);
         }
         batches.emplace(height, batch);
         if (height == 9) {
-            const auto historical = engine->proposal_for(batches.at(7).header_hash).value();
-            TEST_REQUIRE(ConsensusStateTestFixture::admit(service, historical, batches.at(7)).has_value());
-            auto expired_batch = batches.at(7);
+            const auto historical = engine->proposal_for(batches.at(8).header_hash).value();
+            TEST_REQUIRE(ConsensusStateTestFixture::admit(service, historical, batches.at(8)).has_value());
+            auto expired_batch = batches.at(8);
             auto section       = Json::deserialize<Section>(expired_batch.sections.front().second).value();
             TEST_REQUIRE(section.transactions.size() == 1);
             auto envelope                        = intent_from_transaction(*section.transactions.begin()).value();

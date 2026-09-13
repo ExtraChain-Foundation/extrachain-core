@@ -123,24 +123,45 @@ namespace ExtraChain::Consensus {
         auto            work = mining_work_state();
         if (!work.has_value())
             return std::unexpected(work.error());
-        const auto nonce    = next_local_nonce(provider.id());
+        const auto nonce = next_local_nonce(provider.id());
+        if (!nonce.has_value())
+            return std::unexpected(nonce.error());
         const auto height   = intent_height();
         const auto duration = operation == IntentOperation::StorageProof ? 1ULL : 64ULL;
-        if (!nonce.has_value() || height > UINT64_MAX - duration)
-            return std::unexpected(ConsensusError::InvalidNonce);
-        const auto intent = make_intent(TransactionIntentV2 { .network_id           = work.value().network,
-                                                              .sender               = provider.id(),
-                                                              .receiver             = work.value().network,
-                                                              .amount               = "0",
-                                                              .operation            = operation,
-                                                              .account_nonce        = nonce.value(),
-                                                              .valid_after_height   = height,
-                                                              .expires_after_height = height + duration },
-                                        metadata,
-                                        provider);
+        if (height > UINT64_MAX - duration)
+            return std::unexpected(ConsensusError::InvalidHeight);
+        IntentEnvelope envelope { .intent   = TransactionIntentV2 { .network_id           = work.value().network,
+                                                                    .sender               = provider.id(),
+                                                                    .receiver             = work.value().network,
+                                                                    .amount               = "0",
+                                                                    .operation            = operation,
+                                                                    .account_nonce        = nonce.value(),
+                                                                    .valid_after_height   = height,
+                                                                    .expires_after_height = height + duration },
+                                  .metadata = std::move(metadata) };
+        if (operation == IntentOperation::StorageProof) {
+            const auto request = decode_mining_request(envelope);
+            if (!request.has_value())
+                return std::unexpected(request.error());
+            const auto& proof    = std::get<MiningProofSubmission>(request.value());
+            const auto  schedule = mining_epoch_schedule(proof.epoch);
+            if (!schedule.has_value() || work.value().section < schedule.value().proof_first_section
+                || work.value().section > schedule.value().proof_last_section)
+                return std::unexpected(ConsensusError::InvalidHeight);
+            const auto before =
+                (work.value().section - schedule.value().proof_first_section) / ShadowSectionInterval;
+            const auto after =
+                (schedule.value().proof_last_section - work.value().section) / ShadowSectionInterval;
+            if (height < before || height > UINT64_MAX - after)
+                return std::unexpected(ConsensusError::InvalidHeight);
+            // Use the complete proof window, including a submission in its last Shadow interval.
+            envelope.intent.valid_after_height   = height - before;
+            envelope.intent.expires_after_height = height + after;
+        }
+        const auto intent = make_intent(std::move(envelope.intent), envelope.metadata, provider);
         if (!intent.has_value())
             return std::unexpected(intent.error());
-        IntentEnvelope envelope { intent.value(), std::move(metadata) };
+        envelope.intent           = intent.value();
         const auto     applicable = apply_mining_request(work.value(), envelope);
         if (!applicable.has_value())
             return std::unexpected(applicable.error());
