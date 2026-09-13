@@ -393,7 +393,7 @@ else
 log "=== bootstrap $NODE_COUNT nodes from $SEED ==="
 EXTRACHAIN_TEST_BUILD="$BUILD_DIR" \
 EXTRACHAIN_TEST_WORK="$SYNC_WORK" \
-EXTRACHAIN_TEST_DFS_BYTES=1048576 \
+EXTRACHAIN_TEST_DFS_BYTES="${EXTRACHAIN_TEST_DFS_BYTES:-1048576}" \
     bash "$CORE_TESTS/multi_console_sync.sh" "$SEED" "$((NODE_COUNT - 1))" "$BASE_PORT" >"$WORK/bootstrap.log" 2>&1 \
     || { tail -30 "$WORK/bootstrap.log" >&2; fail "DAG and ExDFS bootstrap failed"; }
 

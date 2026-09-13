@@ -34,6 +34,7 @@ class Endurance(Cycle):
         self.environment.update(
             EXC_SHADOW_WAVES=str(self.waves), EXC_SHADOW_SENDERS=str(args.senders),
             EXC_SHADOW_PER_SENDER=str(args.per_sender), EXC_SHADOW_DFS_BYTES=str(args.file_bytes),
+            EXTRACHAIN_TEST_DFS_BYTES=str(args.file_bytes),
             EXC_SHADOW_VECTOR_ROWS='48', EXC_SHADOW_VECTOR_CROSS='8', EXC_SHADOW_HISTORY_ROWS='130',
             EXC_SHADOW_REMOVE_AFTER_S='30', EXC_SHADOW_DFS_MODE='full', EXC_SHADOW_MINING_TEST='1',
             EXC_SHADOW_MINING_LONG_TEST='1',
@@ -257,7 +258,8 @@ class Endurance(Cycle):
                 binary_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
             self.event('configuration', duration_s=self.args.duration, interval_s=self.args.interval,
                        waves=self.waves, binary_sha256=binary_hash, senders=self.args.senders,
-                       per_sender=self.args.per_sender, file_bytes=self.args.file_bytes)
+                       per_sender=self.args.per_sender, file_bytes=self.args.file_bytes,
+                       bootstrap_file_bytes=self.args.file_bytes)
             self.wait_for(lambda: (self.barrier / 'committee-ready').exists(), 'committee barrier', 600)
             (self.barrier / 'controller-ready').touch()
             self.wait_for(lambda: (self.barrier / 'go').exists(), 'workload start')
