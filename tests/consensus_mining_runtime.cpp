@@ -345,6 +345,26 @@ int main() {
             // A certified nonce must remain reserved even when its pending copy is gone.
             ConsensusStateTestFixture::expire(service, hash_intent(ready.front().intent));
             TEST_REQUIRE_EQ(ConsensusStateTestFixture::next_nonce(service, provider.id()).value(), 2);
+            std::vector<std::string> window_requests;
+            for (std::uint64_t nonce = 2; nonce <= 64; ++nonce) {
+                const auto request = make_intent(TransactionIntentV2 { .network_id    = network.id(),
+                                                                       .sender        = provider.id(),
+                                                                       .receiver      = provider.id(),
+                                                                       .amount        = "0",
+                                                                       .operation     = IntentOperation::Cancel,
+                                                                       .account_nonce = nonce,
+                                                                       .expires_after_height = 1000 },
+                                                 "",
+                                                 provider);
+                TEST_REQUIRE(request.has_value());
+                const auto accepted = service.submit_intent({ request.value(), "" });
+                TEST_REQUIRE(accepted.has_value());
+                window_requests.push_back(accepted.value());
+            }
+            const auto full_window = ConsensusStateTestFixture::next_nonce(service, provider.id());
+            TEST_REQUIRE(!full_window.has_value() && full_window.error() == ConsensusError::PoolFull);
+            for (const auto& hash : window_requests)
+                ConsensusStateTestFixture::expire(service, hash);
         }
         batches.emplace(height, batch);
         if (height == 9) {

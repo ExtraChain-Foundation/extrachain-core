@@ -579,12 +579,22 @@ int main(int argc, char* argv[]) {
             const auto submitted_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                              std::chrono::steady_clock::now().time_since_epoch())
                                              .count();
-            const auto submitted = (mining_test || wave_count > 1)
-                                       ? node->consensus()->submit_local_intent(intent.value(), metadata, sender)
-                                       : node->consensus()->submit_intent(IntentEnvelope {
-                                             .intent   = intent.value(),
-                                             .metadata = metadata,
-                                         });
+            const auto submit = [&] {
+                return (mining_test || wave_count > 1)
+                           ? node->consensus()->submit_local_intent(intent.value(), metadata, sender)
+                           : node->consensus()->submit_intent(IntentEnvelope { intent.value(), metadata });
+            };
+            auto submitted = submit();
+            if (!submitted.has_value() && submitted.error() == ConsensusError::PoolFull) {
+                std::printf("[node-run] intent admission full at %zu; waiting for finality\n", index);
+                std::fflush(stdout);
+                const auto admission_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+                while (stop_requested == 0 && std::chrono::steady_clock::now() < admission_deadline
+                       && !submitted.has_value() && submitted.error() == ConsensusError::PoolFull) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    submitted = submit();
+                }
+            }
             if (!submitted.has_value()) {
                 std::printf("[node-run] intent submission failed at %zu (error %d)\n",
                             index,

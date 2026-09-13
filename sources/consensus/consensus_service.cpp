@@ -2897,7 +2897,10 @@ namespace ExtraChain::Consensus {
         if (!expired.has_value())
             return std::unexpected(expired.error());
         const auto found = nonces.value().find(sender);
-        return intent_pool_.next_nonce(sender, found == nonces.value().end() ? 0 : found->second);
+        const auto committed = committed_nonces_.find(sender);
+        return intent_pool_.next_nonce(sender,
+                                       committed == committed_nonces_.end() ? 0 : committed->second,
+                                       found == nonces.value().end() ? 0 : found->second);
     }
 
     std::expected<bool, ConsensusError> ConsensusService::repair_local_nonce_gap(const Actor<KeyPrivate>& sender) {

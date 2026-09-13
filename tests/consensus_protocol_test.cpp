@@ -149,6 +149,19 @@ int main() {
     gap_pool.erase({ first_hash.value() });
     check("local protocol work fills an unused nonce before a future request",
           gap_pool.next_nonce(sender.id(), 0).value() == 1);
+    IntentPool bounded_window({ .maximum_sender_intents = 2, .maximum_nonce_gap = 2 });
+    check("last available nonce enters the admission window",
+          bounded_window.submit(second_envelope, sender_public_key, 0, 10).has_value());
+    const auto exhausted = bounded_window.next_nonce(sender.id(), 0, 1);
+    check("certified work cannot extend the unfinalized admission window",
+          !exhausted.has_value() && exhausted.error() == ConsensusError::PoolFull);
+    const auto reopened = bounded_window.next_nonce(sender.id(), 1, 1);
+    check("finality opens one new nonce slot", reopened.has_value() && reopened.value() == 3);
+    auto third              = first;
+    third.account_nonce     = reopened.value();
+    const auto signed_third = make_intent(third, "memo-three", sender).value();
+    check("reopened nonce passes the same admission bound",
+          bounded_window.submit({ signed_third, "memo-three" }, sender_public_key, 1, 10).has_value());
     check("local protocol nonce allocation checks overflow",
           !pool.next_nonce(sender.id(), UINT64_MAX).has_value());
     {

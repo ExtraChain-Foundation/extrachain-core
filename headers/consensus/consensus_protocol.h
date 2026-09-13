@@ -382,8 +382,10 @@ namespace ExtraChain::Consensus {
         std::vector<std::string>                   expire(std::uint64_t current_height);
         void                                       erase(const std::vector<std::string>& intent_hashes);
 
-        [[nodiscard]] std::expected<std::uint64_t, ConsensusError> next_nonce(const ActorId& sender,
-                                                                              std::uint64_t committed_nonce) const;
+        [[nodiscard]] std::expected<std::uint64_t, ConsensusError> next_nonce(
+            const ActorId& sender,
+            std::uint64_t  committed_nonce,
+            std::uint64_t  certified_nonce = 0) const;
         [[nodiscard]] std::vector<std::string>                     expired_uncommitted(
             std::uint64_t                           height,
             const std::map<ActorId, std::uint64_t>& nonces) const;

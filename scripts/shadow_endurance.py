@@ -26,6 +26,7 @@ class Endurance(Cycle):
         self.waves = args.duration // args.interval
         self.observer = None
         self.observer_online = False
+        self.offline = set()
         self.submissions, self.cursors, self.file_cache = {}, {}, {}
         self.next_sample = 0
         self.last_minted = 0
@@ -51,6 +52,8 @@ class Endurance(Cycle):
             raise RuntimeError('Free disk space fell below 10 GiB')
         nodes = []
         for index in range(8 if self.observer_online else 7):
+            if index in self.offline:
+                continue
             if not (self.barrier / f'pid-{index}').exists() and not (
                     self.barrier / f'initial-pid-{index}').exists():
                 continue
@@ -59,15 +62,15 @@ class Endurance(Cycle):
             try:
                 if directory.joinpath('cmdline').read_bytes().split(b'\0')[:2] != [
                         os.fsencode(self.binary), b'committee']:
-                    continue
+                    raise RuntimeError(f'Node {index} exited or its PID changed')
                 fields = dict(line.split(':', 1) for line in directory.joinpath('status').read_text().splitlines())
                 rss = int(fields.get('VmRSS', '0 kB').split()[0]) * 1024
                 threads = int(fields['Threads'])
                 fds = sum(1 for _ in directory.joinpath('fd').iterdir())
                 process_stat = directory.joinpath('stat').read_text().rsplit(')', 1)[1].split()
                 log_bytes = (self.work / f'node-{index}.log').stat().st_size
-            except FileNotFoundError:
-                continue
+            except FileNotFoundError as error:
+                raise RuntimeError(f'Node {index} disappeared during resource sampling') from error
             if rss > 4 * 1024 ** 3 or fds > 4096 or log_bytes > 16 * 1024 ** 3:
                 raise RuntimeError(f'Node {index} exceeded its RSS, file descriptor or log limit')
             nodes.append(dict(node=index, pid=pid, rss_bytes=rss, threads=threads, fds=fds,
@@ -117,12 +120,14 @@ class Endurance(Cycle):
                             '8' if index == 7 else '7', str(count), str(remaining), str(self.barrier), '1', '1'],
                            self.work / f'node-{index}.log', self.home(index), environment)
         (self.barrier / f'pid-{index}').write_text(str(child.pid))
+        self.offline.discard(index)
         self.event('restart' if resume else 'observer-start', node=index, pid=child.pid, wave=self.wave)
         return child
 
     def stop_member(self, index, hard=False):
         pid = self.pid(index)
         self.send(index, signal.SIGKILL if hard else signal.SIGTERM)
+        self.offline.add(index)
 
         def stopped():
             path = Path(f'/proc/{pid}/stat')

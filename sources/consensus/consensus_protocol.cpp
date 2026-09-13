@@ -390,7 +390,8 @@ namespace ExtraChain::Consensus {
     }
 
     std::expected<std::uint64_t, ConsensusError> IntentPool::next_nonce(const ActorId& sender,
-                                                                        std::uint64_t  committed_nonce) const {
+                                                                        std::uint64_t  committed_nonce,
+                                                                        std::uint64_t  certified_nonce) const {
         std::set<std::uint64_t> used;
         for (const auto& [_, entry] : entries_)
             if (entry.envelope.intent.sender == sender)
@@ -399,7 +400,7 @@ namespace ExtraChain::Consensus {
             if (offset > UINT64_MAX - committed_nonce)
                 return std::unexpected(ConsensusError::InvalidNonce);
             const auto nonce = committed_nonce + offset;
-            if (!used.contains(nonce))
+            if (nonce > certified_nonce && !used.contains(nonce))
                 return nonce;
         }
         return std::unexpected(ConsensusError::PoolFull);
