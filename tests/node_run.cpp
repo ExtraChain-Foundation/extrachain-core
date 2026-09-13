@@ -1040,12 +1040,14 @@ int main(int argc, char* argv[]) {
                 }
             }
             if (wave_count > 1 && all_finalized) {
-                const auto request = FileIo::read_all(barrier_directory / "wave");
-                if (request.has_value()) {
+                std::ifstream request(barrier_directory / "wave", std::ios::binary);
+                if (request.is_open()) {
+                    char data[4] { };
+                    request.read(data, sizeof(data));
+                    const std::string_view text(data, static_cast<std::size_t>(request.gcount()));
                     std::size_t next_wave = 0;
-                    const auto& text      = request.value();
-                    const auto  parsed    = std::from_chars(text.data(), text.data() + text.size(), next_wave);
-                    if (text.empty() || text.size() > 3 || parsed.ec != std::errc { }
+                    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), next_wave);
+                    if (request.bad() || text.empty() || text.size() > 3 || parsed.ec != std::errc { }
                         || parsed.ptr != text.data() + text.size() || next_wave >= wave_count
                         || next_wave > wave + 1) {
                         node->cleanUp();

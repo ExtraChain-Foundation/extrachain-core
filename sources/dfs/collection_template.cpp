@@ -60,10 +60,10 @@ namespace Dfs {
 
         for (const auto& field : m_fields) {
             auto column = field.to_db_column();
-            if (!column) {
+            if (!column.has_value()) {
                 return std::unexpected(column.error());
             }
-            schema.add_column(std::move(*column));
+            schema.add_column(std::move(column.value()));
         }
 
         return schema;
@@ -107,49 +107,6 @@ namespace Dfs {
             column.default_value("(unixepoch() * 1000)");
         } else if (m_default.has_value()) {
             column.default_literal(m_default.value());
-        }
-
-        std::vector<std::string> checks;
-
-        // Length checks for string types
-        if ((m_min_length || m_max_length)
-            && (m_type == FieldType::String || m_type == FieldType::ActorId || m_type == FieldType::Email
-                || m_type == FieldType::Url || m_type == FieldType::Username)) {
-            checks.push_back(fmt::format("length({}) BETWEEN {} AND {}",
-                                         m_name,
-                                         m_min_length.value_or(0),
-                                         m_max_length.value_or(std::numeric_limits<size_t>::max())));
-        }
-
-        // Range checks for numeric types
-        if ((m_min || m_max)
-            && (m_type == FieldType::Integer || m_type == FieldType::Real || m_type == FieldType::Bool)) {
-            if (m_min) {
-                checks.push_back(fmt::format("{} >= {}", m_name, *m_min));
-            }
-            if (m_max) {
-                checks.push_back(fmt::format("{} <= {}", m_name, *m_max));
-            }
-        }
-
-        // Pattern check
-        if (m_pattern) {
-            checks.push_back(fmt::format("{} REGEXP '{}'", m_name, *m_pattern));
-        }
-
-        // Allowed values check
-        if (m_allowed_values && !m_allowed_values->empty()) {
-            std::vector<std::string> quoted;
-            quoted.reserve(m_allowed_values->size());
-            for (const auto& val : *m_allowed_values) {
-                quoted.push_back(fmt::format("'{}'", val));
-            }
-            checks.push_back(fmt::format("{} IN ({})", m_name, boost::algorithm::join(quoted, ", ")));
-        }
-
-        // Add combined checks if any exist
-        if (!checks.empty()) {
-            // column.check(boost::algorithm::join(checks, " AND "));
         }
 
         return column;
