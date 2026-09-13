@@ -1,6 +1,16 @@
 #include <filesystem>
 #include <memory>
-#ifdef __APPLE__
+#if defined(__SANITIZE_ADDRESS__)
+    #define EXTRACHAIN_TEST_ADDRESS_SANITIZER 1
+#elif defined(__clang__)
+    #if __has_feature(address_sanitizer)
+        #define EXTRACHAIN_TEST_ADDRESS_SANITIZER 1
+    #endif
+#endif
+
+#ifdef EXTRACHAIN_TEST_ADDRESS_SANITIZER
+extern "C" std::size_t __sanitizer_get_current_allocated_bytes();
+#elif defined(__APPLE__)
     #include <mach/mach.h>
 #else
     #include <fstream>
@@ -50,8 +60,11 @@ namespace {
         ExtraChain::Core::ExtraChainNode& node_;
     };
 
-    std::uint64_t resident_memory() {
-#ifdef __APPLE__
+    std::uint64_t retained_memory() {
+#ifdef EXTRACHAIN_TEST_ADDRESS_SANITIZER
+        // ASan keeps freed allocations in quarantine; they are not retained application state.
+        return __sanitizer_get_current_allocated_bytes();
+#elif defined(__APPLE__)
         mach_task_basic_info   info { };
         mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
         TEST_REQUIRE(
@@ -87,16 +100,16 @@ int main() {
     Responder responder;
     responder.add_identifier(source->identifier());
     responder         = responder.with_new_message_id();
-    const auto before = resident_memory();
+    const auto before = retained_memory();
     for (unsigned i = 0; i < 100000; ++i) {
         TokenMigrationReadinessResponse response;
         response.plan_transaction_hash = fmt::format("{:064x}", i);
         response.ready                 = true;
         node->token_manager()->handle_migration_readiness_response(response, responder);
     }
-    const auto after  = resident_memory();
+    const auto after  = retained_memory();
     const auto growth = after > before ? after - before : 0;
-    std::printf("Unsolicited migration response memory growth: %llu bytes\n",
+    std::printf("Unsolicited migration response retained memory growth: %llu bytes\n",
                 static_cast<unsigned long long>(growth));
     TEST_REQUIRE(growth < 8 * 1024 * 1024);
     source->close_connection();

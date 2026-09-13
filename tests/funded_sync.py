@@ -26,7 +26,10 @@ def stop(process):
 
 
 def main():
-    generator, node = [str(Path(value).resolve()) for value in sys.argv[1:]]
+    generator, node = [str(Path(value).resolve()) for value in sys.argv[1:3]]
+    timeout = int(sys.argv[3]) if len(sys.argv) > 3 else 30
+    if not 1 <= timeout <= 120:
+        raise ValueError("Timeout must be in 1..120 seconds")
     work = Path(tempfile.mkdtemp(prefix="extrachain-funded-sync-"))
     processes = []
     success = False
@@ -34,7 +37,7 @@ def main():
         seed = work / "server" / "data"
         with (work / "generate.log").open("w") as output:
             subprocess.run([generator, "25000", str(seed)], stdout=output, stderr=output,
-                           check=True, timeout=30)
+                           check=True, timeout=timeout)
         target = int(json.loads((seed / "dag" / "range").read_text())["last"])
         server_port = free_port()
         client_port = free_port()
@@ -44,7 +47,7 @@ def main():
             server = subprocess.Popen([node, "serve", "data", str(server_port), "65536"],
                                       cwd=seed.parent, stdout=output, stderr=output)
         processes.append(server)
-        deadline = time.monotonic() + 15
+        deadline = time.monotonic() + timeout / 2
         publication = None
         while time.monotonic() < deadline and server.poll() is None:
             publication = re.search(r"DFS payload owner=(\w+) file_id=(\w+) size=65536",
@@ -62,7 +65,7 @@ def main():
                                        "combined-network.bin", "65536"],
                                       cwd=client_home, stdout=output, stderr=output)
         processes.append(client)
-        if client.wait(timeout=30) != 0:
+        if client.wait(timeout=timeout) != 0:
             raise RuntimeError("Funded history synchronization failed")
         destination = client_home / "data"
         assert int(json.loads((destination / "dag" / "range").read_text())["last"]) == target

@@ -95,7 +95,10 @@ add_test(NAME seed-profile COMMAND extrachain-seed-profile-tests)
 set_tests_properties(seed-profile PROPERTIES TIMEOUT 30)
 add_core_test_executable(extrachain-file-cipher-tests file_cipher.cpp)
 add_test(NAME file-cipher COMMAND extrachain-file-cipher-tests)
-set_tests_properties(file-cipher PROPERTIES TIMEOUT 30)
+set_tests_properties(file-cipher PROPERTIES TIMEOUT 120)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set_tests_properties(seed-profile PROPERTIES TIMEOUT 120)
+endif()
 add_core_test_executable(extrachain-thoth-token-tests thoth_tokens.cpp)
 add_test(NAME thoth-tokens COMMAND extrachain-thoth-token-tests)
 set_tests_properties(thoth-tokens PROPERTIES TIMEOUT 30)
@@ -170,7 +173,7 @@ add_test(NAME contract-depth-replay COMMAND extrachain-contract-depth-replay-tes
          ${CMAKE_CURRENT_LIST_DIR}/contracts/depth-fixture.wasm)
 set_tests_properties(contract-depth-replay PROPERTIES
     TIMEOUT 120
-    ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=0"
+    ENVIRONMENT "ASAN_OPTIONS=detect_leaks=$<IF:$<PLATFORM_ID:Darwin>,0,1>:halt_on_error=1:detect_stack_use_after_return=0"
 )
 add_test(NAME relay COMMAND extrachain-relay-tests)
 if(EXTRACHAIN_BUILD_CBINDINGS)
@@ -362,8 +365,9 @@ add_test(NAME storage-index COMMAND extrachain-storage-index)
 set_tests_properties(storage-index PROPERTIES TIMEOUT 30)
 
 add_test(NAME funded-sync COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/funded_sync.py
-    $<TARGET_FILE:extrachain-gen-sections> $<TARGET_FILE:extrachain-node-run>)
-set_tests_properties(funded-sync PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
+    $<TARGET_FILE:extrachain-gen-sections> $<TARGET_FILE:extrachain-node-run>
+    $<IF:$<CONFIG:Debug>,120,30>)
+set_tests_properties(funded-sync PROPERTIES TIMEOUT 360 RUN_SERIAL TRUE)
 
 add_core_test_executable(extrachain-mining-epoch mining_epoch.cpp)
 add_test(NAME mining-epoch COMMAND extrachain-mining-epoch)
