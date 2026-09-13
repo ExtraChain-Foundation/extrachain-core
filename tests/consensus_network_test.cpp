@@ -10,6 +10,7 @@
 #include "consensus/light_client.h"
 #include "consensus/mining_epoch.h"
 #include "consensus/mining_state.h"
+#include "consensus/mining_settlement.h"
 #include "utils/serialization.h"
 #include "consensus/balance_snapshot.h"
 #include "consensus/validator_set.h"
@@ -269,16 +270,61 @@ int main() {
         engines.push_back(make_engine(index));
     }
 
+    const auto reward_reader = [](std::uint64_t) -> std::expected<std::string, ConsensusError> {
+        return "certified storage";
+    };
+    const auto reward_dataset    = commit_storage_dataset(17, reward_reader).value();
+    const auto reward_dataset_id = storage_dataset_id(committee.governance.id(), reward_dataset).value();
+    auto       certified_mining  = create_mining_state(committee.governance.id(), 0).value();
+    check("certified mining registers immutable bytes before its epoch",
+          register_storage_provider(certified_mining, committee.governance.id(), reward_dataset).has_value());
+    auto       mining_verifier = LightClientVerifier::create(committee.document).value();
+    const auto mining_finality = [&](std::uint64_t section) -> std::expected<FinalityProof, ConsensusError> {
+        const auto proofs = engines.front()->finality_proofs_after(section / ShadowSectionInterval - 1, 1);
+        if (!proofs.has_value() || proofs.value().size() != 1
+            || proofs.value().front().finalized_proposal.header.dag_section != section)
+            return std::unexpected(ConsensusError::DataUnavailable);
+        return proofs.value().front();
+    };
+    std::optional<MiningEpochWitness> closing_witness;
+    MiningPayouts                     certified_payouts;
     bool quorum_guard_checked = false;
     for (std::uint64_t height = 1; height <= 12; ++height) {
         const auto& leader       = committee.view.leader(height, 0);
         const auto  leader_index = committee.index_for(leader.validator_id);
-        const auto  proposal =
-            engines[leader_index]->make_proposal(batch_manifest(height,
-                                                                height == 10 ? epoch_action_hash : std::string {}),
-                                                 state_commitment(*engines[leader_index],
-                                                                  height,
-                                                                  "network-root-" + std::to_string(height)));
+        for (auto section = (height - 1) * ShadowSectionInterval + 1; section <= height * ShadowSectionInterval;
+             ++section) {
+            const auto payouts = advance_mining_state(certified_mining,
+                                                      section,
+                                                      section == 1 ? 10 : 0,
+                                                      mining_finality,
+                                                      mining_verifier);
+            check("mining projects each section before certification", payouts.has_value());
+            if (!payouts.has_value())
+                std::abort();
+            for (const auto& [provider, units] : payouts.value())
+                certified_payouts[provider] += units;
+            if (section == 81) {
+                const auto proof = make_storage_proof(committee.governance.id(),
+                                                      committee.governance.id(),
+                                                      reward_dataset,
+                                                      certified_mining.epochs.at(0).challenge.value(),
+                                                      reward_reader)
+                                       .value();
+                check("certified mining accepts the challenged bytes in its proof window",
+                      submit_mining_proof(certified_mining, 0, committee.governance.id(), reward_dataset_id, proof)
+                          .has_value());
+            }
+        }
+        if (height == 6)
+            closing_witness = make_mining_epoch_witness(certified_mining, 0).value();
+        auto projected_state =
+            state_commitment(*engines[leader_index], height, "network-root-" + std::to_string(height));
+        projected_state.mining_state_root = mining_state_root(certified_mining);
+        const auto proposal = engines[leader_index]->make_proposal(batch_manifest(height,
+                                                                                  height == 10 ? epoch_action_hash
+                                                                                               : std::string { }),
+                                                                   std::move(projected_state));
         check("scheduled leader proposes a canonical network batch", proposal.has_value());
         if (!proposal.has_value()) {
             break;
@@ -344,6 +390,33 @@ int main() {
                   engines[restart_index]->safety_state().finalized_height == state_before.finalized_height);
         }
     }
+
+    MiningSettlementRecord settlement { closing_witness.value(), mining_finality(120).value() };
+    const auto             checked_payouts = verify_mining_settlement(settlement, 161, mining_verifier);
+    check("settlement derives exact payouts from a certified mining root",
+          checked_payouts.has_value() && checked_payouts.value() == certified_payouts
+              && certified_payouts.at(committee.governance.id().to_string()) == 10);
+    check("settlement rejects the wrong section",
+          !verify_mining_settlement(settlement, 160, mining_verifier).has_value()
+              && !verify_mining_settlement(settlement, 162, mining_verifier).has_value());
+    auto changed_settlement = settlement;
+    changed_settlement.witness.epoch.budget_units += 1;
+    check("settlement rejects an altered epoch budget",
+          !verify_mining_settlement(changed_settlement, 161, mining_verifier).has_value());
+    changed_settlement                                                    = settlement;
+    changed_settlement.closure.finalized_proposal.state.mining_state_root = mining_state_root(certified_mining);
+    check("settlement rejects a replaced signed state root",
+          !verify_mining_settlement(changed_settlement, 161, mining_verifier).has_value());
+    changed_settlement = settlement;
+    changed_settlement.closure.decision_certificate.signatures.clear();
+    check("settlement rejects missing quorum signatures",
+          !verify_mining_settlement(changed_settlement, 161, mining_verifier).has_value());
+    const auto restored_settlement =
+        MessagePack::deserialize<MiningSettlementRecord>(MessagePack::serialize(settlement));
+    check("settlement restores with the same verified native payout",
+          restored_settlement.has_value()
+              && verify_mining_settlement(restored_settlement.value(), 161, mining_verifier).value()
+                     == certified_payouts);
 
     const auto expected_finalized = std::uint64_t(10);
     check("seven-node run finalizes the three-chain prefix",
