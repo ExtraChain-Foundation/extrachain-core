@@ -847,18 +847,11 @@ namespace ExtraChain::Consensus {
         catch_up_deferred_finalization();
         if (already_certified) {
             pending_proposals_.erase(proposal);
-            queue_next_checkpoint();
-            return;
+        } else {
+            vote_for_proposal(proposal->second, peer_identifier);
         }
-        const bool resume_leader =
-            highest.has_value() && proposal->second.header.height < highest.value().height
-            && consensus_->engine().is_local_leader(highest.value().height + 1,
-                                                    consensus_->engine().safety_state().current_round);
-        vote_for_proposal(proposal->second, peer_identifier);
-        // An ancestor can unblock the leader's next batch request before its timeout.
-        if (resume_leader) {
-            queue_next_checkpoint();
-        }
+        // An ancestor can unblock pending requests on followers and observers too.
+        queue_next_checkpoint();
     }
 
     void ConsensusService::receive_sync_request(const ShadowSyncRequest& request,
@@ -2257,6 +2250,12 @@ namespace ExtraChain::Consensus {
     }
 
     void ConsensusService::vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier) {
+        const auto header_hash = hash_header(proposal.header);
+        if (proposal.header.height <= consensus_->engine().safety_state().finalized_height
+            || consensus_->engine().certified(header_hash)) {
+            pending_proposals_.erase(header_hash);
+            return;
+        }
         if (!voting_enabled_) {
             return;
         }
@@ -2281,23 +2280,13 @@ namespace ExtraChain::Consensus {
                 st.highest_certificate.has_value() ? st.highest_certificate.value().height : 0,
                 st.locked_certificate.has_value() ? st.locked_certificate.value().height : 0,
                 st.finalized_height);
-            // A proposal we already finalized past, or one a quorum has certified
-            // without us, will never earn our vote. Keeping it pending only means
-            // every duplicate batch reply re-runs a full validation for a branch
-            // that is settled — measured at ~0.6 s a copy on this hardware, which
-            // is how a lagging node spends its catch-up window on payloads it
-            // cannot use.
-            const auto header_hash = hash_header(proposal.header);
-            if (proposal.header.height <= st.finalized_height || consensus_->engine().certified(header_hash)) {
-                pending_proposals_.erase(header_hash);
-            }
             return;
         }
         send_to_peer(vote.value(),
                      MessageType::ConsensusVote,
                      std::string(peer_identifier),
                      MessageStatus::NoStatus);
-        pending_proposals_.erase(hash_header(proposal.header));
+        pending_proposals_.erase(header_hash);
         reset_timeout();
     }
 

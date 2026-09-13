@@ -28,6 +28,20 @@ namespace ExtraChain::Consensus {
             TEST_REQUIRE(service.intent_store_->open().has_value());
             service.committed_nonces_ = service.intent_store_->load_committed_nonces().value();
         }
+        static void require_stale_vote_ignored(ConsensusService& service, const std::string& hash) {
+            const auto proofs = service.consensus_->engine().finality_proofs_after(0, 1);
+            TEST_REQUIRE(proofs.has_value() && proofs.value().size() == 1);
+            const auto proposal = proofs.value().front().finalized_proposal;
+            TEST_REQUIRE_EQ(hash_header(proposal.header), hash);
+            TEST_REQUIRE(service.consensus_->engine().batch_for(hash).has_value());
+            const auto voting       = service.voting_enabled_;
+            service.voting_enabled_ = true;
+            service.pending_proposals_.insert_or_assign(hash, proposal);
+            service.vote_for_proposal(proposal, "stale-peer");
+            TEST_REQUIRE(service.voting_enabled_ && !service.voting_paused_);
+            TEST_REQUIRE(!service.pending_proposals_.contains(hash));
+            service.voting_enabled_ = voting;
+        }
         static auto stage(ConsensusService& service, const SectionBatchData& batch) {
             return service.consensus_->engine().stage_batch(batch);
         }
@@ -588,6 +602,7 @@ int main() {
                                       AppliedCheckpoint { last_applied.finalized_proposal.header.height,
                                                           hash_header(last_applied.finalized_proposal.header) });
     TEST_REQUIRE_EQ(mining_state_root(ConsensusStateTestFixture::parent(service, parent).value()), expected_root);
+    ConsensusStateTestFixture::require_stale_vote_ignored(service, batches.at(1).header_hash);
     // A repeated registration is signed and structurally valid, but must not poison the leader's queue.
     const auto repeated          = request(IntentOperation::StorageRegister, dataset, 3, 261, 14);
     const auto repeated_envelope = intent_from_transaction(repeated).value();
@@ -660,7 +675,12 @@ int main() {
     ConsensusStateTestFixture::require_missing_batch_request(service, batches.at(13).header_hash);
     TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(13)).has_value());
     ConsensusStateTestFixture::require_missing_batch_request(service, batches.at(12).header_hash);
-    TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(12)).has_value());
+    {
+        const auto recovery_peer = view.find(validator_id_for(keys[0].public_key()))->node_identifier;
+        ConsensusStateTestFixture::authenticate(service, view, keys[0], recovery_peer);
+        service.receive_batch_data(batches.at(12), recovery_peer);
+    }
+    TEST_REQUIRE_EQ(service.ready_intents(10, 1024 * 1024).size(), repaired.size());
     const auto restored_nonce = ConsensusStateTestFixture::next_nonce(service, provider.id());
     TEST_REQUIRE(restored_nonce.has_value());
     TEST_REQUIRE_EQ(restored_nonce.value(), repaired.back().intent.account_nonce + 1);
