@@ -29,53 +29,10 @@ static const int MINING_TIMER_TICK = 60000;
 
 class DataMiningManager {
 public:
-    explicit DataMiningManager(ExtraChain::Core::ExtraChainNode *node);
-
-    /**
-     * @brief calculate_coins
-     * @param dataAmountStored
-     * @param dataAmountTotalStoredInNetwork
-     * @param circulativeSupply
-     * @param blockAmount
-     * @param coefficient
-     * @return
-     */
-    BigNumberFloat calculate_coins(BigNumberFloat dataAmountStored,
-                                   BigNumberFloat dataAmountTotalStoredInNetwork,
-                                   BigNumberFloat circulativeSupply,
-                                   BigNumberFloat blockAmount,
-                                   double         coefficient);
-
-    /**
-     * @brief Reward request
-     * */
+    explicit DataMiningManager(ExtraChain::Core::ExtraChainNode* node);
     void request_reward();
-
-    /**
-     * @brief calculate reward amound
-     * @return amount of reward
-     */
-    BigNumberFloat calculate_reward_amount() const;
-    BigNumberFloat calculate_reward_amount(const Dfs::Reward::RequestReward &request_reward) const;
-
-    /**
-     * @brief Send reward amount
-     */
-    bool network_request_coin_reward(const Dfs::Reward::RequestReward &request_reward, const Responder &responder);
-
-    /**
-     * @brief set_koef_to_koef
-     * @param koef_to_koef
-     */
-    void set_koef_to_koef(const BigNumberFloat &koef_to_koef);
+    bool network_request_coin_reward(const Dfs::Reward::RequestReward& request, const Responder& responder);
 
 private:
-    const int            max_reward_          = 2;
-    const BigNumberFloat koef_reward_dag_dfs_ = BigNumberFloat("0.017");
-    const BigNumberFloat koef_reward_dag_     = BigNumberFloat("0.0063"); // 0.0063 - dfs + dag
-    const BigNumberFloat koef_reward_         = BigNumberFloat("0.000015");
-    BigNumberFloat       koef_to_koef_        = BigNumberFloat(1);
-    ExtraChain::Core::ExtraChainNode *node;
-
-    std::unordered_map<ActorId, std::unordered_map<std::string, std::uint64_t>> last_reward_;
+    ExtraChain::Core::ExtraChainNode* node;
 };

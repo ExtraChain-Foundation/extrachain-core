@@ -2848,6 +2848,9 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
                                                         const SectionId                       *validation_frontier,
                                                         const TransactionValidationFacts      *facts,
                                                         bool stage_contract_change) {
+    if (tx.type() == TransactionType::Reward)
+        return TransactionProveError::MiningProofRequired;
+
     if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance) {
         return validate_initial_transaction(tx);
     }
@@ -3066,15 +3069,6 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     bool verify = verify_stored_hash();
     if (!verify) {
         return TransactionProveError::InvalidSignature;
-    }
-
-    // Special transaction types that don't require balance check
-    if (tx.type() == TransactionType::Reward) {
-        if (tx.amount() > 3) {
-            return TransactionProveError::BigReward;
-        }
-
-        return TransactionProveError::NoError;
     }
 
     // special conditions: receiver is null - coins burning,

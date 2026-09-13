@@ -122,7 +122,8 @@ enum class TransactionProveError {
     TokenMigrationFrozen,
     AdmissionBusy,
     StateUnavailable,
-    IntentRequired ///< Legacy transaction arrived after the V2 activation point
+    IntentRequired, ///< Legacy transaction arrived after the V2 activation point
+    MiningProofRequired
 };
 
 /**

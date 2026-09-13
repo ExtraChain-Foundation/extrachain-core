@@ -2935,27 +2935,9 @@ void NetworkService::message_received(const std::string &message,
         break;
     }
 
-    case MessageType::CoinReward: {
-        auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
-        if (!reward_request_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for coin reward", type);
-            break;
-        }
-        const auto &reward_request = reward_request_result.value();
-        switch (status) {
-        case MessageStatus::Request: {
-            auto res = node->data_mining_manager()->network_request_coin_reward(reward_request, responder);
-
-            if (res) {
-                send_broadcast_message_further(package_data);
-            }
-            break;
-        }
-        default:
-            break;
-        }
+    case MessageType::CoinReward:
+        // The legacy reward message carries no consensus storage proof.
         break;
-    }
 
     case MessageType::DagSyncLastInfo: {
 #ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority

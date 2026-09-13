@@ -5,6 +5,7 @@
 #include "chain/dag.h"
 #include "chain/private_profile.h"
 #include "core/extrachain_node.h"
+#include "managers/data_mining_manager.h"
 #include "dfs/dfs_service.h"
 #include "managers/account_controller.h"
 #include "managers/luminance_manager.h"
@@ -226,6 +227,30 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(!socket->check_first_message(claim));
         TEST_REQUIRE(socket->identifier().empty());
         TEST_REQUIRE(!socket->is_active());
+    });
+
+    run("legacy rewards never authorize emission", [&] {
+        for (const auto amount : { "0.00000001", "2", "3", "1000000" }) {
+            Transaction reward;
+            reward.set_type(TransactionType::Reward);
+            reward.set_sender(owner.id());
+            reward.set_receiver(owner.id());
+            reward.set_token(TokenId());
+            reward.set_section(SectionId(10));
+            reward.set_amount(BigNumberFloat(amount));
+            TEST_REQUIRE(reward.sign(owner));
+            const SectionId frontier(10);
+            TEST_REQUIRE_EQ(node->dag()->prove_transaction(reward, { }, nullptr, &frontier),
+                            TransactionProveError::MiningProofRequired);
+            Dfs::Reward::RequestReward request { .data_stored_size = UINT64_MAX,
+                                                 .bytes_sent       = UINT64_MAX,
+                                                 .bytes_received   = UINT64_MAX,
+                                                 .sections_stored  = BigNumber(std::to_string(UINT64_MAX)),
+                                                 .transaction      = reward };
+            Responder                  responder;
+            responder.set_node_id(NodeId { .actor_id = owner.id(), .node_identifier = "claimed-identifier" });
+            TEST_REQUIRE(!node->data_mining_manager()->network_request_coin_reward(request, responder));
+        }
     });
 
     run("conversion checks source balance including pending debits", [&] {

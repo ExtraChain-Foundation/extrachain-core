@@ -24,6 +24,17 @@ int main(int argc, char* argv[]) {
     DagCache cache(nullptr, nullptr);
     Balances balances;
 
+    Transaction allocation;
+    allocation.set_type(TransactionType::Balance);
+    allocation.set_sender(sender.value());
+    allocation.set_receiver(receiver.value());
+    allocation.set_token(TokenId());
+    allocation.set_amount(BigNumberFloat(7));
+    Balances allocated;
+    cache.apply_transaction_delta(allocation, allocated);
+    TEST_REQUIRE_EQ(allocated.at({ receiver.value(), TokenId() }), BigNumberFloat(7));
+    TEST_REQUIRE(!allocated.contains({ sender.value(), TokenId() }));
+
     Transaction reward;
     reward.set_sender(sender.value());
     reward.set_receiver(sender.value());

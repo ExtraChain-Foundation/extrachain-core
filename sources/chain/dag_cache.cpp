@@ -926,6 +926,14 @@ void DagCache::apply_transaction(const Transaction& tx, Balances& balances, bool
         return;
     }
 
+    // A trusted section-one balance is an initial allocation, not a transfer
+    // from the network owner's spendable account.
+    if (tx.type() == TransactionType::Balance) {
+        if (!tx.receiver().is_zero())
+            credit(std::make_pair(tx.receiver(), tx.token()), tx.amount());
+        return;
+    }
+
     // Minting transactions (creates from nothing, adds to receiver)
     if (tx.type() == TransactionType::Minting && !tx.receiver().is_zero() && !tx.token().is_zero()) {
         credit(std::make_pair(tx.receiver(), tx.token()), tx.amount());
