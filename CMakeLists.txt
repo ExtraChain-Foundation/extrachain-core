@@ -56,7 +56,7 @@ endif()
 
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED COMPONENTS system thread json)
+find_package(Boost CONFIG REQUIRED COMPONENTS system thread json icl)
 find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
@@ -412,6 +412,7 @@ target_link_libraries(
   Boost::mp11
   Boost::describe
   Boost::json
+  Boost::icl
   bip3x
   extrachain-wamr
   $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>
