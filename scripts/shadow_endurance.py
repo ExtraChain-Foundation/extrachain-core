@@ -17,6 +17,7 @@ from shadow_fault_cycle import Cycle
 from shadow_live_join import DOCUMENTS
 from shadow_receipts import audit
 from shadow_wave_audit import audit_waves
+from shadow_verify import capture_checkpoint, node_dirs
 
 
 class Endurance(Cycle):
@@ -38,6 +39,7 @@ class Endurance(Cycle):
             EXC_SHADOW_VECTOR_ROWS='48', EXC_SHADOW_VECTOR_CROSS='8', EXC_SHADOW_HISTORY_ROWS='130',
             EXC_SHADOW_REMOVE_AFTER_S='30', EXC_SHADOW_DFS_MODE='full', EXC_SHADOW_MINING_TEST='1',
             EXC_SHADOW_MINING_LONG_TEST='1',
+            EXC_SHADOW_CHECKPOINT=str(self.barrier / 'shutdown-checkpoint.json'),
             EXC_SHADOW_RUN_SECONDS=str(args.duration + args.recovery + 600),
             EXC_SHADOW_DEADLINE_S=str(args.duration + args.recovery), EXC_SHADOW_HOLD_S='0')
         for key in ('EXC_SHADOW_RESUME_WAVE', 'EXC_SHADOW_OLD_INDEXES', 'EXC_FUND_NODES'):
@@ -165,7 +167,7 @@ class Endurance(Cycle):
         self.observer = self.start_member(7, resume=False)
         self.observer_online = True
 
-    def converge(self):
+    def converge(self, shutdown=False):
         nodes = 8 if self.observer_online else 7
         expected = (self.wave + 1) * self.args.senders * self.args.per_sender
         mining_progress = []
@@ -200,7 +202,16 @@ class Endurance(Cycle):
                     raise RuntimeError('Invalid mining counters')
                 mining_progress.append(dict(node=index, section=state[1], reserved_units=state[2],
                                             minted_units=state[3]))
-            return min(item['minted_units'] for item in mining_progress) > self.last_minted
+            if min(item['minted_units'] for item in mining_progress) <= self.last_minted:
+                return False
+            if shutdown:
+                checkpoint = capture_checkpoint(node_dirs(self.work), mining_progress)
+                if checkpoint is None:
+                    return False
+                with (self.barrier / 'shutdown-checkpoint.json').open('x') as stream:
+                    json.dump(checkpoint, stream, indent=2)
+                self.event('shutdown-checkpoint', **checkpoint)
+            return True
 
         self.wait_for(complete, f'wave {self.wave} convergence on {nodes} nodes', self.args.recovery)
         self.last_minted = max(item['minted_units'] for item in mining_progress)
@@ -292,7 +303,7 @@ class Endurance(Cycle):
                     self.event('observer-returned', missed_waves=online_wave - offline_wave + 1)
                 self.converge()
             self.hold_until(started + self.args.duration)
-            self.converge()
+            self.converge(shutdown=True)
             elapsed = time.monotonic() - started
             # The harness stops every barrier PID together after its live audits.
             # Stopping the observer first lets the committee advance during those audits.

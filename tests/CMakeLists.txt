@@ -11,6 +11,7 @@ enable_testing()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME shadow-vector-audit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/shadow_vector_audit.py)
 add_test(NAME shadow-wave-audit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/shadow_wave_audit_test.py)
+add_test(NAME shadow-verification COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/test_shadow_verify.py)
 
 set(EXTRACHAIN_STATIC_BUILD true)
 option(EXTRACHAIN_BUILD_QT_COMPAT_TESTS "Build tests for the optional Qt compatibility library" OFF)

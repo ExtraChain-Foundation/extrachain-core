@@ -239,6 +239,14 @@ be attributed.
     had 10. The file hashes differed even though the replicated data and DFS metadata
     hashes were equal. Compare sorted logical rows, schema, and the DFS logical hash for
     vectors and dictionaries. Use a raw byte hash only for immutable file payloads.
+12. **Shutdown is asynchronous.** A committee can finalize more checkpoints while its
+    peers stop. The endurance driver first requires all eight live mining snapshots to
+    agree on section, reserved units, and minted units. It records the common finalized
+    batch from each safety store. After shutdown, each node must retain that batch and
+    reach at least that section. Cross-node section content, coverage, individual DAG
+    replay, balances, mining state, receipts, and DFS audits must still pass. Runs without
+    this recorded live checkpoint retain the existing stopped-height check. A failed run
+    cannot be reclassified by creating a checkpoint after shutdown.
 
 ---
 

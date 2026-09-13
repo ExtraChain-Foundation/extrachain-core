@@ -715,7 +715,11 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     if [ "${#SNAPSHOT_HASH[@]}" -gt 1 ]; then
         log "note: nodes stopped at ${#SNAPSHOT_HASH[@]} different snapshot sections (shutdown skew, not a mismatch)"
     fi
-    EXC_VERIFY_SKIP="$DEAD_NODES" offline_verify "$WORK/cross-node.core" python3 "$SHADOW_VERIFY" "$WORK" >"$WORK/cross-node.log" 2>&1 \
+    checkpoint_args=()
+    if [ -n "${EXC_SHADOW_CHECKPOINT:-}" ]; then
+        checkpoint_args=(--checkpoint "$EXC_SHADOW_CHECKPOINT")
+    fi
+    EXC_VERIFY_SKIP="$DEAD_NODES" offline_verify "$WORK/cross-node.core" python3 "$SHADOW_VERIFY" "$WORK" "${checkpoint_args[@]}" >"$WORK/cross-node.log" 2>&1 \
         || { tail -80 "$WORK/cross-node.log" >&2; fail "cross-node content verification failed"; }
 fi
 
