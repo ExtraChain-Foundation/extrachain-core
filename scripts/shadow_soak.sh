@@ -50,6 +50,10 @@ SENDERS="${EXC_SHADOW_SENDERS:-4}"
 PER_SENDER="${EXC_SHADOW_PER_SENDER:-32}"
 RUN_SECONDS="${EXC_SHADOW_RUN_SECONDS:-240}"
 RECOVERY_SECONDS="${EXC_SHADOW_RECOVERY_SECONDS:-60}"
+if [ -n "${EXC_SHADOW_MINING_TEST+x}" ] && [ "$EXC_SHADOW_MINING_TEST" != 1 ]; then
+    printf 'Invalid EXC_SHADOW_MINING_TEST: expected 1 when set\n' >&2
+    exit 64
+fi
 if ! [[ "$RECOVERY_SECONDS" =~ ^[1-9][0-9]{0,3}$ ]] || [ "$RECOVERY_SECONDS" -gt 3600 ]; then
     printf 'Invalid EXC_SHADOW_RECOVERY_SECONDS: expected 1..3600\n' >&2
     exit 64
@@ -608,6 +612,12 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
             [ "$node_finalized" = "$reference" ] || converged=0
         done
         [ -n "$reference" ] || converged=0
+        if [ "${EXC_SHADOW_MINING_TEST:-0}" = 1 ]; then
+            for index in $(seq 0 $((NODE_COUNT - 1))); do
+                is_dead "$index" && continue
+                grep -q 'native payout section=' "$WORK/node-$index.log" || converged=0
+            done
+        fi
         if [ "$converged" -eq 1 ]; then
             # Heights agree; the ExDFS mesh has to be complete as well before the
             # audits read a snapshot.
@@ -668,6 +678,7 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     # a perfectly good run. What must agree is the CONTENT at a shared section: group
     # the snapshots by section and require one hash per section.
     declare -A SNAPSHOT_HASH=() SNAPSHOT_OWNER=()
+    declare -A MINING_HASH=()
     for index in $(seq 0 $((NODE_COUNT - 1))); do
         role="joiner"; [ "$index" -eq 0 ] && role="seed"
         offline_verify "$WORK/audit-$index.core" "$DAG_AUDIT" "${NODE_HOMES[$index]}" "$role" >"$WORK/audit-$index.log" 2>&1 \
@@ -685,6 +696,16 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
         fi
         SNAPSHOT_HASH[$section]="$hash"
         SNAPSHOT_OWNER[$section]="$index"
+        if [ "${EXC_SHADOW_MINING_TEST:-0}" = 1 ]; then
+            mining="$(sed -n 's/^mining: section=\([^ ]*\).*root=\([^ ]*\).*/\1:\2/p' "$WORK/audit-$index.log")"
+            [ -n "$mining" ] || fail "node $index did not report a mining snapshot"
+            section="${mining%%:*}"
+            hash="${mining#*:}"
+            if [ -n "${MINING_HASH[$section]:-}" ] && [ "${MINING_HASH[$section]}" != "$hash" ]; then
+                fail "nodes disagree on mining state at section $section"
+            fi
+            MINING_HASH[$section]="$hash"
+        fi
     done
     if [ "${#SNAPSHOT_HASH[@]}" -gt 1 ]; then
         log "note: nodes stopped at ${#SNAPSHOT_HASH[@]} different snapshot sections (shutdown skew, not a mismatch)"

@@ -84,6 +84,10 @@ namespace ExtraChain::Consensus {
         void receive_intent(const IntentEnvelope& envelope);
 
         std::expected<std::string, ConsensusError> submit_intent(const IntentEnvelope& envelope);
+        // Allocate a nonce and sign under the submission lock, including concurrent local mining work.
+        std::expected<std::string, ConsensusError> submit_local_intent(TransactionIntentV2      intent,
+                                                                       std::string              metadata,
+                                                                       const Actor<KeyPrivate>& sender);
         [[nodiscard]] std::vector<IntentEnvelope>  ready_intents(std::size_t maximum_count,
                                                                  std::size_t maximum_bytes) const;
         [[nodiscard]] std::expected<std::optional<IntentReceipt>, ConsensusError> intent_receipt(
@@ -100,6 +104,13 @@ namespace ExtraChain::Consensus {
         std::expected<BalanceSnapshotV1, ConsensusError> balance_snapshot() const;
         bool accept_balance_snapshot(const BalanceSnapshotV1& snapshot);
 
+        [[nodiscard]] bool                                       native_mining_enabled() const;
+        [[nodiscard]] std::expected<MiningState, ConsensusError> finalized_mining_state() const;
+        // Preview the next section for local proof work; this does not commit state or issue coins.
+        [[nodiscard]] std::expected<MiningState, ConsensusError> mining_work_state() const;
+        std::expected<std::string, ConsensusError> submit_mining_request(IntentOperation          operation,
+                                                                         std::string              metadata,
+                                                                         const Actor<KeyPrivate>& provider);
         [[nodiscard]] bool verify_mining_transaction(const Transaction& transaction) const;
         [[nodiscard]] bool active() const noexcept;
         [[nodiscard]] bool voting() const noexcept;
@@ -176,15 +187,19 @@ namespace ExtraChain::Consensus {
         /// ancestor whose batch we simply do not hold yet. Absent data and corrupt
         /// data both break the walk, but only the former is worth another request.
         [[nodiscard]] std::expected<std::vector<Transaction>, ConsensusError> staged_ancestor_transactions(
-            const QuorumCertificate& parent,
-            std::uint64_t            first_section,
-            std::string*             missing_ancestor = nullptr) const;
+            const QuorumCertificate&     parent,
+            std::uint64_t                first_section,
+            std::string*                 missing_ancestor = nullptr,
+            std::optional<std::uint64_t> applied_height   = std::nullopt) const;
         /// Ancestors as a set, ready for the DAG's balance proofs. An empty set means
         /// the parent is already canonical; a broken ancestor chain is an error, not
         /// an empty set, so a proposal is never accepted on a silently weaker check.
         [[nodiscard]] std::expected<std::set<Transaction>, ConsensusError> staged_ancestors_for(
             const Proposal& proposal,
             std::string*    missing_ancestor = nullptr) const;
+        std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> staged_nonces_for(
+            const QuorumCertificate& parent,
+            std::uint64_t            first_section) const;
         [[nodiscard]] bool                         has_unfinalized_intents() const;
         std::expected<std::string, ConsensusError> accept_intent(const IntentEnvelope& envelope, bool broadcast);
         [[nodiscard]] std::expected<std::vector<std::pair<IntentEnvelope, IntentReceipt>>, ConsensusError>

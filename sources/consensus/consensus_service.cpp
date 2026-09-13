@@ -19,6 +19,7 @@
 #include "contracts/standard_token.h"
 #include "core/extrachain_node.h"
 #include "managers/token_manager.h"
+#include "managers/data_mining_manager.h"
 #include "network/network_service.h"
 #include "network/peer_meta.h"
 #include "network/responder.h"
@@ -99,6 +100,34 @@ namespace ExtraChain::Consensus {
                                               token.tx_hash.value_or(std::string {}),
                                               static_cast<std::uint64_t>(
                                                   token.section_id.value_or(SectionId(0)).to_int().value_or(0)));
+        }
+
+        std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> advance_nonces(
+            std::map<ActorId, std::uint64_t> nonces,
+            const std::vector<Transaction>&  transactions) {
+            std::map<ActorId, std::map<std::uint64_t, SectionId>> by_sender;
+            for (const auto& transaction : transactions) {
+                if (!transaction.consensus_intent().has_value())
+                    continue;
+                const auto envelope = intent_from_transaction(transaction);
+                if (!envelope.has_value())
+                    return std::unexpected(envelope.error());
+                if (!by_sender[envelope.value().intent.sender]
+                         .emplace(envelope.value().intent.account_nonce, transaction.section())
+                         .second)
+                    return std::unexpected(ConsensusError::InvalidNonce);
+            }
+            for (const auto& [sender, entries] : by_sender) {
+                auto&     nonce = nonces[sender];
+                SectionId previous(-1);
+                for (const auto& [next, section] : entries) {
+                    if (nonce == UINT64_MAX || next != nonce + 1 || section < previous)
+                        return std::unexpected(ConsensusError::InvalidNonce);
+                    nonce    = next;
+                    previous = section;
+                }
+            }
+            return nonces;
         }
 
         std::uint64_t wall_clock_millis() {
@@ -1124,6 +1153,25 @@ namespace ExtraChain::Consensus {
         return accept_intent(envelope, true);
     }
 
+    std::expected<std::string, ConsensusError> ConsensusService::submit_local_intent(
+        TransactionIntentV2      intent,
+        std::string              metadata,
+        const Actor<KeyPrivate>& sender) {
+        std::lock_guard lock(mutex_);
+        if (!consensus_)
+            return std::unexpected(ConsensusError::NotReady);
+        const auto committed = committed_nonces_.find(sender.id());
+        const auto nonce =
+            intent_pool_.next_nonce(sender.id(), committed == committed_nonces_.end() ? 0 : committed->second);
+        if (!nonce.has_value())
+            return std::unexpected(nonce.error());
+        intent.account_nonce     = nonce.value();
+        const auto signed_intent = make_intent(std::move(intent), metadata, sender);
+        if (!signed_intent.has_value())
+            return std::unexpected(signed_intent.error());
+        return accept_intent(IntentEnvelope { signed_intent.value(), std::move(metadata) }, true);
+    }
+
     std::vector<IntentEnvelope> ConsensusService::ready_intents(std::size_t maximum_count,
                                                                 std::size_t maximum_bytes) const {
         std::lock_guard lock(mutex_);
@@ -1841,6 +1889,8 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !consensus_->engine().safety_state().highest_certificate.has_value()) {
             return;
         }
+        if (node_.data_mining_manager() != nullptr)
+            node_.data_mining_manager()->consensus_progress();
         const auto&             highest = consensus_->engine().safety_state().highest_certificate.value();
         auto                    target  = consensus_->configuration().activation_dag_section;
         std::optional<Proposal> highest_proposal;
@@ -1904,15 +1954,22 @@ namespace ExtraChain::Consensus {
             const bool mining_pending  = !parent_mining.value().epochs.empty()
                                          || (!parent_mining.value().registrations.empty()
                                              && parent_mining.value().reserved_units < scheduled_total);
+            const auto projected_nonces = staged_nonces_for(highest, target - ShadowSectionInterval + 1);
+            if (!projected_nonces.has_value()) {
+                eWarning("[Shadow] Certified account nonces are unavailable: {}",
+                         std::to_underlying(projected_nonces.error()));
+                return;
+            }
             const auto flush_pipeline = has_unfinalized_intents();
             const auto intents =
-                flush_pipeline
+                flush_pipeline && !consensus_->mining_policy().has_value()
                     ? std::vector<IntentEnvelope> { }
-                    : intent_pool_.ready(committed_nonces_,
+                    : intent_pool_.ready(projected_nonces.value(),
                                          intent_height(),
                                          20 * 256 - static_cast<std::size_t>(settlement.value().has_value()),
                                          consensus_->configuration().maximum_batch_bytes / 2);
-            if (intents.empty() && !flush_pipeline && !mining_pending) {
+            if (intents.empty() && !flush_pipeline && !mining_pending
+                && !(highest.phase == Phase::Genesis && consensus_->mining_policy().has_value())) {
                 return;
             }
             const auto first = target == 0 ? SectionId(0) : SectionId(target) - CONTROL_INTERVAL_DIFF;
@@ -2397,9 +2454,10 @@ namespace ExtraChain::Consensus {
     }
 
     std::expected<std::vector<Transaction>, ConsensusError> ConsensusService::staged_ancestor_transactions(
-        const QuorumCertificate& parent,
-        std::uint64_t            first_section,
-        std::string*             missing_ancestor) const {
+        const QuorumCertificate&     parent,
+        std::uint64_t                first_section,
+        std::string*                 missing_ancestor,
+        std::optional<std::uint64_t> applied_height) const {
         // Stored sections use decimal numbers even inside a legacy wire callback.
         WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
         if (!consensus_) {
@@ -2410,7 +2468,7 @@ namespace ExtraChain::Consensus {
         std::set<std::string>                 seen;
         auto                                  certificate = parent;
         auto                                  frontier    = first_section;
-        const auto                            finalized   = consensus_->engine().safety_state().finalized_height;
+        const auto finalized = applied_height.value_or(consensus_->engine().safety_state().finalized_height);
 
         while (certificate.phase != Phase::Genesis && certificate.height > finalized) {
             if (certificate.header_hash.empty() || !seen.insert(certificate.header_hash).second
@@ -2765,6 +2823,20 @@ namespace ExtraChain::Consensus {
         return consensus_->engine().stage_batch(std::move(local.value()));
     }
 
+    std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> ConsensusService::staged_nonces_for(
+        const QuorumCertificate& parent,
+        std::uint64_t            first_section) const {
+        const auto applied   = consensus_->configuration().mode == ShadowMode::Finality
+                                   ? std::optional<std::uint64_t> { applied_checkpoint_.has_value()
+                                                                        ? applied_checkpoint_.value().height
+                                                                        : 0 }
+                                   : std::nullopt;
+        const auto ancestors = staged_ancestor_transactions(parent, first_section, nullptr, applied);
+        if (!ancestors.has_value())
+            return std::unexpected(ancestors.error());
+        return advance_nonces(committed_nonces_, ancestors.value());
+    }
+
     bool ConsensusService::has_unfinalized_intents() const {
         if (!consensus_) {
             return false;
@@ -2890,6 +2962,20 @@ namespace ExtraChain::Consensus {
             && finalized.value().size() + system_records != proposal.batch.transaction_hashes.size()) {
             return std::unexpected(ConsensusError::InvalidIntent);
         }
+        auto nonces = staged_nonces_for(proposal.parent_certificate, proposal.batch.first_section);
+        if (!nonces.has_value())
+            return std::unexpected(nonces.error());
+        std::vector<Transaction> transactions;
+        for (const auto& [_, bytes] : batch.sections) {
+            auto section = Json::deserialize<Section>(bytes);
+            if (!section.has_value())
+                return std::unexpected(ConsensusError::InvalidIntent);
+            for (const auto& transaction : section.value().transactions)
+                transactions.push_back(transaction);
+        }
+        const auto next_nonces = advance_nonces(std::move(nonces.value()), transactions);
+        if (!next_nonces.has_value())
+            return std::unexpected(next_nonces.error());
         bool epoch_change_seen = false;
         for (const auto& [envelope, _] : finalized.value()) {
             if (envelope.intent.operation == IntentOperation::EpochChange) {

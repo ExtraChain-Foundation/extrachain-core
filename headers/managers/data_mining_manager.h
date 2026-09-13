@@ -19,20 +19,28 @@
 
 #pragma once
 
-#include <string>
-#include "dfs/dfs_service.h"
-#include "utils/bignumber_float.h"
-#include "core/extrachain_node.h"
+#include <memory>
+
 #include "dfs/dfs_utils.h"
 
-static const int MINING_TIMER_TICK = 60000;
+namespace ExtraChain::Core {
+    class ExtraChainNode;
+}
+class Responder;
+
+inline constexpr int MINING_TIMER_TICK = 60000;
 
 class DataMiningManager {
 public:
     explicit DataMiningManager(ExtraChain::Core::ExtraChainNode* node);
+    ~DataMiningManager();
     void request_reward();
+    void consensus_progress();
+    void set_enabled(bool enabled);
+    void prepare_shutdown();
     bool network_request_coin_reward(const Dfs::Reward::RequestReward& request, const Responder& responder);
 
 private:
-    ExtraChain::Core::ExtraChainNode* node;
+    struct Work;
+    std::shared_ptr<Work> work_;
 };

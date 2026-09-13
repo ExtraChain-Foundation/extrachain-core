@@ -2,6 +2,10 @@
 #include "chain/dag.h"
 #include "consensus/consensus_service.h"
 #include "core/extrachain_node.h"
+#include "managers/data_mining_manager.h"
+#include "managers/account_controller.h"
+#include "dfs/dfs_service.h"
+#include <thread>
 #include "test_support.h"
 #include "utils/exc_utils.h"
 #include "utils/file_io.h"
@@ -35,6 +39,10 @@ namespace ExtraChain::Consensus {
         static auto persist(ConsensusService& service, const FinalityProof& proof, const SectionBatchData& batch) {
             return service.persist_mining_state(proof, batch);
         }
+        static auto ready(ConsensusService& service) {
+            return service.has_unfinalized_intents() ? std::vector<IntentEnvelope> { }
+                                                     : service.ready_intents(64, 8 * 1024 * 1024);
+        }
         static auto admit(ConsensusService& service, const Proposal& proposal, const SectionBatchData& batch) {
             return service.admit_batch_intents(proposal, batch);
         }
@@ -62,7 +70,9 @@ int main() {
     network.create(ActorType::Service);
     Actor<KeyPrivate> provider;
     provider.create(ActorType::User);
-    TEST_REQUIRE(node->actor_index()->store_new_actor(provider.to_public()).has_value());
+    node->account_controller()->create_profile("mining-runtime-profile", ActorType::User, provider);
+    TEST_REQUIRE(node->account_controller()->system_actor().id() == provider.id());
+    TEST_REQUIRE(node->actor_index()->exists(provider.id()));
     TEST_REQUIRE(node->actor_index()->store_new_actor(network.to_public()).has_value());
     std::vector<KeyPrivate>      keys(7);
     std::vector<ValidatorRecord> records;
@@ -138,24 +148,50 @@ int main() {
                                 .value();
         return materialize_intent(envelope, section, height, { }).value();
     };
+    node->data_mining_manager()->set_enabled(true);
+    const auto local_file_id = Utils::calculate_hash("mining-runtime-file");
+    const auto local_path    = Dfs::Path::file_path(provider.id(), local_file_id).value();
+    std::filesystem::create_directories(local_path.native().parent_path());
+    TEST_REQUIRE(FileIo::write_atomic(local_path.native(), "bytes").has_value());
+    Dfs::DirRow file_row { .actor_id = provider.id(),
+                           .owner_id = provider.id(),
+                           .file_id  = local_file_id,
+                           .hash     = Utils::calculate_hash("bytes"),
+                           .name     = "mining-runtime.bin",
+                           .size     = 5,
+                           .type     = Dfs::FileType::File,
+                           .state    = Dfs::FileState::Ready };
+    node->dfs()->notify_stored(provider.id(), file_row);
+    auto alias_row        = file_row;
+    alias_row.file_id     = Utils::calculate_hash("mining-runtime-alias");
+    const auto alias_path = Dfs::Path::file_path(provider.id(), alias_row.file_id).value();
+    TEST_REQUIRE(FileIo::write_atomic(alias_path.native(), "bytes").has_value());
+    node->dfs()->notify_stored(provider.id(), alias_row);
     for (std::uint64_t height = 1; height <= 13; ++height) {
         const auto               first = (height - 1) * ShadowSectionInterval + 1;
         std::vector<Transaction> transactions;
-        if (height == 2)
-            transactions.push_back(request(IntentOperation::StorageRegister, dataset, 1, first, height));
         if (height == 7) {
-            const auto             proof = engine->finality_proof_for_section(80).value().value();
-            const StorageChallenge challenge { 2, hash_header(proof.finalized_proposal.header) };
-            transactions.push_back(
-                request(IntentOperation::StorageProof,
-                        MiningProofSubmission {
-                            2,
-                            dataset_id,
-                            make_storage_proof(network.id(), provider.id(), dataset, challenge, reader).value() },
-                        2,
-                        first,
-                        height));
+            // Loss of the derived index and one alias must not withdraw a dataset with another valid copy.
+            TEST_REQUIRE(std::filesystem::remove(local_path.native()));
+            for (const auto& index : std::filesystem::directory_iterator("consensus/mining-index"))
+                TEST_REQUIRE(std::filesystem::remove(index.path()));
+            node->dfs()->notify_local_removed(provider.id(), file_row.file_id);
         }
+        node->data_mining_manager()->consensus_progress();
+        auto ready = ConsensusStateTestFixture::ready(service);
+        if (height == 2 || height == 7) {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            while (ready.empty() && std::chrono::steady_clock::now() < deadline) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                node->data_mining_manager()->consensus_progress();
+                ready = ConsensusStateTestFixture::ready(service);
+            }
+            TEST_REQUIRE_EQ(ready.size(), std::size_t(1));
+            TEST_REQUIRE(ready.front().intent.operation
+                         == (height == 2 ? IntentOperation::StorageRegister : IntentOperation::StorageProof));
+        }
+        for (const auto& envelope : ready)
+            transactions.push_back(materialize_intent(envelope, first, height, { }).value());
         const auto parent_state = ConsensusStateTestFixture::parent(service, parent);
         TEST_REQUIRE(parent_state.has_value());
         const auto settlement = ConsensusStateTestFixture::settlement(service, parent_state.value(), first);
@@ -220,6 +256,18 @@ int main() {
         proposal.signature = sign_payload(*signer, proposal_signing_payload(proposal)).value();
         batch.header_hash  = hash_header(proposal.header);
         TEST_REQUIRE(node->dag()->validate_shadow_batch(proposal, batch, MaximumShadowBatchBytes).has_value());
+        if (height == 2) {
+            auto skipped                 = ready.front();
+            skipped.intent.account_nonce = 2;
+            skipped.intent               = make_intent(skipped.intent, skipped.metadata, provider).value();
+            auto    invalid_batch        = batch;
+            Section invalid { .id = SectionId(first) };
+            invalid.transactions.insert(materialize_intent(skipped, first, height, { }).value());
+            invalid_batch.sections.front().second = Json::serialize(invalid);
+            const auto rejected = ConsensusStateTestFixture::admit(service, proposal, invalid_batch);
+            TEST_REQUIRE(!rejected.has_value() && rejected.error() == ConsensusError::InvalidNonce);
+            TEST_REQUIRE(!service.intent_receipt(hash_intent(skipped.intent)).value().has_value());
+        }
         TEST_REQUIRE(ConsensusStateTestFixture::admit(service, proposal, batch).has_value());
         TEST_REQUIRE(engine->observe_proposal(proposal).has_value());
         TEST_REQUIRE(engine->stage_batch(batch).has_value());
@@ -310,6 +358,28 @@ int main() {
     TEST_REQUIRE(receipt.has_value() && receipt.value().has_value()
                  && receipt.value().value().status == IntentStatus::Rejected);
     TEST_REQUIRE(service.ready_intents(10, 1024 * 1024).empty());
+    TEST_REQUIRE(std::filesystem::remove(alias_path.native()));
+    node->dfs()->notify_local_removed(provider.id(), alias_row.file_id);
+    node->data_mining_manager()->consensus_progress();
+    const auto withdrawal = service.ready_intents(10, 1024 * 1024);
+    TEST_REQUIRE(withdrawal.size() == 1
+                 && withdrawal.front().intent.operation == IntentOperation::StorageUnregister);
+    node->data_mining_manager()->set_enabled(false);
+    // Local transfers share the account with pending proof work and must reserve distinct nonces.
+    const auto local_transfer = TransactionIntentV2 { .network_id           = network.id(),
+                                                      .sender               = provider.id(),
+                                                      .receiver             = network.id(),
+                                                      .amount               = "0.00000001",
+                                                      .operation            = IntentOperation::Transfer,
+                                                      .expires_after_height = 1000 };
+    const auto transfer_a     = service.submit_local_intent(local_transfer, "local-a", provider);
+    const auto transfer_b     = service.submit_local_intent(local_transfer, "local-b", provider);
+    TEST_REQUIRE(transfer_a.has_value() && transfer_b.has_value() && transfer_a.value() != transfer_b.value());
+    const auto local_ready = service.ready_intents(10, 1024 * 1024);
+    TEST_REQUIRE_EQ(local_ready.size(), std::size_t(3));
+    TEST_REQUIRE_EQ(local_ready[1].intent.account_nonce, local_ready[0].intent.account_nonce + 1);
+    TEST_REQUIRE_EQ(local_ready[2].intent.account_nonce, local_ready[1].intent.account_nonce + 1);
+    TEST_REQUIRE_EQ(service.finalized_mining_state().value().minted_units, 10);
     service.deactivate();
     node->cleanUp();
     node.reset();

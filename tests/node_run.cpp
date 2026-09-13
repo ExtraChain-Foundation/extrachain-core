@@ -224,6 +224,10 @@ int main(int argc, char* argv[]) {
         const auto first_intent_nonce =
             static_cast<std::uint64_t>(argc > 11 ? std::strtoull(argv[11], nullptr, 10) : 1);
         const bool stay_until_deadline = argc > 12 && std::atoi(argv[12]) != 0;
+        const char* mining_test_flag    = std::getenv("EXC_SHADOW_MINING_TEST");
+        if (mining_test_flag != nullptr && std::string_view(mining_test_flag) != "1")
+            return 64;
+        const bool mining_test = mining_test_flag != nullptr;
         if ((role != "seed" && role != "joiner")
             || (node_count != ShadowCommitteeSize && node_count != ShadowCommitteeSize + 1)
             || node_index >= node_count || run_seconds < 10 || first_intent_nonce == 0
@@ -449,10 +453,12 @@ int main(int argc, char* argv[]) {
                         node->cleanUp();
                         return 5;
                     }
-                    const auto submitted = node->consensus()->submit_intent(IntentEnvelope {
-                        .intent   = intent.value(),
-                        .metadata = metadata,
-                    });
+                    const auto submitted =
+                        mining_test ? node->consensus()->submit_local_intent(intent.value(), metadata, funder)
+                                    : node->consensus()->submit_intent(IntentEnvelope {
+                                          .intent   = intent.value(),
+                                          .metadata = metadata,
+                                      });
                     if (!submitted.has_value()) {
                         std::printf("[node-run] funding submission failed for node %zu (error %d)\n",
                                     target,
@@ -550,10 +556,12 @@ int main(int argc, char* argv[]) {
             const auto submitted_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                              std::chrono::steady_clock::now().time_since_epoch())
                                              .count();
-            const auto submitted       = node->consensus()->submit_intent(IntentEnvelope {
-                .intent   = intent.value(),
-                .metadata = metadata,
-            });
+            const auto submitted = mining_test
+                                       ? node->consensus()->submit_local_intent(intent.value(), metadata, sender)
+                                       : node->consensus()->submit_intent(IntentEnvelope {
+                                             .intent   = intent.value(),
+                                             .metadata = metadata,
+                                         });
             if (!submitted.has_value()) {
                 std::printf("[node-run] intent submission failed at %zu (error %d)\n",
                             index,
@@ -901,6 +909,13 @@ int main(int argc, char* argv[]) {
         bool       all_finalized         = submitted_hashes.empty();
         bool       finalization_reported = false;
         while (stop_requested == 0 && std::chrono::steady_clock::now() < run_deadline) {
+            if (mining_test) {
+                const auto state = node->consensus()->finalized_mining_state();
+                if (state.has_value() && state.value().minted_units > 0)
+                    std::printf("[node-run] native payout section=%llu minted_units=%llu\n",
+                                static_cast<unsigned long long>(state.value().section),
+                                static_cast<unsigned long long>(state.value().minted_units));
+            }
             const auto metrics = node->consensus()->metrics();
             const auto ready   = node->consensus()->ready_intents(10'000, 8ULL * 1024ULL * 1024ULL).size();
             const auto shadow_peers =

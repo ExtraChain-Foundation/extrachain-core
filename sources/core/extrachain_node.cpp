@@ -453,6 +453,8 @@ namespace ExtraChain::Core {
         reward_timer_.reset();
         info_timer_.reset();
         luminance_timer_.reset();
+        if (dmm_)
+            dmm_->prepare_shutdown();
         if (consensus_service_) {
             consensus_service_->deactivate();
         }
@@ -2445,6 +2447,7 @@ namespace ExtraChain::Core {
 
     void ExtraChainNode::start_mining() {
         dag_->force_full_mode();
+        data_mining_manager()->set_enabled(true);
         if (reward_timer_) {
             reward_timer_->start();
         }
@@ -2452,6 +2455,7 @@ namespace ExtraChain::Core {
     }
 
     void ExtraChainNode::stop_mining() {
+        data_mining_manager()->set_enabled(false);
         if (reward_timer_) {
             reward_timer_->stop();
         }

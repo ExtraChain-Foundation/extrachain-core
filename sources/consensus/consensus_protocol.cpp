@@ -380,6 +380,22 @@ namespace ExtraChain::Consensus {
         return hash;
     }
 
+    std::expected<std::uint64_t, ConsensusError> IntentPool::next_nonce(const ActorId& sender,
+                                                                        std::uint64_t  committed_nonce) const {
+        std::set<std::uint64_t> used;
+        for (const auto& [_, entry] : entries_)
+            if (entry.envelope.intent.sender == sender)
+                used.insert(entry.envelope.intent.account_nonce);
+        for (std::uint64_t offset = 1; offset <= limits_.maximum_nonce_gap; ++offset) {
+            if (offset > UINT64_MAX - committed_nonce)
+                return std::unexpected(ConsensusError::InvalidNonce);
+            const auto nonce = committed_nonce + offset;
+            if (!used.contains(nonce))
+                return nonce;
+        }
+        return std::unexpected(ConsensusError::PoolFull);
+    }
+
     std::vector<IntentEnvelope> IntentPool::ready(const std::map<ActorId, std::uint64_t>& committed_nonces,
                                                   std::uint64_t                           current_height,
                                                   std::size_t                             maximum_count,
@@ -417,6 +433,11 @@ namespace ExtraChain::Consensus {
         }
 
         std::vector<IntentEnvelope> result;
+        const auto                  can_bundle = [](IntentOperation operation) {
+            return operation == IntentOperation::Transfer || operation == IntentOperation::StorageRegister
+                   || operation == IntentOperation::StorageUnregister
+                   || operation == IntentOperation::StorageProof;
+        };
         std::size_t                 selected_bytes           = 0;
         bool                        contract_change_selected = false;
         bool                        epoch_change_selected    = false;
@@ -441,11 +462,10 @@ namespace ExtraChain::Consensus {
                 contract_change_selected = true;
             }
             epoch_change_selected = epoch_change_selected || intent.operation == IntentOperation::EpochChange;
-            if (intent.operation == IntentOperation::Transfer
-                && candidate.nonce < std::numeric_limits<std::uint64_t>::max()) {
+            if (can_bundle(intent.operation) && candidate.nonce < std::numeric_limits<std::uint64_t>::max()) {
                 const auto& queue = by_sender.at(candidate.sender);
                 const auto  next  = queue.find(candidate.nonce + 1);
-                if (next != queue.end() && next->second->envelope.intent.operation == IntentOperation::Transfer) {
+                if (next != queue.end() && can_bundle(next->second->envelope.intent.operation)) {
                     candidates.push(Candidate { .hash   = hash_intent(next->second->envelope.intent),
                                                 .sender = candidate.sender,
                                                 .nonce  = candidate.nonce + 1,

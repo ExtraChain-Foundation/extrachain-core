@@ -68,6 +68,87 @@ namespace ExtraChain::Consensus {
         return &mining_verifier_.value();
     }
 
+    bool ConsensusService::native_mining_enabled() const {
+        std::lock_guard lock(mutex_);
+        return consensus_ && consensus_->configuration().mode == ShadowMode::Finality
+               && consensus_->mining_policy().has_value();
+    }
+
+    std::expected<MiningState, ConsensusError> ConsensusService::finalized_mining_state() const {
+        std::lock_guard lock(mutex_);
+        if (!native_mining_enabled())
+            return std::unexpected(ConsensusError::NotReady);
+        const auto initialized = initialize_mining_state();
+        if (!initialized.has_value())
+            return std::unexpected(initialized.error());
+        return finalized_mining_.value().state;
+    }
+
+    std::expected<MiningState, ConsensusError> ConsensusService::mining_work_state() const {
+        std::lock_guard lock(mutex_);
+        if (!consensus_ || consensus_->configuration().mode != ShadowMode::Finality
+            || !consensus_->mining_policy().has_value()
+            || !consensus_->engine().safety_state().highest_certificate.has_value()
+            || consensus_->engine().safety_state().highest_certificate.value().phase == Phase::Genesis)
+            return std::unexpected(ConsensusError::NotReady);
+        auto       state    = mining_state_for(consensus_->engine().safety_state().highest_certificate.value());
+        const auto verifier = mining_verifier();
+        if (!state.has_value() || !verifier.has_value())
+            return std::unexpected(state.has_value() ? verifier.error() : state.error());
+        if (state.value().section == UINT64_MAX)
+            return std::unexpected(ConsensusError::InvalidHeight);
+        const auto section = state.value().section + 1;
+        const auto budget =
+            mining_policy_budget(consensus_->mining_policy().value(), (section - 1) / ShadowSectionInterval);
+        if (!budget.has_value())
+            return std::unexpected(budget.error());
+        const auto advanced = advance_mining_state(
+            state.value(),
+            section,
+            budget.value(),
+            [this](auto target) {
+                return mining_finality(target);
+            },
+            *verifier.value());
+        if (!advanced.has_value())
+            return std::unexpected(advanced.error());
+        return state;
+    }
+
+    std::expected<std::string, ConsensusError> ConsensusService::submit_mining_request(
+        IntentOperation          operation,
+        std::string              metadata,
+        const Actor<KeyPrivate>& provider) {
+        std::lock_guard lock(mutex_);
+        auto            work = mining_work_state();
+        if (!work.has_value())
+            return std::unexpected(work.error());
+        const auto committed = committed_nonces_.find(provider.id());
+        const auto nonce =
+            intent_pool_.next_nonce(provider.id(), committed == committed_nonces_.end() ? 0 : committed->second);
+        const auto height   = intent_height();
+        const auto duration = operation == IntentOperation::StorageProof ? 1ULL : 64ULL;
+        if (!nonce.has_value() || height > UINT64_MAX - duration)
+            return std::unexpected(ConsensusError::InvalidNonce);
+        const auto intent = make_intent(TransactionIntentV2 { .network_id           = work.value().network,
+                                                              .sender               = provider.id(),
+                                                              .receiver             = work.value().network,
+                                                              .amount               = "0",
+                                                              .operation            = operation,
+                                                              .account_nonce        = nonce.value(),
+                                                              .valid_after_height   = height,
+                                                              .expires_after_height = height + duration },
+                                        metadata,
+                                        provider);
+        if (!intent.has_value())
+            return std::unexpected(intent.error());
+        IntentEnvelope envelope { intent.value(), std::move(metadata) };
+        const auto     applicable = apply_mining_request(work.value(), envelope);
+        if (!applicable.has_value())
+            return std::unexpected(applicable.error());
+        return accept_intent(envelope, true);
+    }
+
     bool ConsensusService::verify_mining_transaction(const Transaction& transaction) const {
         std::lock_guard lock(mutex_);
         const auto      network =

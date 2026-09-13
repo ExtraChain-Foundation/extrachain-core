@@ -143,6 +143,28 @@ int main() {
     check("future sequential nonce enters the pool",
           pool.submit(second_envelope, sender_public_key, 0, 10).has_value());
 
+    check("local protocol work chooses a nonce after queued transfers",
+          pool.next_nonce(sender.id(), 0).value() == 3 && pool.next_nonce(other_sender.id(), 0).value() == 1);
+    auto gap_pool = pool;
+    gap_pool.erase({ first_hash.value() });
+    check("local protocol work fills an unused nonce before a future request",
+          gap_pool.next_nonce(sender.id(), 0).value() == 1);
+    check("local protocol nonce allocation checks overflow",
+          !pool.next_nonce(sender.id(), UINT64_MAX).has_value());
+    auto proof_pool = pool;
+    for (std::uint64_t nonce = 3; nonce <= 9; ++nonce) {
+        auto proof              = first;
+        proof.account_nonce     = nonce;
+        proof.operation         = IntentOperation::StorageProof;
+        proof.amount            = "0";
+        const auto signed_proof = make_intent(proof, "proof", sender);
+        check("queued dataset proof is admitted",
+              signed_proof.has_value()
+                  && proof_pool.submit({ signed_proof.value(), "proof" }, sender_public_key, 0, 10).has_value());
+    }
+    check("transfers and seven dataset proofs share one bounded batch",
+          proof_pool.ready({ }, 10, 64, 1024 * 1024).size() == 9);
+
     auto delayed                 = first;
     delayed.sender               = other_sender.id();
     delayed.valid_after_height   = 20;
