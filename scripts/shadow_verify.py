@@ -178,6 +178,9 @@ def main():
 
     print("\n--- verdict ---")
     ok = True
+    if not common:
+        ok = False
+        print('MISSING: no common hot sections to compare')
     if diverged:
         ok = False
         print(f"DIVERGED: {len(diverged)} sections differ in transactions")

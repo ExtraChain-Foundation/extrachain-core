@@ -107,6 +107,10 @@ class ShutdownCheckpointTest(unittest.TestCase):
         self.mutate('dag/hot/HotSections.db', 'DELETE FROM sections WHERE section = 190')
         self.assertEqual(self.verify(), 1)
 
+    def test_empty_common_range_cannot_pass(self):
+        self.mutate('dag/hot/HotSections.db', 'DELETE FROM sections WHERE section <= 200')
+        self.assertEqual(self.verify(), 1)
+
     def test_missing_checkpoint_fails(self):
         self.checkpoint.unlink()
         self.assertEqual(self.verify(), 1)
