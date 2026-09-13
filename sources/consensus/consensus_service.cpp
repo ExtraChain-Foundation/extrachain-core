@@ -825,8 +825,9 @@ namespace ExtraChain::Consensus {
                      std::to_underlying(admitted.error()));
             return;
         }
-        const auto& highest           = consensus_->engine().safety_state().highest_certificate;
-        const bool  already_certified = highest.has_value() && highest.value().header_hash == batch.header_hash;
+        const bool already_certified =
+            consensus_->engine().certified(batch.header_hash)
+            || proposal->second.header.height <= consensus_->engine().safety_state().finalized_height;
         const auto  staged            = voting_enabled_ && !already_certified
                                             ? consensus_->engine().stage_batch_for_vote(batch)
                                             : consensus_->engine().stage_batch(batch);

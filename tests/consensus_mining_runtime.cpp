@@ -42,6 +42,14 @@ namespace ExtraChain::Consensus {
             TEST_REQUIRE(!service.pending_proposals_.contains(hash));
             service.voting_enabled_ = voting;
         }
+        static void receive_voting_batch(ConsensusService&       service,
+                                         const SectionBatchData& batch,
+                                         const std::string&      peer) {
+            const auto voting       = service.voting_enabled_;
+            service.voting_enabled_ = true;
+            service.receive_batch_data(batch, peer);
+            service.voting_enabled_ = voting;
+        }
         static auto stage(ConsensusService& service, const SectionBatchData& batch) {
             return service.consensus_->engine().stage_batch(batch);
         }
@@ -793,6 +801,23 @@ int main() {
         auto connections = *node->network()->connections();
         connections->erase(socket);
         connections->erase(other_socket);
+    }
+    service.deactivate();
+    {
+        DbConnector database("consensus/safety.sqlite");
+        TEST_REQUIRE(database.open());
+        TEST_REQUIRE(database.query("DELETE FROM consensus_batches WHERE height > 11"));
+    }
+    TEST_REQUIRE(service.activate(network.id()).value());
+    TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(13)).has_value());
+    ConsensusStateTestFixture::require_missing_batch_request(service, batches.at(12).header_hash);
+    ConsensusStateTestFixture::authenticate(service, view, keys[0], peer);
+    ConsensusStateTestFixture::receive_voting_batch(service, batches.at(12), peer);
+    {
+        DbConnector database("consensus/safety.sqlite");
+        TEST_REQUIRE(database.open());
+        TEST_REQUIRE_EQ(database.select("SELECT hash FROM consensus_batches WHERE height = 12").size(),
+                        std::size_t(1));
     }
     service.deactivate();
     node->cleanUp();
