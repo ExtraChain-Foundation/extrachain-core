@@ -367,3 +367,7 @@ set_tests_properties(funded-sync PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
 add_core_test_executable(extrachain-mining-epoch mining_epoch.cpp)
 add_test(NAME mining-epoch COMMAND extrachain-mining-epoch)
 set_tests_properties(mining-epoch PROPERTIES TIMEOUT 30)
+
+add_core_test_executable(extrachain-consensus-state-replay consensus_state_replay.cpp)
+add_test(NAME consensus-state-replay COMMAND extrachain-consensus-state-replay)
+set_tests_properties(consensus-state-replay PROPERTIES TIMEOUT 30)

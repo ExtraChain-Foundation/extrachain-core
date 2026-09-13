@@ -40,6 +40,8 @@ namespace ExtraChain::Core {
 namespace ExtraChain::Consensus {
 
     class EXTRACHAIN_EXPORT ConsensusService {
+        friend class ConsensusStateTestFixture;
+
     public:
         explicit ConsensusService(Core::ExtraChainNode& node, std::filesystem::path directory = "consensus");
         ~ConsensusService();

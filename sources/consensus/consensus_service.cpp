@@ -2466,14 +2466,14 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidRoot);
         }
 
-        const auto ancestry = staged_ancestor_transactions(parent, batch.manifest.first_section);
+        auto ancestry = staged_ancestor_transactions(parent, batch.manifest.first_section);
         if (!ancestry.has_value()) {
             return std::unexpected(ancestry.error());
         }
 
-        std::vector<Transaction> transactions;
+        std::vector<Transaction> transactions = std::move(ancestry.value());
         std::vector<ActorId>     actors = node_.actor_index()->read_all_actors_ids();
-        for (const auto& transaction : ancestry.value()) {
+        for (const auto& transaction : transactions) {
             if (!transaction.sender().is_zero()) {
                 actors.push_back(transaction.sender());
             }
@@ -2511,9 +2511,6 @@ namespace ExtraChain::Consensus {
         // Replay the certified-but-unfinalized ancestors first: their spends are not
         // in the canonical balances above, and our own batch is only valid relative
         // to the state they produced.
-        for (const auto& transaction : ancestry.value()) {
-            node_.dag()->cache().process_transaction(transaction, balances);
-        }
         for (const auto& transaction : transactions) {
             node_.dag()->cache().process_transaction(transaction, balances);
         }
