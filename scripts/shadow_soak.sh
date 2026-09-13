@@ -22,6 +22,9 @@
 #                                rows; the run passes only if every row reaches every node
 #        EXC_SHADOW_VECTOR_CROSS every node also appends this many rows to every OTHER
 #                                node's vector (multi-writer); audited together
+#        EXC_SHADOW_VECTOR_PAYLOAD_BYTES pad each owner row to this many bytes (default 0)
+#        EXC_SHADOW_VECTOR_MIN_BYTES minimum total payload bytes per replicated vector
+#        EXC_SHADOW_LOAD_SECONDS publication window after DAG load (default 300)
 #        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
 #                                the run passes only if it reaches every node (default 0)
 #        EXC_SHADOW_DFS_MODE     "full" puts the committee's ExDFS into Full mode (pull
@@ -53,6 +56,8 @@ DFS_BYTES="${EXC_SHADOW_DFS_BYTES:-0}"
 export EXC_DFS_BYTES="$DFS_BYTES"
 VECTOR_ROWS="${EXC_SHADOW_VECTOR_ROWS:-0}"
 export EXC_DFS_VECTOR_ROWS="$VECTOR_ROWS"
+export EXC_DFS_VECTOR_PAYLOAD_BYTES="${EXC_SHADOW_VECTOR_PAYLOAD_BYTES:-0}"
+VECTOR_MIN_BYTES="${EXC_SHADOW_VECTOR_MIN_BYTES:-0}"
 HISTORY_ROWS="${EXC_SHADOW_HISTORY_ROWS:-0}"
 export EXC_DFS_HISTORY_ROWS="$HISTORY_ROWS"
 # Multi-writer: every node appends this many rows to every other node's vector.
@@ -200,9 +205,9 @@ vector_audit() {
     local report="$1"
     [ "$VECTOR_ROWS" -eq 0 ] && return 0
     if [ "$report" = 1 ]; then
-        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES"
+        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" "$VECTOR_MIN_BYTES"
     else
-        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" >/dev/null
+        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" "$VECTOR_MIN_BYTES" >/dev/null
     fi
 }
 
@@ -548,7 +553,7 @@ fi
 # Publication and cross-writes must finish before the recovery audit starts.
 if { [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; } \
    && { [ "$VECTOR_ROWS" -gt 0 ] || [ "$DFS_BYTES" -gt 0 ] || [ "$HISTORY_ROWS" -gt 0 ]; }; then
-    load_deadline=$(( $(date +%s) + 300 ))
+    load_deadline=$(( $(date +%s) + ${EXC_SHADOW_LOAD_SECONDS:-300} ))
     [ "$load_deadline" -le "$deadline" ] || load_deadline="$deadline"
     while :; do
         loaded=1

@@ -55,6 +55,12 @@ class VectorAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs from the other nodes"):
             self.check_audit()
 
+    def test_required_payload_bytes_include_embedded_nulls(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            audit(self.work, 2, 2, 0, set(), 4)
+        with self.assertRaisesRegex(ValueError, "has 4 payload bytes"):
+            audit(self.work, 2, 2, 0, set(), 5)
+
 
 if __name__ == "__main__":
     unittest.main()

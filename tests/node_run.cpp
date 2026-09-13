@@ -627,9 +627,28 @@ int main(int argc, char* argv[]) {
         // replicate row by row over a different path than plain files (gossiped
         // DfsVectorAdd rather than fragment transfers), so the harness can tell
         // the two apart when one of them stops working.
-        if (const char* rows_env = std::getenv("EXC_DFS_VECTOR_ROWS");
-            rows_env != nullptr && std::strtoull(rows_env, nullptr, 10) > 0) {
-            const auto  row_count = static_cast<std::size_t>(std::strtoull(rows_env, nullptr, 10));
+        const auto vector_parameter = [](const char* name, std::uint64_t maximum) -> std::optional<std::uint64_t> {
+            const char* raw = std::getenv(name);
+            if (raw == nullptr)
+                return 0;
+            const std::string_view text(raw);
+            std::uint64_t          value  = 0;
+            const auto             parsed = std::from_chars(text.data(), text.data() + text.size(), value);
+            if (parsed.ec != std::errc { } || parsed.ptr != text.data() + text.size() || value > maximum)
+                return std::nullopt;
+            return value;
+        };
+        const auto configured_rows    = vector_parameter("EXC_DFS_VECTOR_ROWS", 1000000);
+        const auto configured_payload = vector_parameter("EXC_DFS_VECTOR_PAYLOAD_BYTES", 65536);
+        if (!configured_rows.has_value() || !configured_payload.has_value()
+            || (configured_payload.value() != 0
+                && configured_rows.value() > (1024ULL * 1024 * 1024) / configured_payload.value())) {
+            node->cleanUp();
+            return 64;
+        }
+        if (configured_rows.value() != 0) {
+            const auto  row_count           = static_cast<std::size_t>(configured_rows.value());
+            const auto  payload_bytes       = configured_payload.value();
             const auto& owner     = node->account_controller()->system_actor().id();
             const auto  name      = "soak_vector_" + std::to_string(node_index);
             auto        collection_template = Dfs::CollectionTemplate::create(name);
@@ -667,6 +686,8 @@ int main(int argc, char* argv[]) {
                 // process. The caller must supply it.
                 entry["id"]       = name + "_" + std::to_string(index);
                 entry["payload"]  = name + "_row_" + std::to_string(index);
+                if (payload_bytes != 0)
+                    entry["payload"].resize(payload_bytes, 'm');
                 entry["position"] = std::to_string(index);
                 if (node->dfs()->add_vector_row(owner, row->file_id, entry)) {
                     ++appended;
