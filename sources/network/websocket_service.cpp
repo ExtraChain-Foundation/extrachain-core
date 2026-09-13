@@ -424,9 +424,18 @@ asio::awaitable<void> WebSocketService::process_binary(std::vector<std::uint8_t>
     if (!context_.peer_processing_enabled()) {
         co_return;
     }
-    if (on_message) {
-        std::string text(reinterpret_cast<const char*>(decrypted.data()), decrypted.size());
-        on_message(shared_from_this(), std::move(text), ip_, identifier_);
+    ReceivedMessage received { std::string(reinterpret_cast<const char*>(decrypted.data()), decrypted.size()),
+                               { } };
+    Data { }.swap(decrypted);
+    asio::steady_timer retry(strand_);
+    while (is_active() && context_.peer_processing_enabled() && on_message) {
+        if (on_message(shared_from_this(), received, ip_, identifier_))
+            co_return;
+        retry.expires_after(std::chrono::milliseconds(10));
+        boost::system::error_code error;
+        co_await retry.async_wait(asio::redirect_error(asio::use_awaitable, error));
+        if (error)
+            co_return;
     }
 }
 

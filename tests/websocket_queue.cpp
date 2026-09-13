@@ -83,14 +83,18 @@ namespace {
         auto listen = runtime.listen({ .bind_address = "127.0.0.1", .port = 0 }, [&](auto socket) {
             auto service = WebSocketService::from_accepted(runtime, std::move(socket), alice);
             if (drain) {
-                service->on_message = [&](SocketService::Ptr, std::string message, std::string, std::string) {
-                    if (message != std::string(65536, 'x')) {
+                service->on_message = [&](SocketService::Ptr,
+                                          SocketService::ReceivedMessage& message,
+                                          std::string,
+                                          std::string) {
+                    if (message.data != std::string(65536, 'x')) {
                         if (received < 32)
                             checked.set_exception(std::make_exception_ptr(std::runtime_error("Changed payload")));
                         received = 33;
                     } else if (++received == 32) {
                         checked.set_value();
                     }
+                    return true;
                 };
             }
             accepted_promise.set_value(service);
@@ -171,6 +175,72 @@ namespace {
         TEST_REQUIRE_EQ(pending, std::int64_t(0));
     }
 
+    void check_read_backpressure(bool stop_while_waiting) {
+        Context        alice, bob;
+        NetworkRuntime runtime({ .io_threads = 2, .storage_threads = 1, .compute_threads = 1 });
+        std::promise<WebSocketService::Service> accepted_promise, connected_promise;
+        auto                                    accepted_future  = accepted_promise.get_future();
+        auto                                    connected_future = connected_promise.get_future();
+        std::promise<void>                      delivered;
+        auto                                    delivered_future = delivered.get_future();
+        std::atomic_bool                        ready { false }, valid_payload { true };
+        std::atomic_uint                        attempts { 0 };
+        const std::string                       payload(65536, 'b');
+        auto listen = runtime.listen({ .bind_address = "127.0.0.1", .port = 0 }, [&](auto socket) {
+            auto service = WebSocketService::from_accepted(runtime, std::move(socket), alice);
+            service->on_message =
+                [&](SocketService::Ptr, SocketService::ReceivedMessage& message, std::string, std::string) {
+                    if (message.data != payload)
+                        valid_payload.store(false);
+                    ++attempts;
+                    if (!ready.load())
+                        return false;
+                    delivered.set_value();
+                    return true;
+                };
+            accepted_promise.set_value(service);
+            runtime.spawn(service->run(true));
+        });
+        TEST_REQUIRE(listen.has_value());
+        auto connect = [&]() -> asio::awaitable<void> {
+            auto result = co_await WebSocketService::connect(runtime, "127.0.0.1", listen.value(), bob);
+            TEST_REQUIRE(result.has_value());
+            auto service          = result.value();
+            service->on_activated = [&](SocketService::Ptr socket) {
+                socket->send_message(std::span(reinterpret_cast<const std::uint8_t*>(payload.data()),
+                                               payload.size()),
+                                     SocketService::Priority::Normal);
+            };
+            connected_promise.set_value(service);
+            co_await service->run(false);
+        };
+        runtime.spawn(connect());
+        TEST_REQUIRE(accepted_future.wait_for(5s) == std::future_status::ready);
+        TEST_REQUIRE(connected_future.wait_for(5s) == std::future_status::ready);
+        auto       accepted  = accepted_future.get();
+        auto       connected = connected_future.get();
+        const auto deadline  = std::chrono::steady_clock::now() + 3s;
+        while (attempts.load() < 2 && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(1ms);
+        const bool paused   = attempts.load() >= 2 && accepted->is_active() && connected->is_active();
+        const bool withheld = delivered_future.wait_for(0ms) != std::future_status::ready;
+        bool       resumed  = false;
+        if (!stop_while_waiting) {
+            ready.store(true);
+            resumed = delivered_future.wait_for(5s) == std::future_status::ready;
+        }
+        accepted->close_connection();
+        connected->close_connection();
+        const bool accepted_closed  = accepted->wait_closed(5s);
+        const bool connected_closed = connected->wait_closed(5s);
+        runtime.stop();
+        TEST_REQUIRE(paused);
+        TEST_REQUIRE(withheld);
+        TEST_REQUIRE(valid_payload.load());
+        TEST_REQUIRE(stop_while_waiting || resumed);
+        TEST_REQUIRE(accepted_closed && connected_closed);
+    }
+
     void check_ingress() {
         const auto original  = std::filesystem::current_path();
         const auto directory = std::filesystem::temp_directory_path()
@@ -234,7 +304,7 @@ namespace {
         node.reset();
         std::filesystem::current_path(original);
         std::filesystem::remove_all(directory);
-        TEST_REQUIRE(overflow_closed);
+        TEST_REQUIRE(!overflow_closed);
     }
 } // namespace
 
@@ -249,6 +319,12 @@ int main() {
     });
     runner.run("queue drain and byte accounting", [] {
         check_queue(false, true);
+    });
+    runner.run("retained frame resumes after backpressure", [] {
+        check_read_backpressure(false);
+    });
+    runner.run("close cancels a reader waiting for capacity", [] {
+        check_read_backpressure(true);
     });
     runner.run("bounded inbound dispatch while the consumer is stalled", [] {
         check_ingress();

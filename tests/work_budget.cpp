@@ -41,6 +41,39 @@ int main() {
     tickets.clear();
     TEST_REQUIRE(counts.reserve("0", 1));
 
+    WorkBudget pending({ 10, 1, 10, 1 });
+    auto       running = pending.reserve("peer", 6);
+    TEST_REQUIRE(running);
+    auto waiting = pending.reserve_waiting("peer", 4);
+    TEST_REQUIRE(waiting && !waiting->try_start());
+    TEST_REQUIRE(!pending.reserve_waiting("peer", 0));
+    TEST_REQUIRE(!pending.reserve_waiting("other", 1));
+    TEST_REQUIRE(!pending.reserve("other", 0));
+    running.reset();
+    TEST_REQUIRE(!pending.reserve("other", 7));
+    TEST_REQUIRE(!pending.reserve("peer", 0));
+    TEST_REQUIRE(waiting->try_start());
+    TEST_REQUIRE(waiting->try_start());
+    auto empty_waiter = pending.reserve_waiting("other", 0);
+    TEST_REQUIRE(empty_waiter && !empty_waiter->try_start());
+    TEST_REQUIRE(!pending.reserve_waiting("third", 0));
+    waiting.reset();
+    TEST_REQUIRE(empty_waiter->try_start());
+    auto stopped_waiter = pending.reserve_waiting("last", 1);
+    TEST_REQUIRE(stopped_waiter && !stopped_waiter->try_start());
+    pending.stop();
+    TEST_REQUIRE(!empty_waiter->try_start());
+    TEST_REQUIRE(!stopped_waiter->try_start());
+    empty_waiter.reset();
+    stopped_waiter.reset();
+
+    WorkBudget cancelled({ 10, 1, 10, 1 });
+    auto       busy             = cancelled.reserve("peer", 6);
+    auto       cancelled_waiter = cancelled.reserve_waiting("peer", 4);
+    TEST_REQUIRE(busy && cancelled_waiter && !cancelled_waiter->try_start());
+    cancelled_waiter.reset();
+    TEST_REQUIRE(cancelled.reserve_waiting("other", 4));
+
     auto shutdown = std::make_unique<WorkBudget>(WorkBudget::Limits { 100, 4, 75, 2 });
     auto held     = shutdown->reserve("peer", 1);
     TEST_REQUIRE(held && !held->stopped());

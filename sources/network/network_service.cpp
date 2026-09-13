@@ -620,24 +620,34 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
             }
         });
     };
-    service->on_message = [this](SocketService::Ptr socket,
-                                 std::string        message,
-                                 std::string        ip,
-                                 std::string        identifier) {
-        const auto ticket = incoming_budget_.reserve(identifier, message.size());
-        if (!ticket) {
-            if (!stopping_.load(std::memory_order_acquire))
-                eWarning("[Network] Inbound work budget exhausted for {}: message={} bytes",
-                         identifier,
-                         message.size());
+    service->on_message = [this](SocketService::Ptr              socket,
+                                 SocketService::ReceivedMessage &message,
+                                 std::string                     ip,
+                                 std::string                     identifier) {
+        if (stopping_.load(std::memory_order_acquire)) {
             socket->close_connection();
-            return;
+            return true;
         }
-        dispatch_serial(
-            [this, ticket, message = std::move(message), ip = std::move(ip), identifier = std::move(identifier)] {
-                if (!ticket->stopped())
-                    message_received(message, ip, identifier);
-            });
+        if (!message.reservation)
+            message.reservation = incoming_budget_.reserve_waiting(identifier, message.data.size());
+        if (!message.reservation) {
+            eWarning("[Network] Inbound byte or waiting-frame budget exhausted for {}: message={} bytes",
+                     identifier,
+                     message.data.size());
+            socket->close_connection();
+            return true;
+        }
+        if (!message.reservation->try_start())
+            return false;
+        dispatch_serial([this,
+                         ticket     = std::move(message.reservation),
+                         message    = std::move(message.data),
+                         ip         = std::move(ip),
+                         identifier = std::move(identifier)] {
+            if (!ticket->stopped())
+                message_received(message, ip, identifier);
+        });
+        return true;
     };
     service->on_share_connections = [this](SocketService::Ptr,
                                            const std::set<SocketService::SocketPair> &connections) {

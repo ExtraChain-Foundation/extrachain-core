@@ -24,6 +24,7 @@ namespace ExtraChain::Core {
             Ticket(const Ticket&)            = delete;
             Ticket& operator=(const Ticket&) = delete;
             bool    stopped() const;
+            bool    try_start();
 
         private:
             friend class WorkBudget;
@@ -32,13 +33,16 @@ namespace ExtraChain::Core {
             std::string            peer_;
             std::size_t            bytes_;
             bool                   active_ = false;
+            bool                   started_ = false;
         };
 
         explicit WorkBudget(Limits limits);
         std::shared_ptr<Ticket> reserve(std::string_view peer, std::size_t bytes);
+        std::shared_ptr<Ticket> reserve_waiting(std::string_view peer, std::size_t bytes);
         void                    stop();
 
     private:
+        std::shared_ptr<Ticket> reserve_impl(std::string_view peer, std::size_t bytes, bool allow_wait);
         std::shared_ptr<State> state_;
     };
 } // namespace ExtraChain::Core
