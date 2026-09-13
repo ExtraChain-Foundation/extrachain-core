@@ -126,6 +126,35 @@ int main() {
         "INSERT INTO FlagOptions (id, payload) VALUES (1, NULL), (1, NULL), (1, 'same'), (1, 'same')"));
     const auto timestamps = probe.select("SELECT created FROM FlagOptions WHERE created IS NOT NULL");
     TEST_REQUIRE(timestamps.empty());
+    auto              literal_schema = Dfs::CollectionTemplate::create("literal_options").value();
+    const std::string expression     = "(hex(randomblob(16)))";
+    literal_schema.add_fields({ Dfs::Field::String("payload").default_value(expression),
+                                Dfs::Field::Integer("quantity").default_value(7) });
+    auto literal_storage = literal_schema.to_db_schema().value();
+    literal_storage.set_table_name("LiteralOptions");
+    TEST_REQUIRE(probe.create_table(literal_storage).has_value());
+    TEST_REQUIRE(probe.query("INSERT INTO LiteralOptions DEFAULT VALUES"));
+    const auto literal_rows = probe.select("SELECT payload, quantity FROM LiteralOptions");
+    TEST_REQUIRE_EQ(literal_rows.size(), std::size_t(1));
+    TEST_REQUIRE_EQ(literal_rows.front().at("payload"), expression);
+    TEST_REQUIRE_EQ(literal_rows.front().at("quantity"), std::string("7"));
+    auto              quoted_schema = Dfs::CollectionTemplate::create("quoted_options").value();
+    const std::string quoted        = "O'Reilly; DROP TABLE LiteralOptions; --";
+    quoted_schema.add_fields({ Dfs::Field::String("payload").default_value(quoted) });
+    auto quoted_storage = quoted_schema.to_db_schema().value();
+    quoted_storage.set_table_name("QuotedOptions");
+    TEST_REQUIRE(probe.create_table(quoted_storage).has_value());
+    TEST_REQUIRE(probe.query("INSERT INTO QuotedOptions DEFAULT VALUES"));
+    const auto quoted_rows = probe.select("SELECT payload FROM QuotedOptions");
+    TEST_REQUIRE_EQ(quoted_rows.size(), std::size_t(1));
+    TEST_REQUIRE_EQ(quoted_rows.front().at("payload"), quoted);
+    TEST_REQUIRE(probe.table_exists("LiteralOptions"));
+    TEST_REQUIRE(!Dfs::Field::String("payload")
+                      .default_value(std::string("zero\0tail", 9))
+                      .to_db_column()
+                      .value()
+                      .to_sql()
+                      .has_value());
     TEST_REQUIRE(probe.close());
     node.reset();
     std::filesystem::current_path(original);

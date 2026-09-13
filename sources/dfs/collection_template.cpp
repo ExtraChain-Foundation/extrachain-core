@@ -106,7 +106,7 @@ namespace Dfs {
         if (m_default_now.value_or(false) && m_type == FieldType::Timestamp) {
             column.default_value("(unixepoch() * 1000)");
         } else if (m_default.has_value()) {
-            column.default_value(m_default.value());
+            column.default_literal(m_default.value());
         }
 
         std::vector<std::string> checks;

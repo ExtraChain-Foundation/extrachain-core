@@ -122,6 +122,7 @@ public:
     DbColumn& not_null();
     DbColumn& unique();
     DbColumn& default_value(std::string_view value);
+    DbColumn& default_literal(std::string_view value);
     DbColumn& check(std::string_view condition);
 
     template <typename... Args>
