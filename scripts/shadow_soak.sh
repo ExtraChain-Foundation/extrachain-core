@@ -25,6 +25,7 @@
 #        EXC_SHADOW_VECTOR_PAYLOAD_BYTES pad each owner row to this many bytes (default 0)
 #        EXC_SHADOW_VECTOR_MIN_BYTES minimum total payload bytes per replicated vector
 #        EXC_SHADOW_LOAD_SECONDS publication window after DAG load (default 300)
+#        EXC_SHADOW_RECOVERY_SECONDS recovery window after publication (default 60, max 3600)
 #        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
 #                                the run passes only if it reaches every node (default 0)
 #        EXC_SHADOW_DFS_MODE     "full" puts the committee's ExDFS into Full mode (pull
@@ -48,6 +49,11 @@ BASE_PORT="${2:-17840}"
 SENDERS="${EXC_SHADOW_SENDERS:-4}"
 PER_SENDER="${EXC_SHADOW_PER_SENDER:-32}"
 RUN_SECONDS="${EXC_SHADOW_RUN_SECONDS:-240}"
+RECOVERY_SECONDS="${EXC_SHADOW_RECOVERY_SECONDS:-60}"
+if ! [[ "$RECOVERY_SECONDS" =~ ^[1-9][0-9]{0,3}$ ]] || [ "$RECOVERY_SECONDS" -gt 3600 ]; then
+    printf 'Invalid EXC_SHADOW_RECOVERY_SECONDS: expected 1..3600\n' >&2
+    exit 64
+fi
 # The harness must outlive the nodes' own window, otherwise their scheduled exit
 # races our deadline and a normal end-of-run looks like a crash.
 DEADLINE_S="${EXC_SHADOW_DEADLINE_S:-$((RUN_SECONDS + 120))}"
@@ -583,7 +589,7 @@ fi
 # until every node reports the seed node's finalized count, so the audits test a
 # converged snapshot instead of a shutdown race.
 if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
-    convergence_deadline=$(( $(date +%s) + 60 ))
+    convergence_deadline=$(( $(date +%s) + RECOVERY_SECONDS ))
     if [ "${EXC_SHADOW_EXTERNAL_CONTROL:-0}" = "1" ]; then
         # Fault recovery uses the remaining portion of its total 300-second budget.
         convergence_deadline="$deadline"
