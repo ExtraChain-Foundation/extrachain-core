@@ -1860,10 +1860,14 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !consensus_->engine().safety_state().highest_certificate.has_value()) {
             return;
         }
-        if (!restore_pending_intents().has_value())
+        std::string missing_ancestor;
+        const auto  nonces = local_nonce_frontier(&missing_ancestor);
+        if (!nonces.has_value()) {
+            if (nonces.error() == ConsensusError::DataUnavailable && !missing_ancestor.empty())
+                request_ancestor_batch(missing_ancestor, { });
             return;
-        const auto nonces = local_nonce_frontier();
-        if (!nonces.has_value() || !expire_pending_intents(nonces.value()).has_value())
+        }
+        if (!restore_pending_intents().has_value() || !expire_pending_intents(nonces.value()).has_value())
             return;
         if (node_.data_mining_manager() != nullptr)
             node_.data_mining_manager()->consensus_progress();
@@ -2218,34 +2222,37 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || header_hash.empty()) {
             return;
         }
+        const auto now  = std::chrono::steady_clock::now();
+        const auto last = ancestor_requests_.find(header_hash);
+        if (last != ancestor_requests_.end() && now - last->second.sent < std::chrono::seconds(2))
+            return;
+        std::vector<std::string> peers;
+        for (const auto& validator : consensus_->engine().validators().active())
+            if (validator.node_identifier != node_.node_identifier())
+                peers.push_back(validator.node_identifier);
+        if (peers.empty())
+            return;
+        std::string selected(peer_identifier);
+        if (last != ancestor_requests_.end()) {
+            const auto previous = std::ranges::find(peers, last->second.peer);
+            selected = previous == peers.end() || std::next(previous) == peers.end() ? peers.front()
+                                                                                     : *std::next(previous);
+        } else if (std::ranges::find(peers, selected) == peers.end()) {
+            selected = peers.front();
+        }
+        std::erase_if(ancestor_requests_, [now](const auto& entry) {
+            return now - entry.second.sent > std::chrono::minutes(5);
+        });
+        ancestor_requests_[header_hash] = AncestorRequest { now, selected };
         const auto proposal = consensus_->engine().proposal_for(header_hash);
         if (!proposal.has_value()) {
-            // We never saw the ancestor's proposal (cut off from the committee while
-            // it was made), so its payload alone could not be validated or staged
-            // and every copy of it would be dropped. Only a finality sync carries
-            // the proposal together with the proof; ask for that instead.
-            request_sync_from(peer_identifier);
+            request_sync_from(selected);
             return;
         }
         pending_proposals_.insert_or_assign(header_hash, proposal.value());
-        // Once per ancestor per two seconds, from the peer that served the child.
-        // Asking the whole committee on every reply multiplied by six at every
-        // level of the ancestor chain: a node two heights behind got its peers to
-        // serve the same two batches tens of thousands of times a minute and
-        // never caught up. The peer that has the child almost always has the
-        // parent; the timer path retries elsewhere if it does not.
-        const auto now  = std::chrono::steady_clock::now();
-        const auto last = ancestor_requests_.find(header_hash);
-        if (last != ancestor_requests_.end() && now - last->second < std::chrono::seconds(2)) {
-            return;
-        }
-        std::erase_if(ancestor_requests_, [now](const auto& entry) {
-            return now - entry.second > std::chrono::minutes(5);
-        });
-        ancestor_requests_[header_hash] = now;
         eWarning("[Shadow] Ancestor batch {} is missing; requesting it from {}",
                  header_hash.substr(0, 12),
-                 peer_identifier);
+                 selected);
         send_to_peer(
             SectionBatchRequest {
                 .protocol_version = ProtocolVersion,
@@ -2254,7 +2261,7 @@ namespace ExtraChain::Consensus {
                 .header_hash      = header_hash,
             },
             MessageType::ConsensusBatchRequest,
-            std::string(peer_identifier),
+            selected,
             MessageStatus::Request);
     }
 
@@ -2802,20 +2809,21 @@ namespace ExtraChain::Consensus {
 
     std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> ConsensusService::staged_nonces_for(
         const QuorumCertificate& parent,
-        std::uint64_t            first_section) const {
+        std::uint64_t            first_section,
+        std::string*             missing_ancestor) const {
         const auto applied   = consensus_->configuration().mode == ShadowMode::Finality
                                    ? std::optional<std::uint64_t> { applied_checkpoint_.has_value()
                                                                         ? applied_checkpoint_.value().height
                                                                         : 0 }
                                    : std::nullopt;
-        const auto ancestors = staged_ancestor_transactions(parent, first_section, nullptr, applied);
+        const auto ancestors = staged_ancestor_transactions(parent, first_section, missing_ancestor, applied);
         if (!ancestors.has_value())
             return std::unexpected(ancestors.error());
         return advance_nonces(committed_nonces_, ancestors.value());
     }
 
-    std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> ConsensusService::local_nonce_frontier()
-        const {
+    std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> ConsensusService::local_nonce_frontier(
+        std::string* missing_ancestor) const {
         if (!consensus_)
             return std::unexpected(ConsensusError::NotReady);
         auto        nonces  = committed_nonces_;
@@ -2826,12 +2834,16 @@ namespace ExtraChain::Consensus {
             if (nonce_frontier_.has_value() && nonce_frontier_.value().certificate_hash == certificate_hash)
                 return nonce_frontier_.value().nonces;
             const auto proposal = consensus_->engine().proposal_for(highest.value().header_hash);
-            if (!proposal.has_value())
+            if (!proposal.has_value()) {
+                if (missing_ancestor != nullptr)
+                    *missing_ancestor = highest.value().header_hash;
                 return std::unexpected(ConsensusError::DataUnavailable);
+            }
             if (proposal.value().batch.last_section
                 >= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
                 return std::unexpected(ConsensusError::InvalidHeight);
-            const auto staged = staged_nonces_for(highest.value(), proposal.value().batch.last_section + 1);
+            const auto staged =
+                staged_nonces_for(highest.value(), proposal.value().batch.last_section + 1, missing_ancestor);
             if (!staged.has_value())
                 return std::unexpected(staged.error());
             nonces = staged.value();

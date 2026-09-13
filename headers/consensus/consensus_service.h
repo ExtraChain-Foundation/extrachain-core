@@ -164,7 +164,7 @@ namespace ExtraChain::Consensus {
         bool apply_finalized_checkpoint(const FinalizedCheckpoint& checkpoint);
         /// Drive checkpoints that were deferred for missing data to completion.
         void catch_up_deferred_finalization();
-        /// Ask every validator for a specific ancestor payload we are missing.
+        /// Request a missing ancestor from one validator, rotating peers on retry.
         void request_ancestor_batch(const std::string& header_hash, std::string_view peer_identifier);
         void request_sync_from(std::string_view peer_identifier);
         void vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier);
@@ -201,8 +201,10 @@ namespace ExtraChain::Consensus {
             std::string*    missing_ancestor = nullptr) const;
         std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> staged_nonces_for(
             const QuorumCertificate& parent,
-            std::uint64_t            first_section) const;
-        [[nodiscard]] std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> local_nonce_frontier() const;
+            std::uint64_t            first_section,
+            std::string*             missing_ancestor = nullptr) const;
+        [[nodiscard]] std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> local_nonce_frontier(
+            std::string* missing_ancestor = nullptr) const;
         std::expected<void, ConsensusError>                                           restore_pending_intents();
         std::expected<void, ConsensusError> expire_pending_intents(const std::map<ActorId, std::uint64_t>& nonces);
         [[nodiscard]] std::expected<std::uint64_t, ConsensusError> next_local_nonce(const ActorId& sender);
@@ -268,7 +270,11 @@ namespace ExtraChain::Consensus {
         std::map<std::string, Proposal>                               pending_proposals_;
         /// Last time an ancestor batch was asked for, by header hash, and the last
         /// sync request: a lagging node used to re-ask on every reply it got.
-        std::map<std::string, std::chrono::steady_clock::time_point>  ancestor_requests_;
+        struct AncestorRequest {
+            std::chrono::steady_clock::time_point sent;
+            std::string                           peer;
+        };
+        std::map<std::string, AncestorRequest>                        ancestor_requests_;
         std::chrono::steady_clock::time_point                         last_sync_request_ {};
         std::chrono::steady_clock::time_point                         last_light_history_request_ { };
         std::shared_ptr<Core::DeadlineTask>                           timeout_task_;

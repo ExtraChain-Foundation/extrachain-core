@@ -52,6 +52,17 @@ namespace ExtraChain::Consensus {
             const auto found = frontier.value().find(sender);
             return found == frontier.value().end() ? 0 : found->second;
         }
+        static void require_missing_batch_request(ConsensusService& service, const std::string& hash) {
+            service.queue_next_checkpoint();
+            TEST_REQUIRE(service.pending_proposals_.contains(hash));
+            TEST_REQUIRE(service.ancestor_requests_.contains(hash));
+            const auto first = service.ancestor_requests_.at(hash);
+            service.queue_next_checkpoint();
+            TEST_REQUIRE(service.ancestor_requests_.at(hash).sent == first.sent);
+            service.ancestor_requests_.at(hash).sent -= std::chrono::seconds(3);
+            service.queue_next_checkpoint();
+            TEST_REQUIRE(service.ancestor_requests_.at(hash).peer != first.peer);
+        }
         static void expire(ConsensusService& service, const std::string& hash) {
             TEST_REQUIRE(service.intent_store_->expire({ hash }).has_value());
             service.intent_pool_.erase({ hash });
@@ -563,8 +574,10 @@ int main() {
     const auto waiting_transfer = service.submit_local_intent(local_transfer, "after-batch-sync", provider);
     TEST_REQUIRE(!waiting_transfer.has_value() && waiting_transfer.error() == ConsensusError::DataUnavailable);
     TEST_REQUIRE(service.ready_intents(10, 1024 * 1024).empty());
-    TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(12)).has_value());
+    ConsensusStateTestFixture::require_missing_batch_request(service, batches.at(13).header_hash);
     TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(13)).has_value());
+    ConsensusStateTestFixture::require_missing_batch_request(service, batches.at(12).header_hash);
+    TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(12)).has_value());
     const auto restored_nonce = ConsensusStateTestFixture::next_nonce(service, provider.id());
     TEST_REQUIRE(restored_nonce.has_value());
     TEST_REQUIRE_EQ(restored_nonce.value(), repaired.back().intent.account_nonce + 1);
