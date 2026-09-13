@@ -35,19 +35,22 @@ namespace ExtraChain::Consensus {
     } // namespace
 
     std::expected<StorageDataset, ConsensusError> commit_storage_dataset(std::uint64_t            bytes,
-                                                                         const MerkleValueReader& read_chunk) {
+                                                                         const MerkleValueReader& read_chunk,
+                                                                         const MerkleNodeSink&    sink) {
         if (!valid_size(bytes) || !read_chunk)
             return std::unexpected(ConsensusError::InvalidProof);
-        const auto tree =
-            build_merkle_tree(chunk_count(bytes),
-                              [&](std::uint64_t index) -> std::expected<std::string, ConsensusError> {
-                                  const auto chunk = read_chunk(index);
-                                  if (!chunk.has_value())
-                                      return std::unexpected(chunk.error());
-                                  if (chunk.value().size() != chunk_size(bytes, index))
-                                      return std::unexpected(ConsensusError::InvalidProof);
-                                  return chunk_value(bytes, index, chunk.value());
-                              });
+        const auto tree = build_merkle_tree(
+            chunk_count(bytes),
+            [&](std::uint64_t index) -> std::expected<std::string, ConsensusError> {
+                const auto chunk = read_chunk(index);
+                if (!chunk.has_value())
+                    return std::unexpected(chunk.error());
+                if (chunk.value().size() != chunk_size(bytes, index))
+                    return std::unexpected(ConsensusError::InvalidProof);
+                return chunk_value(bytes, index, chunk.value());
+            },
+            { },
+            sink);
         if (!tree.has_value())
             return std::unexpected(tree.error());
         return StorageDataset { .bytes = bytes, .root = tree.value().root };
@@ -125,6 +128,34 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidRoot);
         for (std::size_t index = 0; index < result.samples.size(); ++index)
             result.samples[index].path = tree.value().proofs[index];
+        return result;
+    }
+
+    std::expected<StorageProof, ConsensusError> make_indexed_storage_proof(const ActorId&           network,
+                                                                           const ActorId&           provider,
+                                                                           const StorageDataset&    dataset,
+                                                                           const StorageChallenge&  challenge,
+                                                                           const MerkleValueReader& read_chunk,
+                                                                           const MerkleNodeReader&  read_node) {
+        const auto targets = storage_challenge_indices(network, provider, dataset, challenge);
+        if (!targets.has_value() || !read_chunk || !read_node)
+            return std::unexpected(ConsensusError::InvalidProof);
+        StorageProof result;
+        for (auto target : targets.value()) {
+            auto chunk = read_chunk(target);
+            if (!chunk.has_value())
+                return std::unexpected(chunk.error());
+            if (chunk.value().size() != chunk_size(dataset.bytes, target))
+                return std::unexpected(ConsensusError::InvalidProof);
+            auto path = make_indexed_merkle_proof(chunk_count(dataset.bytes), target, read_node);
+            if (!path.has_value())
+                return std::unexpected(path.error());
+            result.samples.push_back(
+                StorageSample { .bytes = std::move(chunk.value()), .path = std::move(path.value()) });
+        }
+        // A persisted index is a cache. Check it against the registered root and current sampled bytes.
+        if (!verify_storage_proof(network, provider, dataset, challenge, result))
+            return std::unexpected(ConsensusError::InvalidProof);
         return result;
     }
 

@@ -595,6 +595,53 @@ namespace ExtraChain::Consensus {
         return result;
     }
 
+    std::expected<MerkleProof, ConsensusError> make_indexed_merkle_proof(std::uint64_t           leaves,
+                                                                         std::uint64_t           index,
+                                                                         const MerkleNodeReader& reader) {
+        if (leaves == 0 || leaves > (std::uint64_t(1) << 32) || index >= leaves || !reader)
+            return std::unexpected(ConsensusError::InvalidProof);
+        const auto subtree = [&](auto&&        self,
+                                 std::uint64_t begin,
+                                 std::uint32_t height) -> std::expected<std::string, ConsensusError> {
+            if (begin + (std::uint64_t(1) << height) <= leaves) {
+                const auto hash = reader(begin, height);
+                if (!hash.has_value())
+                    return std::unexpected(hash.error());
+                if (hash.value().size() != 64 || !std::ranges::all_of(hash.value(), [](char value) {
+                        return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f');
+                    }))
+                    return std::unexpected(ConsensusError::InvalidProof);
+                return hash;
+            }
+            const auto left = self(self, begin, height - 1);
+            if (!left.has_value())
+                return std::unexpected(left.error());
+            const auto right_begin = begin + (std::uint64_t(1) << (height - 1));
+            const auto right       = right_begin < leaves ? self(self, right_begin, height - 1) : left;
+            if (!right.has_value())
+                return std::unexpected(right.error());
+            return merkle_parent(left.value(), right.value());
+        };
+        auto leaf = subtree(subtree, index, 0);
+        if (!leaf.has_value())
+            return std::unexpected(leaf.error());
+        MerkleProof   result { .leaf_index = index, .leaf_count = leaves, .leaf_hash = leaf.value() };
+        auto          current  = leaf.value();
+        auto          position = index;
+        std::uint32_t height   = 0;
+        for (auto width = leaves; width > 1; width = width / 2 + width % 2, position /= 2, ++height) {
+            const auto sibling_position = position ^ 1;
+            const auto sibling = sibling_position < width ? subtree(subtree, sibling_position << height, height)
+                                                          : std::expected<std::string, ConsensusError>(current);
+            if (!sibling.has_value())
+                return std::unexpected(sibling.error());
+            result.siblings.push_back(sibling.value());
+            current = position % 2 == 0 ? merkle_parent(current, sibling.value())
+                                        : merkle_parent(sibling.value(), current);
+        }
+        return result;
+    }
+
     bool verify_merkle_proof(std::string_view value, const MerkleProof& proof, std::string_view expected_root) {
         if (proof.leaf_count == 0 || proof.leaf_index >= proof.leaf_count || proof.siblings.size() > 64
             || expected_root.size() != 64 || proof.leaf_hash.size() != 64

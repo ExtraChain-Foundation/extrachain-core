@@ -37,7 +37,8 @@ namespace ExtraChain::Consensus {
     };
 
     std::expected<StorageDataset, ConsensusError> commit_storage_dataset(std::uint64_t            bytes,
-                                                                         const MerkleValueReader& read_chunk);
+                                                                         const MerkleValueReader& read_chunk,
+                                                                         const MerkleNodeSink&    sink = { });
     std::expected<std::string, ConsensusError>    storage_dataset_id(const ActorId&        network,
                                                                      const StorageDataset& dataset);
     std::expected<std::vector<std::uint64_t>, ConsensusError> storage_challenge_indices(
@@ -55,5 +56,12 @@ namespace ExtraChain::Consensus {
                                                                      const StorageDataset&   dataset,
                                                                      const StorageChallenge& challenge,
                                                                      const StorageProof&     proof);
+
+    std::expected<StorageProof, ConsensusError> make_indexed_storage_proof(const ActorId&           network,
+                                                                           const ActorId&           provider,
+                                                                           const StorageDataset&    dataset,
+                                                                           const StorageChallenge&  challenge,
+                                                                           const MerkleValueReader& read_chunk,
+                                                                           const MerkleNodeReader&  read_node);
 
 } // namespace ExtraChain::Consensus

@@ -356,6 +356,10 @@ add_core_test_executable(extrachain-storage-proof storage_proof.cpp)
 add_test(NAME storage-proof COMMAND extrachain-storage-proof)
 set_tests_properties(storage-proof PROPERTIES TIMEOUT 30)
 
+add_core_test_executable(extrachain-storage-index storage_index.cpp)
+add_test(NAME storage-index COMMAND extrachain-storage-index)
+set_tests_properties(storage-index PROPERTIES TIMEOUT 30)
+
 add_test(NAME funded-sync COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/funded_sync.py
     $<TARGET_FILE:extrachain-gen-sections> $<TARGET_FILE:extrachain-node-run>)
 set_tests_properties(funded-sync PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)

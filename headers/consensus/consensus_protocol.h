@@ -421,6 +421,12 @@ namespace ExtraChain::Consensus {
     // complete subtree for a persistent index; incomplete padding is not emitted.
     using MerkleValueReader = std::function<std::expected<std::string, ConsensusError>(std::uint64_t)>;
     using MerkleNodeSink    = std::function<bool(std::uint64_t, std::uint32_t, std::string_view)>;
+    using MerkleNodeReader =
+        std::function<std::expected<std::string, ConsensusError>(std::uint64_t, std::uint32_t)>;
+    EXTRACHAIN_EXPORT std::expected<MerkleProof, ConsensusError> make_indexed_merkle_proof(
+        std::uint64_t           leaves,
+        std::uint64_t           index,
+        const MerkleNodeReader& reader);
     EXTRACHAIN_EXPORT std::expected<MerkleTreeResult, ConsensusError> build_merkle_tree(
         std::uint64_t                     leaves,
         const MerkleValueReader&          reader,
