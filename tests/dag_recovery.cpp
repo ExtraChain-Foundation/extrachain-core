@@ -185,14 +185,100 @@ int main(int argc, char *argv[]) {
         node->dag()->build_shadow_intent_batch(SectionId(61),
                                                SectionId(80),
                                                2,
-                                               std::vector<ExtraChain::Consensus::IntentEnvelope> {},
-                                               {},
+                                               std::vector<ExtraChain::Consensus::IntentEnvelope> { },
+                                               16ULL * 1024ULL * 1024ULL,
+                                               { },
                                                speculative_parent,
                                                "speculative-parent-root");
     TEST_REQUIRE(speculative_empty_batch.has_value());
     TEST_REQUIRE(speculative_empty_batch.value().manifest.transaction_hashes.empty());
     TEST_REQUIRE_EQ(speculative_empty_batch.value().manifest.previous_section_root, "speculative-parent-root");
     TEST_REQUIRE(node->dag()->shadow_batch_section_root(speculative_empty_batch.value()).has_value());
+
+    {
+        using namespace ExtraChain::Consensus;
+        std::vector<IntentEnvelope> requests;
+        IntentPool                  pool;
+        const std::string           metadata(8192, 'x');
+        std::size_t                 envelope_bytes = 0;
+        for (std::uint64_t nonce = 1; nonce <= 16; ++nonce) {
+            const auto intent = make_intent(TransactionIntentV2 { .network_id    = actor.id(),
+                                                                  .sender        = actor.id(),
+                                                                  .receiver      = receiver.id(),
+                                                                  .amount        = "0.0001",
+                                                                  .operation     = IntentOperation::Transfer,
+                                                                  .account_nonce = nonce,
+                                                                  .expires_after_height = 1000 },
+                                            metadata,
+                                            actor);
+            TEST_REQUIRE(intent.has_value());
+            IntentEnvelope envelope { intent.value(), metadata };
+            TEST_REQUIRE(pool.submit(envelope, Utils::to_base64(actor.key().public_key()), 0, 2).has_value());
+            envelope_bytes += MessagePack::serialize(envelope).size();
+            requests.push_back(std::move(envelope));
+        }
+        const auto payload_limit = 2 * envelope_bytes;
+        TEST_REQUIRE_EQ(pool.ready({ }, 2, 16, payload_limit / 2).size(), requests.size());
+        const auto bounded = node->dag()->build_shadow_intent_batch(SectionId(61),
+                                                                    SectionId(80),
+                                                                    2,
+                                                                    requests,
+                                                                    payload_limit,
+                                                                    { },
+                                                                    speculative_parent,
+                                                                    "speculative-parent-root");
+        TEST_REQUIRE(bounded.has_value());
+        TEST_REQUIRE(bounded.value().manifest.payload_bytes <= payload_limit);
+        TEST_REQUIRE(!bounded.value().manifest.transaction_hashes.empty());
+        TEST_REQUIRE(bounded.value().manifest.transaction_hashes.size() < requests.size());
+        TEST_REQUIRE_EQ(pool.ready({ }, 2, 16, payload_limit / 2).size(), requests.size());
+        std::size_t             actual_bytes = 0;
+        std::set<std::uint64_t> selected_nonces;
+        for (const auto &[section_id, bytes] : bounded.value().sections) {
+            actual_bytes += bytes.size();
+            const auto section = Json::deserialize<Section>(bytes);
+            TEST_REQUIRE(section.has_value());
+            for (const auto &transaction : section.value().transactions) {
+                const auto envelope = intent_from_transaction(transaction);
+                TEST_REQUIRE(envelope.has_value());
+                selected_nonces.insert(envelope.value().intent.account_nonce);
+            }
+        }
+        TEST_REQUIRE_EQ(actual_bytes, bounded.value().manifest.payload_bytes);
+        TEST_REQUIRE_EQ(selected_nonces.size(), bounded.value().manifest.transaction_hashes.size());
+        TEST_REQUIRE_EQ(*selected_nonces.begin(), std::uint64_t(1));
+        TEST_REQUIRE_EQ(*selected_nonces.rbegin(), selected_nonces.size());
+        const std::vector<IntentEnvelope> first_request { requests.front() };
+        const auto                        one = node->dag()->build_shadow_intent_batch(SectionId(61),
+                                                                                       SectionId(80),
+                                                                                       2,
+                                                                                       first_request,
+                                                                                       payload_limit,
+                                                                                       { },
+                                                                                       speculative_parent,
+                                                                                       "speculative-parent-root");
+        TEST_REQUIRE(one.has_value());
+        const auto exact = node->dag()->build_shadow_intent_batch(SectionId(61),
+                                                                  SectionId(80),
+                                                                  2,
+                                                                  first_request,
+                                                                  one.value().manifest.payload_bytes,
+                                                                  { },
+                                                                  speculative_parent,
+                                                                  "speculative-parent-root");
+        TEST_REQUIRE(exact.has_value());
+        TEST_REQUIRE_EQ(exact.value().sections, one.value().sections);
+        const auto too_small = node->dag()->build_shadow_intent_batch(SectionId(61),
+                                                                      SectionId(80),
+                                                                      2,
+                                                                      first_request,
+                                                                      one.value().manifest.payload_bytes - 1,
+                                                                      { },
+                                                                      speculative_parent,
+                                                                      "speculative-parent-root");
+        TEST_REQUIRE(!too_small.has_value());
+        TEST_REQUIRE_EQ(too_small.error(), ConsensusError::DataTooLarge);
+    }
 
     auto corrupted_shadow_batch = shadow_batch.value();
     corrupted_shadow_batch.sections.front().second.push_back('x');

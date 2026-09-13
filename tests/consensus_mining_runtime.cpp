@@ -245,6 +245,31 @@ int main() {
             TEST_REQUIRE(settlement.value().has_value());
             paid = settlement.value();
             TEST_REQUIRE(service.verify_mining_transaction(paid.value()));
+            const auto previous         = Json::serialize(Section { .id = SectionId(first - 1) });
+            const auto build_settlement = [&](std::uint64_t limit, const std::vector<IntentEnvelope>& intents) {
+                return node->dag()->build_shadow_intent_batch(SectionId(first),
+                                                              SectionId(first + ShadowSectionInterval - 1),
+                                                              height,
+                                                              intents,
+                                                              limit,
+                                                              { },
+                                                              previous,
+                                                              prior_section_root,
+                                                              paid);
+            };
+            const auto payment_batch = build_settlement(MaximumShadowBatchBytes, { });
+            TEST_REQUIRE(payment_batch.has_value());
+            TEST_REQUIRE_EQ(payment_batch.value().manifest.transaction_hashes.size(), std::size_t(1));
+            const auto extra =
+                intent_from_transaction(request(IntentOperation::StorageUnregister, dataset_id, 3, first, height));
+            TEST_REQUIRE(extra.has_value());
+            const auto exact_payment =
+                build_settlement(payment_batch.value().manifest.payload_bytes, { extra.value() });
+            TEST_REQUIRE(exact_payment.has_value());
+            TEST_REQUIRE_EQ(exact_payment.value().sections, payment_batch.value().sections);
+            const auto oversized_payment = build_settlement(payment_batch.value().manifest.payload_bytes - 1, { });
+            TEST_REQUIRE(!oversized_payment.has_value());
+            TEST_REQUIRE_EQ(oversized_payment.error(), ConsensusError::DataTooLarge);
             transactions.push_back(paid.value());
         } else {
             TEST_REQUIRE(!settlement.value().has_value());

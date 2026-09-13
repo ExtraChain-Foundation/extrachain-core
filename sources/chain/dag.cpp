@@ -2370,6 +2370,7 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
                               const SectionId                                          &last_section,
                               std::uint64_t                                             logical_time,
                               const std::vector<ExtraChain::Consensus::IntentEnvelope> &intents,
+                              std::uint64_t                                             maximum_payload_bytes,
                               std::string                                               header_hash,
                               std::optional<std::string>                                previous_section_bytes,
                               std::string                                               previous_section_root,
@@ -2385,6 +2386,7 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
         return std::unexpected(ConsensusError::DataTooLarge);
     }
 
+    WireFormat::Scope     canonical_scope(WireFormat::Mode::Canonical);
     std::set<std::string> previous_hashes;
     if (first_section != SectionId(0)) {
         std::optional<Section> previous;
@@ -2421,6 +2423,13 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
             return std::unexpected(ConsensusError::InvalidProof);
         sections.front().transactions.insert(settlement.value());
     }
+    std::uint64_t encoded_payload_bytes = 0;
+    for (const auto &section : sections) {
+        const auto bytes = Json::serialize(section).size();
+        if (bytes > maximum_payload_bytes - encoded_payload_bytes)
+            return std::unexpected(ConsensusError::DataTooLarge);
+        encoded_payload_bytes += bytes;
+    }
     for (std::size_t index = 0; index < intents.size(); ++index) {
         const auto position      = index + static_cast<std::size_t>(settlement.has_value());
         const auto section_index = position / MaximumTransactionsPerSection;
@@ -2432,7 +2441,18 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
         if (!materialized.has_value()) {
             return std::unexpected(materialized.error());
         }
-        sections[section_index].transactions.insert(materialized.value());
+        auto &transactions = sections[section_index].transactions;
+        // Section JSON adds only the transaction and, for a nonempty array, a comma.
+        const auto added_bytes =
+            Json::serialize(materialized.value()).size() + static_cast<std::size_t>(!transactions.empty());
+        if (added_bytes > maximum_payload_bytes - encoded_payload_bytes) {
+            if (index == 0 && !settlement.has_value())
+                return std::unexpected(ConsensusError::DataTooLarge);
+            break;
+        }
+        if (!transactions.insert(materialized.value()).second)
+            return std::unexpected(ConsensusError::InvalidIntent);
+        encoded_payload_bytes += added_bytes;
         if ((position + 1) % MaximumTransactionsPerSection == 0 && section_index + 1 < sections.size()) {
             previous_hashes = sections[section_index].hashs();
         }
@@ -2440,10 +2460,9 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
 
     SectionBatchData  batch { .header_hash = std::move(header_hash) };
     std::uint64_t     payload_bytes = 0;
-    WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
     for (const auto &section : sections) {
         const auto bytes = Json::serialize(section);
-        if (bytes.size() > std::numeric_limits<std::uint64_t>::max() - payload_bytes) {
+        if (bytes.size() > maximum_payload_bytes - payload_bytes) {
             return std::unexpected(ConsensusError::DataTooLarge);
         }
         payload_bytes += bytes.size();
@@ -2456,6 +2475,9 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
         }
         batch.sections.emplace_back(static_cast<std::uint64_t>(section_value.value()), bytes);
     }
+
+    if (payload_bytes != encoded_payload_bytes)
+        return std::unexpected(ConsensusError::InvalidRoot);
 
     const auto first_value = first_section.to_int();
     const auto last_value  = last_section.to_int();

@@ -600,6 +600,7 @@ public:
                               const SectionId                                          &last_section,
                               std::uint64_t                                             logical_time,
                               const std::vector<ExtraChain::Consensus::IntentEnvelope> &intents,
+                              std::uint64_t                                             maximum_payload_bytes,
                               std::string                                               header_hash,
                               std::optional<std::string> previous_section_bytes = std::nullopt,
                               std::string                previous_section_root  = { },

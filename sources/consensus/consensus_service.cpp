@@ -1978,6 +1978,7 @@ namespace ExtraChain::Consensus {
                                                                 SectionId(target),
                                                                 highest.height + 1,
                                                                 intents,
+                                                                consensus_->configuration().maximum_batch_bytes,
                                                                 { },
                                                                 std::move(previous_section_bytes),
                                                                 std::move(previous_section_root),
