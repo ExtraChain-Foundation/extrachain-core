@@ -498,6 +498,33 @@ int main() {
     activation.authorization = activation_authorization.value();
     check("future aligned Shadow activation verifies",
           verify_activation_manifest(activation, governance_policy.value(), 1'500, 9));
+    auto mining_activation          = activation;
+    mining_activation.mining_policy = MiningEmissionPolicy { 201, { { 10, 7 }, { 10, 3 } } };
+    check("adding an unsigned mining policy invalidates activation",
+          !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
+    const auto sign_mining_activation = [&] {
+        mining_activation.authorization =
+            authorize_action(governance_policy.value(),
+                             9,
+                             activation_action_hash(mining_activation),
+                             { governance_keys[0], governance_keys[1], governance_keys[2] })
+                .value();
+    };
+    sign_mining_activation();
+    check("signed mining policy verifies",
+          verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
+    mining_activation.mining_policy.value().segments.front().units_per_epoch += 1;
+    check("a changed emission rate invalidates activation",
+          !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
+    mining_activation.mining_policy.value().first_epoch = 199;
+    sign_mining_activation();
+    check("even signed mining cannot start before activation",
+          !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
+    mining_activation.mining_policy.value().first_epoch                      = 201;
+    mining_activation.mining_policy.value().segments.front().units_per_epoch = MaximumMiningEmissionUnits;
+    sign_mining_activation();
+    check("even signed mining cannot exceed the total cap",
+          !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
     const auto weak_governance_policy = make_multisig_policy(network.id(), 2, public_keys(governance_keys));
     check("activation rejects a policy weaker than three of five",
           !verify_activation_manifest(activation, weak_governance_policy.value(), 1'500, 9));

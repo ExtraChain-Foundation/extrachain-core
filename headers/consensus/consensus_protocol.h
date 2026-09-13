@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "consensus/consensus_types.h"
+#include "consensus/mining_policy.h"
 
 class Transaction;
 
@@ -268,6 +269,7 @@ namespace ExtraChain::Consensus {
         std::uint64_t           activation_dag_section = 0;
         std::string             validator_set_hash;
         bool                    require_intent_v2 = true;
+        std::optional<MiningEmissionPolicy> mining_policy;
         GovernanceAuthorization authorization;
 
         MSGPACK_DEFINE(protocol_version,
@@ -276,6 +278,7 @@ namespace ExtraChain::Consensus {
                        activation_dag_section,
                        validator_set_hash,
                        require_intent_v2,
+                       mining_policy,
                        authorization)
     };
 

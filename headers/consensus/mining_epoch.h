@@ -4,8 +4,6 @@
 
 namespace ExtraChain::Consensus {
     class LightClientVerifier;
-    inline constexpr std::uint64_t NativeCoinUnits            = 100'000'000;
-    inline constexpr std::uint64_t MaximumMiningEmissionUnits = 10'000 * NativeCoinUnits;
     inline constexpr std::uint64_t MiningProofWindowSections  = 2 * ShadowSectionInterval;
     inline constexpr std::size_t   MaximumMiningRegistrations = 8192;
     inline constexpr std::size_t   MaximumMiningDatasets      = 1024;
