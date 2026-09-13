@@ -391,6 +391,17 @@ int main(int argc, char *argv[]) {
                         expected_valid);
     };
     {
+        auto burn = staged_transfer;
+        burn.set_type(TransactionType::Burn);
+        burn.set_receiver(ActorId { });
+        burn.set_amount(BigNumberFloat("2"));
+        TEST_REQUIRE(burn.sign(actor));
+        check_transaction_proof(burn, false);
+        burn.set_amount(BigNumberFloat("0.6"));
+        TEST_REQUIRE(burn.sign(actor));
+        check_transaction_proof(burn, true);
+    }
+    {
         auto       wire           = boost::json::parse(Json::serialize(staged_transfer)).as_object();
         const auto legacy_hash    = staged_transfer.calculate_hash_hex();
         const auto canonical_hash = staged_transfer.calculate_hash();
@@ -625,6 +636,19 @@ int main(int argc, char *argv[]) {
                                                  responder);
     TEST_REQUIRE_EQ(sender.responses, std::size_t(1));
     TEST_REQUIRE_EQ(sender.message_type, MessageType::DagControlRangeResponse);
+
+    node->dag()->cache().reset_db();
+    const auto replay_section  = node->dag()->current_section() + SectionId(1);
+    const auto available       = node->dag()->calculate_actors_balance({ actor.id() }, replay_section - 1);
+    const auto full_spend      = make_transfer(replay_section, available.at({ actor.id(), actor.id() }), 1000);
+    auto       replay_batch    = make_single_transaction_batch(full_spend, "canonical-parent-root");
+    const auto replay_proposal = make_batch_proposal(replay_batch);
+    TEST_REQUIRE(
+        node->dag()->validate_shadow_batch(replay_proposal, replay_batch, 16ULL * 1024ULL * 1024ULL).has_value());
+    TEST_REQUIRE(node->dag()->save_transaction(full_spend));
+    node->dag()->cache().reset_db();
+    TEST_REQUIRE(
+        node->dag()->validate_shadow_batch(replay_proposal, replay_batch, 16ULL * 1024ULL * 1024ULL).has_value());
 
     TEST_REQUIRE(node->dag()->cache().write_cached_balances(replacement_snapshot, node->dag()->current_section()));
     node->dag()->update_range(true);

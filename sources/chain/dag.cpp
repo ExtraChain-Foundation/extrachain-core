@@ -2585,18 +2585,6 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
         || calculate_transaction_root(transaction_hashes) != batch.manifest.transaction_root) {
         return std::unexpected(ConsensusError::InvalidRoot);
     }
-    // Canonical bytes were checked above; reuse their decoded values for the proof.
-    std::set<Transaction> accepted_transactions = std::move(staged_ancestors);
-    for (auto &section : sections) {
-        while (!section.transactions.empty()) {
-            const auto transaction = section.transactions.begin();
-            if (!validate_repair_transaction(*transaction, accepted_transactions)) {
-                return std::unexpected(ConsensusError::InvalidRoot);
-            }
-            accepted_transactions.insert(section.transactions.extract(transaction));
-        }
-    }
-
     auto expected_root = Utils::calculate_hash(section_hashes);
     if (batch.manifest.first_section != 0) {
         if (batch.manifest.previous_section_root.empty()) {
@@ -2606,6 +2594,49 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
     }
     if (expected_root != proposal.header.section_root) {
         return std::unexpected(ConsensusError::InvalidRoot);
+    }
+
+    std::vector<ActorId> actors;
+    bool                 needs_balances = false;
+    for (const auto &section : sections) {
+        for (const auto &transaction : section.transactions) {
+            actors.push_back(transaction.sender());
+            needs_balances |= transaction.type() == TransactionType::Regular
+                              || transaction.type() == TransactionType::Burn
+                              || transaction.type() == TransactionType::Repeatable
+                              || transaction.type() == TransactionType::Conversion
+                              || transaction.type() == TransactionType::Unknown;
+        }
+    }
+    auto balance_frontier = SectionId(batch.manifest.first_section);
+    for (const auto &transaction : staged_ancestors) {
+        if (transaction.section() < 0 || transaction.section() >= SectionId(batch.manifest.first_section))
+            return std::unexpected(ConsensusError::InvalidParent);
+        balance_frontier = std::min(balance_frontier, transaction.section());
+    }
+    Balances balances;
+    if (needs_balances) {
+        std::ranges::sort(actors, { }, &ActorId::to_string);
+        actors.erase(std::unique(actors.begin(), actors.end()), actors.end());
+        // Exclude stored batch effects, then apply each accepted transaction once.
+        balances = calculate_actors_balance(actors, balance_frontier - 1);
+        for (const auto &transaction : staged_ancestors)
+            cache_.process_transaction(transaction, balances);
+    }
+    std::set<Transaction> accepted_transactions = std::move(staged_ancestors);
+    for (auto &section : sections) {
+        while (!section.transactions.empty()) {
+            const auto transaction = section.transactions.begin();
+            if (!validate_repair_transaction(*transaction,
+                                             accepted_transactions,
+                                             true,
+                                             needs_balances ? &balances : nullptr)) {
+                return std::unexpected(ConsensusError::InvalidRoot);
+            }
+            if (needs_balances)
+                cache_.process_transaction(*transaction, balances);
+            accepted_transactions.insert(section.transactions.extract(transaction));
+        }
     }
     return {};
 }
@@ -3084,27 +3115,22 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
         return TransactionProveError::TokenMigrationFrozen;
     }
 
-    // Special handling for Burn transactions
+    // Burns have no receiver, but still require the sender's available balance.
     if (tx.type() == TransactionType::Burn) {
         if (!tx.receiver().is_zero()) {
             return TransactionProveError::BurnIncorrectReceiver;
         }
-
-        bool verify = verify_stored_hash();
-        if (!verify) {
-            return TransactionProveError::InvalidSignature;
-        }
-
-        return TransactionProveError::NoError;
     }
 
     // Validate receiver
-    if (targetReceiver.is_zero()) {
+    if (targetReceiver.is_zero() && tx.type() != TransactionType::Burn) {
         return TransactionProveError::ReceiverZero;
     }
 
     Actor<KeyPublic> receiverActor;
     const auto       receiver_exists = [&]() {
+        if (tx.type() == TransactionType::Burn)
+            return true;
         if (facts != nullptr && facts->receiver_exists.has_value())
             return facts->receiver_exists.value();
         receiverActor = node->actor_index()->read_actor_old(targetReceiver);
@@ -3211,7 +3237,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
                                                         : TransactionProveError::SenderBalanceBelowZero;
     }
 
-    if (tx.type() == TransactionType::Regular || tx.type() == TransactionType::Conversion) {
+    if (tx.type() == TransactionType::Regular || tx.type() == TransactionType::Conversion
+        || tx.type() == TransactionType::Burn) {
         auto network_id = node->actor_index()->network_id();
         if (!network_id.is_zero()) {
             const auto minted_amount = frozen_token_allocation(targetSender, token);
