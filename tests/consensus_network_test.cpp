@@ -9,6 +9,8 @@
 #include "consensus/consensus_engine.h"
 #include "consensus/light_client.h"
 #include "consensus/mining_epoch.h"
+#include "consensus/mining_state.h"
+#include "utils/serialization.h"
 #include "consensus/balance_snapshot.h"
 #include "consensus/validator_set.h"
 #include "utils/exc_utils.h"
@@ -419,6 +421,133 @@ int main() {
     check("mining settles only after authenticated window finality",
           settle_mining_epoch(mining, closing_proofs.value().front(), light_client.value()).has_value()
               && mining.rewards.at(committee.governance.id().to_string()) == 10);
+    auto       ledger         = create_mining_state(committee.governance.id(), 0).value();
+    const auto other_provider = committee.actors.front().id();
+    check("mining registry accepts a provider before the epoch",
+          register_storage_provider(ledger, committee.governance.id(), dataset).has_value());
+    const auto registered_root = mining_state_root(ledger);
+    check("mining registry rejects duplicate aliases without a state change",
+          !register_storage_provider(ledger, committee.governance.id(), dataset).has_value()
+              && mining_state_root(ledger) == registered_root);
+    const MiningFinalityReader read_finality =
+        [&](std::uint64_t section) -> std::expected<FinalityProof, ConsensusError> {
+        const auto proof = engines.front()->finality_proof_for_section(section);
+        if (!proof.has_value() || !proof.value().has_value())
+            return std::unexpected(ConsensusError::DataUnavailable);
+        return proof.value().value();
+    };
+    for (std::uint64_t section = 1; section <= 80; ++section) {
+        const auto budget   = section == 1 ? 7 : section == 21 ? 5 : 0;
+        const auto advanced = advance_mining_state(ledger, section, budget, read_finality, light_client.value());
+        check("mining reserves only the scheduled epoch budgets before proofs",
+              advanced.has_value() && advanced.value().empty() && ledger.minted_units == 0);
+        if (section == 1)
+            check("mining registers a second provider after the first epoch is frozen",
+                  register_storage_provider(ledger, other_provider, dataset).has_value());
+        if (section == 20)
+            check("mining withdrawal leaves the active epoch snapshot intact",
+                  unregister_storage_provider(ledger, committee.governance.id(), dataset_id).has_value()
+                      && ledger.epochs.at(0)
+                             .datasets.at(dataset_id)
+                             .providers.contains(committee.governance.id().to_string()));
+    }
+    check("mining freezes eligibility independently for successive epochs",
+          ledger.reserved_units == 12 && ledger.epochs.size() == 2
+              && !ledger.epochs.at(0).datasets.at(dataset_id).providers.contains(other_provider.to_string())
+              && !ledger.epochs.at(1)
+                      .datasets.at(dataset_id)
+                      .providers.contains(committee.governance.id().to_string()));
+    const auto saved_ledger       = MessagePack::serialize(ledger);
+    const auto root_before_window = mining_state_root(ledger);
+    check("missing finality leaves the entire mining transition unchanged",
+          !advance_mining_state(ledger, 81, 0, { }, light_client.value()).has_value()
+              && mining_state_root(ledger) == root_before_window);
+    MiningPayouts expected_payouts;
+    std::string   expected_mining_root;
+    for (int replay = 0; replay < 2; ++replay) {
+        if (replay != 0) {
+            auto restored = MessagePack::deserialize<MiningState>(saved_ledger);
+            check("mining state restores from its persisted encoding", restored.has_value());
+            ledger = std::move(restored.value());
+        }
+        MiningPayouts payouts;
+        for (std::uint64_t section = 81; section <= 181; ++section) {
+            if (section == 161) {
+                const auto                 before = mining_state_root(ledger);
+                const MiningFinalityReader forged =
+                    [&](auto target) -> std::expected<FinalityProof, ConsensusError> {
+                    auto proof = read_finality(target).value();
+                    proof.decision_certificate.signatures.clear();
+                    return proof;
+                };
+                check("forged closing finality cannot credit or prune mining state",
+                      !advance_mining_state(ledger, section, 0, forged, light_client.value()).has_value()
+                          && mining_state_root(ledger) == before);
+                check("a failed reservation cannot partially settle an earlier epoch",
+                      !advance_mining_state(ledger,
+                                            section,
+                                            MaximumMiningEmissionUnits,
+                                            read_finality,
+                                            light_client.value())
+                              .has_value()
+                          && mining_state_root(ledger) == before);
+            }
+            const auto advanced = advance_mining_state(ledger, section, 0, read_finality, light_client.value());
+            check("mining advances and settles from verified finality", advanced.has_value());
+            if (advanced.has_value())
+                for (const auto& [provider, amount] : advanced.value())
+                    payouts[provider] += amount;
+            if (section == 81 || section == 101) {
+                const auto epoch    = section == 81 ? 0 : 1;
+                const auto provider = epoch == 0 ? committee.governance.id() : other_provider;
+                const auto proof    = make_storage_proof(committee.governance.id(),
+                                                         provider,
+                                                         dataset,
+                                                         ledger.epochs.at(epoch).challenge.value(),
+                                                         storage_reader)
+                                          .value();
+                if (epoch == 0)
+                    check("a late provider cannot claim the earlier epoch",
+                          !submit_mining_proof(ledger, epoch, other_provider, dataset_id, proof).has_value());
+                check("the frozen provider submits one proof",
+                      submit_mining_proof(ledger, epoch, provider, dataset_id, proof).has_value());
+                const auto before = mining_state_root(ledger);
+                check("duplicate mining proof has no state effect",
+                      !submit_mining_proof(ledger, epoch, provider, dataset_id, proof).has_value()
+                          && mining_state_root(ledger) == before);
+            }
+            if (section < 161)
+                check("mining cannot pay before finalized window closure", payouts.empty());
+        }
+        check("mining settles both epochs and prunes completed proof records",
+              ledger.epochs.empty() && ledger.minted_units == 12 && ledger.reserved_units == 12
+                  && payouts[committee.governance.id().to_string()] == 7
+                  && payouts[other_provider.to_string()] == 5);
+        if (replay == 0) {
+            expected_payouts     = payouts;
+            expected_mining_root = mining_state_root(ledger);
+        } else {
+            check("mining replay returns identical native payouts and state",
+                  payouts == expected_payouts && mining_state_root(ledger) == expected_mining_root);
+        }
+    }
+    const auto settled_root = mining_state_root(ledger);
+    check("settlement cannot run twice for one section",
+          !advance_mining_state(ledger, 181, 0, read_finality, light_client.value()).has_value()
+              && mining_state_root(ledger) == settled_root);
+    auto capped = create_mining_state(committee.governance.id(), 0).value();
+    check("an unused epoch consumes its reservation without emission",
+          advance_mining_state(capped, 1, MaximumMiningEmissionUnits, { }, light_client.value()).has_value()
+              && capped.epochs.empty() && capped.minted_units == 0);
+    for (std::uint64_t section = 2; section <= 20; ++section)
+        check("an empty mining interval needs no proof traffic",
+              advance_mining_state(capped, section, 0, { }, light_client.value()).has_value());
+    const auto capped_root = mining_state_root(capped);
+    check("unused mining allocations cannot be carried past the total cap",
+          !advance_mining_state(capped, 21, 1, { }, light_client.value()).has_value()
+              && mining_state_root(capped) == capped_root);
+    check("mining proceeds without new emission after the cap",
+          advance_mining_state(capped, 21, 0, { }, light_client.value()).has_value());
     check("runtime accepts only requested certified light balances and rejects rollback",
           test_balance_snapshot_runtime(balance_snapshot, newer_snapshot, committee.document));
     auto changed_inclusion             = inclusion.value().value();
