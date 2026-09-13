@@ -7,6 +7,7 @@
 #include "utils/db_connector.h"
 
 namespace Dfs {
+    inline constexpr std::size_t MaximumVectorPageRows = 1024;
     struct VectorIndexSummary {
         std::string   prefix;
         std::string   hash;

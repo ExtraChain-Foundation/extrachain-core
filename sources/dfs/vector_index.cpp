@@ -255,7 +255,7 @@ std::expected<Dfs::VectorIndexSummary, std::string> Dfs::VectorIndex::summarize_
     std::string_view          primary,
     const std::vector<DbRow>& rows) {
     try {
-        if (primary.empty() || primary.size() > 128 || rows.size() > 256)
+        if (primary.empty() || primary.size() > 128 || rows.size() > MaximumVectorPageRows)
             throw std::runtime_error("Invalid vector row proof");
         if (rows.empty())
             return empty();
@@ -539,7 +539,7 @@ std::expected<std::vector<DbRow>, std::string> Dfs::VectorIndex::page(std::strin
                                                                       std::size_t      limit) {
     try {
         if (!hex_prefix(prefix) || !hex_prefix(after) || (!after.empty() && after.size() != 64) || limit == 0
-            || limit > 256) {
+            || limit > MaximumVectorPageRows) {
             throw std::runtime_error("Invalid vector page range");
         }
         const auto current = root();

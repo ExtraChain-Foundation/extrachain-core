@@ -80,7 +80,7 @@ int main() {
     for (const auto& value : bucket.value())
         TEST_REQUIRE(Dfs::VectorIndex::key_hash(value.at("id")).starts_with("0"));
     TEST_REQUIRE(!left.page("z", { }, 1).has_value());
-    TEST_REQUIRE(!left.page({ }, { }, 257).has_value());
+    TEST_REQUIRE(!left.page({ }, { }, Dfs::MaximumVectorPageRows + 1).has_value());
 
     TEST_REQUIRE(first.query("UPDATE ExVectorNodes SET hash='damaged' WHERE prefix=''"));
     TEST_REQUIRE_EQ(left.root().value().hash, populated.hash);

@@ -54,8 +54,9 @@ std::expected<Dfs::VectorIndexSlice, std::string> Dfs::VectorSnapshot::read(std:
     if (!subtree.has_value())
         return std::unexpected(subtree.error());
     VectorIndexSlice slice { .summary = subtree.value() };
-    if (slice.summary.rows <= 256 && (slice.summary.bytes <= 1024 * 1024 || slice.summary.rows == 1)) {
-        const auto rows = index_.page(prefix, { }, 256);
+    if (slice.summary.rows <= MaximumVectorPageRows
+        && (slice.summary.bytes <= 1024 * 1024 || slice.summary.rows == 1)) {
+        const auto rows = index_.page(prefix, { }, MaximumVectorPageRows);
         if (!rows.has_value())
             return std::unexpected(rows.error());
         slice.rows = rows.value();

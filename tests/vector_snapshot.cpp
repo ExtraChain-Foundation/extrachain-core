@@ -12,7 +12,7 @@ int main() {
     Dfs::VectorIndex index(writer, "id");
     TEST_REQUIRE(index.root().has_value());
     TEST_REQUIRE(writer.query("BEGIN IMMEDIATE"));
-    constexpr unsigned Count = 2048;
+    constexpr unsigned Count = 8192;
     for (unsigned i = 0; i < Count; ++i) {
         const DbRow row { { "id", std::to_string(i) }, { "payload", std::string("old\0value", 9) } };
         TEST_REQUIRE(writer.replace("Vector", row));
@@ -34,12 +34,18 @@ int main() {
 
     std::vector<Dfs::VectorIndexSummary> pending { old_root.tree };
     unsigned                             count = 0;
+    unsigned                             requests     = 0;
+    std::size_t                          maximum_rows = 0;
     while (!pending.empty()) {
         const auto expected = pending.back();
         pending.pop_back();
         const auto response = before.value()->read(expected.prefix);
         TEST_REQUIRE(response.has_value());
         const auto& slice = response.value();
+        ++requests;
+        maximum_rows = std::max(maximum_rows, slice.rows.size());
+        TEST_REQUIRE(slice.rows.size() <= Dfs::MaximumVectorPageRows);
+        TEST_REQUIRE(slice.summary.bytes <= 1024 * 1024 || slice.rows.empty());
         TEST_REQUIRE(Dfs::VectorSnapshot::verify(expected, "id", slice));
         for (const auto& row : slice.rows) {
             TEST_REQUIRE_EQ(row.at("payload"), std::string("old\0value", 9));
@@ -48,6 +54,9 @@ int main() {
         pending.insert(pending.end(), slice.children.begin(), slice.children.end());
     }
     TEST_REQUIRE_EQ(count, Count);
+    TEST_REQUIRE(requests <= 17);
+    TEST_REQUIRE(maximum_rows > 256);
+    std::printf("snapshot: %u rows in %u requests, largest page %zu rows\n", Count, requests, maximum_rows);
     const auto new_slice = after.value()->read(Dfs::VectorIndex::key_hash("0")).value();
     TEST_REQUIRE_EQ(new_slice.rows.size(), std::size_t(1));
     TEST_REQUIRE_EQ(new_slice.rows.front().at("payload"), std::string("new value"));
