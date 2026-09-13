@@ -32,6 +32,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <sqlite3.h>
 
 #include "chain/actor.h"
 #include "chain/dag.h" // Section
@@ -434,6 +435,81 @@ public:
             TEST_REQUIRE(!reopened.committed_range().has_value());
         }
 
+        std::filesystem::remove_all(dir);
+    }
+
+    void hotSectionStoreMigratesLargeRows() {
+        const auto dir  = std::filesystem::temp_directory_path() / "exc_hot_section_rowid";
+        const auto path = dir / "HotSections.db";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directory(dir);
+        const auto open_database = [&]() {
+            sqlite3 *raw = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_open(path.string().c_str(), &raw), SQLITE_OK);
+            return std::unique_ptr<sqlite3, decltype(&sqlite3_close)>(raw, sqlite3_close);
+        };
+        {
+            auto database = open_database();
+            TEST_REQUIRE_EQ(
+                sqlite3_exec(
+                    database.get(),
+                    "CREATE TABLE sections(section INTEGER PRIMARY KEY,payload BLOB NOT NULL) WITHOUT ROWID;"
+                    "INSERT INTO sections VALUES(10,zeroblob(1048576)),(11,X'00ff00');"
+                    "CREATE TABLE chain_meta(key TEXT PRIMARY KEY,value INTEGER NOT NULL) WITHOUT ROWID;"
+                    "INSERT INTO chain_meta VALUES('committed_first',10),('committed_last',11);"
+                    "CREATE TABLE sections_rowid(sentinel INTEGER);INSERT INTO sections_rowid VALUES(42);",
+                    nullptr,
+                    nullptr,
+                    nullptr),
+                SQLITE_OK);
+        }
+        {
+            HotSectionStore blocked(path);
+            TEST_REQUIRE(!blocked.is_open());
+        }
+        {
+            auto          database = open_database();
+            sqlite3_stmt *raw      = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_prepare_v2(database.get(),
+                                               "SELECT count(*),sum(length(payload)) FROM sections",
+                                               -1,
+                                               &raw,
+                                               nullptr),
+                            SQLITE_OK);
+            std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> query(raw, sqlite3_finalize);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_ROW);
+            TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 0), 2);
+            TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 1), 1048579);
+            query.reset();
+            TEST_REQUIRE_EQ(sqlite3_exec(database.get(), "DROP TABLE sections_rowid", nullptr, nullptr, nullptr),
+                            SQLITE_OK);
+        }
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            HotSectionStore store(path);
+            TEST_REQUIRE(store.is_open());
+            TEST_REQUIRE_EQ(store.get(SectionId(10)), std::optional<std::string>(std::string(1048576, '\0')));
+            TEST_REQUIRE_EQ(store.get(SectionId(11)), std::optional<std::string>(std::string("\0\xff\0", 3)));
+            const std::optional<std::pair<SectionId, SectionId>> expected =
+                std::pair { SectionId(10), SectionId(11) };
+            TEST_REQUIRE_EQ(store.committed_range(), expected);
+            TEST_REQUIRE(!store.get(SectionId(12)).has_value());
+        }
+        {
+            auto          database = open_database();
+            sqlite3_stmt *raw      = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_prepare_v2(database.get(),
+                                               "SELECT rowid FROM sections ORDER BY section",
+                                               -1,
+                                               &raw,
+                                               nullptr),
+                            SQLITE_OK);
+            std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> query(raw, sqlite3_finalize);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_ROW);
+            TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 0), 10);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_ROW);
+            TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 0), 11);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_DONE);
+        }
         std::filesystem::remove_all(dir);
     }
 
@@ -859,6 +935,9 @@ int main() {
     });
     runner.run("hot section store revisions", [&] {
         tests.hotSectionStorePersistsAndPrunesRevisions();
+    });
+    runner.run("hot section large-row migration", [&] {
+        tests.hotSectionStoreMigratesLargeRows();
     });
     runner.run("wire format round trip", [&] {
         tests.wireFormatRoundTrip();
