@@ -55,6 +55,7 @@ public:
     std::string request_catalog_digest(const std::vector<ActorId> &allowed, const Responder &target);
     void        network_request_catalog_rows(const Dfs::CatalogRowsRequest &request, const Responder &responder);
     void        network_response_dir_rows(std::string_view data, const Responder &responder);
+    void        network_request_legacy_files(const std::vector<ActorId> &owners, const Responder &responder);
 
     std::shared_ptr<DbConnector> get_db_instance();
 

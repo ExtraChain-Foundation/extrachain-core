@@ -2,6 +2,7 @@
 #include <memory>
 
 #include "dfs/catalog_metadata.h"
+#include "dfs/legacy_catalog.h"
 #include "test_support.h"
 
 int main() {
@@ -38,6 +39,26 @@ int main() {
     };
     sign(first);
     TEST_REQUIRE(Dfs::valid_catalog_metadata(first, owner.to_public()));
+    const auto legacy_export = Dfs::legacy_public_file(first, owner);
+    TEST_REQUIRE(legacy_export.has_value());
+    TEST_REQUIRE(owner.key().verify(first.calculate_legacy_hash(owner.id()), legacy_export.value().sign).value());
+    TEST_REQUIRE(!Dfs::legacy_public_file(first, outsider).has_value());
+    auto invalid_export = first;
+    invalid_export.name = "tampered";
+    TEST_REQUIRE(!Dfs::legacy_public_file(invalid_export, owner).has_value());
+    for (const auto state : { Dfs::FileState::Known, Dfs::FileState::Removed }) {
+        invalid_export       = first;
+        invalid_export.state = state;
+        sign(invalid_export);
+        TEST_REQUIRE(!Dfs::legacy_public_file(invalid_export, owner).has_value());
+    }
+    invalid_export            = first;
+    invalid_export.encryption = true;
+    sign(invalid_export);
+    TEST_REQUIRE(!Dfs::legacy_public_file(invalid_export, owner).has_value());
+    invalid_export      = first;
+    invalid_export.sign = legacy_export.value().sign;
+    TEST_REQUIRE(!Dfs::valid_catalog_metadata(invalid_export, owner.to_public()));
     auto ambiguous   = first;
     ambiguous.folder = "a";
     ambiguous.name   = "bc";

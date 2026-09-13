@@ -305,6 +305,12 @@ int main() {
         Network::restricted_peer_message_allowed(MessageType::DagFileSections, MessageStatus::Response, false));
     TEST_REQUIRE(
         !Network::restricted_peer_message_allowed(MessageType::DagFileSections, MessageStatus::Response, true));
+    TEST_REQUIRE(
+        Network::restricted_peer_message_allowed(MessageType::DfsTempSyncAll, MessageStatus::Response, true));
+    TEST_REQUIRE(
+        !Network::restricted_peer_message_allowed(MessageType::DfsTempSyncAll, MessageStatus::Response, false));
+    TEST_REQUIRE(
+        !Network::restricted_peer_message_allowed(MessageType::DfsSyncDirRows, MessageStatus::Response, true));
     const auto original = std::filesystem::current_path();
     const auto directory =
         std::filesystem::temp_directory_path() / ("extrachain-peer-id-" + Utils::generate_random_hex(8));

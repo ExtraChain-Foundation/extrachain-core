@@ -33,6 +33,8 @@
 #include "dfs/dfs_service.h"
 #include "dfs/load_manager.h"
 #include "dfs/vector_index.h"
+#include "dfs/legacy_catalog.h"
+#include "managers/account_controller.h"
 #include "utils/exc_logs.h"
 #include "chain/actor_index.h"
 
@@ -88,6 +90,7 @@ struct DirsManager::CatalogWork {
     std::mutex                                        mutex;
     std::map<std::string, Pending>                    pending;
     std::map<std::string, std::size_t>                scope_cursor;
+    std::map<std::string, Dfs::FileLink>              legacy_cursor;
     std::atomic_bool                                  stopped { false };
     bool track(const std::string &id, Kind kind, const std::string &peer, const Dfs::CatalogRowsRequest &request) {
         std::lock_guard lock(mutex);
@@ -464,6 +467,55 @@ void DirsManager::network_request_catalog_rows(const Dfs::CatalogRowsRequest &re
     };
     boost::asio::post(work_->strand,
                       ExtraChain::Core::Runtime::guard_handler("catalog page request", std::move(work)));
+}
+
+void DirsManager::network_request_legacy_files(const std::vector<ActorId> &owners, const Responder &responder) {
+    if (!catalog_peer(responder) || !Dfs::valid_catalog_request({ .owners = owners })
+        || !node->account_controller()->has_current_profile())
+        return;
+    const auto peer   = *responder.identifiers().begin();
+    const auto access = node->network()->peer_meta_for(peer);
+    if (!access.has_value() || !access.value().update_required)
+        return;
+    const auto owner = node->account_controller()->system_actor();
+    if (!owners.empty() && std::ranges::find(owners, owner.id()) == owners.end())
+        return;
+    const auto ticket = work_->budget.reserve(peer, Dfs::CatalogPageBytes);
+    if (!ticket)
+        return;
+    auto work = [this, owner, peer, responder, ticket] {
+        if (ticket->stopped())
+            return;
+        Dfs::CatalogRowsRequest request { .owners = { owner.id() } };
+        {
+            std::lock_guard lock(work_->mutex);
+            if (work_->legacy_cursor.size() >= 128 && !work_->legacy_cursor.contains(peer))
+                work_->legacy_cursor.clear();
+            request.after = work_->legacy_cursor[peer];
+        }
+        const auto page = Dfs::read_catalog_page(db_, request);
+        if (!page.has_value())
+            return;
+        std::vector<Dfs::LegacyFileRow> files;
+        for (const auto &row : page.value().rows) {
+            if (ticket->stopped())
+                return;
+            const auto converted = Dfs::legacy_public_file(row, owner);
+            if (converted.has_value())
+                files.push_back(converted.value());
+        }
+        std::vector<std::pair<ActorId, std::vector<Dfs::LegacyFileRow>>> response;
+        if (!files.empty())
+            response.emplace_back(owner.id(), std::move(files));
+        if (responder
+                .send_response(response, MessageType::DfsSyncDirRows, SendMode::Focused, MessageStatus::Response)
+                .empty())
+            return;
+        std::lock_guard lock(work_->mutex);
+        work_->legacy_cursor[peer] = page.value().next.has_value() ? page.value().next.value() : Dfs::FileLink { };
+    };
+    boost::asio::post(work_->strand,
+                      ExtraChain::Core::Runtime::guard_handler("legacy public files", std::move(work)));
 }
 
 void DirsManager::merge_catalog_rows(const std::vector<Dfs::DirRow> &rows, const Responder &responder) {

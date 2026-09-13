@@ -2430,8 +2430,22 @@ void NetworkService::message_received(const std::string &message,
 
     case MessageType::DfsSyncDirs:
     case MessageType::DfsSyncDirsRows:
-    case MessageType::DfsTempSyncAll:
         break;
+    case MessageType::DfsTempSyncAll: {
+        if (!access.has_value() || !access.value().update_required || status != MessageStatus::Response
+            || serialized.size() > 256 * 1024 || !MessagePack::has_bounded_structure(serialized, 16384, 8192, 8))
+            return;
+        const auto all = MessagePack::deserialize<bool>(serialized);
+        if (all.has_value()) {
+            if (all.value())
+                node->dfs_service()->dirs_manager().network_request_legacy_files({ }, responder);
+            break;
+        }
+        const auto owners = MessagePack::deserialize<std::vector<ActorId>>(serialized);
+        if (owners.has_value())
+            node->dfs_service()->dirs_manager().network_request_legacy_files(owners.value(), responder);
+        break;
+    }
     case MessageType::DfsSyncDirRows: {
         if (status == MessageStatus::Request) {
             if (serialized.size() > 256 * 1024 || !MessagePack::has_bounded_structure(serialized, 16384, 8192, 8))

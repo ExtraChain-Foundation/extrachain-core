@@ -11,6 +11,8 @@ namespace Network {
         case MessageType::Actors:
         case MessageType::ActorsHash:
             return true; // Actor payloads still require their own signature and the envelope signature.
+        case MessageType::DfsTempSyncAll:
+            return incoming && status == MessageStatus::Response;
         case MessageType::DagSections:
         case MessageType::DagLightData:
         case MessageType::DagIntervalHash:
