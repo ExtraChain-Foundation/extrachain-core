@@ -327,3 +327,7 @@ set_tests_properties(catalog-pages PROPERTIES TIMEOUT 30)
 add_core_test_executable(extrachain-catalog-protocol catalog_protocol.cpp)
 add_test(NAME catalog-protocol COMMAND extrachain-catalog-protocol)
 set_tests_properties(catalog-protocol PROPERTIES TIMEOUT 60)
+
+add_core_test_executable(extrachain-vector-signatures vector_signatures.cpp)
+add_test(NAME vector-signatures COMMAND extrachain-vector-signatures)
+set_tests_properties(vector-signatures PROPERTIES TIMEOUT 30)

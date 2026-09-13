@@ -2701,6 +2701,8 @@ Dfs::DfsSize DfsService::calculate_size() {
         if (state == std::to_string(std::to_underlying(Dfs::FileState::Ready)))
             add(result.local, size);
     }
+    if (rows->failed())
+        return { .all = m_totalDfsSize, .local = m_sizeTaken };
     m_totalDfsSize = result.all;
     m_sizeTaken    = result.local;
     return result;

@@ -325,6 +325,8 @@ std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std:
         append("\n");
         ++count;
     }
+    if (rows->failed())
+        return { };
     flush();
     return digests;
 }

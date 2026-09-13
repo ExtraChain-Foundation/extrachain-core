@@ -54,6 +54,7 @@ private:
     bool                    is_encrypted_;
 
     DfsVector() = default;
+    std::expected<bool, DfsVectorError>                  persist_row(DbRow& row, bool local, bool check);
     std::expected<Dfs::VectorDescriptor, DfsVectorError> load_descriptor();
     DfsVector(ExtraChain::Core::ExtraChainNode* node,
               const Actor<KeyPrivate>&          actor,

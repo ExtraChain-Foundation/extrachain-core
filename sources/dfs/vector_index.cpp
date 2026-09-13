@@ -164,7 +164,9 @@ namespace {
             bytes = add(bytes, static_cast<std::uint64_t>(sqlite3_column_bytes(statement.value, i)));
             if (bytes > 64 * 1024 * 1024)
                 throw std::runtime_error("Vector row exceeds the transfer limit");
-            row.emplace(name, statement.text(i));
+            auto value = DbIterator::read_value(statement.value, i);
+            if (value.has_value())
+                row.emplace(name, std::move(value.value()));
         }
         return row;
     }
@@ -218,7 +220,7 @@ std::string Dfs::VectorIndex::schema_hash() {
     if (columns.empty() || columns.front().name != primary_) {
         throw std::runtime_error("Vector primary column differs from its schema");
     }
-    return hash("EXC_DFS_VECTOR_SCHEMA_V1:" + Json::serialize(columns) + ':' + primary_);
+    return hash("EXC_DFS_VECTOR_SCHEMA_V2:" + Json::serialize(columns) + ':' + primary_);
 }
 
 bool Dfs::VectorIndex::valid_root(const VectorIndexRoot& root) {

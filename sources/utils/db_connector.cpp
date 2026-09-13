@@ -202,32 +202,9 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
         int   colNum = sqlite3_column_count(stmt);
 
         for (int i = 0; i < colNum; i++) {
-            std::string n = sqlite3_column_name(stmt, i);
-            std::string t;
-            switch (sqlite3_column_type(stmt, i)) {
-            case SQLITE_BLOB: {
-                int size = sqlite3_column_bytes(stmt, i);
-                t        = std::string(reinterpret_cast<const char *>(sqlite3_column_blob(stmt, i)), size);
-                break;
-            }
-            case SQLITE3_TEXT: {
-                t.assign(reinterpret_cast<const char *>(sqlite3_column_text(stmt, i)),
-                         sqlite3_column_bytes(stmt, i));
-                break;
-            }
-            case SQLITE_INTEGER:
-                t = std::to_string(sqlite3_column_int64(stmt, i));
-                break;
-            case SQLITE_FLOAT:
-                t = std::to_string(sqlite3_column_double(stmt, i));
-                break;
-            case SQLITE_NULL:
-                continue;
-            default:
-                break;
-            }
-
-            row.insert({ n, t });
+            auto value = DbIterator::read_value(stmt, i);
+            if (value.has_value())
+                row.emplace(sqlite3_column_name(stmt, i), std::move(value.value()));
         }
 
         res.push_back(row);
@@ -651,9 +628,10 @@ bool DbConnector::implementation_prepare(const std::string &tableName, const DbR
                 }
                 rc = sqlite3_bind_int64(stmt, fieldNum, number);
             } else if (column == "REAL" || column == "NUMERIC") {
-                std::size_t consumed = 0;
-                const auto  number   = std::stod(el.second, &consumed);
-                if (consumed != el.second.size() || !std::isfinite(number)) {
+                double     number = 0;
+                const auto parsed = std::from_chars(el.second.data(), el.second.data() + el.second.size(), number);
+                if (parsed.ec != std::errc { } || parsed.ptr != el.second.data() + el.second.size()
+                    || !std::isfinite(number)) {
                     return false;
                 }
                 rc = sqlite3_bind_double(stmt, fieldNum, number);

@@ -137,11 +137,14 @@ bool Dfs::upsert_vector_row(DbConnector& database, const std::string& primary, c
         if (!columns.empty()) {
             columns += ',';
             values += ',';
-            updates += ',';
         }
         columns += '"' + name + '"';
         values += '@' + name;
-        updates += '"' + name + "\"=excluded.\"" + name + '"';
+    }
+    for (const auto& column : database.table_columns("Vector")) {
+        if (!updates.empty())
+            updates += ',';
+        updates += '"' + column.name + "\"=excluded.\"" + column.name + '"';
     }
     // REPLACE can delete another primary row when a secondary UNIQUE constraint conflicts.
     return database.query("INSERT INTO Vector(" + columns + ") VALUES(" + values + ") ON CONFLICT(\"" + primary

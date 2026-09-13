@@ -629,28 +629,18 @@ bool DfsVector::store_add(DbRow &row) {
         row["status"] = "1";
     }
 
-    auto [hash, all_empty] = calculate_hash(row);
-    if (hash.empty() || all_empty) {
-        eWarning("[DfsVector] store_add refused, row has no hashable content: {} / {}", file_actor_id_, file_id_);
-        return false;
-    }
-
-    auto sign = actor_.key().sign(hash);
-    if (!sign.has_value()) {
-        eWarning("[DfsVector] store_add refused, signing failed for actor {}: {} / {}",
-                 actor_.id(),
-                 file_actor_id_,
-                 file_id_);
-        return false;
-    }
-
     row["actor"] = actor_.id().to_string();
-    row["sign"]  = ByteArray(sign.value()).toString();
-    auto res     = local_add(row, false);
-    return res.has_value();
+    row["sign"]       = std::string(crypto_sign_BYTES, '\0');
+    const auto result = persist_row(row, true, true);
+    return result.has_value() && result.value();
 }
 
 std::expected<bool, DfsVectorError> DfsVector::local_add(const DbRow &row, bool check) {
+    auto candidate = row;
+    return persist_row(candidate, false, check);
+}
+
+std::expected<bool, DfsVectorError> DfsVector::persist_row(DbRow &row, bool local, bool check) {
     auto write_lock =
         node->dfs()->download_manager().lock_file({ .owner_id = file_actor_id_, .file_id = file_id_ });
     const auto catalog =
@@ -660,7 +650,7 @@ std::expected<bool, DfsVectorError> DfsVector::local_add(const DbRow &row, bool 
     if (!catalog.has_value() || catalog.value().state == Dfs::FileState::Removed
         || catalog.value().template_hash != Dfs::vector_template_hash(collection_template_))
         return std::unexpected(DfsVectorError::Adding);
-    if (!this->verify(row)) {
+    if (!local && !this->verify(row)) {
         eWarning("[DfsVector] local_add refused, row does not verify: {} / {}", file_actor_id_, file_id_);
         return std::unexpected(DfsVectorError::Adding);
     }
@@ -694,11 +684,23 @@ std::expected<bool, DfsVectorError> DfsVector::local_add(const DbRow &row, bool 
         auto existing = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field),
                                   "Vector",
                                   { { field, row.at(field) } });
-        if (!existing.empty() && compare_row_revisions(row, existing.front()) <= 0) {
+        if (local && !existing.empty()) {
+            const auto previous = row_timestamp(existing.front());
+            if (!previous.has_value() || previous.value() >= std::numeric_limits<std::int64_t>::max()) {
+                db.query("ROLLBACK");
+                return std::unexpected(DfsVectorError::Adding);
+            }
+            row["timestamp"] = std::to_string(std::max(row_timestamp(row).value(), previous.value() + 1));
+        }
+        if (!local && !existing.empty() && compare_row_revisions(row, existing.front()) <= 0) {
             if (!db.query("COMMIT"))
                 return std::unexpected(DfsVectorError::Adding);
             return false;
         }
+    }
+    if (local && !db.query("SAVEPOINT vector_row_prepare")) {
+        db.query("ROLLBACK");
+        return std::unexpected(DfsVectorError::Adding);
     }
     if (!Dfs::upsert_vector_row(db, field, row)) {
         db.query("ROLLBACK");
@@ -706,11 +708,34 @@ std::expected<bool, DfsVectorError> DfsVector::local_add(const DbRow &row, bool 
     }
     const auto stored =
         db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field), "Vector", { { field, row.at(field) } });
-    if (stored.size() != 1 || !verify(stored.front()) || !index.update(row.at(field)).has_value()
-        || !db.query("COMMIT")) {
+    if (stored.size() != 1) {
         db.query("ROLLBACK");
         return std::unexpected(DfsVectorError::Adding);
     }
+    auto canonical = stored.front();
+    if (local) {
+        const auto hash = calculate_hash(canonical);
+        if (hash.first.empty() || hash.second) {
+            db.query("ROLLBACK");
+            return std::unexpected(DfsVectorError::Adding);
+        }
+        const auto signature = actor_.key().sign(hash.first);
+        if (!signature.has_value()) {
+            db.query("ROLLBACK");
+            return std::unexpected(DfsVectorError::Adding);
+        }
+        canonical["sign"] = ByteArray(signature.value()).toString();
+        if (!db.query("ROLLBACK TO vector_row_prepare") || !db.query("RELEASE vector_row_prepare")
+            || !Dfs::upsert_vector_row(db, field, canonical)) {
+            db.query("ROLLBACK");
+            return std::unexpected(DfsVectorError::Adding);
+        }
+    }
+    if (!verify(canonical) || !index.update(canonical.at(field)).has_value() || !db.query("COMMIT")) {
+        db.query("ROLLBACK");
+        return std::unexpected(DfsVectorError::Adding);
+    }
+    row = std::move(canonical);
     return true;
 }
 
@@ -758,52 +783,48 @@ std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
 }
 
 std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
-    // Every lookup goes through find(): a row arriving from the network (DfsVectorAdd,
-    // content package) may lack any field, and DbRow::at() on a missing key throws
-    // std::out_of_range straight out of the network handler — a peer could terminate
-    // the node with one malformed row. A missing field is simply an unhashable row.
     const auto status    = row.find("status");
-    const auto timestamp = row.find("timestamp");
-    if (status == row.end() || timestamp == row.end()) {
+    const auto timestamp = row_timestamp(row);
+    const auto author    = row.find("actor");
+    if (status == row.end() || (status->second != "0" && status->second != "1") || !timestamp.has_value()
+        || timestamp.value() > std::numeric_limits<std::int64_t>::max()
+        || row.at("timestamp") != std::to_string(timestamp.value()) || author == row.end())
         return { "", true };
-    }
-
-    std::string to_hash   = status->second + timestamp->second + file_actor_id_.to_string() + file_id_;
-    bool        all_empty = true;
-
-    if (to_hash.size() != 14 + 40 + 64) { // 1 + 13 + 40 + 64
+    const auto actor = ActorId::create(author->second);
+    if (!actor.has_value() || actor.value().is_zero() || actor.value().to_string() != author->second)
         return { "", true };
-    }
 
-    if (collection_template_.primary.has_value()) {
-        const auto primary = row.find(collection_template_.primary->name());
-        if (primary == row.end()) {
-            return { "", true };
-        }
-        to_hash += primary->second;
-    }
-
-    const auto &fields = collection_template_.fields();
-    for (const auto &field : fields) {
-        const auto found = row.find(field.name());
-        if (found == row.end()) {
-            continue;
-        }
-
-        const std::string &value = found->second;
-        if (!value.empty()) {
-            all_empty = false;
-        }
-
-        to_hash += value;
-    }
-
-    if (all_empty || to_hash.empty()) {
+    std::set<std::string> names { "actor", "sign", "timestamp", "status" };
+    const auto            primary =
+        collection_template_.primary.has_value() ? collection_template_.primary.value().name() : "actor";
+    if (!row.contains(primary) || row.at(primary).empty())
         return { "", true };
-    }
+    names.insert(primary);
+    for (const auto &field : collection_template_.fields())
+        names.insert(field.name());
+    if (std::ranges::any_of(row, [&](const auto &field) {
+            return !names.contains(field.first);
+        }))
+        return { "", true };
 
-    auto hash = Utils::calculate_hash(to_hash);
-    return { hash, false };
+    std::string canonical = "extrachain-vector-row-v1:";
+    const auto  append    = [&](std::string_view value) {
+        canonical += std::to_string(value.size());
+        canonical += ':';
+        canonical += value;
+    };
+    append(file_actor_id_.to_string());
+    append(file_id_);
+    append(Dfs::vector_template_hash(collection_template_));
+    names.erase("sign");
+    for (const auto &name : names) {
+        append(name);
+        const auto value = row.find(name);
+        canonical += value == row.end() ? '0' : '1';
+        if (value != row.end())
+            append(value->second);
+    }
+    return { Utils::calculate_hash(canonical), false };
 }
 
 std::optional<std::pair<std::string, std::size_t>> DfsVector::calculate_template_file_hash() {
@@ -933,6 +954,11 @@ std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow        
         }
 
         if (collection_template_.primary.has_value() && key == collection_template_.primary->name()) {
+            encrypted_row[key] = value;
+            continue;
+        }
+
+        if (key == "actor" || key == "status" || key == "timestamp" || key == "sign") {
             encrypted_row[key] = value;
             continue;
         }
