@@ -11,6 +11,9 @@ import sys
 PUBLICATION = re.compile(
     r"\[node-run\] DFS vector owner=([0-9a-f]{40}) file_id=([0-9a-f]{64}) rows=(\d+)/(\d+)"
 )
+WORKLOAD = re.compile(
+    r"\[node-run\] vector workload rows=(\d+) submitted=(\d+) logical_payload_bytes=(\d+)"
+)
 
 
 def row_digest(path):
@@ -33,21 +36,30 @@ def row_digest(path):
         source.close()
 
 
-def audit(work, nodes, rows, cross, dead, minimum_payload_bytes=0):
+def audit(work, nodes, rows, cross, dead, minimum_payload_bytes=0, senders=0):
     live = [index for index in range(nodes) if index not in dead]
     if not live:
         raise ValueError("No live nodes to audit")
     published = []
     for index in live:
         records = set()
+        overlap = False
         with (work / f"node-{index}.log").open(errors="replace") as log:
             for line in log:
+                if not records:
+                    progress = WORKLOAD.search(line)
+                    if progress is not None:
+                        published_rows, submitted, payload_bytes = map(int, progress.groups())
+                        overlap |= (0 < published_rows < rows and submitted > 0
+                                    and payload_bytes >= minimum_payload_bytes)
                 records.update(PUBLICATION.findall(line))
         if len(records) != 1:
             raise ValueError(f"Node {index}: expected one vector publication, found {len(records)}")
         owner, file_id, appended, requested = records.pop()
         if int(appended) != rows or int(requested) != rows:
             raise ValueError(f"Node {index}: incomplete vector publication {appended}/{requested}")
+        if index < senders and rows > 1 and not overlap:
+            raise ValueError(f"Node {index}: no transfer during vector publication at the required size")
         published.append((owner, file_id))
     if len(set(published)) != len(live):
         raise ValueError("Different publishers reported the same vector")
@@ -71,7 +83,8 @@ def audit(work, nodes, rows, cross, dead, minimum_payload_bytes=0):
 if __name__ == "__main__":
     try:
         audit(Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]),
-              {int(index) for index in sys.argv[5].split()}, int(sys.argv[6]) if len(sys.argv) > 6 else 0)
+              {int(index) for index in sys.argv[5].split()}, int(sys.argv[6]) if len(sys.argv) > 6 else 0,
+              int(sys.argv[7]) if len(sys.argv) > 7 else 0)
     except (OSError, ValueError, sqlite3.Error) as error:
         print(f"vectors: {error}")
         sys.exit(1)

@@ -205,9 +205,9 @@ vector_audit() {
     local report="$1"
     [ "$VECTOR_ROWS" -eq 0 ] && return 0
     if [ "$report" = 1 ]; then
-        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" "$VECTOR_MIN_BYTES"
+        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" "$VECTOR_MIN_BYTES" "$SENDERS"
     else
-        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" "$VECTOR_MIN_BYTES" >/dev/null
+        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" "$VECTOR_MIN_BYTES" "$SENDERS" >/dev/null
     fi
 }
 

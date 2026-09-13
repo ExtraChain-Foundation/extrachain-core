@@ -61,6 +61,21 @@ class VectorAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "has 4 payload bytes"):
             audit(self.work, 2, 2, 0, set(), 5)
 
+    def test_transfers_must_overlap_publication_at_the_required_size(self):
+        with self.assertRaisesRegex(ValueError, "no transfer during"):
+            audit(self.work, 2, 2, 0, set(), 0, 1)
+        path = self.work / "node-0.log"
+        publication = path.read_text()
+        progress = "[node-run] vector workload rows=1 submitted=1 logical_payload_bytes=4\n"
+        path.write_text(publication + progress)
+        with self.assertRaisesRegex(ValueError, "no transfer during"):
+            audit(self.work, 2, 2, 0, set(), 0, 1)
+        path.write_text(progress + publication)
+        with contextlib.redirect_stdout(io.StringIO()):
+            audit(self.work, 2, 2, 0, set(), 4, 1)
+        with self.assertRaisesRegex(ValueError, "no transfer during"):
+            audit(self.work, 2, 2, 0, set(), 5, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

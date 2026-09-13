@@ -505,6 +505,69 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        std::vector<std::string> submitted_hashes;
+        const auto               sender = node->account_controller()->system_actor();
+        ActorId                  receiver;
+        for (const auto& account : node->account_controller()->accounts()) {
+            if (account.id() != sender.id()) {
+                receiver = account.id();
+                break;
+            }
+        }
+        if (intent_count > 0
+            && (receiver.is_zero()
+                || funding_nonces > std::numeric_limits<std::uint64_t>::max() - first_intent_nonce
+                || intent_count - 1
+                       > std::numeric_limits<std::uint64_t>::max() - first_intent_nonce - funding_nonces)) {
+            node->cleanUp();
+            return 5;
+        }
+        submitted_hashes.reserve(intent_count);
+        const auto submit_next_intent = [&]() {
+            const auto index = submitted_hashes.size();
+            if (index >= intent_count)
+                return true;
+            const auto metadata = "shadow-live-intent-" + std::to_string(index);
+            const auto nonce    = funding_nonces + first_intent_nonce + index;
+            const auto intent   = make_intent(
+                TransactionIntentV2 {
+                    .network_id           = node->network_id(),
+                    .sender               = sender.id(),
+                    .receiver             = receiver,
+                    .token                = TokenId::create("468faf2f1be6504a9a26f7f027f7e43380b0d77d").value(),
+                    .amount               = "0.0001",
+                    .operation            = IntentOperation::Transfer,
+                    .account_nonce        = nonce,
+                    .valid_after_height   = 0,
+                    .expires_after_height = 1'000'000,
+                },
+                metadata,
+                sender);
+            if (!intent.has_value()) {
+                std::printf("[node-run] intent creation failed (error %d)\n", static_cast<int>(intent.error()));
+                return false;
+            }
+            const auto submitted_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                             std::chrono::steady_clock::now().time_since_epoch())
+                                             .count();
+            const auto submitted       = node->consensus()->submit_intent(IntentEnvelope {
+                .intent   = intent.value(),
+                .metadata = metadata,
+            });
+            if (!submitted.has_value()) {
+                std::printf("[node-run] intent submission failed at %zu (error %d)\n",
+                            index,
+                            static_cast<int>(submitted.error()));
+                return false;
+            }
+            submitted_hashes.push_back(submitted.value());
+            std::printf("[node-run] intent hash=%s submitted_at_ms=%lld\n",
+                        submitted.value().c_str(),
+                        static_cast<long long>(submitted_at_ms));
+            std::fflush(stdout);
+            return true;
+        };
+
         // Optional ExDFS load: every committee node publishes one file of
         // EXC_DFS_BYTES bytes while consensus runs, so the harness can check that
         // content replicates across the whole mesh — through chaos included. The
@@ -678,8 +741,10 @@ int main(int argc, char* argv[]) {
                 node->cleanUp();
                 return 5;
             }
+            const auto intent_stride =
+                std::max<std::size_t>(1, row_count / (std::min(row_count, intent_count) + 1));
             std::size_t appended = 0;
-            for (std::size_t index = 0; index < row_count; ++index) {
+            for (std::size_t index = 0; index < row_count && stop_requested == 0; ++index) {
                 DbRow entry;
                 // use_id() makes "id" the primary field, and DfsVector::calculate_hash
                 // reads it with .at() without checking — an absent id terminates the
@@ -691,6 +756,17 @@ int main(int argc, char* argv[]) {
                 entry["position"] = std::to_string(index);
                 if (node->dfs()->add_vector_row(owner, row->file_id, entry)) {
                     ++appended;
+                }
+                if ((index + 1) % intent_stride == 0 && submitted_hashes.size() < intent_count) {
+                    if (!submit_next_intent()) {
+                        node->cleanUp();
+                        return 5;
+                    }
+                    std::printf("[node-run] vector workload rows=%zu submitted=%zu logical_payload_bytes=%llu\n",
+                                appended,
+                                submitted_hashes.size(),
+                                static_cast<unsigned long long>(appended * payload_bytes));
+                    std::fflush(stdout);
                 }
             }
             std::printf("[node-run] DFS vector owner=%s file_id=%s rows=%zu/%zu\n",
@@ -810,65 +886,13 @@ int main(int argc, char* argv[]) {
             (void)FileIo::write_atomic(barrier_directory / ("loaded-" + std::to_string(node_index)), "ok");
         }
 
-        std::vector<std::string> submitted_hashes;
-        if (intent_count > 0) {
-            const auto&              sender   = node->account_controller()->system_actor();
-            const Actor<KeyPrivate>* receiver = nullptr;
-            for (const auto& account : node->account_controller()->accounts()) {
-                if (account.id() != sender.id()) {
-                    receiver = &account;
-                    break;
-                }
-            }
-            if (receiver == nullptr) {
-                std::printf("[node-run] a distinct intent receiver is absent\n");
+        while (submitted_hashes.size() < intent_count) {
+            if (!submit_next_intent()) {
                 node->cleanUp();
                 return 5;
             }
-            submitted_hashes.reserve(intent_count);
-            for (std::size_t index = 0; index < intent_count; ++index) {
-                const auto metadata = "shadow-live-intent-" + std::to_string(index);
-                const auto nonce    = funding_nonces + first_intent_nonce + index;
-                const auto intent   = make_intent(
-                    TransactionIntentV2 {
-                          .network_id           = node->network_id(),
-                          .sender               = sender.id(),
-                          .receiver             = receiver->id(),
-                          .token                = TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"),
-                          .amount               = "0.0001",
-                          .operation            = IntentOperation::Transfer,
-                          .account_nonce        = nonce,
-                          .valid_after_height   = 0,
-                          .expires_after_height = 1'000'000,
-                    },
-                    metadata,
-                    sender);
-                if (!intent.has_value()) {
-                    std::printf("[node-run] intent creation failed (error %d)\n",
-                                static_cast<int>(intent.error()));
-                    node->cleanUp();
-                    return 5;
-                }
-                const auto submitted_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                 std::chrono::steady_clock::now().time_since_epoch())
-                                                 .count();
-                const auto submitted = node->consensus()->submit_intent(IntentEnvelope {
-                    .intent   = intent.value(),
-                    .metadata = metadata,
-                });
-                if (!submitted.has_value()) {
-                    std::printf("[node-run] intent submission failed at %zu (error %d)\n",
-                                index,
-                                static_cast<int>(submitted.error()));
-                    node->cleanUp();
-                    return 5;
-                }
-                submitted_hashes.push_back(submitted.value());
-                std::printf("[node-run] intent hash=%s submitted_at_ms=%lld\n",
-                            submitted.value().c_str(),
-                            static_cast<long long>(submitted_at_ms));
-                std::fflush(stdout);
-            }
+        }
+        if (intent_count > 0) {
             std::printf("[node-run] submitted intents=%zu\n", submitted_hashes.size());
             std::fflush(stdout);
         }
