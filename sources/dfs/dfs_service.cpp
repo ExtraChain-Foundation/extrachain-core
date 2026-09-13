@@ -1829,25 +1829,43 @@ void DfsService::request_collection(const Dfs::FileLink &link, const std::string
                                              return item.second.link == link;
                                          }))
                                       return;
-                                  auto       found    = std::ranges::find(peers, preferred);
-                                  const auto previous = collection_sources_.find(link);
-                                  if (!continuation && previous != collection_sources_.end()) {
-                                      const auto last = std::ranges::find(peers, previous->second);
+                                  if (!collection_sources_.contains(link) && collection_sources_.size() >= 4096)
+                                      collection_sources_.erase(collection_sources_.begin());
+                                  auto &sources = collection_sources_[link];
+                                  if (sources.after != after
+                                      || now - sources.started >= std::chrono::seconds(10)) {
+                                      sources.attempted.clear();
+                                      sources.started = now;
+                                      sources.after   = after;
+                                  }
+                                  if (!continuation && sources.attempted.size() >= 32)
+                                      return;
+                                  auto found = std::ranges::find(peers, preferred);
+                                  if (!continuation && !sources.last.empty()) {
+                                      const auto last = std::ranges::find(peers, sources.last);
                                       if (last != peers.end())
                                           found = peers.begin() + (last - peers.begin() + 1) % peers.size();
                                   }
-                                  auto peer = found == peers.end()
-                                                  ? peers[collection_source_cursor_++ % peers.size()]
-                                                  : *found;
-                                  if (std::ranges::count_if(collection_pending_,
-                                                            [&peer](const auto &item) {
-                                                                return item.second.peer == peer;
-                                                            })
-                                      >= 8)
+                                  const auto  start = found == peers.end()
+                                                          ? collection_source_cursor_++ % peers.size()
+                                                          : static_cast<std::size_t>(found - peers.begin());
+                                  std::string peer;
+                                  for (std::size_t offset = 0; offset < peers.size(); ++offset) {
+                                      const auto &candidate = peers[(start + offset) % peers.size()];
+                                      if ((!continuation && sources.attempted.contains(candidate))
+                                          || std::ranges::count_if(collection_pending_,
+                                                                   [&candidate](const auto &item) {
+                                                                       return item.second.peer == candidate;
+                                                                   })
+                                                 >= 8)
+                                          continue;
+                                      peer = candidate;
+                                      break;
+                                  }
+                                  if (peer.empty())
                                       return;
-                                  if (!collection_sources_.contains(link) && collection_sources_.size() >= 4096)
-                                      collection_sources_.erase(collection_sources_.begin());
-                                  collection_sources_[link] = peer;
+                                  sources.last = peer;
+                                  sources.attempted.insert(peer);
                                   target.add_identifier(peer);
                                   target = target.with_new_message_id();
                                   collection_pending_.emplace(target.message_id(),
@@ -1885,21 +1903,23 @@ void DfsService::network_request_collection(const ActorId     &owner,
                           guard_handler("serve collection history", [this, owner, file, responder, after, ticket] {
                               if (ticket->stopped())
                                   return;
-                              auto catalog =
+                              std::vector<HistoricalCollectionRow> rows;
+                              auto                                 catalog =
                                   Dfs::Tables::DirsFile::ActorSpace::get_dir_row(get_db_instance(), owner, file);
-                              if (!catalog.has_value() || catalog.value().type != Dfs::FileType::Collection
-                                  || catalog.value().state == Dfs::FileState::Removed)
-                                  return;
-                              auto chain = HistoricalCollection::load(node,
-                                                                      node->account_controller()->system_actor(),
-                                                                      owner,
-                                                                      file);
-                              if (!chain.has_value())
-                                  return;
-                              const auto page = chain.value().get_historical_rows(after);
-                              if (!page.has_value())
-                                  return;
-                              responder.send_response(std::make_tuple(owner, file, page.value()),
+                              if (catalog.has_value() && catalog.value().type == Dfs::FileType::Collection
+                                  && catalog.value().state != Dfs::FileState::Removed) {
+                                  auto chain =
+                                      HistoricalCollection::load(node,
+                                                                 node->account_controller()->system_actor(),
+                                                                 owner,
+                                                                 file);
+                                  if (chain.has_value()) {
+                                      auto page = chain.value().get_historical_rows(after);
+                                      if (page.has_value())
+                                          rows = std::move(page.value());
+                                  }
+                              }
+                              responder.send_response(std::make_tuple(owner, file, rows),
                                                       MessageType::DfsCollectionHistory,
                                                       SendMode::Focused,
                                                       MessageStatus::Response);
@@ -1949,9 +1969,13 @@ void DfsService::network_response_historical_collection(const ActorId           
                               auto [hash, size] =
                                   Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(owner, file);
                               if (hash == catalog.value().hash && size == catalog.value().size) {
+                                  {
+                                      std::lock_guard lock(request_times_mutex_);
+                                      collection_sources_.erase({ owner, file });
+                                  }
                                   load_manager_.finish_him(owner, catalog.value());
-                              } else if (!rows.empty()) {
-                                  request_collection({ owner, file }, peer, true);
+                              } else {
+                                  request_collection({ owner, file }, peer, !rows.empty());
                               }
                           }));
 }

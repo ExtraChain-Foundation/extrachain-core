@@ -101,9 +101,9 @@ int main() {
     node->account_controller()->create_profile("history-protocol", ActorType::User, owner);
     auto schema = Dfs::CollectionTemplate::create("Items").value();
     schema.add_fields({ Dfs::Field::String("value") });
-    auto file  = node->dfs()->store_collection(owner.id(), owner.id(), "Items", schema).value();
+    auto       file    = node->dfs()->store_collection(owner.id(), owner.id(), "Items", schema).value();
     const auto barrier = node->dfs()->store_collection(owner.id(), owner.id(), "Barrier", schema).value();
-    auto chain = HistoricalCollection::load(node.get(), owner, owner.id(), file.file_id).value();
+    auto       chain   = HistoricalCollection::load(node.get(), owner, owner.id(), file.file_id).value();
     for (unsigned i = 0; i < 130; ++i)
         TEST_REQUIRE(node->dfs()
                          ->add_collection_row(owner.id(), file.file_id, { { "value", std::to_string(i) } })
@@ -221,9 +221,54 @@ int main() {
         auto head = catalog_chain.get_last_row();
         return head.has_value() && head.value().id == 1;
     });
+    const auto fallback_file = node->dfs()->store_collection(owner.id(), owner.id(), "Fallback", schema).value();
+    TEST_REQUIRE(node->dfs()
+                     ->add_collection_row(owner.id(), fallback_file.file_id, { { "value", "fallback" } })
+                     .has_value());
+    auto fallback_chain = HistoricalCollection::load(node.get(), owner, owner.id(), fallback_file.file_id).value();
+    const auto fallback_page = fallback_chain.get_historical_rows().value();
+    std::filesystem::remove(fallback_chain.get_file_path().native());
+    node->dfs()->network_request_collection(owner.id(), fallback_file.file_id, target("missing-history"), 0);
+    const auto unavailable = capture.wait(8);
+    TEST_REQUIRE_EQ(unavailable.first, MessageType::DfsCollectionHistory);
+    TEST_REQUIRE_EQ(unavailable.second,
+                    MessagePack::serialize(HistoryPage { owner.id(), fallback_file.file_id, { } }));
+    node->dfs()->request_collection({ owner.id(), fallback_file.file_id }, std::string(64, 'f'));
+    const auto missing_primary = peer->wait(4);
+    node->dfs()->network_response_historical_collection(owner.id(),
+                                                        fallback_file.file_id,
+                                                        { },
+                                                        target(missing_primary.first));
+    const auto missing_alternative = alternative->wait(2);
+    node->dfs()->network_response_historical_collection(owner.id(),
+                                                        fallback_file.file_id,
+                                                        { },
+                                                        target(missing_alternative.first, std::string(64, 'e')));
+    for (unsigned attempt = 0; attempt < 3; ++attempt)
+        node->dfs()->request_collection({ owner.id(), fallback_file.file_id }, std::string(64, 'f'));
+    node->dfs()->network_request_collection(owner.id(), barrier.file_id, target("bounded-retry-barrier"), 0);
+    TEST_REQUIRE_EQ(capture.wait(9).first, MessageType::DfsCollectionHistory);
+    {
+        std::scoped_lock lock(peer->mutex, alternative->mutex);
+        TEST_REQUIRE_EQ(peer->requests.size(), std::size_t(4));
+        TEST_REQUIRE_EQ(alternative->requests.size(), std::size_t(2));
+    }
+    auto available = std::make_shared<HistoryPeer>(*node, 'd');
+    node->network()->connections()->insert(available);
+    node->dfs()->request_collection({ owner.id(), fallback_file.file_id });
+    const auto recovered = available->wait(1);
+    node->dfs()->network_response_historical_collection(owner.id(),
+                                                        fallback_file.file_id,
+                                                        fallback_page,
+                                                        target(recovered.first, std::string(64, 'd')));
+    wait([&] {
+        auto head = fallback_chain.get_last_row();
+        return head.has_value() && head.value().id == 1;
+    });
     node->network()->connections()->clear();
     peer.reset();
     alternative.reset();
+    available.reset();
     node.reset();
     std::filesystem::current_path(original);
     std::filesystem::remove_all(directory);

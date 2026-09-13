@@ -13,6 +13,8 @@ PUBLICATION = re.compile(
 
 
 def inspect(path, expected_rows, expected_hash):
+    if not path.is_file():
+        raise ValueError(f"Missing history database: {path}")
     source = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
     snapshot = sqlite3.connect(":memory:")
     try:

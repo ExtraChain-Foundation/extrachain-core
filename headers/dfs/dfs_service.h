@@ -365,7 +365,13 @@ public:
         std::chrono::steady_clock::time_point deadline;
     };
     std::map<std::string, CollectionPending> collection_pending_;
-    std::map<Dfs::FileLink, std::string>     collection_sources_;
+    struct CollectionSources {
+        std::string                           last;
+        std::set<std::string>                 attempted;
+        std::uint64_t                         after = 0;
+        std::chrono::steady_clock::time_point started;
+    };
+    std::map<Dfs::FileLink, CollectionSources> collection_sources_;
     std::uint64_t                            collection_source_cursor_ = 0;
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
