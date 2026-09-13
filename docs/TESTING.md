@@ -71,9 +71,13 @@ other — a build is validated when it is clean on both.
 
 Console client (also a stand copy): `--join` creates a local user profile to join an
 existing network; stdin input had to be implemented for UNIX (the stock `startInput()` is
-empty under `Q_OS_UNIX`, so headless command control does not work at all on macOS);
-`reward self N` sends a Reward transaction, which needs no balance for `amount <= 3` —
-Regular transactions are unusable for flooding because nothing can hand out a balance.
+empty under `Q_OS_UNIX`, so headless command control does not work at all on macOS).
+
+Current acceptance uses funded Regular transfers. `extrachain-gen-sections` creates
+an initial Balance allocation and validates each transfer before it writes the fixture.
+Its transfer count excludes the allocation section: use 24,999 transfers to end at
+section 25,000 for a Shadow stand. Legacy self-reported Reward requests are rejected.
+The old `reward self N` workload does not provide a valid synchronization fixture.
 
 Loopback aliases, once per boot:
 
@@ -117,8 +121,8 @@ transaction rate limit so the stand can generate load. Keep them out of every co
 
 **Step 3 — a console entry point.** A headless binary that can create or join a network,
 accept commands on stdin, and log verbosely. Two commands are enough to drive everything:
-add a file to storage, and emit a transaction. Prefer a transaction type that needs no
-balance, otherwise the stand has to bootstrap funds before it can generate any load.
+add a file to storage, and emit a funded transaction. Prepare the initial balance
+before load starts. Validate fixture transactions through the normal proof checks.
 
 **Step 4 — process control.** Launch each node with its own working directory, its own
 log file, and stdin wired to a named pipe opened read-write (so the harness never blocks
