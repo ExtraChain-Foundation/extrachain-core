@@ -41,7 +41,10 @@ namespace ExtraChain::Consensus {
         ContractCall,
         ContractUpgrade,
         TokenMigration,
-        EpochChange
+        EpochChange,
+        StorageRegister,
+        StorageUnregister,
+        StorageProof
     };
 
     enum class IntentStatus : std::uint8_t {

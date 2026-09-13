@@ -108,6 +108,9 @@ namespace ExtraChain::Consensus {
             case IntentOperation::ContractUpgrade:
             case IntentOperation::TokenMigration:
             case IntentOperation::EpochChange:
+            case IntentOperation::StorageRegister:
+            case IntentOperation::StorageUnregister:
+            case IntentOperation::StorageProof:
                 return true;
             }
             return false;
@@ -133,6 +136,12 @@ namespace ExtraChain::Consensus {
                 return TransactionType::TokenMigration;
             case IntentOperation::EpochChange:
                 return TransactionType::EpochChange;
+            case IntentOperation::StorageRegister:
+                return TransactionType::StorageRegister;
+            case IntentOperation::StorageUnregister:
+                return TransactionType::StorageUnregister;
+            case IntentOperation::StorageProof:
+                return TransactionType::StorageProof;
             }
             return std::nullopt;
         }

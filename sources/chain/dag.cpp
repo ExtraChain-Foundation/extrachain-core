@@ -2880,7 +2880,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
                                                         const SectionId                       *validation_frontier,
                                                         const TransactionValidationFacts      *facts,
                                                         bool stage_contract_change) {
-    if (tx.type() == TransactionType::Reward)
+    if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::MiningSettlement
+        || is_mining_request(tx.type()))
         return TransactionProveError::MiningProofRequired;
 
     if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance) {
