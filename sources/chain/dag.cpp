@@ -1199,7 +1199,8 @@ std::expected<SectionId, ExtraChain::Consensus::ConsensusError> Dag::prepare_sha
     std::optional<SectionId> requested_boundary) {
     using ExtraChain::Consensus::ConsensusError;
 
-    if (mode_ != DagMode::Full || status_ != DagStatus::Ready || !state_projection_ready()
+    if (mode_ != DagMode::Full || status_ != DagStatus::Ready
+        || (!requested_boundary.has_value() && !state_projection_ready())
         || shadow_transition_sealed_.exchange(true, std::memory_order_acq_rel)) {
         return std::unexpected(ConsensusError::NotReady);
     }
@@ -1223,7 +1224,7 @@ std::expected<SectionId, ExtraChain::Consensus::ConsensusError> Dag::prepare_sha
 
     // A fresh observer can receive later sections before loading its finality proofs.
     // Replay only the governed prefix; a later cache is not a valid starting point.
-    if (requested_boundary.has_value() && cache_.section() > boundary) {
+    if (requested_boundary.has_value() && (cache_.section() > boundary || !state_projection_ready())) {
         cache_.reset_db();
         if (!cache_.init_db() || cache_.section() != SectionId(-1)) {
             return fail(ConsensusError::StorageFailure);
