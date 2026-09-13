@@ -20,6 +20,7 @@
 #include "chain/transaction.h"
 
 #include "consensus/consensus_protocol.h"
+#include "consensus/mining_transaction.h"
 #include "utils/exc_utils.h"
 
 namespace {
@@ -146,6 +147,8 @@ std::string Transaction::hash_preimage(bool hex) const {
 }
 
 std::string Transaction::calculate_hash() const {
+    if (type_ == TransactionType::MiningSettlement)
+        return ExtraChain::Consensus::mining_settlement_identity(receiver_, section_);
     if (is_contract_transaction(type_)) {
         return Utils::calculate_hash(contract_hash_data(*this));
     }
@@ -154,6 +157,8 @@ std::string Transaction::calculate_hash() const {
 }
 
 std::string Transaction::calculate_hash_hex() const {
+    if (type_ == TransactionType::MiningSettlement)
+        return calculate_hash();
     return Utils::calculate_hash(hash_preimage(true));
 }
 

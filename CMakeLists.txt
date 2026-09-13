@@ -261,6 +261,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_state.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_settlement.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_request.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_transaction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/intent_store.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/light_client.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/balance_snapshot.cpp

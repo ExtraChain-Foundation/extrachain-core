@@ -25,6 +25,7 @@
 #include "network/network_service.h"
 #include "utils/db_connector.h"
 #include "utils/msgpack_limits.h"
+#include "consensus/mining_transaction.h"
 
 #include <msgpack.hpp>
 
@@ -32,7 +33,9 @@ namespace {
     using ContractDelta = std::pair<ActorId, BigNumberFloat>;
 
     bool invalid_spending_balance(const Transaction& transaction, const Balances& balances) {
-        if (transaction.type() == TransactionType::Reward || is_contract_transaction(transaction.type())) {
+        if (transaction.type() == TransactionType::Reward
+            || transaction.type() == TransactionType::MiningSettlement
+            || is_contract_transaction(transaction.type())) {
             return false;
         }
         auto token = transaction.token();
@@ -444,7 +447,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
 
     const auto affects_actors = [&actor_ids](const Transaction& tx) {
         // Contract effects can change accounts outside the transaction endpoints.
-        if (is_contract_transaction(tx.type())) {
+        if (is_contract_transaction(tx.type()) || tx.type() == TransactionType::MiningSettlement) {
             return true;
         }
         for (const auto& actor_id : actor_ids) {
@@ -919,6 +922,13 @@ void DagCache::apply_transaction(const Transaction& tx, Balances& balances, bool
 
     // Skip if transaction doesn't affect balances
     if (tx.type() == TransactionType::Unknown) {
+        return;
+    }
+    if (tx.type() == TransactionType::MiningSettlement) {
+        const auto deltas = ExtraChain::Consensus::mining_settlement_deltas(tx);
+        if (deltas.has_value())
+            for (const auto& [provider, amount] : deltas.value())
+                credit({ provider, TokenId { } }, amount);
         return;
     }
     if (is_contract_transaction(tx.type())) {

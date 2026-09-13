@@ -11,6 +11,8 @@
 #include "consensus/mining_epoch.h"
 #include "consensus/mining_state.h"
 #include "consensus/mining_settlement.h"
+#include "consensus/mining_transaction.h"
+#include "chain/dag_cache.h"
 #include "utils/serialization.h"
 #include "consensus/balance_snapshot.h"
 #include "consensus/validator_set.h"
@@ -396,6 +398,71 @@ int main() {
     check("settlement derives exact payouts from a certified mining root",
           checked_payouts.has_value() && checked_payouts.value() == certified_payouts
               && certified_payouts.at(committee.governance.id().to_string()) == 10);
+    const auto settlement_transaction = make_mining_settlement_transaction(settlement).value();
+    check("native system transaction verifies without an actor mint signature",
+          verify_mining_settlement_transaction(settlement_transaction, committee.governance.id(), mining_verifier)
+                  .value()
+              == certified_payouts);
+    DagCache native_cache(nullptr, nullptr);
+    Balances native_balances;
+    native_cache.process_transaction(settlement_transaction, native_balances);
+    check("native balance replay credits exact ExC units",
+          native_balances.size() == 1
+              && native_balances.at({ committee.governance.id(), ActorId { } })
+                     == BigNumberFloat::create("0.00000010").value());
+    auto  alternative_settlement          = settlement;
+    auto& alternative_certificate         = alternative_settlement.closure.decision_certificate;
+    alternative_certificate.signer_bitmap = { 0x1f };
+    alternative_certificate.signatures.clear();
+    for (std::size_t index = 0; index < 5; ++index) {
+        const auto& validator = committee.view.active()[index];
+        Vote        vote { .network_id   = alternative_certificate.network_id,
+                           .epoch        = alternative_certificate.epoch,
+                           .height       = alternative_certificate.height,
+                           .round        = alternative_certificate.round,
+                           .phase        = alternative_certificate.phase,
+                           .header_hash  = alternative_certificate.header_hash,
+                           .validator_id = validator.validator_id };
+        const auto  signature = committee.keys[committee.index_for(validator.validator_id)].sign(
+            ByteArray(vote_signing_payload(vote)).toBytes());
+        alternative_certificate.signatures.push_back(Utils::to_base64(signature.value()));
+    }
+    const auto alternative_transaction = make_mining_settlement_transaction(alternative_settlement).value();
+    check("different valid quorum subsets cannot change the settlement identity",
+          alternative_transaction.meta() != settlement_transaction.meta()
+              && alternative_transaction.hash() == settlement_transaction.hash()
+              && verify_mining_settlement_transaction(alternative_transaction,
+                                                      committee.governance.id(),
+                                                      mining_verifier)
+                         .value()
+                     == certified_payouts);
+    for (unsigned mutation = 0; mutation < 7; ++mutation) {
+        auto invalid_transaction = settlement_transaction;
+        if (mutation == 0)
+            invalid_transaction.set_amount(BigNumberFloat(1));
+        if (mutation == 1)
+            invalid_transaction.set_sender(committee.governance.id());
+        if (mutation == 2)
+            invalid_transaction.set_token(committee.governance.id());
+        if (mutation == 3)
+            invalid_transaction.set_timestamp(1);
+        if (mutation == 4)
+            invalid_transaction.set_prev_hashs({ "extra-parent" });
+        if (mutation == 5)
+            invalid_transaction.set_section(SectionId(162));
+        if (mutation == 6)
+            invalid_transaction.set_meta(std::string(12 * 1024 * 1024, 'a'));
+        invalid_transaction.update_hash();
+        check("native system transaction rejects altered canonical fields",
+              !verify_mining_settlement_transaction(invalid_transaction,
+                                                    committee.governance.id(),
+                                                    mining_verifier)
+                   .has_value());
+        native_cache.process_transaction(invalid_transaction, native_balances);
+        check("invalid native record has no balance replay effect",
+              native_balances.at({ committee.governance.id(), ActorId { } })
+                  == BigNumberFloat::create("0.00000010").value());
+    }
     check("settlement rejects the wrong section",
           !verify_mining_settlement(settlement, 160, mining_verifier).has_value()
               && !verify_mining_settlement(settlement, 162, mining_verifier).has_value());
