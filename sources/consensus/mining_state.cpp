@@ -1,9 +1,76 @@
 #include "consensus/mining_state.h"
 
-#include "utils/exc_utils.h"
 #include "utils/serialization.h"
 
 namespace ExtraChain::Consensus {
+    namespace {
+        std::string epoch_key(std::uint64_t epoch) {
+            return "epoch:" + fmt::format("{:016x}", epoch);
+        }
+
+        std::string entry_value(std::string_view key, const std::string& value) {
+            return "EXC_MINING_STATE_ENTRY_V2" + MessagePack::serialize(std::tuple { std::string(key), value });
+        }
+
+        bool bounded_epoch(const MiningEpochState& epoch) {
+            if (epoch.network.is_zero() || epoch.datasets.size() > MaximumMiningDatasets
+                || epoch.budget_units > MaximumMiningEmissionUnits
+                || epoch.rewards.size() > MaximumMiningRegistrations
+                || epoch.claimed.size() > MaximumMiningRegistrations
+                || (epoch.challenge.has_value() && epoch.challenge.value().checkpoint.size() != 64))
+                return false;
+            std::size_t providers  = 0;
+            const auto  actor_name = [](const auto& value) {
+                return value.size() == ActorId::SIZE;
+            };
+            for (const auto& [identity, dataset] : epoch.datasets) {
+                if (identity.size() != 64 || dataset.dataset.root.size() != 64
+                    || dataset.providers.size() > MaximumMiningRegistrations - providers
+                    || dataset.accepted.size() > dataset.providers.size()
+                    || !std::ranges::all_of(dataset.providers, actor_name)
+                    || !std::ranges::all_of(dataset.accepted, actor_name))
+                    return false;
+                providers += dataset.providers.size();
+            }
+            return std::ranges::all_of(epoch.rewards,
+                                       [&](const auto& item) {
+                                           return actor_name(item.first);
+                                       })
+                   && std::ranges::all_of(epoch.claimed, actor_name);
+        }
+
+        std::expected<std::map<std::string, std::string>, ConsensusError> state_entries(const MiningState& state) {
+            if (state.network.is_zero() || state.registrations.size() > MaximumMiningDatasets
+                || state.epochs.size() > 8)
+                return std::unexpected(ConsensusError::InvalidIntent);
+            std::map<std::string, std::string> entries;
+            entries.emplace("parameters",
+                            MessagePack::serialize(std::tuple { state.network,
+                                                                state.section,
+                                                                state.reserved_units,
+                                                                state.minted_units }));
+            std::size_t providers = 0;
+            for (const auto& [identity, dataset] : state.registrations) {
+                if (identity.size() != 64 || dataset.dataset.root.size() != 64
+                    || dataset.providers.size() > MaximumMiningRegistrations - providers
+                    || !std::ranges::all_of(dataset.providers, [](const auto& item) {
+                           return item.first.size() == ActorId::SIZE;
+                       }))
+                    return std::unexpected(ConsensusError::DataTooLarge);
+                providers += dataset.providers.size();
+                entries.emplace("registration:" + identity, MessagePack::serialize(dataset));
+            }
+            for (const auto& [epoch, frozen] : state.epochs) {
+                if (epoch != frozen.epoch || frozen.network != state.network || !bounded_epoch(frozen))
+                    return std::unexpected(ConsensusError::InvalidIntent);
+                entries.emplace(epoch_key(epoch), MessagePack::serialize(frozen));
+            }
+            for (auto& [key, value] : entries)
+                value = entry_value(key, value);
+            return entries;
+        }
+    } // namespace
+
     std::expected<MiningState, ConsensusError> create_mining_state(const ActorId& network,
                                                                    std::uint64_t  boundary) {
         if (network.is_zero() || boundary % ShadowSectionInterval != 0
@@ -133,7 +200,42 @@ namespace ExtraChain::Consensus {
     }
 
     std::string mining_state_root(const MiningState& state) {
-        return Utils::calculate_hash("EXC_MINING_STATE_V1" + MessagePack::serialize(state),
-                                     Utils::HashAlgorithm::Blake3);
+        const auto entries = state_entries(state);
+        if (!entries.has_value())
+            return { };
+        std::vector<std::string> values;
+        for (const auto& [key, value] : entries.value())
+            values.push_back(value);
+        return merkle_root(values);
+    }
+
+    std::expected<MiningEpochWitness, ConsensusError> make_mining_epoch_witness(const MiningState& state,
+                                                                                std::uint64_t      epoch) {
+        const auto frozen = state.epochs.find(epoch);
+        if (frozen == state.epochs.end())
+            return std::unexpected(ConsensusError::InvalidEpoch);
+        const auto entries = state_entries(state);
+        if (!entries.has_value())
+            return std::unexpected(entries.error());
+        std::vector<std::string> values;
+        std::size_t              target = 0;
+        for (const auto& [key, value] : entries.value()) {
+            if (key == epoch_key(epoch))
+                target = values.size();
+            values.push_back(value);
+        }
+        const auto proof = make_merkle_proof(values, target);
+        if (!proof.has_value())
+            return std::unexpected(proof.error());
+        return MiningEpochWitness { .epoch = frozen->second, .membership = proof.value() };
+    }
+
+    bool verify_mining_epoch_witness(const MiningEpochWitness& witness, std::string_view state_root) {
+        if (!bounded_epoch(witness.epoch) || witness.membership.leaf_count > MaximumMiningDatasets + 9)
+            return false;
+        return verify_merkle_proof(entry_value(epoch_key(witness.epoch.epoch),
+                                               MessagePack::serialize(witness.epoch)),
+                                   witness.membership,
+                                   state_root);
     }
 } // namespace ExtraChain::Consensus

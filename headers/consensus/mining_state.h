@@ -24,6 +24,17 @@ namespace ExtraChain::Consensus {
     using MiningFinalityReader = std::function<std::expected<FinalityProof, ConsensusError>(std::uint64_t)>;
     using MiningPayouts        = std::map<std::string, std::uint64_t>;
 
+    struct MiningEpochWitness {
+        MiningEpochState epoch;
+        MerkleProof      membership;
+
+        MSGPACK_DEFINE(epoch, membership)
+    };
+
+    std::expected<MiningEpochWitness, ConsensusError> make_mining_epoch_witness(const MiningState& state,
+                                                                                std::uint64_t      epoch);
+    bool verify_mining_epoch_witness(const MiningEpochWitness& witness, std::string_view state_root);
+
     std::expected<MiningState, ConsensusError> create_mining_state(const ActorId& network, std::uint64_t boundary);
     std::expected<void, ConsensusError>        register_storage_provider(MiningState&          state,
                                                                          const ActorId&        provider,
