@@ -123,8 +123,13 @@ int main(int argc, char *argv[]) {
     const auto    mining          = node->consensus()->finalized_mining_state();
     const bool    mining_required = mining_test_flag != nullptr || node->consensus()->native_mining_enabled();
     std::uint64_t mining_paid = 0, mining_settlements = 0;
-    if (mining_required && !mining.has_value())
+    if (mining_required && !mining.has_value()) {
+        std::printf("mining state unavailable: active=%d enabled=%d error=%d\n",
+                    node->consensus()->active(),
+                    node->consensus()->native_mining_enabled(),
+                    static_cast<int>(mining.error()));
         ++total_fail;
+    }
 
     // 1. Section continuity + 2. tx integrity ---------------------------------
     long long sec_ok = 0, sec_missing = 0, tx_total = 0, tx_bad_hash = 0, tx_bad_sig = 0, tx_no_actor = 0;

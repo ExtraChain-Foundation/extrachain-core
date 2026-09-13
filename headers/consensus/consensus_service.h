@@ -203,6 +203,7 @@ namespace ExtraChain::Consensus {
             const QuorumCertificate& parent,
             std::uint64_t            first_section) const;
         [[nodiscard]] std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> local_nonce_frontier() const;
+        std::expected<void, ConsensusError>                                           restore_pending_intents();
         std::expected<void, ConsensusError> expire_pending_intents(const std::map<ActorId, std::uint64_t>& nonces);
         [[nodiscard]] std::expected<std::uint64_t, ConsensusError> next_local_nonce(const ActorId& sender);
         [[nodiscard]] bool                         has_unfinalized_intents() const;
@@ -250,6 +251,7 @@ namespace ExtraChain::Consensus {
         std::unique_ptr<ShadowConsensus>                              consensus_;
         std::unique_ptr<IntentStore>                                  intent_store_;
         IntentPool                                                    intent_pool_;
+        bool                                                          pending_intents_restored_ = false;
         std::map<ActorId, std::uint64_t>                              committed_nonces_;
         std::optional<AppliedCheckpoint>                              applied_checkpoint_;
         std::unique_ptr<PeerAuthenticator>                            authenticator_;

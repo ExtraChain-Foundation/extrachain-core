@@ -9,6 +9,7 @@
 #include "test_support.h"
 #include "utils/exc_utils.h"
 #include "utils/file_io.h"
+#include "utils/db_connector.h"
 
 #include <filesystem>
 #include <memory>
@@ -24,6 +25,9 @@ namespace ExtraChain::Consensus {
             service.intent_store_       = std::make_unique<IntentStore>(service.directory_ / "intent-pool.sqlite");
             TEST_REQUIRE(service.intent_store_->open().has_value());
             service.committed_nonces_ = service.intent_store_->load_committed_nonces().value();
+        }
+        static auto stage(ConsensusService& service, const SectionBatchData& batch) {
+            return service.consensus_->engine().stage_batch(batch);
         }
         static auto project(ConsensusService&        service,
                             const SectionBatchData&  batch,
@@ -472,6 +476,30 @@ int main() {
     TEST_REQUIRE(node->dag()->prove_transaction(unsigned_cancel, { }, nullptr, &frontier)
                  != TransactionProveError::NoError);
     TEST_REQUIRE_EQ(service.finalized_mining_state().value().minted_units, 10);
+    service.deactivate();
+    TEST_REQUIRE(std::filesystem::remove("consensus/identity.msgpack"));
+    {
+        DbConnector database("consensus/safety.sqlite");
+        TEST_REQUIRE(database.open());
+        TEST_REQUIRE(database.query("DELETE FROM consensus_batches WHERE height > 11"));
+    }
+    // An observer can persist certificates before their unfinalized batches arrive.
+    const auto observer_restart = service.activate(network.id());
+    TEST_REQUIRE(observer_restart.has_value() && observer_restart.value());
+    TEST_REQUIRE(service.active() && !service.voting());
+    TEST_REQUIRE_EQ(service.finalized_mining_state().value().minted_units, 10);
+    const auto waiting_nonce = ConsensusStateTestFixture::next_nonce(service, provider.id());
+    TEST_REQUIRE(!waiting_nonce.has_value() && waiting_nonce.error() == ConsensusError::DataUnavailable);
+    TEST_REQUIRE(service.ready_intents(10, 1024 * 1024).empty());
+    TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(12)).has_value());
+    TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(13)).has_value());
+    const auto restored_nonce = ConsensusStateTestFixture::next_nonce(service, provider.id());
+    TEST_REQUIRE(restored_nonce.has_value());
+    TEST_REQUIRE_EQ(restored_nonce.value(), repaired.back().intent.account_nonce + 1);
+    const auto restored_pending = service.ready_intents(10, 1024 * 1024);
+    TEST_REQUIRE_EQ(restored_pending.size(), repaired.size());
+    for (std::size_t index = 0; index < repaired.size(); ++index)
+        TEST_REQUIRE_EQ(hash_intent(restored_pending[index].intent), hash_intent(repaired[index].intent));
     service.deactivate();
     node->cleanUp();
     node.reset();

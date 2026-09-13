@@ -222,54 +222,12 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::InvalidValidator);
             }
         }
-        const auto pending_intents = intent_store_->load_pending();
-        if (!pending_intents.has_value()) {
+        const auto restored = restore_pending_intents();
+        if (!restored.has_value() && restored.error() != ConsensusError::DataUnavailable
+            && restored.error() != ConsensusError::NotReady) {
             consensus_.reset();
             intent_store_.reset();
-            return std::unexpected(pending_intents.error());
-        }
-        const auto nonce_frontier = local_nonce_frontier();
-        if (!nonce_frontier.has_value()) {
-            consensus_.reset();
-            intent_store_.reset();
-            return std::unexpected(nonce_frontier.error());
-        }
-        std::vector<std::string> expired_intents;
-        for (const auto& envelope : pending_intents.value()) {
-            // Certified requests remain on disk until finality, even after their admission window closes.
-            const auto certified = nonce_frontier.value().find(envelope.intent.sender);
-            if (certified != nonce_frontier.value().end() && envelope.intent.account_nonce <= certified->second)
-                continue;
-            const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
-            if (!actor.has_value()) {
-                eWarning("[Shadow] Pending intent {} waits for sender data", hash_intent(envelope.intent));
-                continue;
-            }
-            const auto accepted = intent_pool_.submit(envelope,
-                                                      Utils::to_base64(actor.value().key().public_key()),
-                                                      committed_nonces_[envelope.intent.sender],
-                                                      intent_height());
-            if (!accepted.has_value() && accepted.error() == ConsensusError::IntentExpired) {
-                expired_intents.push_back(hash_intent(envelope.intent));
-            } else if (!accepted.has_value()) {
-                consensus_.reset();
-                intent_store_.reset();
-                intent_pool_ = IntentPool {};
-                return std::unexpected(accepted.error());
-            } else if (!intent_store_->put(envelope).has_value()) {
-                consensus_.reset();
-                intent_store_.reset();
-                intent_pool_ = IntentPool {};
-                return std::unexpected(ConsensusError::StorageFailure);
-            }
-        }
-        if (!expired_intents.empty()) {
-            if (!intent_store_->expire(expired_intents).has_value()) {
-                consensus_.reset();
-                intent_store_.reset();
-                intent_pool_ = IntentPool {};
-                return std::unexpected(ConsensusError::StorageFailure);
-            }
+            return std::unexpected(restored.error());
         }
         authenticator_ = std::make_unique<PeerAuthenticator>(consensus_->engine().validators(),
                                                              consensus_->engine().identity());
@@ -353,6 +311,7 @@ namespace ExtraChain::Consensus {
         relay_context_.reset();
         intent_store_.reset();
         intent_pool_ = IntentPool {};
+        pending_intents_restored_ = false;
         committed_nonces_.clear();
         if (timeout_task_) {
             timeout_task_->cancel();
@@ -1323,6 +1282,9 @@ namespace ExtraChain::Consensus {
             || envelope.intent.network_id != consensus_->engine().validators().document().network_id) {
             return std::unexpected(consensus_ ? ConsensusError::InvalidNetwork : ConsensusError::NotReady);
         }
+        const auto restored = restore_pending_intents();
+        if (!restored.has_value())
+            return std::unexpected(restored.error());
         const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
         if (!actor.has_value()) {
             return std::unexpected(ConsensusError::DataUnavailable);
@@ -1894,6 +1856,8 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !consensus_->engine().safety_state().highest_certificate.has_value()) {
             return;
         }
+        if (!restore_pending_intents().has_value())
+            return;
         const auto nonces = local_nonce_frontier();
         if (!nonces.has_value() || !expire_pending_intents(nonces.value()).has_value())
             return;
@@ -2854,16 +2818,58 @@ namespace ExtraChain::Consensus {
         if (consensus_->configuration().mode == ShadowMode::Finality && highest.has_value()
             && highest.value().phase != Phase::Genesis) {
             const auto proposal = consensus_->engine().proposal_for(highest.value().header_hash);
-            if (!proposal.has_value()
-                || proposal.value().batch.last_section
-                       >= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
-                return std::unexpected(ConsensusError::NotReady);
+            if (!proposal.has_value())
+                return std::unexpected(ConsensusError::DataUnavailable);
+            if (proposal.value().batch.last_section
+                >= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+                return std::unexpected(ConsensusError::InvalidHeight);
             const auto staged = staged_nonces_for(highest.value(), proposal.value().batch.last_section + 1);
             if (!staged.has_value())
                 return std::unexpected(staged.error());
             nonces = staged.value();
         }
         return nonces;
+    }
+
+    std::expected<void, ConsensusError> ConsensusService::restore_pending_intents() {
+        if (pending_intents_restored_)
+            return { };
+        if (!consensus_ || !intent_store_)
+            return std::unexpected(ConsensusError::NotReady);
+        // Observers can restart with certified headers but no unfinalized payloads.
+        // Keep their pending requests on disk until the certified nonce frontier is known.
+        const auto nonce_frontier = local_nonce_frontier();
+        if (!nonce_frontier.has_value())
+            return std::unexpected(nonce_frontier.error());
+        const auto pending_intents = intent_store_->load_pending();
+        if (!pending_intents.has_value())
+            return std::unexpected(pending_intents.error());
+        IntentPool               restored_pool;
+        std::vector<std::string> expired_intents;
+        for (const auto& envelope : pending_intents.value()) {
+            const auto certified = nonce_frontier.value().find(envelope.intent.sender);
+            if (certified != nonce_frontier.value().end() && envelope.intent.account_nonce <= certified->second)
+                continue;
+            const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
+            if (!actor.has_value())
+                return std::unexpected(ConsensusError::DataUnavailable);
+            const auto accepted = restored_pool.submit(envelope,
+                                                       Utils::to_base64(actor.value().key().public_key()),
+                                                       committed_nonces_[envelope.intent.sender],
+                                                       intent_height());
+            if (!accepted.has_value() && accepted.error() == ConsensusError::IntentExpired)
+                expired_intents.push_back(hash_intent(envelope.intent));
+            else if (!accepted.has_value())
+                return std::unexpected(accepted.error());
+        }
+        if (!expired_intents.empty()) {
+            const auto expired = intent_store_->expire(expired_intents);
+            if (!expired.has_value())
+                return std::unexpected(expired.error());
+        }
+        intent_pool_              = std::move(restored_pool);
+        pending_intents_restored_ = true;
+        return { };
     }
 
     std::expected<void, ConsensusError> ConsensusService::expire_pending_intents(
@@ -2881,6 +2887,9 @@ namespace ExtraChain::Consensus {
     }
 
     std::expected<std::uint64_t, ConsensusError> ConsensusService::next_local_nonce(const ActorId& sender) {
+        const auto restored = restore_pending_intents();
+        if (!restored.has_value())
+            return std::unexpected(restored.error());
         const auto nonces = local_nonce_frontier();
         if (!nonces.has_value())
             return std::unexpected(nonces.error());
