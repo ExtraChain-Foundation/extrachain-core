@@ -348,6 +348,14 @@ set_tests_properties(historical-protocol PROPERTIES TIMEOUT 60)
 
 add_test(NAME shadow-history-audit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/shadow_history_audit.py)
 
+add_core_test_executable(extrachain-merkle-stream merkle_stream.cpp)
+add_test(NAME merkle-stream COMMAND extrachain-merkle-stream)
+set_tests_properties(merkle-stream PROPERTIES TIMEOUT 30)
+
+add_core_test_executable(extrachain-storage-proof storage_proof.cpp)
+add_test(NAME storage-proof COMMAND extrachain-storage-proof)
+set_tests_properties(storage-proof PROPERTIES TIMEOUT 30)
+
 add_test(NAME funded-sync COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/funded_sync.py
     $<TARGET_FILE:extrachain-gen-sections> $<TARGET_FILE:extrachain-node-run>)
 set_tests_properties(funded-sync PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)

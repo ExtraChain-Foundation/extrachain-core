@@ -1,0 +1,66 @@
+#include "consensus/consensus_protocol.h"
+#include "test_support.h"
+
+#include <algorithm>
+#include <bit>
+#include <map>
+#include <vector>
+
+using namespace ExtraChain::Consensus;
+
+int main() {
+    for (const std::size_t count : { 1, 2, 3, 5, 8, 15, 16, 17, 63, 64, 65, 1025 }) {
+        std::vector<std::string> values;
+        for (std::size_t index = 0; index < count; ++index)
+            values.push_back("value_" + std::to_string(index));
+        std::vector<std::uint64_t> targets;
+        for (std::size_t index = 0; index < count; index += std::max<std::size_t>(1, count / 8))
+            targets.push_back(index);
+        if (targets.back() != count - 1)
+            targets.push_back(count - 1);
+        std::vector<std::string> emitted;
+        const auto               read = [&](std::uint64_t index) -> std::expected<std::string, ConsensusError> {
+            return values.at(index);
+        };
+        const auto stream = build_merkle_tree(count, read, targets, [&](auto begin, auto height, auto hash) {
+            const auto end    = begin + (std::uint64_t(1) << height);
+            const auto offset = 2 * end - std::popcount(end) - (std::countr_zero(end) - height) - 1;
+            TEST_REQUIRE_EQ(offset, std::uint64_t(emitted.size()));
+            emitted.emplace_back(hash);
+            return true;
+        });
+        TEST_REQUIRE(stream.has_value());
+        TEST_REQUIRE_EQ(stream.value().root, merkle_root(values));
+        TEST_REQUIRE_EQ(emitted.size(), 2 * count - std::popcount(count));
+        TEST_REQUIRE_EQ(stream.value().proofs.size(), targets.size());
+        for (std::size_t index = 0; index < targets.size(); ++index) {
+            auto        expected = make_merkle_proof(values, targets[index]).value();
+            const auto& actual   = stream.value().proofs[index];
+            TEST_REQUIRE_EQ(actual.leaf_index, expected.leaf_index);
+            TEST_REQUIRE_EQ(actual.leaf_count, expected.leaf_count);
+            TEST_REQUIRE_EQ(actual.leaf_hash, expected.leaf_hash);
+            TEST_REQUIRE_EQ(actual.siblings, expected.siblings);
+            TEST_REQUIRE(verify_merkle_proof(values[targets[index]], actual, stream.value().root));
+        }
+        TEST_REQUIRE_EQ(build_merkle_tree(count, read).value().root, stream.value().root);
+        TEST_REQUIRE(!build_merkle_tree(count, read, { count }).has_value());
+        TEST_REQUIRE(!build_merkle_tree(count, read, { 0, 0 }).has_value());
+        TEST_REQUIRE(!build_merkle_tree(count, read, { }, [](auto, auto, auto) {
+                          return false;
+                      }).has_value());
+    }
+    const auto reader = [](std::uint64_t) -> std::expected<std::string, ConsensusError> {
+        return "value";
+    };
+    TEST_REQUIRE(!build_merkle_tree(0, reader).has_value());
+    TEST_REQUIRE(!build_merkle_tree(UINT64_MAX, reader).has_value());
+    TEST_REQUIRE(!build_merkle_tree(1, [](auto) -> std::expected<std::string, ConsensusError> {
+                      return std::unexpected(ConsensusError::DataUnavailable);
+                  }).has_value());
+    std::vector<std::string> values { "one", "two", "three", "four" };
+    auto                     false_count = make_merkle_proof(values, 2).value();
+    false_count.leaf_count               = 3;
+    TEST_REQUIRE(!verify_merkle_proof("three", false_count, merkle_root(values)));
+    false_count.leaf_count = UINT64_MAX;
+    TEST_REQUIRE(!verify_merkle_proof("three", false_count, merkle_root(values)));
+}

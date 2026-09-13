@@ -254,6 +254,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/relay_transport.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_engine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_protocol.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/storage_proof.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/intent_store.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/light_client.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/balance_snapshot.cpp

@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -412,6 +413,19 @@ namespace ExtraChain::Consensus {
     EXTRACHAIN_EXPORT std::expected<MerkleProof, ConsensusError> make_merkle_proof(
         const std::vector<std::string>& values,
         std::size_t                     index);
+    struct MerkleTreeResult {
+        std::string              root;
+        std::vector<MerkleProof> proofs;
+    };
+    // The reader supplies one value at a time. The optional sink receives each
+    // complete subtree for a persistent index; incomplete padding is not emitted.
+    using MerkleValueReader = std::function<std::expected<std::string, ConsensusError>(std::uint64_t)>;
+    using MerkleNodeSink    = std::function<bool(std::uint64_t, std::uint32_t, std::string_view)>;
+    EXTRACHAIN_EXPORT std::expected<MerkleTreeResult, ConsensusError> build_merkle_tree(
+        std::uint64_t                     leaves,
+        const MerkleValueReader&          reader,
+        const std::vector<std::uint64_t>& targets = { },
+        const MerkleNodeSink&             sink    = { });
     EXTRACHAIN_EXPORT bool verify_merkle_proof(std::string_view   value,
                                                const MerkleProof& proof,
                                                std::string_view   expected_root);

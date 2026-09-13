@@ -517,8 +517,88 @@ namespace ExtraChain::Consensus {
         return proof;
     }
 
+    std::expected<MerkleTreeResult, ConsensusError> build_merkle_tree(std::uint64_t                     leaves,
+                                                                      const MerkleValueReader&          reader,
+                                                                      const std::vector<std::uint64_t>& targets,
+                                                                      const MerkleNodeSink&             sink) {
+        if (leaves == 0 || leaves > (std::uint64_t(1) << 32) || !reader || targets.size() > 16
+            || std::set<std::uint64_t>(targets.begin(), targets.end()).size() != targets.size()
+            || std::ranges::any_of(targets, [leaves](auto index) {
+                   return index >= leaves;
+               }))
+            return std::unexpected(ConsensusError::InvalidProof);
+        struct TreeNode {
+            std::string   hash;
+            std::uint64_t begin;
+            std::uint64_t count;
+            std::uint32_t height;
+        };
+        MerkleTreeResult result;
+        for (auto target : targets)
+            result.proofs.push_back(MerkleProof { .leaf_index = target, .leaf_count = leaves });
+        std::array<std::optional<TreeNode>, 33> frontier;
+        bool                                    stored = true;
+        const auto                              emit   = [&](const TreeNode& node) {
+            if (sink && node.count == (std::uint64_t(1) << node.height))
+                stored = stored && sink(node.begin, node.height, node.hash);
+        };
+        const auto join = [&](const TreeNode& left, const TreeNode& right, bool duplicate) {
+            for (auto& proof : result.proofs) {
+                if (proof.leaf_index >= left.begin && proof.leaf_index - left.begin < left.count)
+                    proof.siblings.push_back(right.hash);
+                else if (!duplicate && proof.leaf_index >= right.begin
+                         && proof.leaf_index - right.begin < right.count)
+                    proof.siblings.push_back(left.hash);
+            }
+            TreeNode parent { merkle_parent(left.hash, right.hash),
+                              left.begin,
+                              duplicate ? left.count : left.count + right.count,
+                              left.height + 1 };
+            emit(parent);
+            return parent;
+        };
+        for (std::uint64_t index = 0; index < leaves; ++index) {
+            const auto value = reader(index);
+            if (!value.has_value())
+                return std::unexpected(value.error());
+            if (value.value().size() > 1024 * 1024)
+                return std::unexpected(ConsensusError::DataTooLarge);
+            TreeNode current { merkle_leaf(value.value()), index, 1, 0 };
+            emit(current);
+            for (auto& proof : result.proofs)
+                if (proof.leaf_index == index)
+                    proof.leaf_hash = current.hash;
+            while (frontier[current.height].has_value()) {
+                const auto height = current.height;
+                current           = join(frontier[height].value(), current, false);
+                frontier[height].reset();
+            }
+            if (!stored)
+                return std::unexpected(ConsensusError::StorageFailure);
+            frontier[current.height] = std::move(current);
+        }
+        std::optional<TreeNode> root;
+        for (std::uint32_t height = 0; height < frontier.size(); ++height) {
+            if (!frontier[height].has_value())
+                continue;
+            if (!root.has_value())
+                root = std::move(frontier[height].value());
+            else {
+                while (root.value().height < height)
+                    root = join(root.value(), root.value(), true);
+                root = join(frontier[height].value(), root.value(), false);
+            }
+        }
+        if (!stored || !root.has_value())
+            return std::unexpected(ConsensusError::StorageFailure);
+        result.root = root.value().hash;
+        return result;
+    }
+
     bool verify_merkle_proof(std::string_view value, const MerkleProof& proof, std::string_view expected_root) {
-        if (proof.leaf_count == 0 || proof.leaf_index >= proof.leaf_count
+        if (proof.leaf_count == 0 || proof.leaf_index >= proof.leaf_count || proof.siblings.size() > 64
+            || expected_root.size() != 64 || proof.leaf_hash.size() != 64
+            || std::ranges::any_of(proof.siblings, [](const auto& hash) { return hash.size() != 64; })
             || proof.leaf_hash != merkle_leaf(value)) {
             return false;
         }
@@ -530,10 +610,12 @@ namespace ExtraChain::Consensus {
             if (sibling_index >= proof.siblings.size()) {
                 return false;
             }
+            if (position % 2 == 0 && position + 1 == width && proof.siblings[sibling_index] != hash)
+                return false;
             hash = position % 2 == 0 ? merkle_parent(hash, proof.siblings[sibling_index])
                                      : merkle_parent(proof.siblings[sibling_index], hash);
             position /= 2;
-            width = (width + 1) / 2;
+            width = width / 2 + width % 2;
             ++sibling_index;
         }
         return sibling_index == proof.siblings.size() && hash == expected_root;
