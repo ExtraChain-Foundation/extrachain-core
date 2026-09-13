@@ -101,6 +101,30 @@ int main() {
         std::filesystem::temp_directory_path() / ("extrachain-dfs-recovery-" + Utils::generate_random_hex(8));
     std::filesystem::create_directories(directory);
     std::filesystem::current_path(directory);
+    {
+        const auto sparse = FsPath::create(std::string_view("sparse-fragment")).value();
+#ifdef _WIN32
+        constexpr std::uint64_t offset = 8 * 1024 * 1024;
+#else
+        constexpr std::uint64_t offset = std::uint64_t(512) * 1024 * 1024 * 1024;
+#endif
+        TEST_REQUIRE(Utils::write_file_chunk(sparse, "tail", offset).has_value());
+        TEST_REQUIRE_EQ(sparse.file_size().value(), offset + 4);
+        TEST_REQUIRE(Utils::write_file_chunk(sparse, "head", 0).has_value());
+        std::ifstream       input(sparse.native(), std::ios::binary);
+        std::array<char, 5> head { };
+        input.read(head.data(), head.size());
+        TEST_REQUIRE_EQ(std::string_view(head.data(), 4), "head");
+        TEST_REQUIRE_EQ(head.back(), '\0');
+        input.seekg(offset);
+        std::array<char, 4> tail { };
+        input.read(tail.data(), tail.size());
+        TEST_REQUIRE_EQ(std::string_view(tail.data(), tail.size()), "tail");
+        TEST_REQUIRE(!Utils::write_file_chunk(sparse, "x", std::numeric_limits<std::uint64_t>::max()).has_value());
+        TEST_REQUIRE_EQ(sparse.file_size().value(), offset + 4);
+        input.close();
+        std::filesystem::remove(sparse.native());
+    }
     auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, true, 0);
     node->process();
     Actor<KeyPrivate> owner;

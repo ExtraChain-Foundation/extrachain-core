@@ -794,6 +794,11 @@ std::expected<void, Utils::FileError> Utils::write_file_chunk(const FsPath      
                                                               uint64_t               offset) {
     using FileError = Utils::FileError;
 
+    constexpr auto maximum_offset = static_cast<std::uint64_t>(std::numeric_limits<std::streamoff>::max());
+    if (offset > maximum_offset || data.size() > maximum_offset - offset) {
+        return std::unexpected(FileError::InvalidInput);
+    }
+
     // Check if file path is valid
     const auto path_str = file_path.string();
     if (!path_str.has_value()) {
@@ -801,18 +806,7 @@ std::expected<void, Utils::FileError> Utils::write_file_chunk(const FsPath      
         return std::unexpected(FileError::InvalidInput);
     }
 
-    // Check if we have write permissions for the file or its parent directory if file doesn't exist
-    auto exists = file_path.exists();
-    if (exists) {
-        // File exists - check write permissions
-        // auto parent = file_path.parent_path();
-        // if (!parent.has_value()) {
-        //     eLog("Failed to get parent path");
-        //     return std::unexpected(FileError::OpenError);
-        // }
-    }
-
-    // Open file in appropriate mode
+    const auto   exists = file_path.exists();
     std::fstream file;
     file.open(path_str.value(), std::ios::in | std::ios::out | std::ios::binary);
 
@@ -840,37 +834,7 @@ std::expected<void, Utils::FileError> Utils::write_file_chunk(const FsPath      
         return std::unexpected(FileError::OpenError);
     }
 
-    // Get current file size
-    file.seekg(0, std::ios::end);
-    if (file.fail()) {
-        eLog("Failed to seek to end of file");
-        return std::unexpected(FileError::SeekError);
-    }
-
-    const auto file_size = file.tellg();
-    if (file_size == -1) {
-        eLog("Failed to get file size");
-        return std::unexpected(FileError::ReadError);
-    }
-
-    // Handle different offset cases
-    if (offset > static_cast<uint64_t>(file_size)) {
-        // Need to pad with zeros
-        file.seekp(file_size, std::ios::beg);
-        if (file.fail()) {
-            eLog("Failed to seek to file_size position");
-            return std::unexpected(FileError::SeekError);
-        }
-
-        const std::vector<char> padding(offset - file_size, '\0');
-        file.write(padding.data(), padding.size());
-        if (file.fail()) {
-            eLog("Failed to write padding");
-            return std::unexpected(FileError::WriteError);
-        }
-    }
-
-    // Seek to the target position
+    // Seeking past EOF leaves a zero-filled gap without allocating it in memory.
     file.seekp(offset, std::ios::beg);
     if (file.fail()) {
         eLog("Failed to seek to target position");
