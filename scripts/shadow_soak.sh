@@ -48,6 +48,11 @@ SEED="${1:-/tmp/gen-shadow-seed}"
 BASE_PORT="${2:-17840}"
 SENDERS="${EXC_SHADOW_SENDERS:-4}"
 PER_SENDER="${EXC_SHADOW_PER_SENDER:-32}"
+WAVES="${EXC_SHADOW_WAVES:-1}"
+if ! [[ "$WAVES" =~ ^[1-9][0-9]{0,2}$ ]] || [ "$WAVES" -gt 256 ]; then
+    printf "Invalid EXC_SHADOW_WAVES: expected 1..256\n" >&2
+    exit 64
+fi
 RUN_SECONDS="${EXC_SHADOW_RUN_SECONDS:-240}"
 RECOVERY_SECONDS="${EXC_SHADOW_RECOVERY_SECONDS:-60}"
 if [ -n "${EXC_SHADOW_MINING_TEST+x}" ] && [ "$EXC_SHADOW_MINING_TEST" != 1 ]; then
@@ -437,8 +442,8 @@ fi
 # Spreading intents keeps every sender under maximum_sender_intents, and gives the
 # state machine several independent nonce sequences to interleave — which is the
 # condition the state_commitment defect is expected to need.
-TOTAL_INTENTS=$((SENDERS * PER_SENDER))
-log "=== committee: $SENDERS senders x $PER_SENDER intents = $TOTAL_INTENTS ==="
+TOTAL_INTENTS=$((SENDERS * PER_SENDER * WAVES))
+log "=== committee: $SENDERS senders x $PER_SENDER intents x $WAVES waves = $TOTAL_INTENTS ==="
 mkdir -p "$BARRIER"
 # In the seed only node 0's actor holds funds, so with several senders node 0
 # must first transfer to the other senders' actors; EXC_FUND_NODES drives the

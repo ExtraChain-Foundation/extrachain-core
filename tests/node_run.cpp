@@ -228,6 +228,27 @@ int main(int argc, char* argv[]) {
         if (mining_test_flag != nullptr && std::string_view(mining_test_flag) != "1")
             return 64;
         const bool mining_test = mining_test_flag != nullptr;
+        const auto parse_wave_option = [](const char* name, std::size_t fallback) -> std::optional<std::size_t> {
+            const char* raw = std::getenv(name);
+            if (raw == nullptr)
+                return fallback;
+            std::string_view text(raw);
+            std::size_t      value  = 0;
+            const auto       parsed = std::from_chars(text.data(), text.data() + text.size(), value);
+            if (text.empty() || parsed.ec != std::errc { } || parsed.ptr != text.data() + text.size())
+                return std::nullopt;
+            return value;
+        };
+        const auto wave_option   = parse_wave_option("EXC_SHADOW_WAVES", 1);
+        const auto resume_option = parse_wave_option("EXC_SHADOW_RESUME_WAVE", 0);
+        const bool resumed       = std::getenv("EXC_SHADOW_RESUME_WAVE") != nullptr;
+        if (!wave_option.has_value() || !resume_option.has_value() || wave_option.value() < 1
+            || wave_option.value() > 256 || resume_option.value() >= wave_option.value()
+            || (wave_option.value() > 1
+                && (barrier_directory.empty() || !stay_until_deadline || intent_count > 64)))
+            return 64;
+        const auto wave_count = wave_option.value();
+        auto       wave       = resume_option.value();
         if ((role != "seed" && role != "joiner")
             || (node_count != ShadowCommitteeSize && node_count != ShadowCommitteeSize + 1)
             || node_index >= node_count || run_seconds < 10 || first_intent_nonce == 0
@@ -523,7 +544,8 @@ int main(int argc, char* argv[]) {
         if (intent_count > 0
             && (receiver.is_zero()
                 || funding_nonces > std::numeric_limits<std::uint64_t>::max() - first_intent_nonce
-                || intent_count - 1
+                || intent_count > std::numeric_limits<std::uint64_t>::max() / wave_count
+                || intent_count * wave_count - 1
                        > std::numeric_limits<std::uint64_t>::max() - first_intent_nonce - funding_nonces)) {
             node->cleanUp();
             return 5;
@@ -533,8 +555,9 @@ int main(int argc, char* argv[]) {
             const auto index = submitted_hashes.size();
             if (index >= intent_count)
                 return true;
-            const auto metadata = "shadow-live-intent-" + std::to_string(index);
-            const auto nonce    = funding_nonces + first_intent_nonce + index;
+            const auto ordinal  = wave * intent_count + index;
+            const auto metadata = "shadow-live-intent-" + std::to_string(ordinal);
+            const auto nonce    = funding_nonces + first_intent_nonce + ordinal;
             const auto intent   = make_intent(
                 TransactionIntentV2 {
                     .network_id           = node->network_id(),
@@ -556,7 +579,7 @@ int main(int argc, char* argv[]) {
             const auto submitted_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                              std::chrono::steady_clock::now().time_since_epoch())
                                              .count();
-            const auto submitted = mining_test
+            const auto submitted = (mining_test || wave_count > 1)
                                        ? node->consensus()->submit_local_intent(intent.value(), metadata, sender)
                                        : node->consensus()->submit_intent(IntentEnvelope {
                                              .intent   = intent.value(),
@@ -576,13 +599,59 @@ int main(int argc, char* argv[]) {
             return true;
         };
 
+        const auto mark_wave_loaded = [&]() {
+            return barrier_directory.empty()
+                   || FileIo::write_atomic(barrier_directory
+                                               / ("loaded-wave-" + std::to_string(wave) + "-"
+                                                  + std::to_string(node_index)),
+                                           "ok")
+                          .has_value();
+        };
+        const auto record_wave_file = [&](const Dfs::DirRow& row) {
+            if (barrier_directory.empty())
+                return true;
+            const DbRow record { { "owner", row.owner_id.to_string() },
+                                 { "file_id", row.file_id },
+                                 { "size", std::to_string(row.size) },
+                                 { "wave", std::to_string(wave) } };
+            return FileIo::write_atomic(barrier_directory
+                                            / ("published-wave-" + std::to_string(wave) + "-"
+                                               + std::to_string(node_index) + ".json"),
+                                        Json::serialize(record))
+                .has_value();
+        };
+        const auto publish_wave_file = [&]() {
+            const auto bytes = parse_wave_option("EXC_DFS_BYTES", 0);
+            if (!bytes.has_value() || bytes.value() == 0 || bytes.value() > 16 * 1024 * 1024)
+                return false;
+            std::vector<std::uint8_t> payload(bytes.value());
+            for (std::size_t index = 0; index < payload.size(); ++index)
+                payload[index] = static_cast<std::uint8_t>(
+                    (index * (131U + node_index) + 17U + node_index * 7U + wave) & 0xffU);
+            const auto owner = sender.id();
+            const auto row   = node->dfs()->store_data_as_file(owner,
+                                                               owner,
+                                                               std::move(payload),
+                                                               "soak",
+                                                               "node-" + std::to_string(node_index) + "-wave-"
+                                                                   + std::to_string(wave) + ".bin");
+            if (!row.has_value() || !record_wave_file(row.value()))
+                return false;
+            std::printf("[node-run] DFS wave=%zu owner=%s file_id=%s size=%zu\n",
+                        wave,
+                        owner.to_string().c_str(),
+                        row.value().file_id.c_str(),
+                        row.value().size);
+            std::fflush(stdout);
+            return true;
+        };
         // Optional ExDFS load: every committee node publishes one file of
         // EXC_DFS_BYTES bytes while consensus runs, so the harness can check that
         // content replicates across the whole mesh — through chaos included. The
         // payload is deterministic per node, so a corrupt copy is told from a
         // missing one.
         if (const char* dfs_bytes_env = std::getenv("EXC_DFS_BYTES");
-            dfs_bytes_env != nullptr && std::strtoull(dfs_bytes_env, nullptr, 10) > 0) {
+            !resumed && dfs_bytes_env != nullptr && std::strtoull(dfs_bytes_env, nullptr, 10) > 0) {
             const auto dfs_bytes = static_cast<std::size_t>(std::strtoull(dfs_bytes_env, nullptr, 10));
             std::vector<std::uint8_t> payload(dfs_bytes);
             for (std::size_t index = 0; index < payload.size(); ++index) {
@@ -597,6 +666,10 @@ int main(int argc, char* argv[]) {
                                                              "node-" + std::to_string(node_index) + ".bin");
             if (!row.has_value()) {
                 std::printf("[node-run] DFS store failed (error %d)\n", static_cast<int>(row.error()));
+                node->cleanUp();
+                return 5;
+            }
+            if (!record_wave_file(row.value())) {
                 node->cleanUp();
                 return 5;
             }
@@ -650,7 +723,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (const char* rows_env = std::getenv("EXC_DFS_HISTORY_ROWS");
-            rows_env != nullptr && std::strtoull(rows_env, nullptr, 10) >= 3) {
+            !resumed && rows_env != nullptr && std::strtoull(rows_env, nullptr, 10) >= 3) {
             const auto count  = std::min<std::size_t>(10000, std::strtoull(rows_env, nullptr, 10));
             const auto owner  = node->account_controller()->system_actor().id();
             auto       schema = Dfs::CollectionTemplate::create("HistoryItems").value();
@@ -717,7 +790,7 @@ int main(int argc, char* argv[]) {
             node->cleanUp();
             return 64;
         }
-        if (configured_rows.value() != 0) {
+        if (!resumed && configured_rows.value() != 0) {
             const auto  row_count           = static_cast<std::size_t>(configured_rows.value());
             const auto  payload_bytes       = configured_payload.value();
             const auto& owner     = node->account_controller()->system_actor().id();
@@ -887,24 +960,28 @@ int main(int argc, char* argv[]) {
         }
 
         // Every ExDFS load phase (file, vector, cross-writes) is over: tell the
-        // stand. A chaos agent that hits before this cuts a publication short, and
+        // stand. A fault controller that hits before this cuts a publication short, and
         // a node it relaunches has none of the load knobs, so the vector would
         // never exist anywhere — a harness artifact, not a finding.
-        if (!barrier_directory.empty()) {
+        if (!resumed && !barrier_directory.empty()) {
             (void)FileIo::write_atomic(barrier_directory / ("loaded-" + std::to_string(node_index)), "ok");
         }
 
-        while (submitted_hashes.size() < intent_count) {
+        while (!resumed && submitted_hashes.size() < intent_count) {
             if (!submit_next_intent()) {
                 node->cleanUp();
                 return 5;
             }
         }
-        if (intent_count > 0) {
+        if (!resumed && intent_count > 0) {
             std::printf("[node-run] submitted intents=%zu\n", submitted_hashes.size());
             std::fflush(stdout);
         }
 
+        if (!resumed && !mark_wave_loaded()) {
+            node->cleanUp();
+            return 5;
+        }
         const auto run_deadline          = std::chrono::steady_clock::now() + std::chrono::seconds(run_seconds);
         bool       all_finalized         = submitted_hashes.empty();
         bool       finalization_reported = false;
@@ -952,12 +1029,45 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
+            if (wave_count > 1 && all_finalized) {
+                const auto request = FileIo::read_all(barrier_directory / "wave");
+                if (request.has_value()) {
+                    std::size_t next_wave = 0;
+                    const auto& text      = request.value();
+                    const auto  parsed    = std::from_chars(text.data(), text.data() + text.size(), next_wave);
+                    if (text.empty() || text.size() > 3 || parsed.ec != std::errc { }
+                        || parsed.ptr != text.data() + text.size() || next_wave >= wave_count
+                        || next_wave > wave + 1) {
+                        node->cleanUp();
+                        return 5;
+                    }
+                    if (next_wave == wave + 1) {
+                        wave = next_wave;
+                        if (!publish_wave_file()) {
+                            node->cleanUp();
+                            return 5;
+                        }
+                        submitted_hashes.clear();
+                        finalization_reported = false;
+                        while (submitted_hashes.size() < intent_count)
+                            if (!submit_next_intent()) {
+                                node->cleanUp();
+                                return 5;
+                            }
+                        all_finalized = submitted_hashes.empty();
+                        if (!mark_wave_loaded()) {
+                            node->cleanUp();
+                            return 5;
+                        }
+                    }
+                }
+            }
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
         const auto metrics    = node->consensus()->metrics();
         const bool progressed = metrics.certificates > 0 && metrics.finalized > 0;
         node->cleanUp();
-        return progressed && all_finalized ? 0 : 6;
+        return progressed && all_finalized && wave + 1 == wave_count ? 0 : 6;
     }
 
     if (mode == "serve") {
