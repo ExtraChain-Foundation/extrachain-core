@@ -602,7 +602,8 @@ public:
                               const std::vector<ExtraChain::Consensus::IntentEnvelope> &intents,
                               std::string                                               header_hash,
                               std::optional<std::string> previous_section_bytes = std::nullopt,
-                              std::string                previous_section_root  = {});
+                              std::string                previous_section_root  = { },
+                              std::optional<Transaction> settlement             = std::nullopt);
     std::expected<std::string, ExtraChain::Consensus::ConsensusError> shadow_batch_section_root(
         const ExtraChain::Consensus::SectionBatchData &batch) const;
     std::vector<Transaction> unprovable_batch_transactions(const ExtraChain::Consensus::SectionBatchData &batch,

@@ -23,6 +23,7 @@
 
 #include "consensus/peer_authenticator.h"
 #include "consensus/balance_snapshot.h"
+#include "consensus/mining_replay.h"
 #include "consensus/relay_transport.h"
 #include "consensus/intent_store.h"
 #include "consensus/shadow_consensus.h"
@@ -99,6 +100,7 @@ namespace ExtraChain::Consensus {
         std::expected<BalanceSnapshotV1, ConsensusError> balance_snapshot() const;
         bool accept_balance_snapshot(const BalanceSnapshotV1& snapshot);
 
+        [[nodiscard]] bool verify_mining_transaction(const Transaction& transaction) const;
         [[nodiscard]] bool active() const noexcept;
         [[nodiscard]] bool voting() const noexcept;
         [[nodiscard]] bool controls_section(std::uint64_t section) const;
@@ -200,6 +202,27 @@ namespace ExtraChain::Consensus {
         bool accept_light_history(const BootstrapHistoryPageV1& page);
         void request_light_history();
         std::expected<LightClientVerifier, ConsensusError> load_light_verifier() const;
+
+        struct MiningSnapshot {
+            std::string header_hash;
+            MiningState state;
+            MSGPACK_DEFINE(header_hash, state)
+        };
+        std::expected<const LightClientVerifier*, ConsensusError> mining_verifier() const;
+        std::expected<FinalityProof, ConsensusError>              mining_finality(std::uint64_t section) const;
+        std::expected<void, ConsensusError>                       initialize_mining_state() const;
+        std::expected<MiningState, ConsensusError>                mining_state_for(const QuorumCertificate& parent,
+                                                                                   std::size_t              depth = 0) const;
+        std::expected<MiningState, ConsensusError> project_mining_state(const SectionBatchData&  batch,
+                                                                        const QuorumCertificate& parent) const;
+        std::expected<void, ConsensusError>        persist_mining_state(const FinalityProof&    proof,
+                                                                        const SectionBatchData& batch);
+        std::expected<std::optional<Transaction>, ConsensusError> next_mining_settlement(
+            const MiningState& parent,
+            std::uint64_t      first_section) const;
+        mutable std::optional<LightClientVerifier> mining_verifier_;
+        mutable std::optional<MiningSnapshot>      finalized_mining_;
+        mutable std::map<std::string, MiningState> staged_mining_;
 
         Core::ExtraChainNode&                                         node_;
         std::optional<LightClientVerifier>                            light_verifier_;

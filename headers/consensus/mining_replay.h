@@ -16,4 +16,13 @@ namespace ExtraChain::Consensus {
         const SectionBatchData&                    batch,
         const MiningFinalityReader&                read_finality,
         const LightClientVerifier&                 verifier);
+    // Reports a request that cannot apply at its assigned section. Consensus or missing-data errors leave it
+    // empty.
+    std::expected<MiningState, ConsensusError> replay_mining_batch(
+        MiningState                                state,
+        const std::optional<MiningEmissionPolicy>& policy,
+        const SectionBatchData&                    batch,
+        const MiningFinalityReader&                read_finality,
+        const LightClientVerifier&                 verifier,
+        std::string*                               invalid_request);
 } // namespace ExtraChain::Consensus

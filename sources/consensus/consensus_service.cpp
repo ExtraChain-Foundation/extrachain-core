@@ -329,6 +329,9 @@ namespace ExtraChain::Consensus {
         intent_batch_task_.reset();
         consensus_.reset();
         applied_checkpoint_.reset();
+        finalized_mining_.reset();
+        staged_mining_.clear();
+        mining_verifier_.reset();
         latest_proposal_.reset();
         latest_certificate_.reset();
         latest_timeout_certificate_.reset();
@@ -1410,6 +1413,14 @@ namespace ExtraChain::Consensus {
             }
             batch = std::move(rebuilt.value());
         }
+        const auto initialized_mining = initialize_mining_state();
+        if (!initialized_mining.has_value())
+            return std::unexpected(initialized_mining.error());
+        const auto mining = finalized_mining_.value().header_hash == checkpoint.header_hash
+                                ? std::expected<MiningState, ConsensusError> { finalized_mining_.value().state }
+                                : project_mining_state(batch.value(), proposal.parent_certificate);
+        if (!mining.has_value() || mining_state_root(mining.value()) != proposal.state.mining_state_root)
+            return std::unexpected(mining.has_value() ? ConsensusError::InvalidRoot : mining.error());
         const auto installed = node_.dag()->install_shadow_batch(proposal,
                                                                  batch.value(),
                                                                  consensus_->configuration().maximum_batch_bytes,
@@ -1425,6 +1436,9 @@ namespace ExtraChain::Consensus {
         if (!epoch_changes.has_value()) {
             return std::unexpected(epoch_changes.error());
         }
+        const auto mining_committed = persist_mining_state(proof, batch.value());
+        if (!mining_committed.has_value())
+            return std::unexpected(mining_committed.error());
         const auto intents_committed = finalize_intents(finalized.value(), checkpoint);
         if (!intents_committed.has_value()) {
             return std::unexpected(intents_committed.error());
@@ -1872,14 +1886,33 @@ namespace ExtraChain::Consensus {
                 propose_checkpoint(consensus_->engine().safety_state().current_round);
                 return;
             }
+            const auto parent_mining = mining_state_for(highest);
+            if (!parent_mining.has_value()) {
+                eWarning("[Shadow] Mining parent state is unavailable: {}",
+                         std::to_underlying(parent_mining.error()));
+                return;
+            }
+            const auto settlement =
+                next_mining_settlement(parent_mining.value(), target - ShadowSectionInterval + 1);
+            if (!settlement.has_value()) {
+                eWarning("[Shadow] Mining settlement is unavailable: {}", std::to_underlying(settlement.error()));
+                return;
+            }
+            const auto scheduled_total = consensus_->mining_policy().has_value()
+                                             ? mining_policy_total(consensus_->mining_policy().value()).value_or(0)
+                                             : 0;
+            const bool mining_pending  = !parent_mining.value().epochs.empty()
+                                         || (!parent_mining.value().registrations.empty()
+                                             && parent_mining.value().reserved_units < scheduled_total);
             const auto flush_pipeline = has_unfinalized_intents();
-            const auto intents        = flush_pipeline
-                                            ? std::vector<IntentEnvelope> {}
-                                            : intent_pool_.ready(committed_nonces_,
-                                                          intent_height(),
-                                                          20 * 256,
-                                                          consensus_->configuration().maximum_batch_bytes / 2);
-            if (intents.empty() && !flush_pipeline) {
+            const auto intents =
+                flush_pipeline
+                    ? std::vector<IntentEnvelope> { }
+                    : intent_pool_.ready(committed_nonces_,
+                                         intent_height(),
+                                         20 * 256 - static_cast<std::size_t>(settlement.value().has_value()),
+                                         consensus_->configuration().maximum_batch_bytes / 2);
+            if (intents.empty() && !flush_pipeline && !mining_pending) {
                 return;
             }
             const auto first = target == 0 ? SectionId(0) : SectionId(target) - CONTROL_INTERVAL_DIFF;
@@ -1916,9 +1949,10 @@ namespace ExtraChain::Consensus {
                                                                 SectionId(target),
                                                                 highest.height + 1,
                                                                 intents,
-                                                                {},
+                                                                { },
                                                                 std::move(previous_section_bytes),
-                                                                std::move(previous_section_root));
+                                                                std::move(previous_section_root),
+                                                                settlement.value());
             if (!batch.has_value()) {
                 eWarning("[Shadow] Leader could not materialize the next intent batch: {}",
                          std::to_underlying(batch.error()));
@@ -1936,6 +1970,28 @@ namespace ExtraChain::Consensus {
             const auto state =
                 build_state_commitment(batch.value(), section_root.value(), highest.height + 1, highest);
             if (!state.has_value()) {
+                std::string invalid_request;
+                const auto  verifier = mining_verifier();
+                if (verifier.has_value())
+                    static_cast<void>(replay_mining_batch(
+                        parent_mining.value(),
+                        consensus_->mining_policy(),
+                        batch.value(),
+                        [this](auto section) {
+                            return mining_finality(section);
+                        },
+                        *verifier.value(),
+                        &invalid_request));
+                if (!invalid_request.empty()) {
+                    const std::vector<std::string> rejected { invalid_request };
+                    if (!intent_store_ || !intent_store_->reject(rejected, state.error()).has_value()) {
+                        pause_voting("a mining rejection receipt could not be stored");
+                        return;
+                    }
+                    intent_pool_.erase(rejected);
+                    if (intent_batch_task_)
+                        intent_batch_task_->schedule_earlier(std::chrono::milliseconds(25));
+                }
                 eWarning("[Shadow] Leader could not calculate the state commitment: {}",
                          std::to_underlying(state.error()));
                 return;
@@ -2466,6 +2522,14 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidRoot);
         }
 
+        std::string mining_root;
+        if (consensus_->configuration().mode == ShadowMode::Finality) {
+            const auto mining = project_mining_state(batch, parent);
+            if (!mining.has_value())
+                return std::unexpected(mining.error());
+            mining_root = mining_state_root(mining.value());
+        }
+
         auto ancestry = staged_ancestor_transactions(parent, batch.manifest.first_section);
         if (!ancestry.has_value()) {
             return std::unexpected(ancestry.error());
@@ -2500,6 +2564,15 @@ namespace ExtraChain::Consensus {
             if (section < batch.manifest.first_section || section > batch.manifest.last_section) {
                 return std::unexpected(ConsensusError::InvalidRoot);
             }
+        }
+        for (const auto& transaction : transactions) {
+            if (transaction.type() != TransactionType::MiningSettlement)
+                continue;
+            const auto deltas = mining_settlement_deltas(transaction);
+            if (!deltas.has_value())
+                return std::unexpected(deltas.error());
+            for (const auto& [provider, _] : deltas.value())
+                actors.push_back(provider);
         }
         std::ranges::sort(actors, {}, &ActorId::to_string);
         actors.erase(std::unique(actors.begin(), actors.end()), actors.end());
@@ -2622,6 +2695,7 @@ namespace ExtraChain::Consensus {
             .account_state_root        = segmented_state_root("accounts", state_entries(account_state)),
             .contract_state_root       = segmented_state_root("contracts", state_entries(contract_state)),
             .token_registry_root       = segmented_state_root("tokens", state_entries(token_state)),
+            .mining_state_root         = std::move(mining_root),
             .validator_set_hash        = consensus_->engine().validators().hash(),
         };
     }
@@ -2800,8 +2874,20 @@ namespace ExtraChain::Consensus {
         if (!finalized.has_value()) {
             return std::unexpected(finalized.error());
         }
+        std::size_t system_records = 0;
+        for (const auto& [_, bytes] : batch.sections) {
+            const auto section = Json::deserialize<Section>(bytes);
+            if (!section.has_value())
+                return std::unexpected(ConsensusError::InvalidIntent);
+            for (const auto& transaction : section.value().transactions) {
+                if (transaction.type() != TransactionType::MiningSettlement)
+                    continue;
+                if (++system_records > 1 || !verify_mining_transaction(transaction))
+                    return std::unexpected(ConsensusError::InvalidProof);
+            }
+        }
         if (proposal.header.height >= consensus_->configuration().activation_height
-            && finalized.value().size() != proposal.batch.transaction_hashes.size()) {
+            && finalized.value().size() + system_records != proposal.batch.transaction_hashes.size()) {
             return std::unexpected(ConsensusError::InvalidIntent);
         }
         bool epoch_change_seen = false;

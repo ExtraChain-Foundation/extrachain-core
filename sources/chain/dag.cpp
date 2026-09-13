@@ -2091,6 +2091,11 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
         }
         return prove == TransactionProveError::NoError;
     }
+    if (transaction.type() == TransactionType::MiningSettlement) {
+        const std::set<Transaction> empty;
+        const auto                  frontier = transaction.section();
+        return prove_transaction(transaction, empty, &pending, &frontier) == TransactionProveError::NoError;
+    }
     if (Utils::is_container_empty(transaction.signature())) {
         if (report_failure) {
             eWarning("[Dag] Repair transaction has no signature: {}", transaction.hash());
@@ -2366,14 +2371,16 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
                               const std::vector<ExtraChain::Consensus::IntentEnvelope> &intents,
                               std::string                                               header_hash,
                               std::optional<std::string>                                previous_section_bytes,
-                              std::string                                               previous_section_root) {
+                              std::string                                               previous_section_root,
+                              std::optional<Transaction>                                settlement) {
     using namespace ExtraChain::Consensus;
     constexpr std::size_t MaximumTransactionsPerSection = 256;
     if (first_section < SectionId(0) || last_section < first_section
         || last_section - first_section >= CONTROL_INTERVAL
-        || intents.size() > MaximumTransactionsPerSection
-                                * static_cast<std::size_t>(
-                                    (last_section - first_section + SectionId(1)).to_int().value_or(0))) {
+        || intents.size() + static_cast<std::size_t>(settlement.has_value())
+               > MaximumTransactionsPerSection
+                     * static_cast<std::size_t>(
+                         (last_section - first_section + SectionId(1)).to_int().value_or(0))) {
         return std::unexpected(ConsensusError::DataTooLarge);
     }
 
@@ -2407,8 +2414,15 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
         sections.push_back(Section { .id = section_id, .transactions = {}, .control = std::nullopt });
     }
 
+    if (settlement.has_value()) {
+        if (settlement.value().section() != first_section
+            || !decode_mining_settlement_transaction(settlement.value()).has_value())
+            return std::unexpected(ConsensusError::InvalidProof);
+        sections.front().transactions.insert(settlement.value());
+    }
     for (std::size_t index = 0; index < intents.size(); ++index) {
-        const auto section_index = index / MaximumTransactionsPerSection;
+        const auto position      = index + static_cast<std::size_t>(settlement.has_value());
+        const auto section_index = position / MaximumTransactionsPerSection;
         const auto materialized =
             materialize_intent(intents[index],
                                static_cast<std::uint64_t>(sections[section_index].id.to_int().value_or(0)),
@@ -2418,7 +2432,7 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
             return std::unexpected(materialized.error());
         }
         sections[section_index].transactions.insert(materialized.value());
-        if ((index + 1) % MaximumTransactionsPerSection == 0 && section_index + 1 < sections.size()) {
+        if ((position + 1) % MaximumTransactionsPerSection == 0 && section_index + 1 < sections.size()) {
             previous_hashes = sections[section_index].hashs();
         }
     }
@@ -2501,6 +2515,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
         || hash_batch_manifest(batch.manifest) != proposal.header.batch_root
         || hash_batch_manifest(batch.manifest) != hash_batch_manifest(proposal.batch)
         || batch.manifest.payload_bytes > maximum_batch_bytes
+        || batch.manifest.transaction_hashes.size() > ShadowSectionInterval * 256
         || batch.manifest.first_section > batch.manifest.last_section
         || batch.manifest.last_section - batch.manifest.first_section >= CONTROL_INTERVAL_MOD
         || batch.sections.size() != batch.manifest.last_section - batch.manifest.first_section + 1
@@ -2521,7 +2536,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
         }
         payload_bytes += bytes.size();
         auto section = Json::deserialize<Section>(bytes);
-        if (!section.has_value()) {
+        if (!section.has_value() || section.value().transactions.size() > 256) {
             return std::unexpected(ConsensusError::InvalidRoot);
         }
         const auto section_id = SectionId(section_value);
@@ -2880,8 +2895,7 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
                                                         const SectionId                       *validation_frontier,
                                                         const TransactionValidationFacts      *facts,
                                                         bool stage_contract_change) {
-    if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::MiningSettlement
-        || is_mining_request(tx.type()))
+    if (tx.type() == TransactionType::Reward)
         return TransactionProveError::MiningProofRequired;
 
     if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance) {
@@ -2896,7 +2910,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
 
     // Validate transaction amount
     if (tx.amount() == BigNumberFloat(0) && !is_contract_transaction(tx.type())
-        && !is_token_migration_transaction(tx.type()) && !is_epoch_change_transaction(tx.type())) {
+        && !is_token_migration_transaction(tx.type()) && !is_epoch_change_transaction(tx.type())
+        && !is_mining_request(tx.type()) && tx.type() != TransactionType::MiningSettlement) {
         return TransactionProveError::AmountZero;
     }
 
@@ -2907,7 +2922,6 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     // Get sender and receiver IDs
     ActorId        targetSender   = tx.sender();
     ActorId        targetReceiver = tx.receiver();
-    const ActorId &mainActorId    = node->account_controller()->system_actor().id();
 
     // Check if transaction involves the node's own accounts
     // if (tx.type() != TransactionType::Repeatable) {
@@ -2944,6 +2958,11 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
         return TransactionProveError::Duplicate;
     }
 
+    if (tx.type() == TransactionType::MiningSettlement)
+        return node->consensus() != nullptr && node->consensus()->verify_mining_transaction(tx)
+                   ? TransactionProveError::NoError
+                   : TransactionProveError::MiningProofRequired;
+
     // Validate sender
     if (targetSender.is_zero()) {
         return TransactionProveError::SenderZero;
@@ -2974,6 +2993,12 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
         const auto result = senderActor.key().verify(transaction_hash, tx.signature());
         return result.has_value() && *result;
     };
+
+    if (is_mining_request(tx.type())) {
+        if (node->consensus() == nullptr || !node->consensus()->verify_mining_transaction(tx))
+            return TransactionProveError::MiningProofRequired;
+        return verify_stored_hash() ? TransactionProveError::NoError : TransactionProveError::InvalidSignature;
+    }
 
     if (tx.type() == TransactionType::EpochChange) {
         if (tx.amount() != 0 || !tx.token().is_zero() || !tx.meta().has_value() || tx.meta()->empty()
@@ -5141,6 +5166,11 @@ bool Dag::validate_received_pack(Pack::PackId id, const Pack::Reader &reader) co
                 if (validate_initial_transaction(tx) != TransactionProveError::NoError) {
                     return reject("invalid network initialization transaction");
                 }
+                continue;
+            }
+            if (tx.type() == TransactionType::MiningSettlement) {
+                if (node->consensus() == nullptr || !node->consensus()->verify_mining_transaction(tx))
+                    return reject("invalid mining settlement proof");
                 continue;
             }
             if (Utils::is_container_empty(tx.signature()))

@@ -381,3 +381,7 @@ add_test(NAME mining-policy COMMAND extrachain-mining-policy)
 set_tests_properties(mining-policy PROPERTIES TIMEOUT 30)
 add_test(NAME mining-witness COMMAND extrachain-mining-witness)
 set_tests_properties(mining-witness PROPERTIES TIMEOUT 30)
+
+add_core_test_executable(extrachain-consensus-mining-runtime consensus_mining_runtime.cpp)
+add_test(NAME consensus-mining-runtime COMMAND extrachain-consensus-mining-runtime)
+set_tests_properties(consensus-mining-runtime PROPERTIES TIMEOUT 60)

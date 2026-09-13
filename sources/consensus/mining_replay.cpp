@@ -25,6 +25,18 @@ namespace ExtraChain::Consensus {
         const SectionBatchData&                    batch,
         const MiningFinalityReader&                read_finality,
         const LightClientVerifier&                 verifier) {
+        return replay_mining_batch(std::move(state), policy, batch, read_finality, verifier, nullptr);
+    }
+
+    std::expected<MiningState, ConsensusError> replay_mining_batch(
+        MiningState                                state,
+        const std::optional<MiningEmissionPolicy>& policy,
+        const SectionBatchData&                    batch,
+        const MiningFinalityReader&                read_finality,
+        const LightClientVerifier&                 verifier,
+        std::string*                               invalid_request) {
+        if (invalid_request != nullptr)
+            invalid_request->clear();
         if (state.emission_policy_hash != mining_policy_hash(policy) || state.section == UINT64_MAX
             || batch.manifest.first_section != state.section + 1
             || batch.manifest.last_section < batch.manifest.first_section
@@ -60,14 +72,18 @@ namespace ExtraChain::Consensus {
                         return std::unexpected(ConsensusError::InvalidProof);
                     settled = true;
                 } else if (is_mining_request(transaction.type())) {
-                    if (!policy.has_value())
-                        return std::unexpected(ConsensusError::InvalidGovernance);
                     const auto envelope = intent_from_transaction(transaction);
                     if (!envelope.has_value())
                         return std::unexpected(envelope.error());
-                    const auto applied = apply_mining_request(state, envelope.value());
-                    if (!applied.has_value())
+                    const auto applied = policy.has_value()
+                                             ? apply_mining_request(state, envelope.value())
+                                             : std::expected<void, ConsensusError> { std::unexpected(
+                                                   ConsensusError::InvalidGovernance) };
+                    if (!applied.has_value()) {
+                        if (invalid_request != nullptr)
+                            *invalid_request = hash_intent(envelope.value().intent);
                         return std::unexpected(applied.error());
+                    }
                 }
             }
             if (settled != !payouts.value().empty())
