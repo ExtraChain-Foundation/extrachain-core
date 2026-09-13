@@ -1,4 +1,4 @@
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 import io
 import json
 import os
@@ -39,13 +39,13 @@ class ShutdownCheckpointTest(unittest.TestCase):
             home = self.work / 'bootstrap' / ('server' if index == 0 else f'client{index}') / 'data'
             (home / 'consensus').mkdir(parents=True)
             (home / 'dag/hot').mkdir(parents=True)
-            with sqlite3.connect(home / 'consensus/safety.sqlite') as database:
+            with closing(sqlite3.connect(home / 'consensus/safety.sqlite')) as database, database:
                 database.executescript(
                     'CREATE TABLE consensus_finality_proofs (last_section INTEGER, finalized_hash TEXT);'
                     'CREATE TABLE consensus_batches (hash TEXT PRIMARY KEY, payload TEXT);')
                 database.execute('INSERT INTO consensus_finality_proofs VALUES (200, ?)', ('a' * 64,))
                 database.execute('INSERT INTO consensus_batches VALUES (?, ?)', ('a' * 64, 'batch'))
-            with sqlite3.connect(home / 'dag/hot/HotSections.db') as database:
+            with closing(sqlite3.connect(home / 'dag/hot/HotSections.db')) as database, database:
                 database.execute('CREATE TABLE sections (section INTEGER PRIMARY KEY, payload TEXT)')
                 database.executemany('INSERT INTO sections VALUES (?, ?)',
                                      [(section, '{"transactions": []}')
@@ -62,7 +62,7 @@ class ShutdownCheckpointTest(unittest.TestCase):
             return main()
 
     def mutate(self, relative, sql):
-        with sqlite3.connect(Path(self.homes[-1][1]) / relative) as database:
+        with closing(sqlite3.connect(Path(self.homes[-1][1]) / relative)) as database, database:
             database.execute(sql)
 
     def test_retains_shared_checkpoint_with_valid_shutdown_suffixes(self):
