@@ -641,9 +641,7 @@ namespace ExtraChain::Consensus {
         }
         if (accepted.value().certificate.has_value()) {
             const auto& certificate = accepted.value().certificate.value();
-            if (apply_certificate(certificate)) {
-                send_to_validators(certificate, MessageType::ConsensusCertificate);
-            }
+            apply_certificate(certificate, true);
         }
     }
 
@@ -1314,7 +1312,7 @@ namespace ExtraChain::Consensus {
         return certificate.has_value() ? certificate.value().height + 1 : 1;
     }
 
-    bool ConsensusService::apply_certificate(const QuorumCertificate& certificate) {
+    bool ConsensusService::apply_certificate(const QuorumCertificate& certificate, bool announce) {
         const auto finalized = consensus_->receive_certificate(certificate);
         if (!finalized.has_value()) {
             eWarning("[Consensus] Certificate {} at height {} was rejected with error {}",
@@ -1331,6 +1329,9 @@ namespace ExtraChain::Consensus {
             return false;
         }
         latest_certificate_ = certificate;
+        // Mining callbacks can reuse expired nonces; peers must receive their new height first.
+        if (announce)
+            send_to_validators(certificate, MessageType::ConsensusCertificate);
         if (latest_proposal_.has_value()
             && certificate.header_hash == hash_header(latest_proposal_.value().header)) {
             pending_batches_.erase(latest_proposal_.value().batch.last_section);
@@ -2136,9 +2137,8 @@ namespace ExtraChain::Consensus {
             return;
         }
         latest_proposal_ = proposal.value();
-        if (accepted.value().certificate.has_value() && apply_certificate(accepted.value().certificate.value())) {
-            send_to_validators(accepted.value().certificate.value(), MessageType::ConsensusCertificate);
-        }
+        if (accepted.value().certificate.has_value())
+            apply_certificate(accepted.value().certificate.value(), true);
         send_to_validators(proposal_value, MessageType::ConsensusProposal);
         reset_timeout();
     }

@@ -147,7 +147,7 @@ namespace ExtraChain::Consensus {
         void                                refresh_peer_authentication();
         void                                checkpoint_ready(std::uint64_t section);
         void                                queue_next_checkpoint();
-        bool                                apply_certificate(const QuorumCertificate& certificate);
+        bool apply_certificate(const QuorumCertificate& certificate, bool announce = false);
         std::expected<void, ConsensusError> apply_finality_proof(const FinalityProof& proof);
         std::expected<void, ConsensusError> reconcile_finalized_checkpoint();
         bool                                apply_timeout_certificate(const TimeoutCertificate& certificate);

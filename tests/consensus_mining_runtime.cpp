@@ -134,6 +134,9 @@ namespace ExtraChain::Consensus {
         static auto apply(ConsensusService& service, const FinalityProof& proof) {
             return service.apply_finality_proof(proof);
         }
+        static bool announce(ConsensusService& service, const QuorumCertificate& certificate) {
+            return service.apply_certificate(certificate, true);
+        }
         static void forget(ConsensusService& service) {
             service.finalized_mining_.reset();
             service.staged_mining_.clear();
@@ -498,7 +501,31 @@ int main() {
                               .validator_id = validator };
             certificate.signatures.push_back(sign_payload(*key, vote_signing_payload(vote)).value());
         }
-        TEST_REQUIRE(engine->accept_certificate(certificate).has_value());
+        if (height == 13) {
+            auto ordered_socket = std::make_shared<RecoverySocket>(*node->network(), "ordered-peer");
+            {
+                auto connections = *node->network()->connections();
+                connections->insert(ordered_socket);
+            }
+            bool observed              = false;
+            auto subscription          = service.finalized_event().subscribe([&](const FinalizedCheckpoint&) {
+                observed = true;
+                TEST_REQUIRE_EQ(ordered_socket->certified_height.load(), certificate.height);
+            });
+            auto invalid               = certificate;
+            invalid.signatures.front() = "invalid";
+            TEST_REQUIRE(!ConsensusStateTestFixture::announce(service, invalid));
+            TEST_REQUIRE_EQ(ordered_socket->certificates.load(), 0U);
+            TEST_REQUIRE(!observed);
+            TEST_REQUIRE(ConsensusStateTestFixture::announce(service, certificate));
+            TEST_REQUIRE(observed);
+            {
+                auto connections = *node->network()->connections();
+                connections->erase(ordered_socket);
+            }
+        } else {
+            TEST_REQUIRE(engine->accept_certificate(certificate).has_value());
+        }
         const std::uint64_t certified_nonce = height >= 8 ? 2 : (height >= 2 ? 1 : 0);
         TEST_REQUIRE_EQ(ConsensusStateTestFixture::certified_nonce(service, provider.id()), certified_nonce);
         if (height == 2) {
@@ -558,13 +585,15 @@ int main() {
             // Restore the snapshot before the applied marker advances: interrupted commit is idempotent.
             ConsensusStateTestFixture::forget(service);
             TEST_REQUIRE(ConsensusStateTestFixture::persist(service, proof, batches.at(height - 2)).has_value());
-            const auto applied = ConsensusStateTestFixture::apply(service, proof);
-            if (!applied.has_value())
-                std::fprintf(stderr,
-                             "apply height %llu failed: %u\n",
-                             static_cast<unsigned long long>(proof.finalized_proposal.header.height),
-                             static_cast<unsigned>(applied.error()));
-            TEST_REQUIRE(applied.has_value());
+            if (height != 13) {
+                const auto applied = ConsensusStateTestFixture::apply(service, proof);
+                if (!applied.has_value())
+                    std::fprintf(stderr,
+                                 "apply height %llu failed: %u\n",
+                                 static_cast<unsigned long long>(proof.finalized_proposal.header.height),
+                                 static_cast<unsigned>(applied.error()));
+                TEST_REQUIRE(applied.has_value());
+            }
             TEST_REQUIRE(!ConsensusStateTestFixture::apply(service, proof).has_value());
             TEST_REQUIRE_EQ(ConsensusStateTestFixture::certified_nonce(service, provider.id()), certified_nonce);
         }

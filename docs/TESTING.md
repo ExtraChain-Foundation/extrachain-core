@@ -247,6 +247,11 @@ be attributed.
     replay, balances, mining state, receipts, and DFS audits must still pass. Runs without
     this recorded live checkpoint retain the existing stopped-height check. A failed run
     cannot be reclassified by creating a checkpoint after shutdown.
+13. **Callbacks can publish messages before their prerequisite.** Applying a new local
+    quorum certificate runs finality and mining work. That work can cancel expired
+    requests while peers still retain them. Send the verified certificate before those
+    callbacks. A publication-order regression must observe the outgoing certificate
+    when the finality callback runs and reject an invalid certificate before any send.
 
 ---
 
