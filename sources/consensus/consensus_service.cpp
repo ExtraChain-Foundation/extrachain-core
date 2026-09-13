@@ -665,7 +665,11 @@ namespace ExtraChain::Consensus {
                      peer_identifier.substr(0, 12));
             return;
         }
-        apply_certificate(certificate);
+        if (!apply_certificate(certificate)
+            && !consensus_->engine().proposal_for(certificate.header_hash).has_value()
+            && consensus_->engine().verify_certificate(certificate)) {
+            request_sync_from(peer_identifier);
+        }
     }
 
     void ConsensusService::receive_timeout_vote(const TimeoutVote& vote, std::string_view peer_identifier) {
@@ -674,26 +678,29 @@ namespace ExtraChain::Consensus {
             return;
         }
         const auto accepted = consensus_->receive_timeout_vote(vote, peer_identifier);
-        if (!accepted.has_value()) {
-            // A stale timeout vote is often the ONLY traffic a lagging validator
-            // still produces once the committee has finished its work and gone
-            // quiet: it missed the final certificates and nothing will ever
-            // arrive to reveal the gap. Answer with our verified tip - one
-            // focused certificate per received stale vote, no periodic traffic.
-            const auto& state = consensus_->engine().safety_state();
-            if (state.highest_certificate.has_value() && vote.height <= state.highest_certificate.value().height) {
-                send_to_peer(state.highest_certificate.value(),
-                             MessageType::ConsensusCertificate,
-                             std::string(peer_identifier),
-                             MessageStatus::NoStatus);
-            }
+        if (!accepted.has_value() && accepted.error() != ConsensusError::InvalidParent)
             return;
-        }
-        if (accepted.value().equivocation.has_value()) {
+        if (accepted.has_value() && accepted.value().equivocation.has_value()) {
             eCritical("[Shadow] Conflicting timeout votes from validator {} at height {} round {}",
                       vote.validator_id,
                       vote.height,
                       vote.round);
+            return;
+        }
+        const auto& state = consensus_->engine().safety_state();
+        if (state.highest_certificate.has_value() && vote.height <= state.highest_certificate.value().height) {
+            send_to_peer(state.highest_certificate.value(),
+                         MessageType::ConsensusCertificate,
+                         std::string(peer_identifier),
+                         MessageStatus::NoStatus);
+            return;
+        }
+        // InvalidParent follows signature verification: the peer has named a certificate we lack.
+        if (!accepted.has_value()
+            || (state.highest_certificate.has_value()
+                && vote.height - 1 > state.highest_certificate.value().height)) {
+            request_sync_from(peer_identifier);
+            return;
         }
         if (accepted.value().certificate.has_value()
             && apply_timeout_certificate(accepted.value().certificate.value())) {

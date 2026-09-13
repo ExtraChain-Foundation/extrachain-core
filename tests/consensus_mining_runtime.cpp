@@ -10,6 +10,8 @@
 #include "utils/exc_utils.h"
 #include "utils/file_io.h"
 #include "utils/db_connector.h"
+#include "network/network_service.h"
+#include "network/isocket_service.h"
 
 #include <filesystem>
 #include <memory>
@@ -63,6 +65,27 @@ namespace ExtraChain::Consensus {
             service.queue_next_checkpoint();
             TEST_REQUIRE(service.ancestor_requests_.at(hash).peer != first.peer);
         }
+        static auto highest(ConsensusService& service) {
+            return service.consensus_->engine().safety_state().highest_certificate.value();
+        }
+        static auto certified_parent(ConsensusService& service) {
+            return service.consensus_->engine()
+                .proposal_for(highest(service).header_hash)
+                .value()
+                .parent_certificate;
+        }
+        static void authenticate(ConsensusService&       service,
+                                 const ValidatorSetView& validators,
+                                 const KeyPrivate&       key,
+                                 const std::string&      peer) {
+            PeerAuthenticator responder(validators, ValidatorIdentity { validator_id_for(key.public_key()), key });
+            const auto        challenge = service.authenticator_->create_challenge("runtime-test", peer).value();
+            const auto        response  = responder.answer_challenge(challenge, peer).value();
+            TEST_REQUIRE(service.authenticator_->verify_response(response, peer).has_value());
+        }
+        static void reset_sync_timer(ConsensusService& service) {
+            service.last_sync_request_ = { };
+        }
         static void expire(ConsensusService& service, const std::string& hash) {
             TEST_REQUIRE(service.intent_store_->expire({ hash }).has_value());
             service.intent_pool_.erase({ hash });
@@ -84,6 +107,54 @@ namespace ExtraChain::Consensus {
     };
 } // namespace ExtraChain::Consensus
 using namespace ExtraChain::Consensus;
+
+class RecoverySocket final : public SocketService {
+public:
+    RecoverySocket(PeerContext& context, std::string identifier)
+        : SocketService(context) {
+        identifier_ = std::move(identifier);
+        peer_meta_.capabilities.insert(std::string(SHADOW_CONSENSUS_CAPABILITY));
+        activated_.store(true);
+        mode_ = SocketMode::Full;
+    }
+    bool is_active() const override {
+        return activated_.load();
+    }
+    std::string protocol_string() const override {
+        return "recovery-test";
+    }
+    Network::Protocol protocol() const override {
+        return Network::Protocol::WebSocket;
+    }
+    std::uint16_t port() const override {
+        return 0;
+    }
+    std::uint16_t server_port() const override {
+        return 0;
+    }
+    void flush() override {
+    }
+    std::atomic<unsigned>      certificates { 0 }, syncs { 0 };
+    std::atomic<std::uint64_t> certified_height { 0 }, sync_height { 0 };
+    void                       send_message(std::span<const std::uint8_t> bytes, Priority) override {
+        TEST_REQUIRE(bytes.size() >= crypto_sign_BYTES);
+        const auto body = MessagePack::deserialize<MessageBody>(
+            std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size() - crypto_sign_BYTES));
+        TEST_REQUIRE(body.has_value());
+        if (body.value().message_type == MessageType::ConsensusCertificate) {
+            const auto value = MessagePack::deserialize<QuorumCertificate>(body.value().data);
+            TEST_REQUIRE(value.has_value());
+            certified_height.store(value.value().height);
+            ++certificates;
+        }
+        if (body.value().message_type == MessageType::ConsensusSyncRequest) {
+            const auto value = MessagePack::deserialize<ShadowSyncRequest>(body.value().data);
+            TEST_REQUIRE(value.has_value());
+            sync_height.store(value.value().finalized_height);
+            ++syncs;
+        }
+    }
+};
 
 int main() {
     const auto original = std::filesystem::current_path();
@@ -591,6 +662,66 @@ int main() {
     TEST_REQUIRE_EQ(resumed_pending.size(), repaired.size() + 1);
     TEST_REQUIRE_EQ(resumed_pending.back().intent.account_nonce, restored_nonce.value());
     TEST_REQUIRE_EQ(hash_intent(resumed_pending.back().intent), resumed_transfer.value());
+    const auto tip     = ConsensusStateTestFixture::highest(service);
+    const auto peer_id = validator_id_for(keys[0].public_key());
+    const auto peer    = view.find(peer_id)->node_identifier;
+    auto       socket  = std::make_shared<RecoverySocket>(*node->network(), peer);
+    {
+        auto connections = *node->network()->connections();
+        connections->insert(socket);
+    }
+    ConsensusStateTestFixture::authenticate(service, view, keys[0], peer);
+    TimeoutVote stale { .network_id = network.id(),
+                        .epoch      = 1,
+                        .height     = tip.height,
+                        .highest_certificate_hash =
+                            hash_certificate(ConsensusStateTestFixture::certified_parent(service)),
+                        .validator_id = peer_id };
+    stale.signature = sign_payload(keys[0], timeout_vote_signing_payload(stale)).value();
+    service.receive_timeout_vote(stale, peer);
+    TEST_REQUIRE_EQ(socket->certificates.load(), 1U);
+    TEST_REQUIRE_EQ(socket->certified_height.load(), tip.height);
+    TimeoutVote future              = stale;
+    future.height                   = tip.height + 2;
+    future.highest_certificate_hash = std::string(64, 'f');
+    future.signature                = sign_payload(keys[0], timeout_vote_signing_payload(future)).value();
+    auto invalid                    = future;
+    invalid.signature[0]            = invalid.signature[0] == 'A' ? 'B' : 'A';
+    ConsensusStateTestFixture::reset_sync_timer(service);
+    service.receive_timeout_vote(invalid, peer);
+    TEST_REQUIRE_EQ(socket->syncs.load(), 0U);
+    service.receive_timeout_vote(future, peer);
+    TEST_REQUIRE_EQ(socket->syncs.load(), 1U);
+    TEST_REQUIRE_EQ(socket->sync_height.load(), tip.height - 2);
+    QuorumCertificate unknown { .network_id    = network.id(),
+                                .epoch         = 1,
+                                .height        = tip.height + 1,
+                                .header_hash   = std::string(64, 'e'),
+                                .signer_bitmap = { 0x1f } };
+    for (std::size_t index = 0; index < 5; ++index) {
+        const auto signer = view.active()[index].validator_id;
+        const auto key    = std::ranges::find_if(keys, [&](const auto& candidate) {
+            return validator_id_for(candidate.public_key()) == signer;
+        });
+        Vote       vote { .network_id   = network.id(),
+                          .epoch        = 1,
+                          .height       = unknown.height,
+                          .header_hash  = unknown.header_hash,
+                          .validator_id = signer };
+        unknown.signatures.push_back(sign_payload(*key, vote_signing_payload(vote)).value());
+    }
+    auto invalid_certificate                       = unknown;
+    invalid_certificate.signatures.front().front() = '?';
+    ConsensusStateTestFixture::reset_sync_timer(service);
+    service.receive_certificate(invalid_certificate, peer);
+    TEST_REQUIRE_EQ(socket->syncs.load(), 1U);
+    service.receive_certificate(unknown, peer);
+    TEST_REQUIRE_EQ(socket->syncs.load(), 2U);
+    TEST_REQUIRE_EQ(ConsensusStateTestFixture::highest(service).header_hash, tip.header_hash);
+    {
+        auto connections = *node->network()->connections();
+        connections->erase(socket);
+    }
     service.deactivate();
     node->cleanUp();
     node.reset();
