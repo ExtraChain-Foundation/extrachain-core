@@ -166,7 +166,7 @@ namespace ExtraChain::Consensus {
         void catch_up_deferred_finalization();
         /// Request a missing ancestor from one validator, rotating peers on retry.
         void request_ancestor_batch(const std::string& header_hash, std::string_view peer_identifier);
-        void request_sync_from(std::string_view peer_identifier);
+        void request_sync_from(std::string_view peer_identifier, bool page_progress = false);
         void vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier);
         void timeout_elapsed();
         void reset_timeout();
@@ -276,6 +276,7 @@ namespace ExtraChain::Consensus {
         };
         std::map<std::string, AncestorRequest>                        ancestor_requests_;
         std::chrono::steady_clock::time_point                         last_sync_request_ {};
+        std::string                                                   last_sync_peer_;
         std::chrono::steady_clock::time_point                         last_light_history_request_ { };
         std::shared_ptr<Core::DeadlineTask>                           timeout_task_;
         std::shared_ptr<Core::DeadlineTask>                           recovery_task_;

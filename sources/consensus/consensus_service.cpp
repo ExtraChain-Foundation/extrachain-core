@@ -338,6 +338,9 @@ namespace ExtraChain::Consensus {
         pending_checkpoints_.clear();
         pending_batches_.clear();
         pending_proposals_.clear();
+        ancestor_requests_.clear();
+        last_sync_request_ = { };
+        last_sync_peer_.clear();
         voting_enabled_ = false;
         voting_paused_  = false;
     }
@@ -543,16 +546,7 @@ namespace ExtraChain::Consensus {
                          std::string(peer_identifier),
                          MessageStatus::NoStatus);
         }
-        send_to_peer(
-            ShadowSyncRequest {
-                .protocol_version = ProtocolVersion,
-                .network_id       = consensus_->engine().validators().document().network_id,
-                .epoch            = consensus_->engine().validators().document().epoch,
-                .finalized_height = consensus_->engine().safety_state().finalized_height,
-            },
-            MessageType::ConsensusSyncRequest,
-            std::string(peer_identifier),
-            MessageStatus::Request);
+        request_sync_from(peer_identifier);
     }
 
     void ConsensusService::receive_proposal(const Proposal& proposal, std::string_view peer_identifier) {
@@ -714,7 +708,8 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !authenticator_ || !authenticated_sender(peer_identifier).has_value()) {
             return;
         }
-        if (!apply_timeout_certificate(certificate)) {
+        if (!apply_timeout_certificate(certificate)
+            && consensus_->engine().verify_timeout_certificate(certificate)) {
             const auto& state = consensus_->engine().safety_state();
             if (state.highest_certificate.has_value()
                 && certificate.height <= state.highest_certificate.value().height) {
@@ -731,15 +726,7 @@ namespace ExtraChain::Consensus {
                        || certificate.height > state.highest_certificate.value().height + 1) {
                 // A timeout certificate for a height we have not even certified
                 // means we are the ones behind.
-                send_to_validators(
-                    ShadowSyncRequest {
-                        .protocol_version = ProtocolVersion,
-                        .network_id       = consensus_->engine().validators().document().network_id,
-                        .epoch            = consensus_->engine().validators().document().epoch,
-                        .finalized_height = state.finalized_height,
-                    },
-                    MessageType::ConsensusSyncRequest,
-                    MessageStatus::Request);
+                request_sync_from({ });
             }
         }
     }
@@ -945,7 +932,8 @@ namespace ExtraChain::Consensus {
             batches.insert_or_assign(batch.header_hash, batch);
         }
 
-        auto expected_height = consensus_->engine().safety_state().finalized_height + 1;
+        const auto initial_height  = consensus_->engine().safety_state().finalized_height;
+        auto       expected_height = initial_height + 1;
         for (const auto& proof : response.proofs) {
             // A reply answers the height we had when we asked. By the time it is
             // processed we may have moved on, so proofs we no longer need are the
@@ -1019,17 +1007,9 @@ namespace ExtraChain::Consensus {
             return;
         }
         reset_timeout();
-        if (response.proofs.size() == MaximumShadowSyncProofs) {
-            send_to_peer(
-                ShadowSyncRequest {
-                    .protocol_version = ProtocolVersion,
-                    .network_id       = consensus_->engine().validators().document().network_id,
-                    .epoch            = consensus_->engine().validators().document().epoch,
-                    .finalized_height = consensus_->engine().safety_state().finalized_height,
-                },
-                MessageType::ConsensusSyncRequest,
-                std::string(peer_identifier),
-                MessageStatus::Request);
+        if (!response.proofs.empty() && peer_identifier == last_sync_peer_
+            && consensus_->engine().safety_state().finalized_height > initial_height) {
+            request_sync_from(peer_identifier, true);
         }
     }
 
@@ -1352,15 +1332,7 @@ namespace ExtraChain::Consensus {
                 // checkpoint deferred for a gap below it — so try to close that gap
                 // locally before asking the committee for a replay.
                 catch_up_deferred_finalization();
-                send_to_validators(
-                    ShadowSyncRequest {
-                        .protocol_version = ProtocolVersion,
-                        .network_id       = consensus_->engine().validators().document().network_id,
-                        .epoch            = consensus_->engine().validators().document().epoch,
-                        .finalized_height = consensus_->engine().safety_state().finalized_height,
-                    },
-                    MessageType::ConsensusSyncRequest,
-                    MessageStatus::Request);
+                request_sync_from({ });
             }
             return false;
         }
@@ -1723,13 +1695,7 @@ namespace ExtraChain::Consensus {
             }
         }
 
-        const ShadowSyncRequest request {
-            .protocol_version = ProtocolVersion,
-            .network_id       = consensus_->engine().validators().document().network_id,
-            .epoch            = consensus_->engine().validators().document().epoch,
-            .finalized_height = consensus_->engine().safety_state().finalized_height,
-        };
-        send_to_validators(request, MessageType::ConsensusSyncRequest, MessageStatus::Request);
+        request_sync_from({ });
         eWarning("[Shadow] DAG section {} waits for a finality proof", section);
         return false;
     }
@@ -1767,16 +1733,7 @@ namespace ExtraChain::Consensus {
             return;
         }
         challenge_peer(identifier, true);
-        send_to_peer(
-            ShadowSyncRequest {
-                .protocol_version = ProtocolVersion,
-                .network_id       = consensus_->engine().validators().document().network_id,
-                .epoch            = consensus_->engine().validators().document().epoch,
-                .finalized_height = consensus_->engine().safety_state().finalized_height,
-            },
-            MessageType::ConsensusSyncRequest,
-            identifier,
-            MessageStatus::Request);
+        request_sync_from(identifier);
     }
 
     void ConsensusService::challenge_peer(const std::string& identifier, bool reset_existing) {
@@ -1897,15 +1854,7 @@ namespace ExtraChain::Consensus {
                 // A certificate can arrive before its proposal, so recovery must use authenticated sync.
                 eWarning("[Shadow] Proposal for certified height {} is not stored yet; requesting sync",
                          highest.height);
-                send_to_validators(
-                    ShadowSyncRequest {
-                        .protocol_version = ProtocolVersion,
-                        .network_id       = consensus_->engine().validators().document().network_id,
-                        .epoch            = consensus_->engine().validators().document().epoch,
-                        .finalized_height = consensus_->engine().safety_state().finalized_height,
-                    },
-                    MessageType::ConsensusSyncRequest,
-                    MessageStatus::Request);
+                request_sync_from({ });
                 return;
             }
             if (highest_proposal.value().batch.last_section
@@ -2200,17 +2149,39 @@ namespace ExtraChain::Consensus {
         reset_timeout();
     }
 
-    void ConsensusService::request_sync_from(std::string_view peer_identifier) {
+    void ConsensusService::request_sync_from(std::string_view peer_identifier, bool page_progress) {
         if (!consensus_) {
             return;
         }
         const auto now = std::chrono::steady_clock::now();
-        if (now - last_sync_request_ < std::chrono::seconds(2)) {
+        if (!(page_progress && peer_identifier == last_sync_peer_)
+            && now - last_sync_request_ < std::chrono::seconds(2)) {
             return;
         }
+        std::string selected(peer_identifier);
+        if (selected.empty() || selected == node_.node_identifier()) {
+            auto peers = node_.network()->active_full_peers_with_capability(SHADOW_CONSENSUS_CAPABILITY);
+            std::erase_if(peers, [&](const auto& peer) {
+                return std::ranges::none_of(consensus_->engine().validators().active(),
+                                            [&](const auto& validator) {
+                                                return validator.node_identifier == peer;
+                                            });
+            });
+            if (peers.empty()) {
+                for (const auto& validator : consensus_->engine().validators().active())
+                    if (validator.node_identifier != node_.node_identifier())
+                        peers.push_back(validator.node_identifier);
+            }
+            if (peers.empty())
+                return;
+            const auto previous = std::ranges::find(peers, last_sync_peer_);
+            selected = previous == peers.end() || std::next(previous) == peers.end() ? peers.front()
+                                                                                     : *std::next(previous);
+        }
         last_sync_request_ = now;
+        last_sync_peer_    = selected;
         eWarning("[Shadow] Requesting finality sync from {} at finalized height {}",
-                 peer_identifier,
+                 selected,
                  consensus_->engine().safety_state().finalized_height);
         send_to_peer(
             ShadowSyncRequest {
@@ -2220,7 +2191,7 @@ namespace ExtraChain::Consensus {
                 .finalized_height = consensus_->engine().safety_state().finalized_height,
             },
             MessageType::ConsensusSyncRequest,
-            std::string(peer_identifier),
+            selected,
             MessageStatus::Request);
     }
 

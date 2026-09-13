@@ -83,6 +83,18 @@ namespace ExtraChain::Consensus {
             const auto        response  = responder.answer_challenge(challenge, peer).value();
             TEST_REQUIRE(service.authenticator_->verify_response(response, peer).has_value());
         }
+        static ShadowSyncResponse first_page(ConsensusService& service) {
+            auto&              engine = service.consensus_->engine();
+            ShadowSyncResponse response { .network_id = engine.validators().document().network_id,
+                                          .epoch      = engine.validators().document().epoch };
+            response.proofs = engine.finality_proofs_after(0, MaximumShadowSyncProofs).value();
+            for (const auto& proof : response.proofs)
+                response.batches.push_back(engine.batch_for(hash_header(proof.finalized_proposal.header)).value());
+            return response;
+        }
+        static void connect(ConsensusService& service, const std::string& peer) {
+            service.peer_connected(peer);
+        }
         static void reset_sync_timer(ConsensusService& service) {
             service.last_sync_request_ = { };
         }
@@ -718,9 +730,49 @@ int main() {
     service.receive_certificate(unknown, peer);
     TEST_REQUIRE_EQ(socket->syncs.load(), 2U);
     TEST_REQUIRE_EQ(ConsensusStateTestFixture::highest(service).header_hash, tip.header_hash);
+    TimeoutCertificate invalid_timeout { .network_id          = network.id(),
+                                         .epoch               = 1,
+                                         .height              = tip.height + 3,
+                                         .highest_certificate = unknown };
+    ConsensusStateTestFixture::reset_sync_timer(service);
+    const auto before_invalid_timeout = socket->syncs.load();
+    service.receive_timeout_certificate(invalid_timeout, peer);
+    TEST_REQUIRE_EQ(socket->syncs.load(), before_invalid_timeout);
+    invalid_timeout.height        = tip.height;
+    const auto before_invalid_tip = socket->certificates.load();
+    service.receive_timeout_certificate(invalid_timeout, peer);
+    TEST_REQUIRE_EQ(socket->certificates.load(), before_invalid_tip);
+    const auto duplicate_page = ConsensusStateTestFixture::first_page(service);
+    TEST_REQUIRE_EQ(duplicate_page.proofs.size(), MaximumShadowSyncProofs);
+    const auto before_duplicate = socket->syncs.load();
+    service.receive_sync_response(duplicate_page, peer);
+    service.receive_sync_response(duplicate_page, peer);
+    TEST_REQUIRE_EQ(socket->syncs.load(), before_duplicate);
+    ConsensusStateTestFixture::reset_sync_timer(service);
+    const auto before_connect = socket->syncs.load();
+    for (unsigned i = 0; i < 16; ++i)
+        ConsensusStateTestFixture::connect(service, peer);
+    TEST_REQUIRE_EQ(socket->syncs.load(), before_connect + 1);
+    const auto other_peer   = view.find(validator_id_for(keys[1].public_key()))->node_identifier;
+    auto       other_socket = std::make_shared<RecoverySocket>(*node->network(), other_peer);
+    {
+        auto connections = *node->network()->connections();
+        connections->insert(other_socket);
+    }
+    ConsensusStateTestFixture::reset_sync_timer(service);
+    const auto before_repair = socket->syncs.load();
+    for (unsigned i = 0; i < 16; ++i)
+        TEST_REQUIRE(!service.repair_section(std::numeric_limits<std::uint64_t>::max() - 1));
+    TEST_REQUIRE_EQ(socket->syncs.load(), before_repair);
+    TEST_REQUIRE_EQ(other_socket->syncs.load(), 1U);
+    ConsensusStateTestFixture::reset_sync_timer(service);
+    TEST_REQUIRE(!service.repair_section(std::numeric_limits<std::uint64_t>::max() - 1));
+    TEST_REQUIRE_EQ(socket->syncs.load(), before_repair + 1);
+    TEST_REQUIRE_EQ(other_socket->syncs.load(), 1U);
     {
         auto connections = *node->network()->connections();
         connections->erase(socket);
+        connections->erase(other_socket);
     }
     service.deactivate();
     node->cleanUp();
