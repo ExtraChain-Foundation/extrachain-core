@@ -614,23 +614,16 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
 }
 
 bool DfsVector::store_add(DbRow &row) {
-    // Every refusal below is a message the user never sees; say why.
-    auto encryption_res = encrypt_data(row, security_data_);
-    if (!encryption_res.has_value()) {
-        eWarning("[DfsVector] store_add refused, encryption failed: {} / {}", file_actor_id_, file_id_);
-        return false;
-    }
-    if (!encryption_res->empty()) {
-        row = encryption_res.value();
-    }
-
     row["timestamp"] = std::to_string(Utils::current_date_ms());
-    if (row["status"] != "0") {
-        row["status"] = "1";
-    }
-
+    row["status"]    = row.contains("status") && row.at("status") == "0" ? "0" : "1";
     row["actor"] = actor_.id().to_string();
-    row["sign"]       = std::string(crypto_sign_BYTES, '\0');
+    row["sign"]      = std::string(crypto_sign_BYTES, '\0');
+    auto encrypted   = encrypt_data(row, security_data_);
+    if (!encrypted.has_value())
+        return false;
+    if (!encrypted.value().empty())
+        row = std::move(encrypted.value());
+
     const auto result = persist_row(row, true, true);
     return result.has_value() && result.value();
 }
@@ -751,30 +744,10 @@ std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
         return std::nullopt;
     }
 
-    // A tombstone blanks every non-primary field. Numeric columns cannot take "-":
-    // the INTEGER bind used to throw and take the node down with it, so they get
-    // "0" (the tombstone's meaning is carried by status, and the row is re-signed).
-    std::unordered_map<std::string, Dfs::FieldType> field_types;
-    for (const auto &field : collection_template_.fields()) {
-        field_types.emplace(field.name(), field.type());
-    }
-    for (const auto &[key, _] : row) {
-        if (collection_template_.primary.has_value() && collection_template_.primary->name() == key) {
-            continue;
-        }
-
-        const auto type = field_types.find(key);
-        const bool numeric =
-            type != field_types.end()
-            && (type->second == Dfs::FieldType::Integer || type->second == Dfs::FieldType::Real
-                || type->second == Dfs::FieldType::Bool || type->second == Dfs::FieldType::Timestamp);
-        row[key] = numeric ? "0" : "-";
-    }
-
+    // Retain valid field values so a tombstone still satisfies its schema constraints.
     row["status"] = "0";
 
     auto res = store_add(row);
-    // bool res = db.delete_row("Vector", row);
     if (!res) {
         return std::nullopt;
     }
@@ -942,12 +915,30 @@ std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow        
     }
 
     if (!encryptor) {
+        if (is_encrypted_)
+            return std::unexpected(DfsVectorError::IncorrectEncryption);
         return DbRow { };
     }
 
-    DbRow encrypted_row;
+    const auto storage = Dfs::vector_storage_template(collection_template_, false);
+    if (!storage.has_value())
+        return std::unexpected(DfsVectorError::StructuralCreation);
+    auto schema = storage.value().to_db_schema();
+    if (!schema.has_value())
+        return std::unexpected(DfsVectorError::StructuralCreation);
+    schema.value().set_table_name("Vector");
+    DbConnector temporary(std::string(":memory:"));
+    const auto  primary =
+        collection_template_.primary.has_value() ? collection_template_.primary.value().name() : "actor";
+    if (!temporary.open() || !temporary.create_table(schema.value()).has_value()
+        || !Dfs::upsert_vector_row(temporary, primary, row))
+        return std::unexpected(DfsVectorError::Adding);
+    const auto normalized = temporary.select("SELECT * FROM Vector");
+    if (normalized.size() != 1)
+        return std::unexpected(DfsVectorError::Adding);
 
-    for (const auto &[key, value] : row) {
+    DbRow encrypted_row;
+    for (const auto &[key, value] : normalized.front()) {
         if (value.empty()) {
             encrypted_row[key] = "";
             continue;

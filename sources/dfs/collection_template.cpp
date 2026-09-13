@@ -104,7 +104,7 @@ namespace Dfs {
         }
 
         if (m_default_now && m_type == FieldType::Timestamp) {
-            column.default_value("CURRENT_TIMESTAMP");
+            column.default_value("(unixepoch() * 1000)");
         } else if (m_default) {
             column.default_value(*m_default);
         }

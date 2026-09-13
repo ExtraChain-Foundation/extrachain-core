@@ -119,8 +119,9 @@ bool DbConnector::open(bool create_if_missing) {
         db = nullptr;
         return false;
     } else {
-        if (!std::filesystem::exists(m_file)) {
-            // eFatal("[DbConnector] Open error: {}", m_file);
+        if (m_file != ":memory:" && !std::filesystem::exists(m_file)) {
+            sqlite3_close_v2(db);
+            db = nullptr;
             return false;
         }
 

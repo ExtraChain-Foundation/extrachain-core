@@ -76,6 +76,7 @@ int main() {
     auto numbers = Dfs::CollectionTemplate::create("Numbers").value();
     numbers.use_id().add_fields({ Dfs::Field::Real("value").not_null(),
                                   Dfs::Field::Integer("count").default_value(7),
+                                  Dfs::Field::Timestamp("created_at").default_now(),
                                   Dfs::Field::Blob("optional_value") });
     const auto number_template = node->dfs()->store_template(owner.id(), numbers);
     TEST_REQUIRE(number_template.has_value());
@@ -155,6 +156,51 @@ int main() {
     TEST_REQUIRE(removed.has_value() && removed.value().at("status") == "0");
     TEST_REQUIRE(encrypted.verify(removed.value()));
     TEST_REQUIRE(!encrypted.read_row("secret").has_value());
+    auto  without_key = node->dfs()->make_vector(owner.id(), encrypted_file.value().file_id).value().second;
+    DbRow no_key { { "id", "no-key" }, { "left_value", "must not be stored" } };
+    TEST_REQUIRE(!without_key.store_add(no_key));
+    const auto encrypted_numbers = node->dfs()->store_vector(owner.id(),
+                                                             owner.id(),
+                                                             "EncryptedNumbers",
+                                                             owner.id(),
+                                                             number_template.value().file_id,
+                                                             Dfs::DataSecurity::Key,
+                                                             key);
+    TEST_REQUIRE(encrypted_numbers.has_value());
+    auto protected_numbers =
+        node->dfs()
+            ->make_vector(owner.id(), encrypted_numbers.value().file_id, false, owner.id(), key)
+            .value()
+            .second;
+    DbRow number { { "id", "default" }, { "value", "1.2345678901234567" } };
+    TEST_REQUIRE(protected_numbers.store_add(number));
+    TEST_REQUIRE(number.at("count") != "7");
+    const auto plain = protected_numbers.read_row("default");
+    TEST_REQUIRE(plain.has_value() && plain.value().at("count") == "7");
+    TEST_REQUIRE_EQ(plain.value().at("value"), std::string("1.2345678901234567"));
+    const auto created = std::stoull(plain.value().at("created_at"));
+    const auto now     = Utils::current_date_ms();
+    TEST_REQUIRE(created <= now && now - created < 5000);
+    DbRow invalid_number { { "id", "invalid" }, { "value", "not-a-number" } };
+    TEST_REQUIRE(!protected_numbers.store_add(invalid_number));
+    TEST_REQUIRE(!protected_numbers.read_row("invalid").has_value());
+    auto unique_schema = Dfs::CollectionTemplate::create("UniqueRows").value();
+    unique_schema.use_id().add_fields({ Dfs::Field::Integer("position").unique().not_null() });
+    const auto unique_file = node->dfs()->store_vector(owner.id(), owner.id(), "UniqueRows", unique_schema);
+    TEST_REQUIRE(unique_file.has_value());
+    auto unique_rows = node->dfs()->make_vector(owner.id(), unique_file.value().file_id).value().second;
+    for (const auto& id : { "1", "2" }) {
+        DbRow unique_row { { "id", id }, { "position", id } };
+        TEST_REQUIRE(unique_rows.store_add(unique_row));
+        const auto tombstone = unique_rows.remove(id);
+        TEST_REQUIRE(tombstone.has_value() && tombstone.value().at("status") == "0");
+        TEST_REQUIRE(unique_rows.verify(tombstone.value()));
+    }
+    TEST_REQUIRE(unique_rows.read_rows("WHERE status=0").value().size() == 2);
+    TEST_REQUIRE(
+        !node->dfs()
+             ->store_vector(owner.id(), owner.id(), "EncryptedUnique", unique_schema, Dfs::DataSecurity::Key, key)
+             .has_value());
     node.reset();
     std::filesystem::current_path(original);
     std::filesystem::remove_all(directory);

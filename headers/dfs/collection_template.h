@@ -148,6 +148,10 @@ namespace Dfs {
             return m_type;
         }
 
+        bool is_unique() const {
+            return m_unique.value_or(false);
+        }
+
     private:
         friend struct Field;
 

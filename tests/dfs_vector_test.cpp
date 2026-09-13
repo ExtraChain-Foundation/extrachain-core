@@ -125,8 +125,7 @@ int main() {
     TEST_REQUIRE(!node->dfs()->add_vector_row(owner_id, file_id, bad_number));
     TEST_REQUIRE_EQ(row_count(), std::size_t(2));
 
-    // Removal is a status flip that blanks the other fields; with an INTEGER
-    // field that used to be "-" and the same fatal bind. Now the tombstone lands.
+    // Removal preserves valid field values and records a signed status change.
     TEST_REQUIRE(node->dfs()->remove_vector_row(owner_id, file_id, "row_1"));
     // read_vector_row hides tombstones (status = '1' only); look at the raw row.
     const auto removed = node->dfs()->read_vector_rows(owner_id, file_id, "WHERE id = 'row_1'");

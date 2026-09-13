@@ -37,6 +37,8 @@ std::expected<Dfs::CollectionTemplate, std::string> Dfs::vector_storage_template
     if (schema.primary.has_value() && !names.insert(schema.primary.value().name()).second)
         return std::unexpected("Reserved vector primary field");
     for (const auto& field : schema.fields()) {
+        if (encrypted && field.is_unique())
+            return std::unexpected("Encrypted vector fields cannot enforce UNIQUE constraints");
         if (!names.insert(field.name()).second)
             return std::unexpected("Duplicate or reserved vector field");
     }
