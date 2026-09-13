@@ -200,6 +200,7 @@ namespace ExtraChain::Consensus {
             return std::unexpected(applied_checkpoint.error());
         }
         committed_nonces_     = committed_nonces.value();
+        nonce_frontier_.reset();
         applied_checkpoint_   = applied_checkpoint.value();
         const auto reconciled = reconcile_finalized_checkpoint();
         if (!reconciled.has_value()) {
@@ -313,6 +314,7 @@ namespace ExtraChain::Consensus {
         intent_pool_ = IntentPool {};
         pending_intents_restored_ = false;
         committed_nonces_.clear();
+        nonce_frontier_.reset();
         if (timeout_task_) {
             timeout_task_->cancel();
         }
@@ -1183,6 +1185,7 @@ namespace ExtraChain::Consensus {
             return std::unexpected(committed.error());
         }
         committed_nonces_ = std::move(next_nonces);
+        nonce_frontier_.reset();
         if (checkpoint.has_value()) {
             applied_checkpoint_ = std::move(checkpoint);
         }
@@ -1251,6 +1254,7 @@ namespace ExtraChain::Consensus {
         }
         authenticator_ = std::make_unique<PeerAuthenticator>(consensus_->engine().validators(),
                                                              consensus_->engine().identity());
+        nonce_frontier_.reset();
         latest_proposal_.reset();
         latest_certificate_.reset();
         latest_timeout_certificate_.reset();
@@ -2818,6 +2822,9 @@ namespace ExtraChain::Consensus {
         const auto& highest = consensus_->engine().safety_state().highest_certificate;
         if (consensus_->configuration().mode == ShadowMode::Finality && highest.has_value()
             && highest.value().phase != Phase::Genesis) {
+            const auto certificate_hash = hash_certificate(highest.value());
+            if (nonce_frontier_.has_value() && nonce_frontier_.value().certificate_hash == certificate_hash)
+                return nonce_frontier_.value().nonces;
             const auto proposal = consensus_->engine().proposal_for(highest.value().header_hash);
             if (!proposal.has_value())
                 return std::unexpected(ConsensusError::DataUnavailable);
@@ -2828,6 +2835,8 @@ namespace ExtraChain::Consensus {
             if (!staged.has_value())
                 return std::unexpected(staged.error());
             nonces = staged.value();
+            // Certified payloads are immutable; retain only their checked nonce frontier.
+            nonce_frontier_ = NonceFrontier { certificate_hash, nonces };
         }
         return nonces;
     }

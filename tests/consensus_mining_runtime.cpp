@@ -46,6 +46,12 @@ namespace ExtraChain::Consensus {
         static auto next_nonce(ConsensusService& service, const ActorId& sender) {
             return service.next_local_nonce(sender);
         }
+        static std::uint64_t certified_nonce(ConsensusService& service, const ActorId& sender) {
+            const auto frontier = service.local_nonce_frontier();
+            TEST_REQUIRE(frontier.has_value());
+            const auto found = frontier.value().find(sender);
+            return found == frontier.value().end() ? 0 : found->second;
+        }
         static void expire(ConsensusService& service, const std::string& hash) {
             TEST_REQUIRE(service.intent_store_->expire({ hash }).has_value());
             service.intent_pool_.erase({ hash });
@@ -377,6 +383,8 @@ int main() {
             certificate.signatures.push_back(sign_payload(*key, vote_signing_payload(vote)).value());
         }
         TEST_REQUIRE(engine->accept_certificate(certificate).has_value());
+        const std::uint64_t certified_nonce = height >= 8 ? 2 : (height >= 2 ? 1 : 0);
+        TEST_REQUIRE_EQ(ConsensusStateTestFixture::certified_nonce(service, provider.id()), certified_nonce);
         if (height == 2) {
             // A certified nonce must remain reserved even when its pending copy is gone.
             ConsensusStateTestFixture::expire(service, hash_intent(ready.front().intent));
@@ -442,6 +450,7 @@ int main() {
                              static_cast<unsigned>(applied.error()));
             TEST_REQUIRE(applied.has_value());
             TEST_REQUIRE(!ConsensusStateTestFixture::apply(service, proof).has_value());
+            TEST_REQUIRE_EQ(ConsensusStateTestFixture::certified_nonce(service, provider.id()), certified_nonce);
         }
         parent             = certificate;
         prior_state        = proposal.header.state_commitment;

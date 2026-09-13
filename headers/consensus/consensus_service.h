@@ -253,6 +253,11 @@ namespace ExtraChain::Consensus {
         IntentPool                                                    intent_pool_;
         bool                                                          pending_intents_restored_ = false;
         std::map<ActorId, std::uint64_t>                              committed_nonces_;
+        struct NonceFrontier {
+            std::string                      certificate_hash;
+            std::map<ActorId, std::uint64_t> nonces;
+        };
+        mutable std::optional<NonceFrontier>                          nonce_frontier_;
         std::optional<AppliedCheckpoint>                              applied_checkpoint_;
         std::unique_ptr<PeerAuthenticator>                            authenticator_;
         std::optional<Proposal>                                       latest_proposal_;
