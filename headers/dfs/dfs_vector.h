@@ -55,6 +55,9 @@ private:
 
     DfsVector() = default;
     std::expected<bool, DfsVectorError>                  persist_row(DbRow& row, bool local, bool check);
+    bool                                                 authorized(const DbRow& row);
+    bool                                                 verify_signature(const DbRow& row);
+    std::string                                          row_key(const std::string& key) const;
     std::expected<Dfs::VectorDescriptor, DfsVectorError> load_descriptor();
     DfsVector(ExtraChain::Core::ExtraChainNode* node,
               const Actor<KeyPrivate>&          actor,

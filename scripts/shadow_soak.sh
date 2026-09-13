@@ -166,7 +166,7 @@ remove_audit() {
         while read -r vpublisher vowner vfile; do
             [ -n "$vfile" ] || continue
             rows_total=$((rows_total + 1))
-            [ "$(vector_row_status "${NODE_HOMES[$index]}/dfs/$vowner/$vfile" "soak_vector_${vpublisher}_0")" = "0" ] \
+            [ "$(vector_row_status "${NODE_HOMES[$index]}/dfs/$vowner/$vfile" "${vowner}:soak_vector_${vpublisher}_0")" = "0" ] \
                 && rows_gone=$((rows_gone + 1))
         done <<<"$(vectors_published)"
         [ "$rows_gone" -eq "$rows_total" ] || complete=0

@@ -271,22 +271,27 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     auto chat = Chat::Chat { .chat_key       = key,
                              .my_per_chat_id = per_chat.id() };
 
+    auto schema =
+        Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(network_id,
+                                                                           search_result.value().file_id);
+    if (!schema.has_value())
+        return std::unexpected(ChatError::Unknown);
+    schema.value().set_write_policy(encryption ? Dfs::VectorWritePolicy::ActorNamespace
+                                               : Dfs::VectorWritePolicy::OwnerOnly);
     auto security_key = Dfs::DataSecurityKey { .key = chat.chat_key.value() };
     auto store_chat_res =
         encryption ? node->dfs()->store_vector(per_chat.id(),
                                                per_chat.id(),
                                                fmt::format("chat-{}",
                                                            node->dfs()->create_file_id_from("chat").substr(0, 10)),
-                                               network_id,
-                                               search_result->file_id,
+                                               schema.value(),
                                                Dfs::DataSecurity::Key,
                                                security_key)
                    : node->dfs()->store_vector(per_chat.id(),
                                                per_chat.id(),
                                                fmt::format("channel-{}",
                                                            node->dfs()->create_file_id_from("chat").substr(0, 10)),
-                                               network_id,
-                                               search_result->file_id,
+                                               schema.value(),
                                                Dfs::DataSecurity::Public);
 
     if (!store_chat_res.has_value()) {
@@ -468,12 +473,16 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
         fmt::format("{}{}{}", name, Utils::current_date_ms(), per_chat.id().to_string())).substr(0, 10);
     auto channel_name = fmt::format("Channel-{}", channel_hash);
 
-    // Create channel vector (public, owned by per-channel actor)
+    auto schema =
+        Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(network_id,
+                                                                           search_result.value().file_id);
+    if (!schema.has_value())
+        return std::unexpected(ChatError::Unknown);
+    schema.value().set_write_policy(Dfs::VectorWritePolicy::OwnerOnly);
     auto store_res = node->dfs()->store_vector(per_chat.id(),
                                                per_chat.id(),
                                                channel_name,
-                                               network_id,
-                                               search_result->file_id,
+                                               schema.value(),
                                                Dfs::DataSecurity::Public);
     if (!store_res.has_value()) {
         return std::unexpected(ChatError::Unknown);

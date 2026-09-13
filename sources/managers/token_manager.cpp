@@ -342,6 +342,13 @@ std::optional<std::string> TokenManager::registry_file_id() const {
     return file.value().file_id;
 }
 
+bool TokenManager::validate_registry_row(const DbRow &row) const {
+    const auto author = row.find("actor");
+    auto       token  = Utils::from_dbrow<TokenData>(row);
+    return author != row.end() && token.has_value() && author->second == token.value().owner_id.to_string()
+           && registry_row_valid(token.value());
+}
+
 bool TokenManager::registry_row_valid(TokenData &token_data) const {
     if (token_data.token_id.is_zero()) {
         token_data.kind = "native-token";

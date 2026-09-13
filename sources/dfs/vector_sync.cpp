@@ -45,6 +45,7 @@ struct Dfs::VectorSync::State : std::enable_shared_from_this<State> {
         FileLink                        link;
         std::string                     peer;
         std::unique_ptr<VectorSnapshot> snapshot;
+        Packets::DfsVectorContentPackage metadata;
     };
     struct Pending {
         FileLink          link;
@@ -160,6 +161,12 @@ struct Dfs::VectorSync::State : std::enable_shared_from_this<State> {
         if (found == clients.end())
             return;
         auto client = std::move(found->second);
+        if (!complete)
+            eLog("[VectorSync] Retry {} / {} from {}, snapshot {}",
+                 link.owner_id,
+                 link.file_id,
+                 client.peer,
+                 client.snapshot);
         clients.erase(found);
         {
             std::lock_guard lock(gate);
@@ -242,6 +249,7 @@ struct Dfs::VectorSync::State : std::enable_shared_from_this<State> {
             return;
         }
         if (client.snapshot.empty()) {
+            client.snapshot = reply.snapshot;
             if (!reply.metadata.has_value() || reply.slice.has_value() || !reply.metadata.value().content.empty()
                 || reply.metadata.value().owner_id != client.link.owner_id
                 || reply.metadata.value().file_id != client.link.file_id
@@ -267,7 +275,6 @@ struct Dfs::VectorSync::State : std::enable_shared_from_this<State> {
                 return;
             }
             client.metadata = reply.metadata.value();
-            client.snapshot = reply.snapshot;
             client.root     = reply.root;
             if (reply.root.tree.rows != 0)
                 client.todo.push_back(reply.root.tree);
@@ -304,11 +311,42 @@ struct Dfs::VectorSync::State : std::enable_shared_from_this<State> {
         if (!request.release && node->network()->connection_pending_bytes(source) > 4 * 1024 * 1024)
             return;
         if (request.snapshot.empty()) {
-            if (request.release || !request.prefix.empty() || servers.size() >= MaxServers
-                || std::ranges::count_if(servers, [&](const auto& item) {
-                       return item.second.peer == source;
-                   }) >= 4)
+            if (request.release || !request.prefix.empty())
                 return;
+            std::erase_if(servers, [&](const auto& item) {
+                return item.second.snapshot->expired(Clock::now());
+            });
+            const auto existing = std::ranges::find_if(servers, [&](const auto& item) {
+                return item.second.peer == source && item.second.link == request.link;
+            });
+            if (existing != servers.end()) {
+                const auto current =
+                    Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->dirs_manager().get_db_instance(),
+                                                              request.link.owner_id,
+                                                              request.link.file_id);
+                if (!current.has_value() || current.value().state == FileState::Removed) {
+                    servers.erase(existing);
+                    return;
+                }
+                responder.send_response(VectorSyncReply { .link     = request.link,
+                                                          .snapshot = existing->first,
+                                                          .root     = existing->second.snapshot->root(),
+                                                          .metadata = existing->second.metadata },
+                                        MessageType::DfsVectorSyncReply,
+                                        SendMode::Focused,
+                                        MessageStatus::Response);
+                return;
+            }
+            if (servers.size() >= MaxServers || std::ranges::count_if(servers, [&](const auto& item) {
+                                                    return item.second.peer == source;
+                                                }) >= 4) {
+                eLog("[VectorSync] Snapshot limit for {} / {} from {}: {} active",
+                     request.link.owner_id,
+                     request.link.file_id,
+                     source,
+                     servers.size());
+                return;
+            }
             auto vector = node->dfs()->make_vector(request.link.owner_id, request.link.file_id);
             if (!vector.has_value() || vector.value().first.state == FileState::Removed)
                 return;
@@ -328,7 +366,7 @@ struct Dfs::VectorSync::State : std::enable_shared_from_this<State> {
                                     .snapshot = id,
                                     .root     = snapshot.value()->root(),
                                     .metadata = metadata.value() };
-            servers.emplace(id, Server { request.link, source, std::move(snapshot.value()) });
+            servers.emplace(id, Server { request.link, source, std::move(snapshot.value()), metadata.value() });
             responder.send_response(reply,
                                     MessageType::DfsVectorSyncReply,
                                     SendMode::Focused,

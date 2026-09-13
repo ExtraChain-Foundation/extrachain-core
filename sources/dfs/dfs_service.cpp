@@ -1989,8 +1989,10 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsService::mak
     //     return std::unexpected(DfsVectorError::Unknown);
     // }
 
-    auto signer_actor = node->account_controller()->current_profile().get_actor(
-        !signer_id.is_zero() ? signer_id : node->account_controller()->current_profile().main_id());
+    auto &profile      = node->account_controller()->current_profile();
+    auto  signer_actor = profile.get_actor(signer_id.is_zero() ? owner_id : signer_id);
+    if (!signer_actor.has_value() && signer_id.is_zero())
+        signer_actor = profile.get_actor(profile.main_id());
     auto encryption = dir_row->encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
 
     if (!signer_actor.has_value()) {

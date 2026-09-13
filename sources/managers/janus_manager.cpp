@@ -48,7 +48,9 @@ std::optional<std::string> JanusManager::place_bid_row(const ActorId     &item_o
 
 bool JanusManager::create_bid_template(const std::string &template_name, const Dfs::CollectionTemplate &tmpl) {
     auto system_actor_id = node->account_controller()->system_actor().id();
-    auto template_res    = node->dfs()->store_template(system_actor_id, tmpl);
+    auto shared          = tmpl;
+    shared.set_write_policy(Dfs::VectorWritePolicy::ActorNamespace);
+    auto template_res = node->dfs()->store_template(system_actor_id, shared);
 
     if (!template_res.has_value()) {
         eCritical("Can't create bid template '{}': {}", template_name, template_res.error());

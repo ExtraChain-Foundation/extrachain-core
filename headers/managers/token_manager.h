@@ -35,6 +35,7 @@
 
 #include "chain/actor.h"
 #include "chain/transaction.h"
+#include "utils/db_connector.h"
 #include "contracts/contract_transaction.h"
 #include "contracts/toolchain_registry.h"
 #include "runtime/event.h"
@@ -238,6 +239,7 @@ public:
             ExtraChain::Contracts::ToolchainLanguage::AssemblyScript);
 
     void final_token_creation(const Transaction &transaction);
+    bool validate_registry_row(const DbRow &row) const;
 
     static bool is_valid_token_name(const std::string &name);
     static bool id_valid_token_ticker(const std::string &ticker);

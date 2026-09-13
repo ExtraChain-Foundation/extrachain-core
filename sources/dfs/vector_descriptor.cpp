@@ -34,9 +34,18 @@ std::expected<Dfs::CollectionTemplate, std::string> Dfs::vector_storage_template
         || Json::serialize(schema).size() > VectorDescriptorLimit)
         return std::unexpected("Invalid vector template size");
     std::set<std::string> names { "actor", "sign", "timestamp", "status" };
+    if (schema.write_policy() != VectorWritePolicy::OwnerOnly
+        && schema.write_policy() != VectorWritePolicy::ActorNamespace
+        && schema.write_policy() != VectorWritePolicy::TokenRegistry)
+        return std::unexpected("Unknown vector write policy");
+    if (schema.write_policy() == VectorWritePolicy::ActorNamespace && schema.primary.has_value()
+        && schema.primary.value().type() != FieldType::String)
+        return std::unexpected("Actor namespace keys must be strings");
     if (schema.primary.has_value() && !names.insert(schema.primary.value().name()).second)
         return std::unexpected("Reserved vector primary field");
     for (const auto& field : schema.fields()) {
+        if (schema.write_policy() != VectorWritePolicy::OwnerOnly && field.is_unique())
+            return std::unexpected("Shared vector fields cannot enforce secondary UNIQUE constraints");
         if (encrypted && field.is_unique())
             return std::unexpected("Encrypted vector fields cannot enforce UNIQUE constraints");
         if (!names.insert(field.name()).second)

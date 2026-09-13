@@ -563,7 +563,8 @@ namespace ExtraChain::Core {
     bool ExtraChainNode::create_usernames_vector() {
         auto vector_template = Dfs::CollectionTemplate::create("Usernames")
                                    .value()
-                                   .add_fields({ Dfs::Field::String("name").unique() });
+                                   .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
+                                   .add_fields({ Dfs::Field::String("name") });
 
         auto system_actor_id = account_controller()->system_actor().id();
         auto template_res    = dfs()->store_template(system_actor_id, vector_template);
@@ -587,8 +588,11 @@ namespace ExtraChain::Core {
 
     bool ExtraChainNode::create_chat_templates() {
         auto system_actor_id = account_controller()->system_actor().id();
-        auto chat_template   = Dfs::CollectionTemplate::create("Chat").value().use_id().add_fields(
-            { Dfs::Field::Json("message").not_null() });
+        auto chat_template   = Dfs::CollectionTemplate::create("Chat")
+                                   .value()
+                                   .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
+                                   .use_id()
+                                   .add_fields({ Dfs::Field::Json("message").not_null() });
 
         auto chat_result = dfs()->store_template(system_actor_id, chat_template);
         if (!chat_result.has_value()) {
@@ -604,6 +608,7 @@ namespace ExtraChain::Core {
     bool ExtraChainNode::create_subscription_template() {
         auto subscription_template = Dfs::CollectionTemplate::create("Subscription")
                                          .value()
+                                         .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
                                          .add_fields({ Dfs::Field::Integer("type").not_null(),
                                                        Dfs::Field::Integer("date_start").not_null(),
                                                        Dfs::Field::Bool("auto_renew").not_null().between(0, 1),
@@ -631,17 +636,18 @@ namespace ExtraChain::Core {
             return existing->state == Dfs::FileState::Ready;
         }
 
-        auto tokens_template = Dfs::CollectionTemplate::create("TokensRegistry")
-                                   .value()
-                                   .add_fields({ Dfs::Field::String("name").not_null().unique().length(3, 20),
-                                                 Dfs::Field::String("ticker").not_null().unique().length(2, 5),
-                                                 Dfs::Field::String("count").not_null(),
-                                                 Dfs::Field::ActorId("owner_id").not_null(),
-                                                 Dfs::Field::String("color").not_null(),
-                                                 Dfs::Field::String("smart"),
-                                                 Dfs::Field::Integer("decimals").not_null().between(0, 18),
-                                                 Dfs::Field::String("section_id").not_null(),
-                                                 Dfs::Field::String("tx_hash").not_null() });
+        auto tokens_template    = Dfs::CollectionTemplate::create("TokensRegistry")
+                                      .value()
+                                      .set_write_policy(Dfs::VectorWritePolicy::TokenRegistry)
+                                      .add_fields({ Dfs::Field::String("name").not_null().length(3, 20),
+                                                    Dfs::Field::String("ticker").not_null().length(2, 5),
+                                                    Dfs::Field::String("count").not_null(),
+                                                    Dfs::Field::ActorId("owner_id").not_null(),
+                                                    Dfs::Field::String("color").not_null(),
+                                                    Dfs::Field::String("smart"),
+                                                    Dfs::Field::Integer("decimals").not_null().between(0, 18),
+                                                    Dfs::Field::String("section_id").not_null(),
+                                                    Dfs::Field::String("tx_hash").not_null() });
         tokens_template.primary = Dfs::Field::ActorId("token_id").not_null().unique();
 
         auto template_res = dfs_->store_template(network_id, tokens_template);
@@ -968,9 +974,10 @@ namespace ExtraChain::Core {
 
         auto vector_template = Dfs::CollectionTemplate::create(CHANNELS_VECTOR_NAME)
                                    .value()
+                                   .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
                                    .add_fields({ Dfs::Field::String("name"),
                                                  Dfs::Field::String("owner_id").not_null(),
-                                                 Dfs::Field::String("file_id").unique().not_null() });
+                                                 Dfs::Field::String("file_id").not_null() });
 
         auto template_res = dfs()->store_template(system_id, vector_template);
         if (!template_res.has_value()) {

@@ -595,6 +595,7 @@ int main(int argc, char* argv[]) {
                 return 5;
             }
             auto vector_template = collection_template.value()
+                                       .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
                                        .use_id()
                                        .add_fields({ Dfs::Field::String("payload").not_null(),
                                                      Dfs::Field::Integer("position").not_null() });

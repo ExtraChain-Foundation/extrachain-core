@@ -19,6 +19,7 @@
 
 #include "dfs/dfs_vector.h"
 #include "dfs/vector_index.h"
+#include "managers/token_manager.h"
 
 #include "dfs/dfs_service.h"
 #include "core/extrachain_node.h"
@@ -316,7 +317,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &prim
     }
 
     auto               query   = fmt::format("SELECT * FROM {} WHERE {} = ? AND status = '1'", "Vector", field);
-    std::vector<DbRow> db_rows = db.select(query, "Vector", { { field, primary_data } });
+    std::vector<DbRow> db_rows = db.select(query, "Vector", { { field, row_key(primary_data) } });
 
     if (db_rows.empty()) {
         return std::unexpected(DfsVectorError::CollectionEmpty);
@@ -483,8 +484,6 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         return false;
     }
 
-    auto write_lock =
-        node->dfs()->download_manager().lock_file({ .owner_id = file_actor_id_, .file_id = file_id_ });
     const auto catalog =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->dirs_manager().get_db_instance(),
                                                        file_actor_id_,
@@ -540,6 +539,16 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         return false;
     schema.value().set_table_name("Vector");
 
+    auto write_lock =
+        node->dfs()->download_manager().lock_file({ .owner_id = file_actor_id_, .file_id = file_id_ });
+    const auto current =
+        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->dirs_manager().get_db_instance(),
+                                                       file_actor_id_,
+                                                       file_id_);
+    if (!current.has_value() || current.value().state == Dfs::FileState::Removed
+        || current.value().template_hash != Dfs::vector_template_hash(vector_template))
+        return false;
+
     // The owner's directory may not exist yet: vector content can arrive before anything
     // else has created it, and sqlite then fails to open the file — 300 such failures on
     // one node during seeding, each one a vector that never arrived. This used to be
@@ -581,6 +590,11 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         auto existing = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", primary_field),
                                   "Vector",
                                   { { primary_field, db_row.at(primary_field) } });
+        if (!existing.empty()
+            && (!existing.front().contains("actor") || existing.front().at("actor") != db_row.at("actor"))) {
+            db.query("ROLLBACK");
+            return false;
+        }
         if (!existing.empty() && compare_row_revisions(db_row, existing.front()) <= 0) {
             continue;
         }
@@ -591,7 +605,7 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         const auto stored = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", primary_field),
                                       "Vector",
                                       { { primary_field, db_row.at(primary_field) } });
-        if (stored.size() != 1 || !verifier.verify(stored.front())
+        if (stored.size() != 1 || !verifier.verify_signature(stored.front())
             || !index.update(db_row.at(primary_field)).has_value()) {
             db.query("ROLLBACK");
             return false;
@@ -614,6 +628,12 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
 }
 
 bool DfsVector::store_add(DbRow &row) {
+    if (collection_template_.primary.has_value()) {
+        const auto &primary = collection_template_.primary.value().name();
+        if (row.contains(primary))
+            row[primary] = row_key(row.at(primary));
+    }
+
     row["timestamp"] = std::to_string(Utils::current_date_ms());
     row["status"]    = row.contains("status") && row.at("status") == "0" ? "0" : "1";
     row["actor"] = actor_.id().to_string();
@@ -624,11 +644,15 @@ bool DfsVector::store_add(DbRow &row) {
     if (!encrypted.value().empty())
         row = std::move(encrypted.value());
 
+    if (!authorized(row))
+        return false;
     const auto result = persist_row(row, true, true);
     return result.has_value() && result.value();
 }
 
 std::expected<bool, DfsVectorError> DfsVector::local_add(const DbRow &row, bool check) {
+    if (!verify(row))
+        return std::unexpected(DfsVectorError::Adding);
     auto candidate = row;
     return persist_row(candidate, false, check);
 }
@@ -643,7 +667,7 @@ std::expected<bool, DfsVectorError> DfsVector::persist_row(DbRow &row, bool loca
     if (!catalog.has_value() || catalog.value().state == Dfs::FileState::Removed
         || catalog.value().template_hash != Dfs::vector_template_hash(collection_template_))
         return std::unexpected(DfsVectorError::Adding);
-    if (!local && !this->verify(row)) {
+    if (!local && !verify_signature(row)) {
         eWarning("[DfsVector] local_add refused, row does not verify: {} / {}", file_actor_id_, file_id_);
         return std::unexpected(DfsVectorError::Adding);
     }
@@ -673,10 +697,14 @@ std::expected<bool, DfsVectorError> DfsVector::persist_row(DbRow &row, bool loca
         db.query("ROLLBACK");
         return std::unexpected(DfsVectorError::Adding);
     }
+    const auto existing =
+        db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field), "Vector", { { field, row.at(field) } });
+    if (!existing.empty()
+        && (!existing.front().contains("actor") || existing.front().at("actor") != row.at("actor"))) {
+        db.query("ROLLBACK");
+        return std::unexpected(DfsVectorError::Adding);
+    }
     if (check) {
-        auto existing = db.select(fmt::format("SELECT * FROM Vector WHERE {} = ?", field),
-                                  "Vector",
-                                  { { field, row.at(field) } });
         if (local && !existing.empty()) {
             const auto previous = row_timestamp(existing.front());
             if (!previous.has_value() || previous.value() >= std::numeric_limits<std::int64_t>::max()) {
@@ -724,7 +752,7 @@ std::expected<bool, DfsVectorError> DfsVector::persist_row(DbRow &row, bool loca
             return std::unexpected(DfsVectorError::Adding);
         }
     }
-    if (!verify(canonical) || !index.update(canonical.at(field)).has_value() || !db.query("COMMIT")) {
+    if (!verify_signature(canonical) || !index.update(canonical.at(field)).has_value() || !db.query("COMMIT")) {
         db.query("ROLLBACK");
         return std::unexpected(DfsVectorError::Adding);
     }
@@ -848,7 +876,45 @@ std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
     return std::pair { root.value().hash, root.value().tree.bytes };
 }
 
+std::string DfsVector::row_key(const std::string &key) const {
+    if (collection_template_.write_policy() == Dfs::VectorWritePolicy::ActorNamespace
+        && collection_template_.primary.has_value() && key.find(':') == std::string::npos)
+        return actor_.id().to_string() + ':' + key;
+    return key;
+}
+
+bool DfsVector::authorized(const DbRow &row) {
+    const auto author = row.find("actor");
+    if (author == row.end())
+        return false;
+    const auto actor = ActorId::create(author->second);
+    if (!actor.has_value() || actor.value().is_zero())
+        return false;
+    switch (collection_template_.write_policy()) {
+    case Dfs::VectorWritePolicy::OwnerOnly:
+        return actor.value() == file_actor_id_;
+    case Dfs::VectorWritePolicy::ActorNamespace:
+        if (!collection_template_.primary.has_value())
+            return true;
+        if (const auto primary = row.find(collection_template_.primary.value().name()); primary != row.end()) {
+            const auto prefix = actor.value().to_string() + ':';
+            return primary->second.size() > prefix.size() && primary->second.size() <= 512
+                   && primary->second.starts_with(prefix);
+        }
+        return false;
+    case Dfs::VectorWritePolicy::TokenRegistry:
+        return file_actor_id_ == node->network_id() && !is_encrypted_ && collection_template_.primary.has_value()
+               && collection_template_.primary.value().name() == "token_id"
+               && node->token_manager()->validate_registry_row(row);
+    }
+    return false;
+}
+
 bool DfsVector::verify(const DbRow &row) {
+    return verify_signature(row) && authorized(row);
+}
+
+bool DfsVector::verify_signature(const DbRow &row) {
     if (!row.contains("actor") || !row.contains("sign") || !row.contains("status")
         || row.at("sign").size() != crypto_sign_BYTES || !row_timestamp(row).has_value()) {
         return false;

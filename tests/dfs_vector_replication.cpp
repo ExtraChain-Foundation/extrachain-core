@@ -82,6 +82,8 @@ namespace {
         std::atomic_size_t       transferred_rows { 0 };
         std::atomic_bool         tamper_once { false };
         std::atomic_bool         tampered { false };
+        std::atomic_bool         bad_metadata { false };
+        std::atomic_uint         releases { 0 };
         std::atomic<std::size_t> served_rows { 0 };
 
         std::string protocol_string() const override {
@@ -138,6 +140,7 @@ namespace {
             }
             if (request.release) {
                 snapshot_.reset();
+                releases.fetch_add(1);
                 return;
             }
             Dfs::VectorSyncReply reply { .link = { owner_, file_id_ } };
@@ -165,6 +168,8 @@ namespace {
                                                                          .file_id         = file_id_,
                                                                          .vector_template = template_,
                                                                          .vector_file     = vector_file_ };
+                if (bad_metadata)
+                    reply.metadata.value().vector_template.add_fields({ Dfs::Field::String("forged_field") });
             } else {
                 TEST_REQUIRE(request.snapshot == snapshot_id_ && snapshot_);
                 const auto slice = snapshot_->read(request.prefix);
@@ -346,7 +351,22 @@ int main(int argc, char **argv) {
         node->network()->connections()->insert(unavailable);
     }
 
-    if (mode == "tamper") {
+    if (mode == "metadata") {
+        peer->served_rows  = TOTAL_ROWS;
+        peer->bad_metadata = true;
+        node->dfs()->request_vector_content(owner_id, file_id);
+        TEST_REQUIRE(wait_for(
+            [&] {
+                return peer->releases.load() > 0;
+            },
+            5s));
+        TEST_REQUIRE_EQ(rows_now(), kept);
+        peer->bad_metadata = false;
+        node->dfs()->request_vector_content(owner_id, file_id, true);
+        TEST_REQUIRE(wait_for([&] {
+            return rows_now() == TOTAL_ROWS;
+        }));
+    } else if (mode == "tamper") {
         peer->served_rows = TOTAL_ROWS;
         peer->tamper_once = true;
         node->dfs()->request_vector_content(owner_id, file_id);

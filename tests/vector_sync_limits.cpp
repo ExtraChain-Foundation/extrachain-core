@@ -61,6 +61,16 @@ int main() {
     const Dfs::FileLink link { owner.id(), vector.value().file_id };
     TEST_REQUIRE(
         node->dfs()->add_vector_row(owner.id(), link.file_id, { { "id", "row" }, { "payload", "value" } }));
+    std::vector<Dfs::FileLink> links { link };
+    for (unsigned i = 1; i < 5; ++i) {
+        const auto file = node->dfs()->store_vector(owner.id(),
+                                                    owner.id(),
+                                                    "limits" + std::to_string(i),
+                                                    owner.id(),
+                                                    stored.value().file_id);
+        TEST_REQUIRE(file.has_value());
+        links.push_back({ owner.id(), file.value().file_id });
+    }
     Replies    replies;
     auto&      sync   = node->dfs()->vector_sync();
     const auto target = [&](char source) {
@@ -76,15 +86,17 @@ int main() {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
     };
-    const auto root = [&](char source) {
+    const auto root = [&](char source, const Dfs::FileLink& file_link) {
         const auto responder = target(source);
-        send({ .link = link }, responder);
+        send({ .link = file_link }, responder);
         const auto reply = replies.wait(responder.message_id());
         TEST_REQUIRE(Dfs::VectorIndex::valid_root(reply.root));
         TEST_REQUIRE(reply.metadata.has_value() && !reply.slice.has_value());
         return reply;
     };
-    const auto first = root('a');
+    const auto first = root('a', link);
+    for (unsigned i = 0; i < 8; ++i)
+        TEST_REQUIRE_EQ(root('a', link).snapshot, first.snapshot);
     const auto probe = [&] {
         const auto responder = target('a');
         send({ link, first.snapshot, first.root.tree.prefix }, responder);
@@ -106,21 +118,21 @@ int main() {
     probe();
     TEST_REQUIRE(!replies.contains(wrong_file.message_id()));
     for (unsigned i = 1; i < 4; ++i)
-        root('a');
+        root('a', links[i]);
     const auto fifth = target('a');
-    send({ .link = link }, fifth);
+    send({ .link = links[4] }, fifth);
     probe();
     TEST_REQUIRE(!replies.contains(fifth.message_id()));
     for (char source : { 'b', 'c', 'd' }) {
         for (unsigned i = 0; i < 4; ++i)
-            root(source);
+            root(source, links[i]);
     }
     const auto seventeenth = target('e');
     send({ .link = link }, seventeenth);
     probe();
     TEST_REQUIRE(!replies.contains(seventeenth.message_id()));
     send({ link, first.snapshot, { }, true }, target('a'));
-    const auto replacement = root('a');
+    const auto replacement = root('a', link);
     TEST_REQUIRE(replacement.snapshot != first.snapshot);
     const auto stale = target('a');
     send({ link, first.snapshot, first.root.tree.prefix }, stale);
