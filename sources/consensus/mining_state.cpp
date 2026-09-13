@@ -41,14 +41,16 @@ namespace ExtraChain::Consensus {
 
         std::expected<std::map<std::string, std::string>, ConsensusError> state_entries(const MiningState& state) {
             if (state.network.is_zero() || state.registrations.size() > MaximumMiningDatasets
-                || state.epochs.size() > 8)
+                || state.epochs.size() > 8
+                || (!state.emission_policy_hash.empty() && state.emission_policy_hash.size() != 64))
                 return std::unexpected(ConsensusError::InvalidIntent);
             std::map<std::string, std::string> entries;
             entries.emplace("parameters",
                             MessagePack::serialize(std::tuple { state.network,
                                                                 state.section,
                                                                 state.reserved_units,
-                                                                state.minted_units }));
+                                                                state.minted_units,
+                                                                state.emission_policy_hash }));
             std::size_t providers = 0;
             for (const auto& [identity, dataset] : state.registrations) {
                 if (identity.size() != 64 || dataset.dataset.root.size() != 64

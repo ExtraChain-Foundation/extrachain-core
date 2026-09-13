@@ -22,6 +22,7 @@ namespace ExtraChain::Consensus {
     };
 
     std::expected<std::uint64_t, ConsensusError> mining_policy_total(const MiningEmissionPolicy& policy);
+    std::string mining_policy_hash(const std::optional<MiningEmissionPolicy>& policy);
     std::expected<std::uint64_t, ConsensusError> mining_policy_budget(const MiningEmissionPolicy& policy,
                                                                       std::uint64_t               epoch);
 } // namespace ExtraChain::Consensus

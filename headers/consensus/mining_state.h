@@ -15,10 +15,11 @@ namespace ExtraChain::Consensus {
         std::uint64_t                                  section        = 0;
         std::uint64_t                                  reserved_units = 0;
         std::uint64_t                                  minted_units   = 0;
+        std::string                                    emission_policy_hash;
         std::map<std::string, MiningRegisteredDataset> registrations;
         std::map<std::uint64_t, MiningEpochState>      epochs;
 
-        MSGPACK_DEFINE(network, section, reserved_units, minted_units, registrations, epochs)
+        MSGPACK_DEFINE(network, section, reserved_units, minted_units, emission_policy_hash, registrations, epochs)
     };
 
     using MiningFinalityReader = std::function<std::expected<FinalityProof, ConsensusError>(std::uint64_t)>;

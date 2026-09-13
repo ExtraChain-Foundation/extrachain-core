@@ -1,7 +1,12 @@
 #include "consensus/mining_policy.h"
 #include "consensus/mining_epoch.h"
+#include "utils/exc_utils.h"
+#include "utils/serialization.h"
 
 namespace ExtraChain::Consensus {
+    std::string mining_policy_hash(const std::optional<MiningEmissionPolicy>& policy) {
+        return Utils::calculate_hash("EXC_MINING_POLICY_V1:" + MessagePack::serialize(policy));
+    }
     std::expected<std::uint64_t, ConsensusError> mining_policy_total(const MiningEmissionPolicy& policy) {
         if (policy.segments.empty() || policy.segments.size() > MaximumMiningEmissionSegments)
             return std::unexpected(ConsensusError::InvalidIntent);

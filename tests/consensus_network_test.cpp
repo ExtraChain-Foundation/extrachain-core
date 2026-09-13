@@ -12,7 +12,9 @@
 #include "consensus/mining_state.h"
 #include "consensus/mining_settlement.h"
 #include "consensus/mining_transaction.h"
+#include "consensus/mining_replay.h"
 #include "chain/dag_cache.h"
+#include "chain/dag.h"
 #include "utils/serialization.h"
 #include "consensus/balance_snapshot.h"
 #include "consensus/validator_set.h"
@@ -277,7 +279,8 @@ int main() {
     };
     const auto reward_dataset    = commit_storage_dataset(17, reward_reader).value();
     const auto reward_dataset_id = storage_dataset_id(committee.governance.id(), reward_dataset).value();
-    auto       certified_mining  = create_mining_state(committee.governance.id(), 0).value();
+    const MiningEmissionPolicy certified_policy { 0, { { 1, 10 } } };
+    auto certified_mining = configure_mining_state(committee.governance.id(), 0, certified_policy).value();
     check("certified mining registers immutable bytes before its epoch",
           register_storage_provider(certified_mining, committee.governance.id(), reward_dataset).has_value());
     auto       mining_verifier = LightClientVerifier::create(committee.document).value();
@@ -289,6 +292,8 @@ int main() {
         return proofs.value().front();
     };
     std::optional<MiningEpochWitness> closing_witness;
+    std::optional<MiningState>        before_settlement;
+    std::string                       after_settlement_root;
     MiningPayouts                     certified_payouts;
     bool quorum_guard_checked = false;
     for (std::uint64_t height = 1; height <= 12; ++height) {
@@ -320,6 +325,10 @@ int main() {
         }
         if (height == 6)
             closing_witness = make_mining_epoch_witness(certified_mining, 0).value();
+        if (height == 8)
+            before_settlement = certified_mining;
+        if (height == 9)
+            after_settlement_root = mining_state_root(certified_mining);
         auto projected_state =
             state_commitment(*engines[leader_index], height, "network-root-" + std::to_string(height));
         projected_state.mining_state_root = mining_state_root(certified_mining);
@@ -399,6 +408,58 @@ int main() {
           checked_payouts.has_value() && checked_payouts.value() == certified_payouts
               && certified_payouts.at(committee.governance.id().to_string()) == 10);
     const auto settlement_transaction = make_mining_settlement_transaction(settlement).value();
+    const auto settlement_batch       = [&](const std::optional<Transaction>& record) {
+        WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+        SectionBatchData  batch;
+        batch.manifest.first_section = 161;
+        batch.manifest.last_section  = 180;
+        for (std::uint64_t section = 161; section <= 180; ++section) {
+            Section content { .id = SectionId(section) };
+            if (section == 161 && record.has_value())
+                content.transactions.insert(record.value());
+            batch.sections.emplace_back(section, Json::serialize(content));
+        }
+        return batch;
+    };
+    const auto replayed = replay_mining_batch(before_settlement.value(),
+                                              certified_policy,
+                                              settlement_batch(settlement_transaction),
+                                              mining_finality,
+                                              mining_verifier);
+    check("DAG batch replay requires and applies the exact certified settlement",
+          replayed.has_value() && mining_state_root(replayed.value()) == after_settlement_root);
+    check("DAG batch replay rejects an omitted settlement",
+          !replay_mining_batch(before_settlement.value(),
+                               certified_policy,
+                               settlement_batch(std::nullopt),
+                               mining_finality,
+                               mining_verifier)
+               .has_value());
+    check("DAG batch replay rejects a substituted emission policy",
+          !replay_mining_batch(before_settlement.value(),
+                               MiningEmissionPolicy { 0, { { 1, 11 } } },
+                               settlement_batch(settlement_transaction),
+                               mining_finality,
+                               mining_verifier)
+               .has_value());
+    const auto restored_mining =
+        MessagePack::deserialize<MiningState>(MessagePack::serialize(before_settlement.value()));
+    check("restored mining state replays the same batch",
+          restored_mining.has_value()
+              && mining_state_root(replay_mining_batch(restored_mining.value(),
+                                                       certified_policy,
+                                                       settlement_batch(settlement_transaction),
+                                                       mining_finality,
+                                                       mining_verifier)
+                                       .value())
+                     == after_settlement_root);
+    check("mining batch cannot be applied twice",
+          !replay_mining_batch(replayed.value(),
+                               certified_policy,
+                               settlement_batch(settlement_transaction),
+                               mining_finality,
+                               mining_verifier)
+               .has_value());
     check("native system transaction verifies without an actor mint signature",
           verify_mining_settlement_transaction(settlement_transaction, committee.governance.id(), mining_verifier)
                   .value()
