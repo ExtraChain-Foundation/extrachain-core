@@ -488,8 +488,13 @@ void WebSocketService::send_message(std::span<const std::uint8_t> data, Priority
         }
     }
     if (overflow) {
-        if (priority == Priority::High)
+        if (priority == Priority::High) {
+            eWarning("[WS] Outbound queue limit for {}: pending={} bytes, message={} bytes",
+                     ip_,
+                     pending_bytes(),
+                     data.size());
             close_connection();
+        }
         return;
     }
     flush();

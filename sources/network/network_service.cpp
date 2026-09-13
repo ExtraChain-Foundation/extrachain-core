@@ -626,6 +626,10 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
                                  std::string        identifier) {
         const auto ticket = incoming_budget_.reserve(identifier, message.size());
         if (!ticket) {
+            if (!stopping_.load(std::memory_order_acquire))
+                eWarning("[Network] Inbound work budget exhausted for {}: message={} bytes",
+                         identifier,
+                         message.size());
             socket->close_connection();
             return;
         }
