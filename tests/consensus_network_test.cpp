@@ -296,7 +296,7 @@ int main() {
     std::string                       after_settlement_root;
     MiningPayouts                     certified_payouts;
     bool quorum_guard_checked = false;
-    for (std::uint64_t height = 1; height <= 12; ++height) {
+    for (std::uint64_t height = 1; height <= 13; ++height) {
         const auto& leader       = committee.view.leader(height, 0);
         const auto  leader_index = committee.index_for(leader.validator_id);
         for (auto section = (height - 1) * ShadowSectionInterval + 1; section <= height * ShadowSectionInterval;
@@ -546,7 +546,7 @@ int main() {
               && verify_mining_settlement(restored_settlement.value(), 161, mining_verifier).value()
                      == certified_payouts);
 
-    const auto expected_finalized = std::uint64_t(10);
+    const auto expected_finalized = std::uint64_t(11);
     check("seven-node run finalizes the three-chain prefix",
           std::ranges::all_of(engines, [expected_finalized](const auto& engine) {
               return engine->safety_state().finalized_height == expected_finalized;
@@ -555,7 +555,19 @@ int main() {
     check("old finalized network transaction has an inclusion proof",
           inclusion.has_value() && inclusion.value().has_value()
               && engines.front()->verify_transaction_inclusion_proof(inclusion.value().value()));
-    auto light_client = LightClientVerifier::create(committee.document);
+    TrustAnchorV1 mining_anchor {
+        .network_id         = committee.governance.id(),
+        .initial_validators = committee.document,
+        .governance_policy  = governance_policy.value(),
+        .recovery_policy =
+            make_multisig_policy(committee.governance.id(), RecoveryThreshold, governance_public_keys).value()
+    };
+    mining_anchor.authorization = authorize_action(governance_policy.value(),
+                                                   1,
+                                                   trust_anchor_action_hash(mining_anchor),
+                                                   { governance_keys[0], governance_keys[1], governance_keys[2] })
+                                      .value();
+    auto light_client           = LightClientVerifier::bootstrap(mining_anchor);
     check("light client starts from the trusted validator set", light_client.has_value());
     check("light client verifies finality and transaction inclusion without DAG state",
           light_client.has_value() && inclusion.has_value() && inclusion.value().has_value()
@@ -855,16 +867,35 @@ int main() {
           new_epoch_inclusion.has_value() && new_epoch_inclusion.value().has_value()
               && light_client.value().advance(new_epoch_inclusion.value().value().finality_proof).has_value()
               && light_client.value().active_validators().document().epoch == 3);
+    const auto abandoned_tail = engines.front()->finality_proof_for_section(220);
+    check("old committee produces a valid proof beyond the handover anchor",
+          abandoned_tail.has_value() && abandoned_tail.value().has_value()
+              && mining_verifier.verify_finality_proof(abandoned_tail.value().value()));
+    check("new committee rejects old authority beyond the handover anchor",
+          abandoned_tail.has_value() && abandoned_tail.value().has_value()
+              && !light_client.value().verify_finality_proof(abandoned_tail.value().value()));
+    check("light client retains old finalized mining proofs after a validator change",
+          verify_mining_settlement_transaction(settlement_transaction,
+                                               committee.governance.id(),
+                                               light_client.value())
+              .has_value());
     check("light client rejects a finalized proof below its trusted height",
           inclusion.has_value() && inclusion.value().has_value()
               && !light_client.value().advance(inclusion.value().value().finality_proof).has_value());
     check("light client saves the promoted trust chain",
           light_client.value().save(light_client_state_path).has_value());
-    const auto promoted_light_client = LightClientVerifier::load(light_client_state_path);
+    auto promoted_light_client = LightClientVerifier::load(light_client_state_path);
     check("light client restores the promoted epoch and trusted height",
           promoted_light_client.has_value()
               && promoted_light_client.value().active_validators().document().epoch == 3
               && promoted_light_client.value().trusted_height() == 13);
+    check("light client restores the old mining proof authority from signed transition history",
+          promoted_light_client.has_value() && promoted_light_client.value().snapshot().epoch_history.size() == 1
+              && verify_mining_settlement_transaction(settlement_transaction,
+                                                      committee.governance.id(),
+                                                      promoted_light_client.value())
+                     .has_value()
+              && !promoted_light_client.value().advance(settlement.closure).has_value());
     const auto third_epoch_inclusion = next_engines.front()->transaction_inclusion_proof(third_epoch_action_hash);
     check("second governed epoch action has an inclusion proof",
           third_epoch_inclusion.has_value() && third_epoch_inclusion.value().has_value());
