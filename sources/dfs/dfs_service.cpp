@@ -857,6 +857,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsService::store_collection(
         return std::unexpected(Dfs::DfsError::DirDuplicate);
     }
 
+    auto author_actor = node->account_controller()->current_profile().get_actor(author_id);
+    if (!author_actor.has_value()) {
+        return std::unexpected(Dfs::DfsError::NoAuthorActor);
+    }
+
     std::string file_id  = create_file_id_from("db");
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
     auto        actor    = node->account_controller()->current_profile().get_actor(owner_id);
@@ -865,19 +870,19 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsService::store_collection(
     }
 
     // TODO: add author, not only owner
-    auto chain =
-        HistoricalCollection::create(node, actor.value(), actor->get().id(), file_id, collection_template);
+    auto chain = HistoricalCollection::create(node,
+                                              actor.value(),
+                                              owner_id,
+                                              file_id,
+                                              collection_template,
+                                              data_security,
+                                              security_data);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
     auto [collection_hash, collection_size] =
         Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(owner_id, file_id);
-
-    auto author_actor = node->account_controller()->current_profile().get_actor(author_id);
-    if (!author_actor.has_value()) {
-        return std::unexpected(Dfs::DfsError::NoAuthorActor);
-    }
 
     Dfs::DirRow dir_row = { .actor_id      = author_id,
                             .owner_id      = owner_id,
@@ -1371,14 +1376,37 @@ std::optional<std::map<std::string, std::string>> DfsService::read_dictionary_ro
     return result;
 }
 
+namespace {
+    Dfs::DataSecurity collection_security(const Dfs::DataSecurityData &data) {
+        if (std::holds_alternative<Dfs::DataSecuritySelf>(data))
+            return Dfs::DataSecurity::Self;
+        if (std::holds_alternative<Dfs::DataSecurityActor>(data))
+            return Dfs::DataSecurity::Actor;
+        if (std::holds_alternative<Dfs::DataSecurityKey>(data))
+            return Dfs::DataSecurity::Key;
+        return Dfs::DataSecurity::Public;
+    }
+} // namespace
+
 std::expected<DbRow, CollectionError> DfsService::get_collection_row(const ActorId               &owner_id,
                                                                      const std::string           &file_id,
                                                                      uint32_t                     id,
                                                                      const Dfs::DataSecurityData &security_data) {
     auto main_actor = node->account_controller()->system_actor();
-    auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
-    auto row        = chain->get_collection_rows("WHERE id=" + std::to_string(id));
-    return row.value()[0];
+    auto chain      = HistoricalCollection::load(node,
+                                                 main_actor,
+                                                 owner_id,
+                                                 file_id,
+                                                 collection_security(security_data),
+                                                 security_data);
+    if (!chain.has_value())
+        return std::unexpected(chain.error());
+    auto row = chain.value().get_collection_rows("WHERE id=" + std::to_string(id));
+    if (!row.has_value())
+        return std::unexpected(row.error());
+    if (row.value().size() != 1)
+        return std::unexpected(CollectionError::CollectionEmpty);
+    return row.value().front();
 }
 
 std::expected<std::vector<DbRow>, CollectionError> DfsService::get_collection_rows(
@@ -1387,7 +1415,12 @@ std::expected<std::vector<DbRow>, CollectionError> DfsService::get_collection_ro
     const Dfs::DataSecurityData &security_data,
     const std::string           &where_statement) {
     auto main_actor = node->account_controller()->system_actor();
-    auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
+    auto chain      = HistoricalCollection::load(node,
+                                                 main_actor,
+                                                 owner_id,
+                                                 file_id,
+                                                 collection_security(security_data),
+                                                 security_data);
 
     if (!chain.has_value()) {
         return std::unexpected(CollectionError::CollectionNotFound);
@@ -1413,7 +1446,12 @@ ExpectedDirHistoricalRow DfsService::universal_collection_row(const ActorId     
         || dir_row_result.value().metadata_revision
                >= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         return std::unexpected(Dfs::DfsError::NoOwnerActor);
-    auto chain = HistoricalCollection::load(node, owner.value().get(), owner_id, file_id);
+    auto chain = HistoricalCollection::load(node,
+                                            owner.value().get(),
+                                            owner_id,
+                                            file_id,
+                                            collection_security(security_data),
+                                            security_data);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -1421,10 +1459,10 @@ ExpectedDirHistoricalRow DfsService::universal_collection_row(const ActorId     
     std::expected<HistoricalCollectionRow, CollectionError> historical_row;
     switch (type) {
     case CollectionOperation::Add:
-        historical_row = chain->add_row(row, Dfs::DataSecurity::Public, security_data);
+        historical_row = chain->add_row(row, collection_security(security_data), security_data);
         break;
     case CollectionOperation::Update:
-        historical_row = chain->update_row(id, row, Dfs::DataSecurity::Public, security_data);
+        historical_row = chain->update_row(id, row, collection_security(security_data), security_data);
         break;
     case CollectionOperation::Remove:
         historical_row = chain->remove_row(id);
@@ -1458,7 +1496,8 @@ ExpectedDirHistoricalRow DfsService::universal_collection_row(const ActorId     
                                   MessageType::DfsCollectionRowChange,
                                   SendMode::Neighbours);
 
-    return std::pair { dir_row_result.value(), historical_row.value() };
+    broadcast_stored(owner_id, dir_row);
+    return std::pair { dir_row, historical_row.value() };
 }
 
 bool DfsService::is_file_already_downloaded(const ActorId     &owner_id,
@@ -1747,222 +1786,208 @@ ExpectedDirHistoricalRow DfsService::remove_collection_row(const ActorId     &ow
     return res;
 }
 
-void DfsService::network_request_collection(const ActorId     &owner_id,
-                                            const std::string &file_id,
-                                            const Responder   &responder) {
-    auto dirRowExp =
-        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
-    if (!dirRowExp.has_value()) {
+void DfsService::request_collection(const Dfs::FileLink &link, const std::string &preferred) {
+    if (!Dfs::Path::file_path(link.owner_id, link.file_id).has_value())
         return;
-    }
-    auto dirRow = dirRowExp.value();
-
-    auto main_actor = node->account_controller()->system_actor();
-    auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
-
-    if (!chain.has_value()) {
+    const auto ticket = vector_write_budget_->budget.reserve(preferred, 4096);
+    if (!ticket)
         return;
-    }
-
-    auto historical_rows = chain->get_historical_rows();
-    if (!historical_rows.has_value()) {
-        eCritical("[DfsCollection] Can't find historical for {} and {}", owner_id, file_id);
-        return;
-    }
-    auto rows = chain->get_collection_rows();
-    if (!rows.has_value() && rows.error() != CollectionError::CollectionEmpty) {
-        eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
-        return;
-    }
-
-    eLog("[Dfs] Response for request collection: {} / {}", owner_id, file_id);
-
-    auto historical_message = std::make_tuple(owner_id, file_id, historical_rows.value());
-    auto collection_message =
-        std::make_tuple(owner_id, file_id, rows.has_value() ? rows.value() : std::vector<DbRow> { });
-
-    responder.send_response(historical_message,
-                            MessageType::DfsCollectionHistory,
-                            SendMode::Focused,
-                            MessageStatus::Response);
-
-    responder.send_response(collection_message,
-                            MessageType::DfsCollectionContent,
-                            SendMode::Focused,
-                            MessageStatus::Response);
+    boost::asio::
+        post(vector_write_budget_->strand,
+             ExtraChain::Core::Runtime::guard_handler("request collection", [this, link, preferred, ticket] {
+                 if (ticket->stopped())
+                     return;
+                 auto catalog = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(get_db_instance(),
+                                                                               link.owner_id,
+                                                                               link.file_id);
+                 if (!catalog.has_value() || catalog.value().type != Dfs::FileType::Collection
+                     || catalog.value().state == Dfs::FileState::Removed)
+                     return;
+                 auto peers = node->network()->active_connection_identifiers();
+                 if (peers.empty())
+                     return;
+                 std::ranges::sort(peers);
+                 std::uint64_t after = 0;
+                 auto          chain = HistoricalCollection::load(node,
+                                                                  node->account_controller()->system_actor(),
+                                                                  link.owner_id,
+                                                                  link.file_id);
+                 if (chain.has_value()) {
+                     auto head = chain.value().get_last_row();
+                     if (head.has_value())
+                         after = std::uint64_t(head.value().id) + 1;
+                 }
+                 Responder target(node->network());
+                 {
+                     std::lock_guard lock(request_times_mutex_);
+                     const auto      now = std::chrono::steady_clock::now();
+                     std::erase_if(collection_pending_, [now](const auto &item) {
+                         return item.second.deadline <= now;
+                     });
+                     if (collection_pending_.size() >= 32
+                         || std::ranges::any_of(collection_pending_, [&link](const auto &item) {
+                                return item.second.link == link;
+                            }))
+                         return;
+                     auto found = std::ranges::find(peers, preferred);
+                     auto peer = found == peers.end() ? peers[collection_source_cursor_++ % peers.size()] : *found;
+                     if (std::ranges::count_if(collection_pending_,
+                                               [&peer](const auto &item) {
+                                                   return item.second.peer == peer;
+                                               })
+                         >= 8)
+                         return;
+                     target.add_identifier(peer);
+                     target = target.with_new_message_id();
+                     collection_pending_
+                         .emplace(target.message_id(),
+                                  CollectionPending { link, peer, after, now + std::chrono::seconds(30) });
+                 }
+                 node->network()->send_message(std::make_tuple(link.owner_id, link.file_id, after),
+                                               MessageType::DfsCollectionRequest,
+                                               SendMode::Focused,
+                                               MessageStatus::Request,
+                                               target);
+             }));
 }
 
-// TODO: checks
-void DfsService::network_response_historical_collection(
-    const ActorId                              &owner_id,
-    const std::string                          &file_id,
-    const std::vector<HistoricalCollectionRow> &historical_rows) {
-    auto dir_row =
-        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
-    if (!dir_row.has_value()) {
+void DfsService::network_request_collection(const ActorId     &owner,
+                                            const std::string &file,
+                                            const Responder   &responder,
+                                            std::uint64_t      after) {
+    if (responder.identifiers().size() != 1 || responder.message_id().empty()
+        || !Dfs::Path::file_path(owner, file).has_value() || after > std::uint64_t(UINT32_MAX) + 1)
         return;
-    }
-    // TODO: check state
-
-    auto main_actor = node->account_controller()->system_actor();
-    // auto template_link = Json::deserialize<CollectionTemplateLink>(historical_rows.begin()->data).value();
-    // collection
-    auto first_row = historical_rows.begin(); // where id = 0
-
-    Dfs::CollectionTemplate collection_template;
-    if (first_row->operation == CollectionOperation::StructuralTemplated) {
-        auto collection_template_result = Json::deserialize<Dfs::CollectionTemplate>(first_row->data);
-        if (!collection_template_result.has_value()) {
-            return;
-        }
-        collection_template = collection_template_result.value();
-    } else if (first_row->operation == CollectionOperation::Structural) {
-        auto template_link = Json::deserialize<Dfs::CollectionTemplateLink>(first_row->data);
-        if (!template_link.has_value()) {
-            return;
-        }
-
-        auto collection_template_result =
-            Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(template_link->owner_id,
-                                                                               template_link->file_id);
-        if (!collection_template_result.has_value()) {
-            return;
-        }
-        collection_template = collection_template_result.value();
-    }
-
-    auto chain = HistoricalCollection::create(node, main_actor, owner_id, file_id, collection_template);
-
-    if (!chain.has_value()) {
+    const auto ticket = vector_write_budget_->budget.reserve(*responder.identifiers().begin(), 4096);
+    if (!ticket)
         return;
-    }
-
-    auto dfs_path = Dfs::Path::file_path(owner_id, file_id);
-    if (!dfs_path->exists()) {
-        return;
-    }
-
-    DbConnector db(chain->get_historical_path().native());
-    db.open();
-    for (const auto &historical_row : historical_rows) {
-        // TODO: verify
-        auto db_row = Utils::to_dbrow(historical_row);
-        db.replace(Dfs::Historical::HISTORICAL_TABLE, db_row);
-    }
-    db.close();
+    boost::asio::post(vector_write_budget_->strand,
+                      ExtraChain::Core::Runtime::
+                          guard_handler("serve collection history", [this, owner, file, responder, after, ticket] {
+                              if (ticket->stopped())
+                                  return;
+                              auto catalog =
+                                  Dfs::Tables::DirsFile::ActorSpace::get_dir_row(get_db_instance(), owner, file);
+                              if (!catalog.has_value() || catalog.value().type != Dfs::FileType::Collection
+                                  || catalog.value().state == Dfs::FileState::Removed)
+                                  return;
+                              auto chain = HistoricalCollection::load(node,
+                                                                      node->account_controller()->system_actor(),
+                                                                      owner,
+                                                                      file);
+                              if (!chain.has_value())
+                                  return;
+                              const auto page = chain.value().get_historical_rows(after);
+                              if (!page.has_value())
+                                  return;
+                              responder.send_response(std::make_tuple(owner, file, page.value()),
+                                                      MessageType::DfsCollectionHistory,
+                                                      SendMode::Focused,
+                                                      MessageStatus::Response);
+                          }));
 }
 
-// TODO: checks
-void DfsService::network_response_content_collection(const ActorId            &owner_id,
-                                                     const std::string        &file_id,
-                                                     const std::vector<DbRow> &db_rows) {
-    auto dir_row =
-        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
-    if (!dir_row.has_value()) {
+void DfsService::network_response_historical_collection(const ActorId                              &owner,
+                                                        const std::string                          &file,
+                                                        const std::vector<HistoricalCollectionRow> &rows,
+                                                        const Responder                            &responder) {
+    if (responder.identifiers().size() != 1 || rows.size() > HistoricalCollection::MaxPageRows)
         return;
-    }
-    // TODO: check state
-
-    auto main_actor = node->account_controller()->system_actor();
-
-    auto chain_opt = HistoricalCollection::load(node, main_actor, owner_id, file_id);
-    if (!chain_opt.has_value()) {
-        return;
-    }
-    auto chain = chain_opt.value();
-
-    auto creation_result = chain.get_creation();
-    if (!creation_result.has_value()) {
-        // remove historical and file
-        return;
-    }
-
-    Dfs::CollectionTemplate collection_template;
-
-    std::visit(
-        [&](const auto &value) {
-            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, Dfs::CollectionTemplateLink>) {
-                auto template_opt =
-                    Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(value.owner_id,
-                                                                                       value.file_id);
-                if (template_opt.has_value()) {
-                    collection_template = template_opt.value();
-                }
-            } else if constexpr (std::is_same_v<std::decay_t<decltype(value)>, Dfs::CollectionTemplate>) {
-                collection_template = value;
-            }
-        },
-        creation_result.value());
-
-    auto schema_opt = collection_template.to_db_schema();
-    if (!schema_opt.has_value()) {
-        return;
-    }
-
-    DbConnector db(chain.get_file_path().native());
-    if (!db.open()) {
-        eWarning("[Dfs] Cannot open collection database");
-        return;
-    }
-
-    auto table_result = db.create_table(schema_opt.value());
-    if (!table_result.has_value()) {
-        eWarning("[Dfs] Cannot create collection table: error {}", static_cast<int>(table_result.error()));
-        return;
-    }
-
-    for (const auto &db_row : db_rows) {
-        if (!db.insert(schema_opt->table_name(), db_row)) {
-            eWarning("[Dfs] Cannot insert a row into collection table {}", schema_opt->table_name());
+    std::size_t weight = 4096;
+    for (const auto &row : rows) {
+        if (row.data.size() > HistoricalCollection::MaxEventBytes
+            || row.data.size() + 1024 > HistoricalCollection::MaxPageBytes + 4096 - weight)
             return;
-        }
+        weight += row.data.size() + 1024;
     }
-    db.close();
-
-    Dfs::FileLinkFragment file_link_fragment;
-    file_link_fragment.file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
-    file_link_fragment.fragment_numbers.emplace(1);
-    load_manager_.remove_active_download(file_link_fragment);
-
-    // check if history and file ok
-    load_manager_.finish_him(owner_id, dir_row.value());
+    const auto       peer = *responder.identifiers().begin();
+    std::unique_lock lock(request_times_mutex_);
+    auto             pending = collection_pending_.find(responder.message_id());
+    if (pending == collection_pending_.end() || pending->second.link != Dfs::FileLink { owner, file }
+        || pending->second.peer != peer || pending->second.deadline <= std::chrono::steady_clock::now())
+        return;
+    auto next = pending->second.after;
+    for (const auto &row : rows)
+        if (row.id != next++)
+            return;
+    const auto ticket = vector_write_budget_->budget.reserve(peer, weight);
+    if (!ticket)
+        return;
+    collection_pending_.erase(pending);
+    lock.unlock();
+    boost::asio::post(vector_write_budget_->strand,
+                      ExtraChain::Core::Runtime::
+                          guard_handler("receive collection history", [this, owner, file, rows, peer, ticket] {
+                              if (ticket->stopped())
+                                  return;
+                              if (!rows.empty()
+                                  && !HistoricalCollection::accept(node, owner, file, rows).has_value())
+                                  return;
+                              auto catalog =
+                                  Dfs::Tables::DirsFile::ActorSpace::get_dir_row(get_db_instance(), owner, file);
+                              if (!catalog.has_value() || catalog.value().state == Dfs::FileState::Removed)
+                                  return;
+                              auto [hash, size] =
+                                  Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(owner, file);
+                              if (hash == catalog.value().hash && size == catalog.value().size) {
+                                  load_manager_.finish_him(owner, catalog.value());
+                              } else if (!rows.empty()) {
+                                  request_collection({ owner, file }, peer);
+                              }
+                          }));
 }
 
-void DfsService::network_change_collection(const ActorId                 &owner_id,
-                                           const std::string             &file_id,
+void DfsService::network_response_content_collection(const ActorId &,
+                                                     const std::string &,
+                                                     const std::vector<DbRow> &) {
+    // Only owner-signed history can construct a collection projection.
+}
+
+void DfsService::network_change_collection(const ActorId                 &owner,
+                                           const std::string             &file,
                                            const HistoricalCollectionRow &row,
                                            const Responder               &responder) {
-    // TODO: need verify
-    auto main_actor = node->account_controller()->system_actor();
-    auto dir_row =
-        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
-
-    if (!dir_row.has_value()) {
+    if (responder.identifiers().size() != 1 || row.data.size() > HistoricalCollection::MaxEventBytes)
         return;
-    }
-
-    if (dir_row->state != Dfs::FileState::Ready) {
-        // return;
-    }
-
-    auto chain = HistoricalCollection::load(node, main_actor, owner_id, file_id);
-    if (!chain.has_value()) {
+    const auto peer   = *responder.identifiers().begin();
+    const auto ticket = vector_write_budget_->budget.reserve(peer, row.data.size() + 4096);
+    if (!ticket)
         return;
-    }
-    chain->insert_row_to_database(row);
-    auto res = chain->change_collection(row);
-    if (res.has_value()) {
-        // dir time update
-        dirs_manager_.update_dirs(owner_id, row.timestamp);
-    }
-
-    // TODO: broadcast
-    responder.send_response(std::make_tuple(owner_id, file_id, row),
-                            MessageType::DfsCollectionRowChange,
-                            SendMode::Except,
-                            MessageStatus::NoStatus);
-
-    notify_collection_changed(owner_id, dir_row.value(), row);
+    boost::asio::post(vector_write_budget_->strand,
+                      ExtraChain::Core::Runtime::
+                          guard_handler("collection change", [this, owner, file, row, responder, peer, ticket] {
+                              if (ticket->stopped() || !HistoricalCollection::verify(node, owner, file, row))
+                                  return;
+                              const auto result = HistoricalCollection::accept(node, owner, file, { row });
+                              if (!result.has_value()) {
+                                  if (result.error() == CollectionError::Conflict)
+                                      request_collection({ owner, file }, peer);
+                                  return;
+                              }
+                              if (!result.value())
+                                  return;
+                              auto catalog =
+                                  Dfs::Tables::DirsFile::ActorSpace::get_dir_row(get_db_instance(), owner, file);
+                              if (!catalog.has_value() || catalog.value().state == Dfs::FileState::Removed)
+                                  return;
+                              responder.send_response(std::make_tuple(owner, file, row),
+                                                      MessageType::DfsCollectionRowChange,
+                                                      SendMode::Except,
+                                                      MessageStatus::NoStatus);
+                              boost::asio::post(node->serial_executor(),
+                                                ExtraChain::Core::Runtime::
+                                                    guard_handler("collection changed",
+                                                                  [this,
+                                                                   owner,
+                                                                   metadata = catalog.value(),
+                                                                   row,
+                                                                   ticket] {
+                                                                      if (!ticket->stopped())
+                                                                          notify_collection_changed(owner,
+                                                                                                    metadata,
+                                                                                                    row);
+                                                                  }));
+                          }));
 }
 
 void DfsService::network_request_vector(const ActorId     &owner_id,

@@ -53,6 +53,8 @@ DFS_BYTES="${EXC_SHADOW_DFS_BYTES:-0}"
 export EXC_DFS_BYTES="$DFS_BYTES"
 VECTOR_ROWS="${EXC_SHADOW_VECTOR_ROWS:-0}"
 export EXC_DFS_VECTOR_ROWS="$VECTOR_ROWS"
+HISTORY_ROWS="${EXC_SHADOW_HISTORY_ROWS:-0}"
+export EXC_DFS_HISTORY_ROWS="$HISTORY_ROWS"
 # Multi-writer: every node appends this many rows to every other node's vector.
 VECTOR_CROSS="${EXC_SHADOW_VECTOR_CROSS:-0}"
 export EXC_DFS_VECTOR_CROSS="$VECTOR_CROSS"
@@ -183,6 +185,15 @@ vectors_published() {
         sed -n "s/.*\\[node-run\\] DFS vector owner=\\([0-9a-f]*\\) file_id=\\([0-9a-f]*\\).*/$index \\1 \\2/p" \
             "$WORK/node-$index.log" 2>/dev/null
     done
+}
+
+history_audit() {
+    [ "$HISTORY_ROWS" -eq 0 ] && return 0
+    if [ "$1" = 1 ]; then
+        python3 "$SCRIPT_DIR/shadow_history_audit.py" "$WORK" "$NODE_COUNT" "$HISTORY_ROWS" "$DEAD_NODES"
+    else
+        python3 "$SCRIPT_DIR/shadow_history_audit.py" "$WORK" "$NODE_COUNT" "$HISTORY_ROWS" "$DEAD_NODES" >/dev/null
+    fi
 }
 
 vector_audit() {
@@ -536,7 +547,7 @@ fi
 
 # Publication and cross-writes must finish before the recovery audit starts.
 if { [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; } \
-   && { [ "$VECTOR_ROWS" -gt 0 ] || [ "$DFS_BYTES" -gt 0 ]; }; then
+   && { [ "$VECTOR_ROWS" -gt 0 ] || [ "$DFS_BYTES" -gt 0 ] || [ "$HISTORY_ROWS" -gt 0 ]; }; then
     load_deadline=$(( $(date +%s) + 300 ))
     [ "$load_deadline" -le "$deadline" ] || load_deadline="$deadline"
     while :; do
@@ -589,7 +600,7 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
         if [ "$converged" -eq 1 ]; then
             # Heights agree; the ExDFS mesh has to be complete as well before the
             # audits read a snapshot.
-            if dfs_audit 0 && vector_audit 0; then
+            if dfs_audit 0 && vector_audit 0 && history_audit 0; then
                 if [ "$verdict" != "pass" ] || [ -z "${EXC_SHADOW_RECEIPTS_PYTHON:-}" ]; then
                     break
                 fi
@@ -685,6 +696,7 @@ fi
 case "$verdict" in
     pass)
         summary
+        history_audit 1 || fail "ExDFS history is incomplete after shutdown"
         if [ "$DFS_BYTES" -gt 0 ]; then
             dfs_audit 1 || fail "ExDFS content is incomplete after shutdown"
         fi
@@ -723,5 +735,6 @@ case "$verdict" in
     dfs-incomplete)
         dfs_audit 1 >&2
         vector_audit 1 >&2
+        history_audit 1 >&2
         fail "ExDFS content did not reach every node before the recovery deadline" ;;
 esac

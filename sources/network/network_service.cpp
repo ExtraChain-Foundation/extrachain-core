@@ -2558,18 +2558,24 @@ void NetworkService::message_received(const std::string &message,
     }
 
     case MessageType::DfsCollectionRequest: {
-        auto db_request_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        if (status != MessageStatus::Request || serialized.size() > 1024)
+            return;
+        auto db_request_result =
+            MessagePack::deserialize<std::tuple<ActorId, std::string, std::uint64_t>>(serialized);
         if (!db_request_result.has_value()) {
             eWarning("[NetworkService] {} deserialization failed for collection request", type);
             return;
         }
-        const auto &[actor_id, file_id] = db_request_result.value();
-        node->dfs_service()->network_request_collection(actor_id, file_id, responder);
+        const auto &[actor_id, file_id, after] = db_request_result.value();
+        node->dfs_service()->network_request_collection(actor_id, file_id, responder, after);
 
         break;
     }
 
     case MessageType::DfsCollectionHistory: {
+        if (status != MessageStatus::Response || serialized.size() > HistoricalCollection::MaxPageBytes + 4096
+            || !MessagePack::has_bounded_structure(serialized, 16384, 128, 8))
+            return;
         auto db_history_result =
             MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<HistoricalCollectionRow>>>(
                 serialized);
@@ -2578,23 +2584,17 @@ void NetworkService::message_received(const std::string &message,
             return;
         }
         const auto &[actor_id, file_id, historical_rows] = db_history_result.value();
-        node->dfs_service()->network_response_historical_collection(actor_id, file_id, historical_rows);
+        node->dfs_service()->network_response_historical_collection(actor_id, file_id, historical_rows, responder);
         break;
     }
 
-    case MessageType::DfsCollectionContent: {
-        auto db_content_result =
-            MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<DbRow>>>(serialized);
-        if (!db_content_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for collection content", type);
-            return;
-        }
-        const auto &[actor_id, file_id, db_rows] = db_content_result.value();
-        node->dfs_service()->network_response_content_collection(actor_id, file_id, db_rows);
+    case MessageType::DfsCollectionContent:
         break;
-    }
 
     case MessageType::DfsCollectionRowChange: {
+        if (serialized.size() > HistoricalCollection::MaxEventBytes + 4096
+            || !MessagePack::has_bounded_structure(serialized, 256, 128, 8))
+            return;
         auto db_add_result =
             MessagePack::deserialize<std::tuple<ActorId, std::string, HistoricalCollectionRow>>(serialized);
         if (!db_add_result.has_value()) {

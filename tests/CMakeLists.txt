@@ -337,3 +337,13 @@ set_tests_properties(vector-signatures PROPERTIES TIMEOUT 30)
 add_core_test_executable(extrachain-vector-policy vector_policy.cpp)
 add_test(NAME vector-policy COMMAND extrachain-vector-policy)
 set_tests_properties(vector-policy PROPERTIES TIMEOUT 30)
+
+add_core_test_executable(extrachain-historical-collection historical_collection.cpp)
+add_test(NAME historical-collection COMMAND extrachain-historical-collection)
+set_tests_properties(historical-collection PROPERTIES TIMEOUT 30)
+
+add_core_test_executable(extrachain-historical-protocol historical_protocol.cpp)
+add_test(NAME historical-protocol COMMAND extrachain-historical-protocol)
+set_tests_properties(historical-protocol PROPERTIES TIMEOUT 60)
+
+add_test(NAME shadow-history-audit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/shadow_history_audit.py)

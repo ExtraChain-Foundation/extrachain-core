@@ -661,6 +661,11 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const Dfs::DirRow& dir_row,
                                const std::string& identifier,
                                const bool         notify_neighbours) {
+    if (dir_row.type == Dfs::FileType::Collection) {
+        node->dfs()->request_collection({ owner_id, dir_row.file_id }, identifier);
+        return;
+    }
+
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
     std::lock_guard write_lock(m_write_file_mutexes[file_link.hash() % WRITE_STRIPES]);
     bool is_forced = node->dfs()->is_forced_file(file_link);

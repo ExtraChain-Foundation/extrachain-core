@@ -578,6 +578,50 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        if (const char* rows_env = std::getenv("EXC_DFS_HISTORY_ROWS");
+            rows_env != nullptr && std::strtoull(rows_env, nullptr, 10) >= 3) {
+            const auto count  = std::min<std::size_t>(10000, std::strtoull(rows_env, nullptr, 10));
+            const auto owner  = node->account_controller()->system_actor().id();
+            auto       schema = Dfs::CollectionTemplate::create("HistoryItems").value();
+            schema.add_fields(
+                { Dfs::Field::String("payload").not_null(), Dfs::Field::Integer("position").not_null() });
+            auto file = node->dfs()->store_collection(owner, owner, "soak_history", schema);
+            if (!file.has_value()) {
+                std::printf("[node-run] history creation failed\n");
+                node->cleanUp();
+                return 5;
+            }
+            for (std::size_t index = 0; index < count; ++index) {
+                auto added = node->dfs()->add_collection_row(owner,
+                                                             file.value().file_id,
+                                                             { { "payload",
+                                                                 "history_" + std::to_string(node_index) + "_"
+                                                                     + std::to_string(index) },
+                                                               { "position", std::to_string(index) } });
+                if (!added.has_value()) {
+                    std::printf("[node-run] history add failed at %zu\n", index);
+                    node->cleanUp();
+                    return 5;
+                }
+            }
+            auto updated = node->dfs()->update_collection_row(owner,
+                                                              file.value().file_id,
+                                                              1,
+                                                              { { "payload", "updated" }, { "position", "0" } });
+            auto removed = node->dfs()->remove_collection_row(owner, file.value().file_id, 2);
+            if (!updated.has_value() || !removed.has_value()) {
+                std::printf("[node-run] history update or removal failed\n");
+                node->cleanUp();
+                return 5;
+            }
+            std::printf("[node-run] DFS history owner=%s file_id=%s rows=%zu hash=%s\n",
+                        owner.to_string().c_str(),
+                        file.value().file_id.c_str(),
+                        count - 1,
+                        removed.value().first.hash.c_str());
+            std::fflush(stdout);
+        }
+
         // Optional ExDFS vector load: every committee node creates a vector from
         // its own template and appends EXC_DFS_VECTOR_ROWS rows to it. Vectors
         // replicate row by row over a different path than plain files (gossiped

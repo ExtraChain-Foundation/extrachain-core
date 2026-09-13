@@ -358,6 +358,14 @@ public:
     // window and blocked the state-response -> add_to_queue path.
     std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> request_vector_times_;
     std::mutex                                                     request_times_mutex_;
+    struct CollectionPending {
+        Dfs::FileLink                         link;
+        std::string                           peer;
+        std::uint64_t                         after;
+        std::chrono::steady_clock::time_point deadline;
+    };
+    std::map<std::string, CollectionPending> collection_pending_;
+    std::uint64_t                            collection_source_cursor_ = 0;
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
@@ -576,12 +584,15 @@ public:
                                                    const std::string &file_id,
                                                    uint32_t           id);
 
+    void request_collection(const Dfs::FileLink &link, const std::string &preferred = "");
     void network_request_collection(const ActorId     &owner_id,
                                     const std::string &file_id,
-                                    const Responder   &responder);
+                                    const Responder   &responder,
+                                    std::uint64_t      after = 0);
     void network_response_historical_collection(const ActorId                              &owner_id,
                                                 const std::string                          &file_id,
-                                                const std::vector<HistoricalCollectionRow> &historical_rows);
+                                                const std::vector<HistoricalCollectionRow> &historical_rows,
+                                                const Responder                            &responder);
     void network_response_content_collection(const ActorId            &owner_id,
                                              const std::string        &file_id,
                                              const std::vector<DbRow> &db_rows);

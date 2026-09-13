@@ -19,6 +19,7 @@
 
 #include "dfs/dfs_utils.h"
 #include "dfs/vector_index.h"
+#include "dfs/historical_collection.h"
 #include "dfs/catalog_metadata.h"
 
 #include <limits>
@@ -573,6 +574,8 @@ std::pair<std::string, uint64_t> Dfs::Tables::DirsFile::ActorSpace::calculate_co
         return root.has_value() ? std::pair { root.value().hash, root.value().tree.bytes }
                                 : std::pair<std::string, std::uint64_t> { { }, 0 };
     }
+    if (db.table_exists("historical_chain"))
+        return HistoricalCollection::hash_size(db);
     return db.hash_size(sort_field);
 }
 
