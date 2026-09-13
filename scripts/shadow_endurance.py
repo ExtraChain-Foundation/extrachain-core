@@ -294,12 +294,13 @@ class Endurance(Cycle):
             self.hold_until(started + self.args.duration)
             self.converge()
             elapsed = time.monotonic() - started
-            self.stop_member(7)
-            self.observer_online = False
+            # The harness stops every barrier PID together after its live audits.
+            # Stopping the observer first lets the committee advance during those audits.
             (self.barrier / 'faults-done').touch()
             self.event('offline-audit-start', committee_timeout_s=self.args.recovery + self.args.audit_timeout,
                        observer_timeout_s=self.args.audit_timeout)
             status = self.harness.wait(timeout=self.args.recovery + self.args.audit_timeout)
+            self.observer_online = False
             if status != 0:
                 raise RuntimeError(f'Committee final audit failed: {status}')
             audit_process = self.start([str(self.args.build.resolve() / 'extrachain-dag-audit'),
