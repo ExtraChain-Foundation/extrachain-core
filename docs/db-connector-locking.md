@@ -65,6 +65,23 @@ are checked. Additional tests retain group ownership/serialization across moves
 and distinguish independent groups. Passing them does not remove synchronous
 actor-file/SQLite writes or qualify full-load latency; task 185 remains separate.
 
+The same target characterizes the real `LuminanceManager` with seven scenarios:
+read-before-increment and reopen visibility, distinct actor/node keys,
+set/decrement clamping, timestamp refresh, expiry selection, waiting for a
+SQLite commit hook, and rollback when that hook rejects the commit. A failed
+increment leaves both the manager's read and a sequential independent SQL
+observer at the previous value; a subsequent successful increment works.
+Observers are test-only and do not establish safe concurrent ownership of a
+production connection. Hooks are removed and temporary working directories
+restored on exit. The full target passes 20 scenarios on Linux and MSVC
+(22 Qt results including initialization/cleanup).
+
+These are characterization tests of the synchronous implementation, not an
+asynchronous writer, crash/power-loss test or complete node-lifecycle test.
+Task 210 still needs explicit intake/backpressure, dispatch ordering and worker
+shutdown guarantees. Reputation influences admission; optimistic unpublished
+increments or a stale cache are not replacements for the current read semantics.
+
 The actual DFS factory is additionally tested against an unrelated blocked SQL
 operation, plus concurrent consumers of its one shared connector. The first
 case reproduces the old metadata stall; the second retains serialization. Tests
