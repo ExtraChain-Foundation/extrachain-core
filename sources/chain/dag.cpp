@@ -2911,7 +2911,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     // Validate transaction amount
     if (tx.amount() == BigNumberFloat(0) && !is_contract_transaction(tx.type())
         && !is_token_migration_transaction(tx.type()) && !is_epoch_change_transaction(tx.type())
-        && !is_mining_request(tx.type()) && tx.type() != TransactionType::MiningSettlement) {
+        && !is_mining_request(tx.type()) && tx.type() != TransactionType::MiningSettlement
+        && tx.type() != TransactionType::IntentCancel) {
         return TransactionProveError::AmountZero;
     }
 
@@ -2993,6 +2994,11 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
         const auto result = senderActor.key().verify(transaction_hash, tx.signature());
         return result.has_value() && *result;
     };
+
+    if (tx.type() == TransactionType::IntentCancel) {
+        return tx.consensus_intent().has_value() && verify_stored_hash() ? TransactionProveError::NoError
+                                                                         : TransactionProveError::InvalidSignature;
+    }
 
     if (is_mining_request(tx.type())) {
         if (node->consensus() == nullptr || !node->consensus()->verify_mining_transaction(tx))
@@ -5173,6 +5179,8 @@ bool Dag::validate_received_pack(Pack::PackId id, const Pack::Reader &reader) co
                     return reject("invalid mining settlement proof");
                 continue;
             }
+            if (tx.type() == TransactionType::IntentCancel && !tx.consensus_intent().has_value())
+                return reject("missing cancellation intent");
             if (Utils::is_container_empty(tx.signature()))
                 return reject("missing transaction signature");
 

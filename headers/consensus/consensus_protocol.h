@@ -44,7 +44,8 @@ namespace ExtraChain::Consensus {
         EpochChange,
         StorageRegister,
         StorageUnregister,
-        StorageProof
+        StorageProof,
+        Cancel
     };
 
     enum class IntentStatus : std::uint8_t {
@@ -383,6 +384,10 @@ namespace ExtraChain::Consensus {
 
         [[nodiscard]] std::expected<std::uint64_t, ConsensusError> next_nonce(const ActorId& sender,
                                                                               std::uint64_t committed_nonce) const;
+        [[nodiscard]] std::vector<std::string>                     expired_uncommitted(
+            std::uint64_t                           height,
+            const std::map<ActorId, std::uint64_t>& nonces) const;
+        [[nodiscard]] bool        has_pending_after(const ActorId& sender, std::uint64_t nonce) const;
         [[nodiscard]] std::size_t size() const noexcept;
         [[nodiscard]] std::size_t bytes() const noexcept;
 

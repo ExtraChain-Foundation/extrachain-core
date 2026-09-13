@@ -44,6 +44,7 @@ enum class TransactionType {
     StorageUnregister = 14,
     StorageProof      = 15,
     MiningSettlement  = 16,
+    IntentCancel      = 17,
     Balance         = 99, ///< Balance query transaction
     Unknown         = 100 ///< Unrecognized transaction type
 };

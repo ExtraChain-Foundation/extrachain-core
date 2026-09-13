@@ -228,8 +228,18 @@ namespace ExtraChain::Consensus {
             intent_store_.reset();
             return std::unexpected(pending_intents.error());
         }
+        const auto nonce_frontier = local_nonce_frontier();
+        if (!nonce_frontier.has_value()) {
+            consensus_.reset();
+            intent_store_.reset();
+            return std::unexpected(nonce_frontier.error());
+        }
         std::vector<std::string> expired_intents;
         for (const auto& envelope : pending_intents.value()) {
+            // Certified requests remain on disk until finality, even after their admission window closes.
+            const auto certified = nonce_frontier.value().find(envelope.intent.sender);
+            if (certified != nonce_frontier.value().end() && envelope.intent.account_nonce <= certified->second)
+                continue;
             const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
             if (!actor.has_value()) {
                 eWarning("[Shadow] Pending intent {} waits for sender data", hash_intent(envelope.intent));
@@ -1160,9 +1170,7 @@ namespace ExtraChain::Consensus {
         std::lock_guard lock(mutex_);
         if (!consensus_)
             return std::unexpected(ConsensusError::NotReady);
-        const auto committed = committed_nonces_.find(sender.id());
-        const auto nonce =
-            intent_pool_.next_nonce(sender.id(), committed == committed_nonces_.end() ? 0 : committed->second);
+        const auto nonce = next_local_nonce(sender.id());
         if (!nonce.has_value())
             return std::unexpected(nonce.error());
         intent.account_nonce     = nonce.value();
@@ -1889,6 +1897,9 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !consensus_->engine().safety_state().highest_certificate.has_value()) {
             return;
         }
+        const auto nonces = local_nonce_frontier();
+        if (!nonces.has_value() || !expire_pending_intents(nonces.value()).has_value())
+            return;
         if (node_.data_mining_manager() != nullptr)
             node_.data_mining_manager()->consensus_progress();
         const auto&             highest = consensus_->engine().safety_state().highest_certificate.value();
@@ -2835,6 +2846,84 @@ namespace ExtraChain::Consensus {
         if (!ancestors.has_value())
             return std::unexpected(ancestors.error());
         return advance_nonces(committed_nonces_, ancestors.value());
+    }
+
+    std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> ConsensusService::local_nonce_frontier()
+        const {
+        if (!consensus_)
+            return std::unexpected(ConsensusError::NotReady);
+        auto        nonces  = committed_nonces_;
+        const auto& highest = consensus_->engine().safety_state().highest_certificate;
+        if (consensus_->configuration().mode == ShadowMode::Finality && highest.has_value()
+            && highest.value().phase != Phase::Genesis) {
+            const auto proposal = consensus_->engine().proposal_for(highest.value().header_hash);
+            if (!proposal.has_value()
+                || proposal.value().batch.last_section
+                       >= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+                return std::unexpected(ConsensusError::NotReady);
+            const auto staged = staged_nonces_for(highest.value(), proposal.value().batch.last_section + 1);
+            if (!staged.has_value())
+                return std::unexpected(staged.error());
+            nonces = staged.value();
+        }
+        return nonces;
+    }
+
+    std::expected<void, ConsensusError> ConsensusService::expire_pending_intents(
+        const std::map<ActorId, std::uint64_t>& nonces) {
+        if (!intent_store_)
+            return std::unexpected(ConsensusError::NotReady);
+        const auto expired = intent_pool_.expired_uncommitted(intent_height(), nonces);
+        if (!expired.empty()) {
+            const auto stored = intent_store_->expire(expired);
+            if (!stored.has_value())
+                return std::unexpected(stored.error());
+            intent_pool_.erase(expired);
+        }
+        return { };
+    }
+
+    std::expected<std::uint64_t, ConsensusError> ConsensusService::next_local_nonce(const ActorId& sender) {
+        const auto nonces = local_nonce_frontier();
+        if (!nonces.has_value())
+            return std::unexpected(nonces.error());
+        const auto expired = expire_pending_intents(nonces.value());
+        if (!expired.has_value())
+            return std::unexpected(expired.error());
+        const auto found = nonces.value().find(sender);
+        return intent_pool_.next_nonce(sender, found == nonces.value().end() ? 0 : found->second);
+    }
+
+    std::expected<bool, ConsensusError> ConsensusService::repair_local_nonce_gap(const Actor<KeyPrivate>& sender) {
+        std::lock_guard lock(mutex_);
+        if (!consensus_ || consensus_->configuration().mode != ShadowMode::Finality)
+            return std::unexpected(ConsensusError::NotReady);
+        const auto nonce = next_local_nonce(sender.id());
+        if (!nonce.has_value())
+            return std::unexpected(nonce.error());
+        if (!intent_pool_.has_pending_after(sender.id(), nonce.value()))
+            return false;
+        const auto height = intent_height();
+        if (height > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) - 64)
+            return std::unexpected(ConsensusError::InvalidIntent);
+        const auto intent =
+            make_intent(TransactionIntentV2 { .network_id =
+                                                  consensus_->engine().validators().document().network_id,
+                                              .sender               = sender.id(),
+                                              .receiver             = sender.id(),
+                                              .amount               = "0",
+                                              .operation            = IntentOperation::Cancel,
+                                              .account_nonce        = nonce.value(),
+                                              .valid_after_height   = height,
+                                              .expires_after_height = height + 64 },
+                        "",
+                        sender);
+        if (!intent.has_value())
+            return std::unexpected(intent.error());
+        const auto accepted = accept_intent({ intent.value(), "" }, true);
+        if (!accepted.has_value())
+            return std::unexpected(accepted.error());
+        return true;
     }
 
     bool ConsensusService::has_unfinalized_intents() const {

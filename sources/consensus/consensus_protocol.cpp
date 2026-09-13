@@ -111,9 +111,16 @@ namespace ExtraChain::Consensus {
             case IntentOperation::StorageRegister:
             case IntentOperation::StorageUnregister:
             case IntentOperation::StorageProof:
+            case IntentOperation::Cancel:
                 return true;
             }
             return false;
+        }
+
+        bool valid_cancel(const TransactionIntentV2& intent, std::string_view metadata) {
+            return intent.operation != IntentOperation::Cancel
+                   || (intent.receiver == intent.sender && intent.token.is_zero() && intent.amount == "0"
+                       && metadata.empty());
         }
 
         bool positive_amount(std::string_view amount) {
@@ -142,6 +149,8 @@ namespace ExtraChain::Consensus {
                 return TransactionType::StorageUnregister;
             case IntentOperation::StorageProof:
                 return TransactionType::StorageProof;
+            case IntentOperation::Cancel:
+                return TransactionType::IntentCancel;
             }
             return std::nullopt;
         }
@@ -235,7 +244,7 @@ namespace ExtraChain::Consensus {
                                                                    const Actor<KeyPrivate>& sender) {
         if (intent.protocol_version != ProtocolVersion || intent.network_id.is_zero() || sender.empty()
             || intent.sender != sender.id() || intent.receiver.is_zero() || !valid_amount(intent.amount)
-            || !valid_operation(intent.operation)
+            || !valid_operation(intent.operation) || !valid_cancel(intent, metadata)
             || (intent.operation == IntentOperation::Transfer && !positive_amount(intent.amount))
             || intent.account_nonce == 0 || intent.account_nonce > MaximumStoredHeight
             || intent.valid_after_height > MaximumStoredHeight || intent.expires_after_height > MaximumStoredHeight
@@ -256,7 +265,7 @@ namespace ExtraChain::Consensus {
         const auto  actor_id = actor_id_for(sender_public_key);
         return intent.protocol_version == ProtocolVersion && !intent.network_id.is_zero() && actor_id.has_value()
                && actor_id.value() == intent.sender && !intent.receiver.is_zero() && valid_amount(intent.amount)
-               && valid_operation(intent.operation)
+               && valid_operation(intent.operation) && valid_cancel(intent, envelope.metadata)
                && (intent.operation != IntentOperation::Transfer || positive_amount(intent.amount))
                && intent.account_nonce != 0 && intent.expires_after_height > intent.valid_after_height
                && intent.account_nonce <= MaximumStoredHeight && intent.valid_after_height <= MaximumStoredHeight
@@ -396,6 +405,27 @@ namespace ExtraChain::Consensus {
         return std::unexpected(ConsensusError::PoolFull);
     }
 
+    std::vector<std::string> IntentPool::expired_uncommitted(
+        std::uint64_t                           height,
+        const std::map<ActorId, std::uint64_t>& nonces) const {
+        std::vector<std::string> result;
+        for (const auto& [hash, entry] : entries_) {
+            const auto& intent = entry.envelope.intent;
+            const auto  found  = nonces.find(intent.sender);
+            if (intent.expires_after_height < height
+                && (found == nonces.end() || intent.account_nonce > found->second))
+                result.push_back(hash);
+        }
+        return result;
+    }
+
+    bool IntentPool::has_pending_after(const ActorId& sender, std::uint64_t nonce) const {
+        return std::ranges::any_of(entries_, [&](const auto& entry) {
+            const auto& intent = entry.second.envelope.intent;
+            return intent.sender == sender && intent.account_nonce > nonce;
+        });
+    }
+
     std::vector<IntentEnvelope> IntentPool::ready(const std::map<ActorId, std::uint64_t>& committed_nonces,
                                                   std::uint64_t                           current_height,
                                                   std::size_t                             maximum_count,
@@ -435,8 +465,8 @@ namespace ExtraChain::Consensus {
         std::vector<IntentEnvelope> result;
         const auto                  can_bundle = [](IntentOperation operation) {
             return operation == IntentOperation::Transfer || operation == IntentOperation::StorageRegister
-                   || operation == IntentOperation::StorageUnregister
-                   || operation == IntentOperation::StorageProof;
+                   || operation == IntentOperation::StorageUnregister || operation == IntentOperation::StorageProof
+                   || operation == IntentOperation::Cancel;
         };
         std::size_t                 selected_bytes           = 0;
         bool                        contract_change_selected = false;

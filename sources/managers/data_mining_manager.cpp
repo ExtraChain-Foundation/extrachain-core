@@ -327,6 +327,11 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
         if (!node->account_controller()->has_current_profile() || node->consensus() == nullptr)
             return;
         const auto provider = node->account_controller()->system_actor();
+        for (std::size_t attempt = 0; attempt < 8; ++attempt) {
+            const auto repaired = node->consensus()->repair_local_nonce_gap(provider);
+            if (!repaired.has_value() || !repaired.value())
+                break;
+        }
         const auto work     = node->consensus()->mining_work_state();
         if (!work.has_value())
             return;

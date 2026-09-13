@@ -151,6 +151,54 @@ int main() {
           gap_pool.next_nonce(sender.id(), 0).value() == 1);
     check("local protocol nonce allocation checks overflow",
           !pool.next_nonce(sender.id(), UINT64_MAX).has_value());
+    {
+        auto cancel                  = first;
+        cancel.operation             = IntentOperation::Cancel;
+        cancel.receiver              = sender.id();
+        cancel.amount                = "0";
+        cancel.expires_after_height  = 50;
+        const auto     signed_cancel = make_intent(cancel, "", sender).value();
+        IntentEnvelope envelope { signed_cancel, "" };
+        check("canonical cancellation verifies", verify_intent(envelope, sender_public_key));
+        auto pending                        = second_envelope;
+        pending.intent.expires_after_height = 50;
+        pending.intent                      = make_intent(pending.intent, pending.metadata, sender).value();
+        IntentPool expired_pool;
+        check("short-lived operation and later transfer enter the pool",
+              expired_pool.submit(first_envelope, sender_public_key, 0, 10).has_value()
+                  && expired_pool.submit(pending, sender_public_key, 0, 10).has_value());
+        check("expired certified operation remains reserved",
+              expired_pool.expired_uncommitted(31, { { sender.id(), 1 } }).empty());
+        const auto expired = expired_pool.expired_uncommitted(31, { });
+        check("only the expired uncertified operation leaves the pool", expired.size() == 1);
+        expired_pool.erase(expired);
+        check("expiration blocks later transfer until the nonce is filled",
+              expired_pool.ready({ }, 31, 10, 1024 * 1024).empty()
+                  && expired_pool.has_pending_after(sender.id(), 1));
+        check("signed cancellation releases the later transfer",
+              expired_pool.submit(envelope, sender_public_key, 0, 31).has_value()
+                  && expired_pool.ready({ }, 31, 10, 1024 * 1024).size() == 2);
+        const auto tx = materialize_intent(envelope, 620, 31, { }).value();
+        check("cancellation preserves signed zero-asset authorization",
+              tx.type() == TransactionType::IntentCancel && tx.amount() == 0 && tx.verify(sender.to_public()));
+        for (int mutation = 0; mutation < 4; ++mutation) {
+            auto invalid = envelope;
+            if (mutation == 0)
+                invalid.intent.receiver = receiver.id();
+            if (mutation == 1)
+                invalid.intent.token = network.id();
+            if (mutation == 2)
+                invalid.intent.amount = "1";
+            if (mutation == 3)
+                invalid.metadata = "payload";
+            check("noncanonical cancellation cannot be constructed",
+                  !make_intent(invalid.intent, invalid.metadata, sender).has_value());
+            invalid.intent.metadata_hash = intent_metadata_hash(invalid.metadata);
+            invalid.intent.signature = sign_payload(sender.key(), intent_signing_payload(invalid.intent)).value();
+            check("valid signature does not authorize malformed cancellation",
+                  !verify_intent(invalid, sender_public_key));
+        }
+    }
     auto proof_pool = pool;
     for (std::uint64_t nonce = 3; nonce <= 9; ++nonce) {
         auto proof              = first;

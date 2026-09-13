@@ -924,6 +924,8 @@ void DagCache::apply_transaction(const Transaction& tx, Balances& balances, bool
     if (tx.type() == TransactionType::Unknown) {
         return;
     }
+    if (tx.type() == TransactionType::IntentCancel)
+        return;
     if (tx.type() == TransactionType::MiningSettlement) {
         const auto deltas = ExtraChain::Consensus::mining_settlement_deltas(tx);
         if (deltas.has_value())

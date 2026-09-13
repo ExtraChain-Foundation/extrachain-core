@@ -123,9 +123,7 @@ namespace ExtraChain::Consensus {
         auto            work = mining_work_state();
         if (!work.has_value())
             return std::unexpected(work.error());
-        const auto committed = committed_nonces_.find(provider.id());
-        const auto nonce =
-            intent_pool_.next_nonce(provider.id(), committed == committed_nonces_.end() ? 0 : committed->second);
+        const auto nonce    = next_local_nonce(provider.id());
         const auto height   = intent_height();
         const auto duration = operation == IntentOperation::StorageProof ? 1ULL : 64ULL;
         if (!nonce.has_value() || height > UINT64_MAX - duration)

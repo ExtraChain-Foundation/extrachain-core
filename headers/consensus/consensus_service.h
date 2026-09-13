@@ -111,6 +111,8 @@ namespace ExtraChain::Consensus {
         std::expected<std::string, ConsensusError> submit_mining_request(IntentOperation          operation,
                                                                          std::string              metadata,
                                                                          const Actor<KeyPrivate>& provider);
+        // Fill an unused local nonce before already signed pending requests. No asset effect.
+        std::expected<bool, ConsensusError> repair_local_nonce_gap(const Actor<KeyPrivate>& sender);
         [[nodiscard]] bool verify_mining_transaction(const Transaction& transaction) const;
         [[nodiscard]] bool active() const noexcept;
         [[nodiscard]] bool voting() const noexcept;
@@ -200,6 +202,9 @@ namespace ExtraChain::Consensus {
         std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> staged_nonces_for(
             const QuorumCertificate& parent,
             std::uint64_t            first_section) const;
+        [[nodiscard]] std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> local_nonce_frontier() const;
+        std::expected<void, ConsensusError> expire_pending_intents(const std::map<ActorId, std::uint64_t>& nonces);
+        [[nodiscard]] std::expected<std::uint64_t, ConsensusError> next_local_nonce(const ActorId& sender);
         [[nodiscard]] bool                         has_unfinalized_intents() const;
         std::expected<std::string, ConsensusError> accept_intent(const IntentEnvelope& envelope, bool broadcast);
         [[nodiscard]] std::expected<std::vector<std::pair<IntentEnvelope, IntentReceipt>>, ConsensusError>

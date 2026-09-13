@@ -39,6 +39,16 @@ namespace ExtraChain::Consensus {
         static auto persist(ConsensusService& service, const FinalityProof& proof, const SectionBatchData& batch) {
             return service.persist_mining_state(proof, batch);
         }
+        static auto next_nonce(ConsensusService& service, const ActorId& sender) {
+            return service.next_local_nonce(sender);
+        }
+        static void drop_pending_copy(ConsensusService& service, const std::string& hash) {
+            service.intent_pool_.erase({ hash });
+        }
+        static void expire(ConsensusService& service, const std::string& hash) {
+            TEST_REQUIRE(service.intent_store_->expire({ hash }).has_value());
+            service.intent_pool_.erase({ hash });
+        }
         static auto ready(ConsensusService& service) {
             return service.has_unfinalized_intents() ? std::vector<IntentEnvelope> { }
                                                      : service.ready_intents(64, 8 * 1024 * 1024);
@@ -319,6 +329,11 @@ int main() {
             certificate.signatures.push_back(sign_payload(*key, vote_signing_payload(vote)).value());
         }
         TEST_REQUIRE(engine->accept_certificate(certificate).has_value());
+        if (height == 2) {
+            // A certified nonce must remain reserved even when its pending copy is gone.
+            ConsensusStateTestFixture::drop_pending_copy(service, hash_intent(ready.front().intent));
+            TEST_REQUIRE_EQ(ConsensusStateTestFixture::next_nonce(service, provider.id()).value(), 2);
+        }
         batches.emplace(height, batch);
         if (height >= 3) {
             const auto proof =
@@ -409,6 +424,27 @@ int main() {
     TEST_REQUIRE_EQ(local_ready.size(), std::size_t(3));
     TEST_REQUIRE_EQ(local_ready[1].intent.account_nonce, local_ready[0].intent.account_nonce + 1);
     TEST_REQUIRE_EQ(local_ready[2].intent.account_nonce, local_ready[1].intent.account_nonce + 1);
+    ConsensusStateTestFixture::expire(service, hash_intent(local_ready.front().intent));
+    TEST_REQUIRE(service.ready_intents(10, 1024 * 1024).empty());
+    TEST_REQUIRE(service.repair_local_nonce_gap(provider).value());
+    TEST_REQUIRE(!service.repair_local_nonce_gap(provider).value());
+    const auto repaired = service.ready_intents(10, 1024 * 1024);
+    TEST_REQUIRE_EQ(repaired.size(), std::size_t(3));
+    TEST_REQUIRE(repaired.front().intent.operation == IntentOperation::Cancel);
+    TEST_REQUIRE_EQ(hash_intent(repaired[1].intent), transfer_a.value());
+    TEST_REQUIRE_EQ(hash_intent(repaired[2].intent), transfer_b.value());
+    const auto cancel   = materialize_intent(repaired.front(), 261, 14, { }).value();
+    const auto frontier = SectionId(260);
+    TEST_REQUIRE(node->dag()->prove_transaction(cancel, { }, nullptr, &frontier)
+                 == TransactionProveError::NoError);
+    const auto prior_balances = balances;
+    node->dag()->cache().process_transaction(cancel, balances);
+    TEST_REQUIRE(balances == prior_balances);
+    auto unsigned_cancel = cancel;
+    unsigned_cancel.set_consensus_intent("", { });
+    unsigned_cancel.update_hash();
+    TEST_REQUIRE(node->dag()->prove_transaction(unsigned_cancel, { }, nullptr, &frontier)
+                 != TransactionProveError::NoError);
     TEST_REQUIRE_EQ(service.finalized_mining_state().value().minted_units, 10);
     service.deactivate();
     node->cleanUp();
