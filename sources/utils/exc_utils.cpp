@@ -279,34 +279,14 @@ std::vector<Utils::MerkleDataBlocks> Utils::splitListIntoPair(std::vector<std::s
     if (isHahsing)
         hashingElements(vector);
 
-    int        position     = 0;
-    int        step         = 2;
-    const int  sizeVector   = vector.size();
-    bool       isLastPair   = sizeVector <= 2;
-    const bool isPairVector = (sizeVector % 2 == 0) ? true : false;
-    const int  next         = 1;
-
-    while (position < sizeVector) {
-        std::vector<std::string> pair;
-        if (isLastPair) {
-            pair.push_back(vector[position]);
-            if (isLastPair)
-                pair.push_back(vector[position + next]);
-        } else {
-            pair.push_back(vector[position]);
-            pair.push_back(vector[position + next]);
-        }
-
-        if (!isPairVector) {
-            position += ((position + step) > sizeVector) ? 1 : 2;
-            isLastPair = ((sizeVector - 1) - position) < 1;
-        } else {
-            position += step;
-            isLastPair = (sizeVector - position) < 2;
-        }
-
-        result.push_back(pair);
+    result.reserve(vector.size() / 2 + vector.size() % 2);
+    for (std::size_t position = 0; position < vector.size(); position += 2) {
+        MerkleDataBlocks pair { vector[position] };
+        if (vector.size() - position > 1)
+            pair.push_back(vector[position + 1]);
+        result.push_back(std::move(pair));
     }
+
     return result;
 }
 

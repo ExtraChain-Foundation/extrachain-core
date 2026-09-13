@@ -1,5 +1,6 @@
 #include "consensus/consensus_protocol.h"
 #include "test_support.h"
+#include "utils/exc_utils.h"
 
 #include <algorithm>
 #include <bit>
@@ -9,6 +10,20 @@
 using namespace ExtraChain::Consensus;
 
 int main() {
+    for (std::size_t count = 0; count <= 7; ++count) {
+        std::vector<std::string> leaves;
+        for (std::size_t index = 0; index < count; ++index)
+            leaves.push_back("legacy_" + std::to_string(index));
+        const auto pairs = Utils::splitListIntoPair(leaves, false);
+        TEST_REQUIRE_EQ(pairs.size(), count / 2 + count % 2);
+        for (std::size_t index = 0; index < pairs.size(); ++index) {
+            TEST_REQUIRE_EQ(pairs[index].size(), std::min<std::size_t>(2, count - 2 * index));
+            for (std::size_t offset = 0; offset < pairs[index].size(); ++offset)
+                TEST_REQUIRE_EQ(pairs[index][offset], leaves[2 * index + offset]);
+        }
+    }
+    std::string single = "one leaf";
+    TEST_REQUIRE_EQ(Utils::rootMerkleHash(single), Utils::calculate_hash(single));
     for (const std::size_t count : { 1, 2, 3, 5, 8, 15, 16, 17, 63, 64, 65, 1025 }) {
         std::vector<std::string> values;
         for (std::size_t index = 0; index < count; ++index)
