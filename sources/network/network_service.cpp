@@ -1,3 +1,4 @@
+#include "network/peer_access.h"
 /*
  * ExtraChain Core
  * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
@@ -594,7 +595,8 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
             socket_activated_event_.publish(activated->ip(), activated->identifier());
             socket_ready_event_.publish();
 
-            if (activated->mode() == SocketMode::Full && activated->direction() == SocketDirection::Outgoing) {
+            if ((activated->mode() == SocketMode::Full || activated->peer_meta().update_required)
+                && activated->direction() == SocketDirection::Outgoing) {
                 // Only a completed outbound handshake proves a listening endpoint.
                 // An accepted socket's remote port is an ephemeral client port.
                 const NetworkReconnect endpoint { activated->ip(),
@@ -1299,7 +1301,11 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         const int                       randoms = send_mode == SendMode::NeighboursRandom ? 3 : 1;
 
         for (const auto &service : connections) {
-            if (service->is_active()) {
+            if (service->is_active()
+                && (!service->peer_meta().update_required
+                    || Network::restricted_peer_message_allowed(message_type,
+                                                                non_serialized_message.status,
+                                                                false))) {
                 active_identifiers.push_back(service);
             }
         }
@@ -1344,6 +1350,9 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
     int sent_to          = 0;
 
     for (const auto &service : connections) {
+        if (service->peer_meta().update_required
+            && !Network::restricted_peer_message_allowed(message_type, non_serialized_message.status, false))
+            continue;
         if (!service->is_active()) {
             ++skipped_inactive;
             continue;
@@ -1785,6 +1794,7 @@ std::vector<std::string> NetworkService::active_full_peers_with_capability(std::
     identifiers.reserve(connections_snapshot.size());
     for (const auto &service : connections_snapshot) {
         if (service == nullptr || !service->is_active() || service->mode() != SocketMode::Full
+            || service->peer_meta().update_required
             || !service->peer_meta().capabilities.contains(std::string(capability))) {
             continue;
         }
@@ -1963,6 +1973,10 @@ void NetworkService::message_received(const std::string &message,
     }
 
     MessageBody message_body = std::move(message_body_expected).value();
+    const auto  access       = peer_meta_for(identifier);
+    if (access.has_value() && access.value().update_required
+        && !Network::restricted_peer_message_allowed(message_body.message_type, message_body.status, true))
+        return;
     const auto  bounded_identifier = [](const std::string &value) {
         return value.size() <= 64;
     };
