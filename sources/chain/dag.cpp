@@ -2068,7 +2068,8 @@ std::optional<std::map<SectionId, std::string>> Dag::collect_repair_vote(
 
 bool Dag::validate_repair_transaction(const Transaction           &transaction,
                                       const std::set<Transaction> &pending,
-                                      bool                         report_failure) {
+                                      bool                         report_failure,
+                                      const Balances              *balances_before) {
     const auto hash = transaction.hash();
     if (hash != transaction.calculate_hash() && hash != transaction.calculate_hash_hex()) {
         if (report_failure) {
@@ -2123,12 +2124,23 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
 
     const std::set<Transaction>      empty;
     const auto                       frontier = transaction.section();
-    const TransactionValidationFacts facts {
+    TransactionValidationFacts       facts {
         .hash            = hash,
         .hash_valid      = true,
         .sender_exists   = true,
         .signature_valid = true,
     };
+    if (balances_before != nullptr) {
+        auto token = transaction.token();
+        if (transaction.type() == TransactionType::Conversion && transaction.meta().has_value()) {
+            const auto source = TokenId::create(transaction.meta().value());
+            if (!source.has_value())
+                return false;
+            token = source.value();
+        }
+        const auto balance   = balances_before->find({ transaction.sender(), token });
+        facts.sender_balance = balance == balances_before->end() ? BigNumberFloat(0) : balance->second;
+    }
     const auto prove =
         prove_transaction_with_facts(transaction, empty, &pending, nullptr, &frontier, &facts, false);
     if (report_failure && prove != TransactionProveError::NoError) {
@@ -2212,6 +2224,22 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_sync_candidate(
     std::set<Transaction>            pending;
     std::map<SectionId, std::string> result;
     WireFormat::Scope                scope(WireFormat::Mode::Canonical);
+    if (peer_sections.empty())
+        return result;
+    std::vector<ActorId> actors;
+    for (const auto &[section_id, bytes] : peer_sections) {
+        const auto candidate = Json::deserialize<Section>(bytes);
+        if (!candidate.has_value())
+            return std::nullopt;
+        for (const auto &transaction : candidate.value().transactions) {
+            actors.push_back(transaction.sender());
+            actors.push_back(transaction.receiver());
+        }
+    }
+    std::ranges::sort(actors, { }, &ActorId::to_string);
+    actors.erase(std::unique(actors.begin(), actors.end()), actors.end());
+    // Replaying cold history for each transaction makes a large first sync quadratic.
+    auto balances = calculate_actors_balance(actors, peer_sections.begin()->first - 1);
     for (const auto &[section_id, bytes] : peer_sections) {
         auto candidate = Json::deserialize<Section>(bytes);
         if (!candidate.has_value()) {
@@ -2219,6 +2247,8 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_sync_candidate(
         }
         auto local = read_section(section_id);
         if (local.has_value() && local.value().transactions == candidate.value().transactions) {
+            for (const auto &transaction : candidate.value().transactions)
+                cache_.process_transaction(transaction, balances);
             continue;
         }
         if (local.has_value()
@@ -2233,11 +2263,13 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_sync_candidate(
                 return std::nullopt;
             }
             if (local.has_value() && local.value().transactions.contains(transaction)) {
+                cache_.process_transaction(transaction, balances);
                 continue;
             }
-            if (!validate_repair_transaction(transaction, pending)) {
+            if (!validate_repair_transaction(transaction, pending, true, &balances)) {
                 return std::nullopt;
             }
+            cache_.process_transaction(transaction, balances);
             pending.insert(transaction);
         }
         candidate.value().control.reset();
@@ -3102,9 +3134,11 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
 
     // Calculate sender's current balance from all previous sections
     std::vector<ActorId> actor_ids = { targetSender };
+    const bool           supplied_balance = facts != nullptr && facts->sender_balance.has_value();
     BigNumberFloat       senderBalance =
-        calculate_actors_balance(actor_ids, tx.section())[std::pair { targetSender, token }];
-    if (pending_transactions != nullptr && !pending_transactions->empty()) {
+        supplied_balance ? facts->sender_balance.value()
+                         : calculate_actors_balance(actor_ids, tx.section())[std::pair { targetSender, token }];
+    if (!supplied_balance && pending_transactions != nullptr && !pending_transactions->empty()) {
         Balances balances { { std::pair { targetSender, token }, senderBalance } };
         for (const auto &pending : *pending_transactions) {
             if (pending.section() <= tx.section())
@@ -3661,6 +3695,13 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             return;
         }
         const bool repair_response = pending_sync_is_repair(responder);
+        const auto expected_count  = (expected_range.value().second - expected_range.value().first + 1).to_int();
+        if (!expected_count.has_value() || expected_count.value() <= 0
+            || expected_count.value() > SYNC_SECTIONS_MAX_REQ
+            || file_sync.value().sections.size() != static_cast<std::size_t>(expected_count.value())) {
+            eWarning("[Dag] Reject incomplete file section response {}", responder.message_id());
+            return;
+        }
 
         const bool valid_hot_gap_response =
             hot_gap_request_.has_value() && file_sync->to == hot_gap_request_->second

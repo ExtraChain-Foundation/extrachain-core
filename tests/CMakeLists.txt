@@ -347,3 +347,7 @@ add_test(NAME historical-protocol COMMAND extrachain-historical-protocol)
 set_tests_properties(historical-protocol PROPERTIES TIMEOUT 60)
 
 add_test(NAME shadow-history-audit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/shadow_history_audit.py)
+
+add_test(NAME funded-sync COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/funded_sync.py
+    $<TARGET_FILE:extrachain-gen-sections> $<TARGET_FILE:extrachain-node-run>)
+set_tests_properties(funded-sync PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)

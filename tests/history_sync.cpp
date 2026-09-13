@@ -40,18 +40,29 @@ namespace {
             const auto body = MessagePack::deserialize<MessageBody>(
                 std::string_view(reinterpret_cast<const char *>(bytes.data()), bytes.size() - crypto_sign_BYTES));
             if (body.has_value() && body.value().message_type == MessageType::DagFileSections) {
+                const auto range = MessagePack::deserialize<SectionRange>(body.value().data);
+                TEST_REQUIRE(range.has_value());
+                const auto base =
+                    WireFormat::wire() == WireFormat::Mode::Legacy ? NumeralBase::Hex : NumeralBase::Dec;
                 std::lock_guard lock(mutex_);
                 last_request_ = body.value().message_id;
+                range_        = { SectionId::create(range.value().first, base).value(),
+                                  SectionId::create(range.value().last, base).value() };
             }
         }
         std::string last_request() {
             std::lock_guard lock(mutex_);
             return last_request_;
         }
+        std::pair<SectionId, SectionId> range() {
+            std::lock_guard lock(mutex_);
+            return range_;
+        }
 
     private:
         std::mutex  mutex_;
         std::string last_request_;
+        std::pair<SectionId, SectionId> range_;
     };
 } // namespace
 
@@ -111,9 +122,21 @@ int main() {
         TEST_REQUIRE(tx.sign(owner));
         return tx;
     };
-    const auto deliver = [&](const std::vector<Section> &sections) {
+    const auto deliver = [&](const std::vector<Section> &sections, bool complete = true) {
         WireFormat::Scope legacy(WireFormat::Mode::Legacy);
         FileSectionsSync  packet { .to = SectionId(40), .sections = { }, .last_section = SectionId(100) };
+        if (complete) {
+            const auto range = peer->range();
+            for (auto index = range.first; index <= range.second; index += 1) {
+                if (std::ranges::any_of(sections, [&](const auto &section) {
+                        return section.id == index;
+                    }))
+                    continue;
+                const auto stored  = dag.read_section(index);
+                const auto section = stored.has_value() ? stored.value() : Section { .id = index };
+                packet.sections.push_back({ index, Json::serialize(section) });
+            }
+        }
         for (const auto &section : sections) {
             packet.sections.push_back({ section.id, Json::serialize(section) });
         }
@@ -123,6 +146,8 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(150));
     };
     const auto valid             = transaction(2, 1);
+    deliver({ Section { .id = SectionId(21), .transactions = { valid } } }, false);
+    TEST_REQUIRE(!dag.read_section(SectionId(21)).has_value());
     auto       invalid_signature = valid;
     invalid_signature.set_amount(BigNumberFloat(1));
     deliver({ Section { .id = SectionId(21), .transactions = { invalid_signature } } });

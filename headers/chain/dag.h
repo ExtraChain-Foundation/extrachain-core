@@ -779,6 +779,7 @@ private:
         std::optional<bool> sender_exists;
         std::optional<bool> receiver_exists;
         std::optional<bool> signature_valid;
+        std::optional<BigNumberFloat> sender_balance;
     };
     struct DeferredContractTransaction {
         Transaction                transaction;
@@ -1040,7 +1041,8 @@ private:
         const std::set<Transaction>            &prior = {});
     bool validate_repair_transaction(const Transaction           &transaction,
                                      const std::set<Transaction> &pending,
-                                     bool                         report_failure = true);
+                                     bool                         report_failure  = true,
+                                     const Balances              *balances_before = nullptr);
 
     std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
 
