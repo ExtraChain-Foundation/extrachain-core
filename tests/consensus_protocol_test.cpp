@@ -491,6 +491,53 @@ int main() {
         check("rejected intent cannot be resubmitted after restart",
               !terminal_replay.has_value() && terminal_replay.error() == ConsensusError::DuplicateIntent);
     }
+    {
+        IntentStore historical(store_root / "historical.sqlite");
+        check("historical receipt store opens", historical.open().has_value());
+        check("a locally expired request is recorded",
+              historical.put(first_envelope).has_value()
+                  && historical.expire({ hash_intent(first_envelope.intent) }).has_value());
+        auto alternative      = first;
+        alternative.operation = IntentOperation::Cancel;
+        alternative.receiver  = sender.id();
+        alternative.amount    = "0";
+        const IntentEnvelope cancel { make_intent(alternative, "", sender).value(), "" };
+        check("a local cancellation can reserve the expired nonce", historical.put(cancel).has_value());
+        const IntentReceipt receipt { .intent_hash      = hash_intent(first_envelope.intent),
+                                      .status           = IntentStatus::Finalized,
+                                      .consensus_height = 14,
+                                      .dag_section      = 280 };
+        check("canonical finality replaces local expiry and a competing cancellation",
+              historical
+                  .commit_finalized({ { first_envelope, receipt } }, AppliedCheckpoint { 14, "certified-14" })
+                  .has_value());
+        check("the canonical receipt is durable",
+              MessagePack::serialize(historical.receipt(receipt.intent_hash).value().value())
+                  == MessagePack::serialize(receipt));
+        const auto cancelled = historical.receipt(hash_intent(cancel.intent)).value().value();
+        check("the losing local cancellation is rejected",
+              cancelled.status == IntentStatus::Rejected && cancelled.error == ConsensusError::InvalidNonce
+                  && historical.load_pending().value().empty());
+        auto unseen_receipt             = receipt;
+        unseen_receipt.intent_hash      = hash_intent(second_envelope.intent);
+        unseen_receipt.consensus_height = 15;
+        unseen_receipt.dag_section      = 300;
+        check("canonical finality accepts an intent absent from the local pool",
+              historical
+                  .commit_finalized({ { second_envelope, unseen_receipt } },
+                                    AppliedCheckpoint { 15, "certified-15" })
+                  .has_value());
+        check("historical canonical replay is idempotent",
+              historical
+                  .commit_finalized({ { second_envelope, unseen_receipt } },
+                                    AppliedCheckpoint { 15, "certified-15" })
+                  .has_value());
+        IntentPool losers;
+        check("local competing pool entry is accepted",
+              losers.submit(cancel, sender_public_key, 0, 10).has_value());
+        losers.discard_committed({ { sender.id(), 1 } });
+        check("canonical nonce advancement removes a losing local pool entry", losers.size() == 0);
+    }
     std::filesystem::remove_all(store_root);
 
     const std::vector<std::string> leaves { "tx-a", "tx-b", "tx-c", "tx-d", "tx-e" };

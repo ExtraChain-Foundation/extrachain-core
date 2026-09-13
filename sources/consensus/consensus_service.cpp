@@ -1207,9 +1207,7 @@ namespace ExtraChain::Consensus {
             return std::tie(left.first.intent.sender, left.first.intent.account_nonce)
                    < std::tie(right.first.intent.sender, right.first.intent.account_nonce);
         });
-        auto                     next_nonces = committed_nonces_;
-        std::vector<std::string> hashes;
-        hashes.reserve(ordered.size());
+        auto next_nonces = committed_nonces_;
         for (const auto& [envelope, receipt] : ordered) {
             const auto hash          = hash_intent(envelope.intent);
             const auto current_nonce = next_nonces[envelope.intent.sender];
@@ -1220,7 +1218,6 @@ namespace ExtraChain::Consensus {
             if (envelope.intent.account_nonce == current_nonce + 1) {
                 next_nonces[envelope.intent.sender] = envelope.intent.account_nonce;
             }
-            hashes.push_back(hash);
         }
         const auto committed = intent_store_->commit_finalized(ordered, checkpoint);
         if (!committed.has_value()) {
@@ -1230,7 +1227,7 @@ namespace ExtraChain::Consensus {
         if (checkpoint.has_value()) {
             applied_checkpoint_ = std::move(checkpoint);
         }
-        intent_pool_.erase(hashes);
+        intent_pool_.discard_committed(committed_nonces_);
         return {};
     }
 
@@ -3081,10 +3078,18 @@ namespace ExtraChain::Consensus {
                 }
                 epoch_change_seen = true;
             }
-            const auto accepted = accept_intent(envelope, false);
-            if (!accepted.has_value() || accepted.value() != hash_intent(envelope.intent)) {
-                return std::unexpected(accepted.has_value() ? ConsensusError::InvalidIntent : accepted.error());
-            }
+            if (envelope.intent.network_id != consensus_->engine().validators().document().network_id)
+                return std::unexpected(ConsensusError::InvalidNetwork);
+            if (proposal.header.height < envelope.intent.valid_after_height
+                || proposal.header.height > envelope.intent.expires_after_height)
+                return std::unexpected(ConsensusError::IntentExpired);
+            if (envelope.metadata.size() > IntentPoolLimits { }.maximum_metadata_bytes)
+                return std::unexpected(ConsensusError::DataTooLarge);
+            const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
+            if (!actor.has_value())
+                return std::unexpected(ConsensusError::DataUnavailable);
+            if (!verify_intent(envelope, Utils::to_base64(actor.value().key().public_key())))
+                return std::unexpected(ConsensusError::InvalidIntent);
         }
         return {};
     }

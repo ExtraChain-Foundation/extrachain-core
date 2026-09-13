@@ -42,9 +42,6 @@ namespace ExtraChain::Consensus {
         static auto next_nonce(ConsensusService& service, const ActorId& sender) {
             return service.next_local_nonce(sender);
         }
-        static void drop_pending_copy(ConsensusService& service, const std::string& hash) {
-            service.intent_pool_.erase({ hash });
-        }
         static void expire(ConsensusService& service, const std::string& hash) {
             TEST_REQUIRE(service.intent_store_->expire({ hash }).has_value());
             service.intent_pool_.erase({ hash });
@@ -76,10 +73,21 @@ int main() {
     auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 0);
     node->process();
     node->dag()->set_mode(DagMode::Full);
-    Actor<KeyPrivate> network;
-    network.create(ActorType::Service);
-    Actor<KeyPrivate> provider;
-    provider.create(ActorType::User);
+    // Fixed test identities keep the signed hash-order fixture repeatable.
+    const auto fixture_actor = [](const std::string& label, ActorType type) {
+        KeyPrivate key;
+        key.generate_seed(MasterSeed { }, label);
+        Actor<KeyPrivate> actor;
+        actor.set_type(type);
+        actor.set_secret_key(key.secret_key(), key.public_key());
+        actor.set_id(ActorId::create(Utils::calculate_hash(ByteArray(key.public_key()).toString(),
+                                                           Utils::HashAlgorithm::Blake3)
+                                         .substr(0, ActorId::SIZE))
+                         .value());
+        return actor;
+    };
+    auto network  = fixture_actor("mining-runtime-network", ActorType::Service);
+    auto provider = fixture_actor("mining-runtime-provider", ActorType::User);
     node->account_controller()->create_profile("mining-runtime-profile", ActorType::User, provider);
     TEST_REQUIRE(node->account_controller()->system_actor().id() == provider.id());
     TEST_REQUIRE(node->actor_index()->exists(provider.id()));
@@ -331,10 +339,28 @@ int main() {
         TEST_REQUIRE(engine->accept_certificate(certificate).has_value());
         if (height == 2) {
             // A certified nonce must remain reserved even when its pending copy is gone.
-            ConsensusStateTestFixture::drop_pending_copy(service, hash_intent(ready.front().intent));
+            ConsensusStateTestFixture::expire(service, hash_intent(ready.front().intent));
             TEST_REQUIRE_EQ(ConsensusStateTestFixture::next_nonce(service, provider.id()).value(), 2);
         }
         batches.emplace(height, batch);
+        if (height == 9) {
+            const auto historical = engine->proposal_for(batches.at(7).header_hash).value();
+            TEST_REQUIRE(ConsensusStateTestFixture::admit(service, historical, batches.at(7)).has_value());
+            auto expired_batch = batches.at(7);
+            auto section       = Json::deserialize<Section>(expired_batch.sections.front().second).value();
+            TEST_REQUIRE(section.transactions.size() == 1);
+            auto envelope                        = intent_from_transaction(*section.transactions.begin()).value();
+            envelope.intent.valid_after_height   = 0;
+            envelope.intent.expires_after_height = historical.header.height - 1;
+            envelope.intent      = make_intent(envelope.intent, envelope.metadata, provider).value();
+            section.transactions = {
+                materialize_intent(envelope, expired_batch.sections.front().first, historical.header.height, { })
+                    .value()
+            };
+            expired_batch.sections.front().second = Json::serialize(section);
+            const auto rejected = ConsensusStateTestFixture::admit(service, historical, expired_batch);
+            TEST_REQUIRE(!rejected.has_value() && rejected.error() == ConsensusError::IntentExpired);
+        }
         if (height >= 3) {
             const auto proof =
                 engine->finality_proof_for_section((height - 2) * ShadowSectionInterval).value().value();

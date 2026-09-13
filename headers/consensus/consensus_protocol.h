@@ -387,6 +387,7 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] std::vector<std::string>                     expired_uncommitted(
             std::uint64_t                           height,
             const std::map<ActorId, std::uint64_t>& nonces) const;
+        void                      discard_committed(const std::map<ActorId, std::uint64_t>& nonces);
         [[nodiscard]] bool        has_pending_after(const ActorId& sender, std::uint64_t nonce) const;
         [[nodiscard]] std::size_t size() const noexcept;
         [[nodiscard]] std::size_t bytes() const noexcept;

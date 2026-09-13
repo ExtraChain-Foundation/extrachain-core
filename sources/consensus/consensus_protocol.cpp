@@ -405,6 +405,16 @@ namespace ExtraChain::Consensus {
         return std::unexpected(ConsensusError::PoolFull);
     }
 
+    void IntentPool::discard_committed(const std::map<ActorId, std::uint64_t>& nonces) {
+        std::vector<std::string> obsolete;
+        for (const auto& [hash, entry] : entries_) {
+            const auto found = nonces.find(entry.envelope.intent.sender);
+            if (found != nonces.end() && entry.envelope.intent.account_nonce <= found->second)
+                obsolete.push_back(hash);
+        }
+        erase(obsolete);
+    }
+
     std::vector<std::string> IntentPool::expired_uncommitted(
         std::uint64_t                           height,
         const std::map<ActorId, std::uint64_t>& nonces) const {
