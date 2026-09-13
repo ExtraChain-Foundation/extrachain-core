@@ -259,7 +259,7 @@ class Endurance(Cycle):
             self.event('configuration', duration_s=self.args.duration, interval_s=self.args.interval,
                        waves=self.waves, binary_sha256=binary_hash, senders=self.args.senders,
                        per_sender=self.args.per_sender, file_bytes=self.args.file_bytes,
-                       bootstrap_file_bytes=self.args.file_bytes)
+                       bootstrap_file_bytes=self.args.file_bytes, audit_timeout_s=self.args.audit_timeout)
             self.wait_for(lambda: (self.barrier / 'committee-ready').exists(), 'committee barrier', 600)
             (self.barrier / 'controller-ready').touch()
             self.wait_for(lambda: (self.barrier / 'go').exists(), 'workload start')
@@ -297,13 +297,15 @@ class Endurance(Cycle):
             self.stop_member(7)
             self.observer_online = False
             (self.barrier / 'faults-done').touch()
-            status = self.harness.wait(timeout=self.args.recovery + 180)
+            self.event('offline-audit-start', committee_timeout_s=self.args.recovery + self.args.audit_timeout,
+                       observer_timeout_s=self.args.audit_timeout)
+            status = self.harness.wait(timeout=self.args.recovery + self.args.audit_timeout)
             if status != 0:
                 raise RuntimeError(f'Committee final audit failed: {status}')
             audit_process = self.start([str(self.args.build.resolve() / 'extrachain-dag-audit'),
                                         str(self.home(7) / 'data'), 'joiner'],
                                        self.work / 'observer-audit.log', self.work, self.environment)
-            if audit_process.wait(timeout=180) != 0:
+            if audit_process.wait(timeout=self.args.audit_timeout) != 0:
                 raise RuntimeError('Observer durable DAG and native reward audit failed')
             receipts = audit(self.work, self.waves * self.args.senders * self.args.per_sender,
                              self.submissions, self.cursors, 8)
@@ -343,6 +345,8 @@ def main():
     parser.add_argument('--duration', type=int, default=21600)
     parser.add_argument('--interval', type=int, default=300)
     parser.add_argument('--recovery', type=int, default=300)
+    parser.add_argument('--audit-timeout', type=int, default=180,
+                        help='Time limit in seconds for each offline audit phase')
     parser.add_argument('--senders', type=int, default=6)
     parser.add_argument('--per-sender', type=int, default=48)
     parser.add_argument('--file-bytes', type=int, default=1048576)
@@ -353,8 +357,9 @@ def main():
     if (not 1024 <= args.port <= 65495 or not 60 <= args.interval <= 3600
             or args.duration % args.interval != 0 or not 4 <= args.duration // args.interval <= 256
             or not 1 <= args.senders <= 6 or not 1 <= args.per_sender <= 64
-            or not 60 <= args.recovery <= 900 or not 1 <= args.file_bytes <= 16777216):
-        parser.error('Invalid port, duration, interval, recovery or workload bounds')
+            or not 60 <= args.recovery <= 900 or not 180 <= args.audit_timeout <= 7200
+            or not 1 <= args.file_bytes <= 16777216):
+        parser.error('Invalid port, duration, interval, recovery, audit or workload bounds')
     if args.parent_netns is None:
         return subprocess.call(['unshare', '-Urn', sys.executable, str(Path(__file__).resolve()),
                                 *sys.argv[1:], '--parent-netns', os.readlink('/proc/self/ns/net')])
