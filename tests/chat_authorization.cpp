@@ -1,6 +1,7 @@
 #include <atomic>
 #include <filesystem>
 #include <memory>
+#include <thread>
 
 #include "chain/actor_index.h"
 #include "chat/chat_manager.h"
@@ -114,6 +115,22 @@ int main() {
     TEST_REQUIRE(recovered.has_value() && recovered->size() == readable->size());
     const auto recovered_last = manager.read_last_message(self->owner_id, self->file_id);
     TEST_REQUIRE(recovered_last.has_value() && recovered_last->id == self_latest->id);
+    {
+        std::atomic_bool start { false };
+        std::jthread     delivery([&] {
+            while (!start.load())
+                std::this_thread::yield();
+            for (unsigned i = 0; i < 100; ++i) {
+                manager.on_vector_row_added(channel->owner_id, catalog.value(), rows->front());
+                manager.on_vector_row_removed(channel->owner_id, catalog.value(), owner_removal);
+            }
+        });
+        start.store(true);
+        for (unsigned i = 0; i < 50; ++i) {
+            TEST_REQUIRE(manager.read_chats().has_value());
+            TEST_REQUIRE(!manager.chats().empty());
+        }
+    }
     removal_connection.disconnect();
     connection.disconnect();
     TEST_REQUIRE(channel_db.close() && self_db.close());

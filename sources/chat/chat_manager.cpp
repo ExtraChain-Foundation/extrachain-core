@@ -58,7 +58,7 @@ void ChatManager::on_file_downloaded(const ActorId& owner_id, const Dfs::DirRow&
         }
     }
 
-    for (const auto& chat : std::as_const(chats_)) {
+    for (const auto& chat : this->chats()) {
         if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id) && chat.file_id == dir_row.file_id) {
             chat_updated_event_.publish(chat);
         }
@@ -72,7 +72,7 @@ void ChatManager::on_vector_row_added(const ActorId& owner_id, const Dfs::DirRow
         return;
     }
 
-    for (auto& chat : chats_) {
+    for (auto& chat : this->chats()) {
         if ((chat.owner_id != owner_id && chat.chat.peer_id != owner_id) || chat.file_id != dir_row.file_id) {
             continue;
         }
@@ -134,7 +134,7 @@ void ChatManager::on_vector_row_removed(const ActorId& owner_id, const Dfs::DirR
     if (id == row.end() || status == row.end() || status->second != "0") {
         return;
     }
-    for (const auto& chat : std::as_const(chats_)) {
+    for (const auto& chat : this->chats()) {
         if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id) && chat.file_id == dir_row.file_id) {
             if (chat.chat.chat_type == Chat::ChatType::Channel && !row_is_from_owner(row, chat.owner_id)) {
                 continue;
@@ -692,10 +692,13 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
         chats.push_back(std::move(chat).value());
     }
 
-    chats_ = std::move(chats);
+    {
+        std::lock_guard lock(cache_mutex_);
+        chats_ = std::move(chats);
+    }
 
     retry_pending_invites();
-    node->thoth_manager()->reconcile_tokens_for_chats(chats_);
+    node->thoth_manager()->reconcile_tokens_for_chats(this->chats());
 
     // From-scratch import: staged startup sync only pulls .dirs for network/priority/my
     // accounts — chat owner-actors (peers' per-chat actors) aren't included. Without their
@@ -703,19 +706,23 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
     // "empty chats" until restart). Targeted dirs-sync for not-yet-requested actors;
     // refresh_actors returns false if there are no connections yet, retried on next read_chats.
     std::vector<ActorId> unsynced_owners;
-    for (const auto& chat : chats_) {
-        if (!dirs_refreshed_actors_.contains(chat.owner_id)) {
-            unsynced_owners.push_back(chat.owner_id);
+    {
+        std::lock_guard lock(cache_mutex_);
+        for (const auto& chat : chats_) {
+            if (!dirs_refreshed_actors_.contains(chat.owner_id)) {
+                unsynced_owners.push_back(chat.owner_id);
+            }
         }
     }
     if (!unsynced_owners.empty()) {
         eLog("[Chat] dirs refresh for {} chat owner actors", unsynced_owners.size());
         if (node->dfs()->refresh_actors(unsynced_owners)) {
+            std::lock_guard lock(cache_mutex_);
             dirs_refreshed_actors_.insert(unsynced_owners.begin(), unsynced_owners.end());
         }
     }
 
-    return chats_;
+    return this->chats();
 }
 
 std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_messages(const ActorId&     owner_id,
@@ -1152,8 +1159,11 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
 }
 
 std::expected<Dfs::DirRow, ChatError> ChatManager::read_my_chats_row() {
-    if (!my_chats_row_.empty()) {
-        return my_chats_row_;
+    {
+        std::lock_guard lock(cache_mutex_);
+        if (!my_chats_row_.empty()) {
+            return my_chats_row_;
+        }
     }
 
     auto chat_actor_result = current_chat_actor();
@@ -1185,11 +1195,13 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::read_my_chats_row() {
 
         auto name = ByteArray(name_result.value()).toString();
         if (name == CHAT_MY_CHATS_INFO) {
+            std::lock_guard lock(cache_mutex_);
             my_chats_row_ = row;
             break;
         }
     }
 
+    std::lock_guard lock(cache_mutex_);
     if (my_chats_row_.empty()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -1203,11 +1215,8 @@ std::expected<Chat::Chat, ChatError> ChatManager::insert_chat_to_mychats(const C
         return std::unexpected(ChatError::PersistenceFailed);
     }
 
-    auto existing_cached = std::find_if(chats_.cbegin(), chats_.cend(), [&chat](const auto& current) {
-        return same_chat_link(current, chat);
-    });
-    if (existing_cached != chats_.cend()) {
-        return *existing_cached;
+    if (const auto existing = get_chat(chat.owner_id, chat.file_id); existing.has_value()) {
+        return existing.value();
     }
 
     auto my_chats = this->read_my_chats_row();
@@ -1226,7 +1235,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::insert_chat_to_mychats(const C
             auto existing = Json::deserialize<Chat::Chat>(value);
             if (existing.has_value() && is_valid_chat_link(existing.value())
                 && same_chat_link(existing.value(), chat)) {
-                chats_.push_back(existing.value());
+                cache_chat(existing.value());
                 mark_chat_priority(existing.value());
                 chat_added_event_.publish(existing.value());
                 return existing.value();
@@ -1247,7 +1256,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::insert_chat_to_mychats(const C
     }
 
     mark_chat_priority(chat_new);
-    chats_.push_back(chat_new);
+    cache_chat(chat_new);
     chat_added_event_.publish(chat_new);
 
     return chat_new;
@@ -1277,7 +1286,19 @@ std::expected<Chat::Chat, ChatError> ChatManager::update_chat_in_mychats(const C
         return std::unexpected(ChatError::PersistenceFailed);
     }
 
-    auto cached = std::find_if(chats_.begin(), chats_.end(), [&chat](const auto& current) {
+    cache_chat(chat);
+    chat_updated_event_.publish(chat);
+    return chat;
+}
+
+std::vector<Chat::Chat> ChatManager::chats() const {
+    std::lock_guard lock(cache_mutex_);
+    return chats_;
+}
+
+void ChatManager::cache_chat(const Chat::Chat& chat) {
+    std::lock_guard lock(cache_mutex_);
+    const auto      cached = std::ranges::find_if(chats_, [&chat](const auto& current) {
         return same_chat_link(current, chat);
     });
     if (cached != chats_.end()) {
@@ -1285,13 +1306,11 @@ std::expected<Chat::Chat, ChatError> ChatManager::update_chat_in_mychats(const C
     } else {
         chats_.push_back(chat);
     }
-    chat_updated_event_.publish(chat);
-    return chat;
 }
 
 void ChatManager::retry_pending_invites() {
     std::vector<Chat::Chat> pending;
-    for (const auto& chat : chats_) {
+    for (const auto& chat : this->chats()) {
         if (chat.invite_pending && chat.peer_chat_main_id.has_value()) {
             pending.push_back(chat);
         }
@@ -1331,7 +1350,8 @@ void ChatManager::mark_chat_priority(const Chat::Chat& chat) {
 }
 
 std::optional<Chat::Chat> ChatManager::get_chat(const ActorId& owner_id, const std::string& file_id) {
-    for (const auto& chat : std::as_const(chats_)) {
+    std::lock_guard lock(cache_mutex_);
+    for (const auto& chat : chats_) {
         if (chat.owner_id == owner_id && chat.file_id == file_id) {
             return chat;
         }
@@ -1341,7 +1361,7 @@ std::optional<Chat::Chat> ChatManager::get_chat(const ActorId& owner_id, const s
 }
 
 void ChatManager::update_dfs_files() {
-    for (const auto& chat : chats_) {
+    for (const auto& chat : this->chats()) {
         node->dfs()->request_file(chat.owner_id, chat.file_id);
     }
 }
