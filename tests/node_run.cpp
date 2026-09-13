@@ -585,12 +585,20 @@ int main(int argc, char* argv[]) {
                            : node->consensus()->submit_intent(IntentEnvelope { intent.value(), metadata });
             };
             auto submitted = submit();
-            if (!submitted.has_value() && submitted.error() == ConsensusError::PoolFull) {
-                std::printf("[node-run] intent admission full at %zu; waiting for finality\n", index);
+            const auto waiting_for_admission = [&] {
+                return !submitted.has_value()
+                       && (submitted.error() == ConsensusError::PoolFull
+                           || submitted.error() == ConsensusError::DataUnavailable);
+            };
+            if (waiting_for_admission()) {
+                // A certificate can arrive before the batch needed to select the next account nonce.
+                std::printf("[node-run] intent admission waiting at %zu (error %d)\n",
+                            index,
+                            static_cast<int>(submitted.error()));
                 std::fflush(stdout);
                 const auto admission_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
                 while (stop_requested == 0 && std::chrono::steady_clock::now() < admission_deadline
-                       && !submitted.has_value() && submitted.error() == ConsensusError::PoolFull) {
+                       && waiting_for_admission()) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     submitted = submit();
                 }

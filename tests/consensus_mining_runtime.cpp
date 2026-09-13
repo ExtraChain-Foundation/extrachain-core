@@ -535,6 +535,8 @@ int main() {
     TEST_REQUIRE_EQ(service.finalized_mining_state().value().minted_units, 10);
     const auto waiting_nonce = ConsensusStateTestFixture::next_nonce(service, provider.id());
     TEST_REQUIRE(!waiting_nonce.has_value() && waiting_nonce.error() == ConsensusError::DataUnavailable);
+    const auto waiting_transfer = service.submit_local_intent(local_transfer, "after-batch-sync", provider);
+    TEST_REQUIRE(!waiting_transfer.has_value() && waiting_transfer.error() == ConsensusError::DataUnavailable);
     TEST_REQUIRE(service.ready_intents(10, 1024 * 1024).empty());
     TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(12)).has_value());
     TEST_REQUIRE(ConsensusStateTestFixture::stage(service, batches.at(13)).has_value());
@@ -545,6 +547,12 @@ int main() {
     TEST_REQUIRE_EQ(restored_pending.size(), repaired.size());
     for (std::size_t index = 0; index < repaired.size(); ++index)
         TEST_REQUIRE_EQ(hash_intent(restored_pending[index].intent), hash_intent(repaired[index].intent));
+    const auto resumed_transfer = service.submit_local_intent(local_transfer, "after-batch-sync", provider);
+    TEST_REQUIRE(resumed_transfer.has_value());
+    const auto resumed_pending = service.ready_intents(10, 1024 * 1024);
+    TEST_REQUIRE_EQ(resumed_pending.size(), repaired.size() + 1);
+    TEST_REQUIRE_EQ(resumed_pending.back().intent.account_nonce, restored_nonce.value());
+    TEST_REQUIRE_EQ(hash_intent(resumed_pending.back().intent), resumed_transfer.value());
     service.deactivate();
     node->cleanUp();
     node.reset();
