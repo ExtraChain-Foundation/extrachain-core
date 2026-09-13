@@ -2942,6 +2942,7 @@ namespace ExtraChain::Consensus {
 
     std::expected<void, ConsensusError> ConsensusService::admit_batch_intents(const Proposal&         proposal,
                                                                               const SectionBatchData& batch) {
+        WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
         const auto finalized = finalized_intents(proposal, batch);
         if (!finalized.has_value()) {
             return std::unexpected(finalized.error());

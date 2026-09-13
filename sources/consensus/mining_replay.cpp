@@ -48,7 +48,7 @@ namespace ExtraChain::Consensus {
             if (section != state.section + 1)
                 return std::unexpected(ConsensusError::InvalidHeight);
             const auto decoded = Json::deserialize<Section>(bytes);
-            if (!decoded.has_value())
+            if (!decoded.has_value() || decoded.value().transactions.size() > 256)
                 return std::unexpected(ConsensusError::InvalidIntent);
             std::uint64_t budget = 0;
             if (policy.has_value() && (section - 1) % ShadowSectionInterval == 0) {
@@ -61,6 +61,7 @@ namespace ExtraChain::Consensus {
             if (!payouts.has_value())
                 return std::unexpected(payouts.error());
             bool settled = false;
+            std::map<ActorId, std::map<std::uint64_t, IntentEnvelope>> requests;
             for (const auto& transaction : decoded.value().transactions) {
                 if (transaction.section() != SectionId(section))
                     return std::unexpected(ConsensusError::InvalidHeight);
@@ -75,13 +76,22 @@ namespace ExtraChain::Consensus {
                     const auto envelope = intent_from_transaction(transaction);
                     if (!envelope.has_value())
                         return std::unexpected(envelope.error());
+                    if (!requests[envelope.value().intent.sender]
+                             .emplace(envelope.value().intent.account_nonce, envelope.value())
+                             .second)
+                        return std::unexpected(ConsensusError::InvalidNonce);
+                }
+            }
+            // Section storage is ordered by transaction hash. Account mutations must follow signed nonces.
+            for (const auto& [sender, account_requests] : requests) {
+                for (const auto& [nonce, envelope] : account_requests) {
                     const auto applied = policy.has_value()
-                                             ? apply_mining_request(state, envelope.value())
+                                             ? apply_mining_request(state, envelope)
                                              : std::expected<void, ConsensusError> { std::unexpected(
                                                    ConsensusError::InvalidGovernance) };
                     if (!applied.has_value()) {
                         if (invalid_request != nullptr)
-                            *invalid_request = hash_intent(envelope.value().intent);
+                            *invalid_request = hash_intent(envelope.intent);
                         return std::unexpected(applied.error());
                     }
                 }

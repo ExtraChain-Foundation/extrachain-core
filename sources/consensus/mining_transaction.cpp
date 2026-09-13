@@ -10,7 +10,7 @@ namespace ExtraChain::Consensus {
         if (network.is_zero() || !value.has_value() || value.value() < 0)
             return { };
         return Utils::calculate_hash("EXC_NATIVE_MINING_SETTLEMENT_V1:" + network.to_string() + ":"
-                                     + section.to_string());
+                                     + std::to_string(value.value()));
     }
 
     std::expected<Transaction, ConsensusError> make_mining_settlement_transaction(

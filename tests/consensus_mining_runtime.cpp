@@ -167,6 +167,29 @@ int main() {
     const auto alias_path = Dfs::Path::file_path(provider.id(), alias_row.file_id).value();
     TEST_REQUIRE(FileIo::write_atomic(alias_path.native(), "bytes").has_value());
     node->dfs()->notify_stored(provider.id(), alias_row);
+    {
+        const auto withdrawal   = request(IntentOperation::StorageUnregister, dataset_id, 2, 21, 2);
+        auto       registration = request(IntentOperation::StorageRegister, dataset, 1, 21, 2);
+        // Force hash order to oppose nonce order, keeping the same section and logical time.
+        for (std::uint64_t expiry = 1001; !(withdrawal < registration) && expiry < 1129; ++expiry) {
+            auto envelope                        = intent_from_transaction(registration).value();
+            envelope.intent.expires_after_height = expiry;
+            envelope.intent = make_intent(envelope.intent, envelope.metadata, provider).value();
+            registration    = materialize_intent(envelope, 21, 2, { }).value();
+        }
+        TEST_REQUIRE(withdrawal < registration);
+        Section          value { .id = SectionId(21), .transactions = { withdrawal, registration } };
+        SectionBatchData ordered;
+        ordered.manifest.first_section = ordered.manifest.last_section = 21;
+        ordered.sections.emplace_back(21, Json::serialize(value));
+        const auto replayed =
+            replay_mining_batch(configure_mining_state(network.id(), 20, manifest.mining_policy).value(),
+                                manifest.mining_policy,
+                                ordered,
+                                { },
+                                LightClientVerifier::bootstrap(anchor).value());
+        TEST_REQUIRE(replayed.has_value() && replayed.value().registrations.empty());
+    }
     for (std::uint64_t height = 1; height <= 13; ++height) {
         const auto               first = (height - 1) * ShadowSectionInterval + 1;
         std::vector<Transaction> transactions;
@@ -268,7 +291,14 @@ int main() {
             TEST_REQUIRE(!rejected.has_value() && rejected.error() == ConsensusError::InvalidNonce);
             TEST_REQUIRE(!service.intent_receipt(hash_intent(skipped.intent)).value().has_value());
         }
-        TEST_REQUIRE(ConsensusStateTestFixture::admit(service, proposal, batch).has_value());
+        {
+            WireFormat::Scope legacy(WireFormat::Mode::Legacy);
+            TEST_REQUIRE(ConsensusStateTestFixture::admit(service, proposal, batch).has_value());
+            if (paid.has_value()) {
+                TEST_REQUIRE(service.verify_mining_transaction(paid.value()));
+                TEST_REQUIRE_EQ(paid.value().calculate_hash(), paid.value().hash());
+            }
+        }
         TEST_REQUIRE(engine->observe_proposal(proposal).has_value());
         TEST_REQUIRE(engine->stage_batch(batch).has_value());
         QuorumCertificate certificate { .network_id    = network.id(),

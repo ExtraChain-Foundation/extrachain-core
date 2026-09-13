@@ -25,10 +25,10 @@ namespace MessagePack {
             std::size_t depth_limit;
             std::size_t depth = 0;
 
-            bool enter(std::size_t elements, std::size_t slots) {
-                if (elements > container_limit || slots > remaining || depth >= depth_limit)
+            bool enter(std::size_t elements, std::size_t object_count) {
+                if (elements > container_limit || object_count > remaining || depth >= depth_limit)
                     return false;
-                remaining -= slots;
+                remaining -= object_count;
                 ++depth;
                 return true;
             }
