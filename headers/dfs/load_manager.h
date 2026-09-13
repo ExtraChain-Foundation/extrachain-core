@@ -31,6 +31,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <boost/signals2/connection.hpp>
+#include <boost/icl/interval_set.hpp>
 #include "dfs/dfs_utils.h"
 #include "chain/actor_id.h"
 #include "utils/safeptr.h"
@@ -51,6 +52,7 @@ enum class DownloadError {
 };
 
 struct LoadInfo {
+    using FragmentSet = boost::icl::interval_set<std::size_t>;
     struct Attempts {
         int                                   counter { 0 };
         bool                                  refused { false };
@@ -60,7 +62,7 @@ struct LoadInfo {
     Dfs::DirRow dir_row;
 
     size_t                                amount_fragments;
-    std::set<size_t>                      fragments_left;
+    FragmentSet                           fragments_left;
     std::chrono::system_clock::time_point last_fragment_received {};
     std::chrono::system_clock::time_point queued {};
 
@@ -174,7 +176,7 @@ private:
     struct ReadStorage {
         // uint64_t current_size;
         std::size_t      amount_fragments;
-        std::set<size_t> fragments_achieved;
+        LoadInfo::FragmentSet fragments_achieved;
         // std::map<uint64_t, bool> offsets_read_progress;
     };
 

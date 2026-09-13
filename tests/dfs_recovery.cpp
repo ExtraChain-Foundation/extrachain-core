@@ -4,6 +4,11 @@
 #include <limits>
 #include <memory>
 #include <thread>
+#ifdef __APPLE__
+    #include <mach/mach.h>
+#else
+    #include <unistd.h>
+#endif
 
 #include "core/extrachain_node.h"
 #include "dfs/dfs_service.h"
@@ -13,6 +18,22 @@
 #include "test_support.h"
 
 namespace {
+    std::uint64_t resident_memory() {
+#ifdef __APPLE__
+        mach_task_basic_info   info { };
+        mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+        TEST_REQUIRE(
+            task_info(mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count)
+            == KERN_SUCCESS);
+        return info.resident_size;
+#else
+        std::ifstream status("/proc/self/statm");
+        std::uint64_t virtual_pages  = 0;
+        std::uint64_t resident_pages = 0;
+        TEST_REQUIRE(static_cast<bool>(status >> virtual_pages >> resident_pages));
+        return resident_pages * static_cast<std::uint64_t>(sysconf(_SC_PAGESIZE));
+#endif
+    }
     class Source final : public SocketService {
     public:
         explicit Source(ExtraChain::Core::ExtraChainNode& node)
@@ -110,6 +131,46 @@ int main() {
     TEST_REQUIRE_EQ(DirsSpace::last_modified(db, first).value(), 2099U);
     manager.update_dirs(first, std::numeric_limits<std::uint64_t>::max());
     TEST_REQUIRE_EQ(DirsSpace::last_modified(db, first).value(), 2099U);
+
+    // A signed large-file advertisement must not allocate one node per fragment.
+    Dfs::DirRow large;
+    large.owner_id          = owner.id();
+    large.actor_id          = owner.id();
+    large.file_id           = std::string(64, 'e');
+    large.name              = "large-advertised-file";
+    large.size              = std::uint64_t(512) * 1024 * 1024 * 1024;
+    large.type              = Dfs::FileType::File;
+    large.state             = Dfs::FileState::Known;
+    large.metadata_revision = 1;
+    large.hash              = std::string(64, 'a');
+    large.sign              = owner.key().sign(large.calculate_hash(owner.id())).value();
+    auto large_row          = Utils::to_dbrow(large);
+    large_row.erase("prev_file_id");
+    TEST_REQUIRE(db->insert(TableNameActorsFiles, large_row));
+    const auto memory_before = resident_memory();
+    node->dfs()->download_manager().add_to_queue(owner.id(), large, source->identifier());
+    TEST_REQUIRE(
+        node->dfs()->download_manager().add_node_identifier({ owner.id(), large.file_id }, std::string(64, 'e')));
+    const auto memory_after = resident_memory();
+    const auto growth       = memory_after > memory_before ? memory_after - memory_before : 0;
+    std::fprintf(stderr, "Large file queue memory growth: %llu bytes\n", static_cast<unsigned long long>(growth));
+    TEST_REQUIRE(growth < 8 * 1024 * 1024);
+    auto tombstone              = large;
+    tombstone.state             = Dfs::FileState::Removed;
+    tombstone.metadata_revision = 2;
+    tombstone.sign              = owner.key().sign(tombstone.calculate_hash(owner.id())).value();
+    auto tombstone_row          = Utils::to_dbrow(tombstone);
+    tombstone_row.erase("prev_file_id");
+    TEST_REQUIRE(db->replace(TableNameActorsFiles, tombstone_row));
+    TEST_REQUIRE(ActorSpace::get_dir_row(db, owner.id(), large.file_id).value().state == Dfs::FileState::Removed);
+    node->dfs()->download_manager().cancel_download({ owner.id(), large.file_id });
+    node->dfs()->download_manager().add_to_queue(owner.id(), large, source->identifier());
+    TEST_REQUIRE_EQ(node->dfs()->download_manager().active_downloads_size(), std::size_t(0));
+    auto removed    = large;
+    removed.state   = Dfs::FileState::Removed;
+    removed.file_id = std::string(64, 'f');
+    node->dfs()->download_manager().add_to_queue(owner.id(), removed, source->identifier());
+    TEST_REQUIRE_EQ(node->dfs()->download_manager().active_downloads_size(), std::size_t(0));
 
     // Reproduce persisted metadata after a crash, including a peer that knows
     // the file but cannot yet serve it. A size match alone cannot prove readiness.
@@ -247,6 +308,49 @@ int main() {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         TEST_REQUIRE_EQ(Utils::calculate_hash_file(path.value()).value(), remote.hash);
     }
+    // Out-of-order delivery splits and then joins the pending and completed ranges.
+    auto ordered              = large;
+    ordered.file_id           = std::string(64, '9');
+    ordered.name              = "fragment-order";
+    const std::string payload = std::string(Dfs::Basic::FRAGMENT_SIZE, 'a')
+                                + std::string(Dfs::Basic::FRAGMENT_SIZE, 'b')
+                                + std::string(Dfs::Basic::FRAGMENT_SIZE, 'c') + std::string(17, 'd');
+    ordered.size              = payload.size();
+    ordered.hash              = Utils::calculate_hash(payload);
+    ordered.sign              = owner.key().sign(ordered.calculate_hash(owner.id())).value();
+    auto ordered_row          = Utils::to_dbrow(ordered);
+    ordered_row.erase("prev_file_id");
+    TEST_REQUIRE(db->insert(TableNameActorsFiles, ordered_row));
+    const Dfs::FileLink ordered_link { owner.id(), ordered.file_id };
+    auto&               downloads = node->dfs()->download_manager();
+    downloads.add_to_queue(owner.id(), ordered, source->identifier());
+    const auto request_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (source->request_id(ordered_link).empty() && std::chrono::steady_clock::now() < request_deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    const auto message_id = source->request_id(ordered_link);
+    TEST_REQUIRE(!message_id.empty());
+    for (const std::size_t number : { 2, 4, 1, 3 }) {
+        const auto                       offset = (number - 1) * Dfs::Basic::FRAGMENT_SIZE;
+        const auto                       bytes  = payload.substr(offset, Dfs::Basic::FRAGMENT_SIZE);
+        const Dfs::Packets::FragmentData fragment { .owner_id              = owner.id(),
+                                                    .file_id               = ordered.file_id,
+                                                    .data                  = bytes,
+                                                    .offset                = offset,
+                                                    .current_size          = bytes.size(),
+                                                    .fragment_number       = number,
+                                                    .full_amount_fragments = 4 };
+        downloads.file_fragment_achieved(fragment, source->identifier(), message_id);
+        downloads.file_fragment_achieved(fragment, source->identifier(), message_id);
+    }
+    const auto completed = [&] {
+        return ActorSpace::get_dir_row(db, owner.id(), ordered.file_id).value().state == Dfs::FileState::Ready;
+    };
+    const auto complete_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (!completed() && std::chrono::steady_clock::now() < complete_deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    TEST_REQUIRE(completed());
+    TEST_REQUIRE(node->dfs()->is_file_already_downloaded(owner.id(), ordered.file_id, ordered.hash));
+
     source->close_connection();
     node->network()->connections()->erase(source);
     node->cleanUp();

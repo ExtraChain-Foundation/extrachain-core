@@ -425,7 +425,11 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                             // writing/finalizing — nothing to request, but the transfer
                             // is alive and must not fall into the give-up path.
                             all_in_flight = true;
-                            for (auto number : it->second.fragments_left) {
+                            const auto& fragments = it->second.fragments_left;
+                            for (auto fragment = boost::icl::elements_begin(fragments);
+                                 fragment != boost::icl::elements_end(fragments);
+                                 ++fragment) {
+                                const auto number = *fragment;
                                 if (m_amount_file_fragments_requests->size() >= active_request_limit)
                                     break;
                                 // Slot bookkeeping is per single fragment. A cumulative key
@@ -661,6 +665,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const Dfs::DirRow& dir_row,
                                const std::string& identifier,
                                const bool         notify_neighbours) {
+    if (dir_row.state == Dfs::FileState::Removed || stopping_.load(std::memory_order_acquire))
+        return;
     if (dir_row.type == Dfs::FileType::Collection) {
         node->dfs()->request_collection({ owner_id, dir_row.file_id }, identifier);
         return;
@@ -722,6 +728,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
 
     auto row =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(), owner_id, dir_row.file_id);
+    if (row.has_value() && row.value().state == Dfs::FileState::Removed)
+        return;
 
     // Vector unreadable on disk (missing DB or .vector template companion) while .dirs says
     // Ready with the correct hash — state left by an interrupted write (kill during sync).
@@ -743,10 +751,6 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         if (row->state == Dfs::FileState::Ready || row->state == Dfs::FileState::Partial) {
             auto file_path = Dfs::Path::file_path(owner_id, dir_row.file_id);
             if (!file_path.has_value()) {
-                return;
-            }
-
-            if (row->state == Dfs::FileState::Removed) {
                 return;
             }
 
@@ -828,9 +832,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     // the count.
     if (dir_row.type == Dfs::FileType::File) {
         load_info.amount_fragments = dir_row.size == 0 ? 1 : 1 + (dir_row.size - 1) / Dfs::Basic::FRAGMENT_SIZE;
-        for (size_t n = 1; n <= load_info.amount_fragments; ++n) {
-            load_info.fragments_left.emplace(n);
-        }
+        load_info.fragments_left.add(LoadInfo::FragmentSet::interval_type::closed(1, load_info.amount_fragments));
     }
 
     load_info.dir_row.state = Dfs::FileState::Known;
@@ -1148,7 +1150,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             const auto  count = row.size == 0 ? 1 : 1 + (row.size - 1) / Dfs::Basic::FRAGMENT_SIZE;
             if (row.type != Dfs::FileType::File || file_content.fragment_number == 0
                 || file_content.fragment_number > count || file_content.full_amount_fragments != count
-                || !res->second.fragments_left.contains(file_content.fragment_number)) {
+                || !boost::icl::contains(res->second.fragments_left, file_content.fragment_number)) {
                 return false;
             }
             const auto offset = (file_content.fragment_number - 1) * Dfs::Basic::FRAGMENT_SIZE;
@@ -1175,7 +1177,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                 pending->erase(request);
             }
             download_started = res->second.queued;
-            res->second.fragments_left.erase(file_content.fragment_number);
+            res->second.fragments_left.subtract(file_content.fragment_number);
             res->second.last_fragment_received = std::chrono::system_clock::now();
             eDebug("[Load] GOT {}/{} fragment {}/{} from {} left={}",
                    file_content.owner_id,
@@ -1239,7 +1241,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             auto active_reads_locked = *m_active_reads;
             auto item                = active_reads_locked->find(file_link);
             if (item != active_reads_locked->end()) {
-                if (item->second.fragments_achieved.contains(file_content.fragment_number)) {
+                if (boost::icl::contains(item->second.fragments_achieved, file_content.fragment_number)) {
                     // eCritical("[Dfs] LoadManager::file_fragment_achieved, offset already exist. file_link: {},
                     // offset: {}, fragment_number: {}", file_link, file_content.offset,
                     // file_content.fragment_number);
@@ -1278,7 +1280,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                     auto locked = **pool;
                     auto it     = locked->find(file_link);
                     if (it != locked->end()) {
-                        it->second.fragments_left.insert(file_content.fragment_number);
+                        it->second.fragments_left.add(file_content.fragment_number);
                     }
                 }
                 kick(file_link);
@@ -1288,7 +1290,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             auto active_reads_locked = *m_active_reads;
             auto item                = active_reads_locked->find(file_link);
             if (item != active_reads_locked->end()) {
-                item->second.fragments_achieved.emplace(file_content.fragment_number);
+                item->second.fragments_achieved.add(file_content.fragment_number);
             }
         }
 
@@ -1314,11 +1316,9 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             item->second.last_fragment_received = std::chrono::system_clock::now();
             if (item->second.amount_fragments == 0) {
                 item->second.amount_fragments = file_content.full_amount_fragments;
-                for (std::size_t number = 1; number <= item->second.amount_fragments; ++number) {
-                    if (number != file_content.fragment_number) {
-                        item->second.fragments_left.emplace(number);
-                    }
-                }
+                item->second.fragments_left.add(
+                    LoadInfo::FragmentSet::interval_type::closed(1, item->second.amount_fragments));
+                item->second.fragments_left.subtract(file_content.fragment_number);
             }
             if (download_complete) {
                 completed_row     = item->second.dir_row;
@@ -1361,9 +1361,8 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                 }
                 item->second.queued = std::chrono::system_clock::now();
                 item->second.fragments_left.clear();
-                for (std::size_t number = 1; number <= item->second.amount_fragments; ++number) {
-                    item->second.fragments_left.emplace(number);
-                }
+                item->second.fragments_left.add(
+                    LoadInfo::FragmentSet::interval_type::closed(1, item->second.amount_fragments));
                 for (auto& source : item->second.identifier_list) {
                     source.second = {};
                 }
