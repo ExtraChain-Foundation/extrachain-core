@@ -293,10 +293,16 @@ int main(int argc, char* argv[]) {
         return 64;
     }
     const bool mining_test = mining_test_flag != nullptr;
+    const char* long_test_flag = std::getenv("EXC_SHADOW_MINING_LONG_TEST");
+    if (long_test_flag != nullptr && (!mining_test || std::string_view(long_test_flag) != "1"))
+        return 64;
     if (mining_test) {
-        // Explicit fixture policy: 32 ExC total. This is not a production emission schedule.
+        // Explicit fixtures: 32 ExC, or 1,000 ExC across the long test. Neither is a production schedule.
+        const MiningEmissionSegment segment = long_test_flag == nullptr
+                                                  ? MiningEmissionSegment { 32, NativeCoinUnits }
+                                                  : MiningEmissionSegment { 100'000, NativeCoinUnits / 100 };
         activation.mining_policy =
-            MiningEmissionPolicy { activation_section / ShadowSectionInterval + 1, { { 32, NativeCoinUnits } } };
+            MiningEmissionPolicy { activation_section / ShadowSectionInterval + 1, { segment } };
     }
     const auto activation_authorization =
         authorize_action(governance.value(),

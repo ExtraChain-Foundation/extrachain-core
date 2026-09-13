@@ -11,6 +11,8 @@ import subprocess
 import sys
 import time
 
+import msgpack
+
 from shadow_fault_cycle import Cycle
 from shadow_live_join import DOCUMENTS
 from shadow_receipts import audit
@@ -26,12 +28,14 @@ class Endurance(Cycle):
         self.observer_online = False
         self.submissions, self.cursors, self.file_cache = {}, {}, {}
         self.next_sample = 0
+        self.last_minted = 0
         self.deadline = time.monotonic() + args.duration + args.recovery + 600
         self.environment.update(
             EXC_SHADOW_WAVES=str(self.waves), EXC_SHADOW_SENDERS=str(args.senders),
             EXC_SHADOW_PER_SENDER=str(args.per_sender), EXC_SHADOW_DFS_BYTES=str(args.file_bytes),
             EXC_SHADOW_VECTOR_ROWS='48', EXC_SHADOW_VECTOR_CROSS='8', EXC_SHADOW_HISTORY_ROWS='130',
             EXC_SHADOW_REMOVE_AFTER_S='30', EXC_SHADOW_DFS_MODE='full', EXC_SHADOW_MINING_TEST='1',
+            EXC_SHADOW_MINING_LONG_TEST='1',
             EXC_SHADOW_RUN_SECONDS=str(args.duration + args.recovery + 600),
             EXC_SHADOW_DEADLINE_S=str(args.duration + args.recovery), EXC_SHADOW_HOLD_S='0')
         for key in ('EXC_SHADOW_RESUME_WAVE', 'EXC_SHADOW_OLD_INDEXES', 'EXC_FUND_NODES'):
@@ -158,6 +162,7 @@ class Endurance(Cycle):
     def converge(self):
         nodes = 8 if self.observer_online else 7
         expected = (self.wave + 1) * self.args.senders * self.args.per_sender
+        mining_progress = []
 
         def complete():
             if self.observer_online and self.observer.poll() is not None:
@@ -166,13 +171,41 @@ class Endurance(Cycle):
             files = audit_waves(self.work, self.wave + 1, nodes, self.args.file_bytes, self.file_cache)
             (self.work / 'live-wave-receipts.json').write_text(json.dumps(receipts, indent=2))
             (self.work / 'live-wave-files.json').write_text(json.dumps(files, indent=2))
-            return receipts['complete'] and files['complete']
+            if not receipts['complete'] or not files['complete']:
+                return False
+            mining_progress.clear()
+            for index in range(nodes):
+                try:
+                    with (self.home(index) / 'data/consensus/mining-state.msgpack').open('rb') as stream:
+                        data = stream.read(16 * 1024 * 1024 + 1)
+                except FileNotFoundError:
+                    return False
+                if len(data) > 16 * 1024 * 1024:
+                    raise RuntimeError('Mining snapshot exceeds its byte limit')
+                snapshot = msgpack.unpackb(data, raw=False, strict_map_key=False,
+                                           max_array_len=8192, max_map_len=8192,
+                                           max_str_len=1048576, max_bin_len=1048576)
+                if not isinstance(snapshot, list) or len(snapshot) != 2:
+                    raise RuntimeError('Invalid mining snapshot')
+                state = snapshot[1]
+                if (not isinstance(state, list) or len(state) != 7
+                        or not all(type(value) is int for value in state[1:4])
+                        or not 0 <= state[3] <= state[2] <= 10000 * 100000000):
+                    raise RuntimeError('Invalid mining counters')
+                mining_progress.append(dict(node=index, section=state[1], reserved_units=state[2],
+                                            minted_units=state[3]))
+            return min(item['minted_units'] for item in mining_progress) > self.last_minted
 
         self.wait_for(complete, f'wave {self.wave} convergence on {nodes} nodes', self.args.recovery)
+        self.last_minted = max(item['minted_units'] for item in mining_progress)
         self.event('wave-converged', wave=self.wave, nodes=nodes, receipts=expected,
-                   file_copies=(self.wave + 1) * 7 * nodes)
+                   file_copies=(self.wave + 1) * 7 * nodes, mining=mining_progress)
 
     def fault(self):
+        pending = audit(self.work, (self.wave + 1) * self.args.senders * self.args.per_sender,
+                        self.submissions, self.cursors, 7)
+        self.event('workload-at-fault', wave=self.wave, submitted=pending['submitted'],
+                   finalized=[node['finalized'] for node in pending['nodes']])
         kind = self.wave % 4
         if kind == 0:
             index = self.wave % 7

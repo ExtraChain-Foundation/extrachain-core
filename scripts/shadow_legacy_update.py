@@ -46,7 +46,8 @@ def main():
                        EXC_SHADOW_DFS_MODE='full', EXC_SHADOW_MINING_TEST='1',
                        EXC_SHADOW_RUN_SECONDS='900', EXC_SHADOW_DEADLINE_S='720',
                        EXC_SHADOW_MIN_RUNTIME_S='0', EXC_SHADOW_RECEIPTS_PYTHON=sys.executable)
-    for key in ('EXC_SHADOW_WAVES', 'EXC_SHADOW_RESUME_WAVE', 'EXC_SHADOW_OLD_INDEXES'):
+    for key in ('EXC_SHADOW_WAVES', 'EXC_SHADOW_RESUME_WAVE', 'EXC_SHADOW_OLD_INDEXES',
+                'EXC_SHADOW_MINING_LONG_TEST'):
         environment.pop(key, None)
 
     def event(name, **values):
@@ -65,11 +66,13 @@ def main():
     def text(path):
         return path.read_text(errors='replace') if path.exists() else ''
 
-    def wait_for(predicate, seconds, label):
+    def wait_for(predicate, seconds, label, process=None):
         end = time.monotonic() + seconds
         while not predicate():
             if soak.poll() is not None:
                 raise RuntimeError(f'Committee stopped during {label}')
+            if process is not None and process.poll() is not None:
+                raise RuntimeError(f'Node exited with {process.returncode} during {label}')
             if time.monotonic() >= end:
                 raise TimeoutError(label)
             time.sleep(0.25)
@@ -132,7 +135,7 @@ def main():
                          str(args.port + 27), str(args.port + 20), '8', '0', '600', str(barrier), '1', '1'],
                         stand / 'node-7.log', cwd=parent, env=join_env)
         wait_for(lambda: re.search(r'committee node=0 conns=7 shadow_peers=7 ', text(stand / 'node-0.log')),
-                 90, 'current signed peer access after update')
+                 90, 'current signed peer access after update', updated)
         submissions, cursors, cache = {}, {}, {}
 
         def converged():
