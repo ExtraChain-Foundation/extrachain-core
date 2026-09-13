@@ -19,10 +19,10 @@ struct HistoryPeer final : SocketService {
     std::mutex                                         mutex;
     std::condition_variable                            ready;
     std::vector<std::pair<std::string, std::uint64_t>> requests;
-    explicit HistoryPeer(ExtraChain::Core::ExtraChainNode& n)
+    explicit HistoryPeer(ExtraChain::Core::ExtraChainNode& n, char name = 'f')
         : SocketService(*n.network())
         , node(n) {
-        identifier_ = std::string(64, 'f');
+        identifier_ = std::string(64, name);
         activated_  = true;
     }
     std::string protocol_string() const override {
@@ -181,8 +181,49 @@ int main() {
     node->dfs()->network_change_collection(owner.id(), file.file_id, live, target("duplicate-live"));
     node->dfs()->network_request_collection(owner.id(), file.file_id, target("barrier"), 131);
     TEST_REQUIRE(capture.wait(5).first == MessageType::DfsCollectionHistory);
+    node->dfs()->set_mode(DfsMode::Full);
+    const auto catalog_file =
+        node->dfs()->store_collection(owner.id(), owner.id(), "CatalogItems", schema).value();
+    TEST_REQUIRE(
+        node->dfs()->add_collection_row(owner.id(), catalog_file.file_id, { { "value", "catalog" } }).has_value());
+    auto catalog_chain = HistoricalCollection::load(node.get(), owner, owner.id(), catalog_file.file_id).value();
+    const auto catalog_page = catalog_chain.get_historical_rows().value();
+    const auto catalog_row  = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(),
+                                                                             owner.id(),
+                                                                             catalog_file.file_id)
+                                  .value();
+    std::filesystem::remove(catalog_chain.get_file_path().native());
+    const auto catalog_request =
+        node->dfs()->dirs_manager().request_catalog_rows({ .owners = { owner.id() } }, target("catalog"));
+    TEST_REQUIRE(!catalog_request.empty());
+    TEST_REQUIRE(capture.wait(6).first == MessageType::DfsSyncDirRows);
+    node->dfs()->dirs_manager().network_response_dir_rows(MessagePack::serialize(
+                                                              Dfs::CatalogRowsPage { .rows = { catalog_row } }),
+                                                          target(catalog_request));
+    const auto from_catalog = peer->wait(3);
+    TEST_REQUIRE_EQ(from_catalog.second, std::uint64_t(0));
+    node->dfs()->network_response_historical_collection(owner.id(),
+                                                        catalog_file.file_id,
+                                                        { },
+                                                        target(from_catalog.first));
+    node->dfs()->network_request_collection(owner.id(), barrier.file_id, target("empty-response-barrier"), 0);
+    TEST_REQUIRE(capture.wait(7).first == MessageType::DfsCollectionHistory);
+    auto alternative = std::make_shared<HistoryPeer>(*node, 'e');
+    node->network()->connections()->insert(alternative);
+    node->dfs()->request_collection({ owner.id(), catalog_file.file_id }, std::string(64, 'f'));
+    const auto retried = alternative->wait(1);
+    TEST_REQUIRE_EQ(retried.second, std::uint64_t(0));
+    node->dfs()->network_response_historical_collection(owner.id(),
+                                                        catalog_file.file_id,
+                                                        catalog_page,
+                                                        target(retried.first, std::string(64, 'e')));
+    wait([&] {
+        auto head = catalog_chain.get_last_row();
+        return head.has_value() && head.value().id == 1;
+    });
     node->network()->connections()->clear();
     peer.reset();
+    alternative.reset();
     node.reset();
     std::filesystem::current_path(original);
     std::filesystem::remove_all(directory);

@@ -380,6 +380,8 @@ std::expected<bool, Error> HistoricalCollection::accept(ExtraChain::Core::ExtraC
             return std::unexpected(Error::InvalidHistory);
         schema = schema_from(first.value()).value();
     } else {
+        if (rows.front().id != 0)
+            return std::unexpected(Error::Conflict);
         if (!db.table_names().empty())
             return std::unexpected(Error::InvalidHistory);
         const auto initial = schema_from(rows.front());

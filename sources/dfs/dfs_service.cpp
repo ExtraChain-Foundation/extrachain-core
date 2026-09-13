@@ -1786,69 +1786,88 @@ ExpectedDirHistoricalRow DfsService::remove_collection_row(const ActorId     &ow
     return res;
 }
 
-void DfsService::request_collection(const Dfs::FileLink &link, const std::string &preferred) {
+void DfsService::request_collection(const Dfs::FileLink &link, const std::string &preferred, bool continuation) {
     if (!Dfs::Path::file_path(link.owner_id, link.file_id).has_value())
         return;
     const auto ticket = vector_write_budget_->budget.reserve(preferred, 4096);
     if (!ticket)
         return;
-    boost::asio::
-        post(vector_write_budget_->strand,
-             ExtraChain::Core::Runtime::guard_handler("request collection", [this, link, preferred, ticket] {
-                 if (ticket->stopped())
-                     return;
-                 auto catalog = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(get_db_instance(),
-                                                                               link.owner_id,
-                                                                               link.file_id);
-                 if (!catalog.has_value() || catalog.value().type != Dfs::FileType::Collection
-                     || catalog.value().state == Dfs::FileState::Removed)
-                     return;
-                 auto peers = node->network()->active_connection_identifiers();
-                 if (peers.empty())
-                     return;
-                 std::ranges::sort(peers);
-                 std::uint64_t after = 0;
-                 auto          chain = HistoricalCollection::load(node,
-                                                                  node->account_controller()->system_actor(),
-                                                                  link.owner_id,
-                                                                  link.file_id);
-                 if (chain.has_value()) {
-                     auto head = chain.value().get_last_row();
-                     if (head.has_value())
-                         after = std::uint64_t(head.value().id) + 1;
-                 }
-                 Responder target(node->network());
-                 {
-                     std::lock_guard lock(request_times_mutex_);
-                     const auto      now = std::chrono::steady_clock::now();
-                     std::erase_if(collection_pending_, [now](const auto &item) {
-                         return item.second.deadline <= now;
-                     });
-                     if (collection_pending_.size() >= 32
-                         || std::ranges::any_of(collection_pending_, [&link](const auto &item) {
-                                return item.second.link == link;
-                            }))
-                         return;
-                     auto found = std::ranges::find(peers, preferred);
-                     auto peer = found == peers.end() ? peers[collection_source_cursor_++ % peers.size()] : *found;
-                     if (std::ranges::count_if(collection_pending_,
-                                               [&peer](const auto &item) {
-                                                   return item.second.peer == peer;
-                                               })
-                         >= 8)
-                         return;
-                     target.add_identifier(peer);
-                     target = target.with_new_message_id();
-                     collection_pending_
-                         .emplace(target.message_id(),
-                                  CollectionPending { link, peer, after, now + std::chrono::seconds(30) });
-                 }
-                 node->network()->send_message(std::make_tuple(link.owner_id, link.file_id, after),
-                                               MessageType::DfsCollectionRequest,
-                                               SendMode::Focused,
-                                               MessageStatus::Request,
-                                               target);
-             }));
+    boost::asio::post(vector_write_budget_->strand,
+                      ExtraChain::Core::Runtime::
+                          guard_handler("request collection", [this, link, preferred, continuation, ticket] {
+                              if (ticket->stopped())
+                                  return;
+                              auto catalog = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(get_db_instance(),
+                                                                                            link.owner_id,
+                                                                                            link.file_id);
+                              if (!catalog.has_value() || catalog.value().type != Dfs::FileType::Collection
+                                  || catalog.value().state == Dfs::FileState::Removed)
+                                  return;
+                              auto peers = node->network()->active_connection_identifiers();
+                              if (peers.empty())
+                                  return;
+                              std::ranges::sort(peers);
+                              std::uint64_t after = 0;
+                              auto chain = HistoricalCollection::load(node,
+                                                                      node->account_controller()->system_actor(),
+                                                                      link.owner_id,
+                                                                      link.file_id);
+                              if (chain.has_value()) {
+                                  auto head = chain.value().get_last_row();
+                                  if (head.has_value())
+                                      after = std::uint64_t(head.value().id) + 1;
+                              }
+                              Responder target(node->network());
+                              {
+                                  std::lock_guard lock(request_times_mutex_);
+                                  const auto      now = std::chrono::steady_clock::now();
+                                  std::erase_if(collection_pending_, [now](const auto &item) {
+                                      return item.second.deadline <= now;
+                                  });
+                                  if (collection_pending_.size() >= 32
+                                      || std::ranges::any_of(collection_pending_, [&link](const auto &item) {
+                                             return item.second.link == link;
+                                         }))
+                                      return;
+                                  auto       found    = std::ranges::find(peers, preferred);
+                                  const auto previous = collection_sources_.find(link);
+                                  if (!continuation && previous != collection_sources_.end()) {
+                                      const auto last = std::ranges::find(peers, previous->second);
+                                      if (last != peers.end())
+                                          found = peers.begin() + (last - peers.begin() + 1) % peers.size();
+                                  }
+                                  auto peer = found == peers.end()
+                                                  ? peers[collection_source_cursor_++ % peers.size()]
+                                                  : *found;
+                                  if (std::ranges::count_if(collection_pending_,
+                                                            [&peer](const auto &item) {
+                                                                return item.second.peer == peer;
+                                                            })
+                                      >= 8)
+                                      return;
+                                  if (!collection_sources_.contains(link) && collection_sources_.size() >= 4096)
+                                      collection_sources_.erase(collection_sources_.begin());
+                                  collection_sources_[link] = peer;
+                                  target.add_identifier(peer);
+                                  target = target.with_new_message_id();
+                                  collection_pending_.emplace(target.message_id(),
+                                                              CollectionPending {
+                                                                  link,
+                                                                  peer,
+                                                                  after,
+                                                                  now + std::chrono::seconds(10) });
+                              }
+                              eLog("[HistorySync] Request {} / {} at {} from {}",
+                                   link.owner_id,
+                                   link.file_id,
+                                   after,
+                                   *target.identifiers().begin());
+                              node->network()->send_message(std::make_tuple(link.owner_id, link.file_id, after),
+                                                            MessageType::DfsCollectionRequest,
+                                                            SendMode::Focused,
+                                                            MessageStatus::Request,
+                                                            target);
+                          }));
 }
 
 void DfsService::network_request_collection(const ActorId     &owner,
@@ -1932,7 +1951,7 @@ void DfsService::network_response_historical_collection(const ActorId           
                               if (hash == catalog.value().hash && size == catalog.value().size) {
                                   load_manager_.finish_him(owner, catalog.value());
                               } else if (!rows.empty()) {
-                                  request_collection({ owner, file }, peer);
+                                  request_collection({ owner, file }, peer, true);
                               }
                           }));
 }
@@ -2485,7 +2504,13 @@ bool DfsService::network_store_file(const ActorId        &owner_id,
     const auto ticket = vector_write_budget_->budget.reserve(peer, 16 * 1024);
     if (!ticket)
         return false;
-    auto work = [this, owner_id, row, origin, ticket, on_accepted = std::move(on_accepted)]() mutable {
+    auto work = [this,
+                 owner_id,
+                 row,
+                 origin,
+                 ticket,
+                 peer        = std::string(peer),
+                 on_accepted = std::move(on_accepted)]() mutable {
         if (ticket->stopped())
             return;
         auto result = accept_catalog_row(owner_id, row);
@@ -2498,6 +2523,11 @@ bool DfsService::network_store_file(const ActorId        &owner_id,
             if (mode() == DfsMode::Full && stored.state != Dfs::FileState::Ready)
                 request_file(owner_id, stored.file_id);
         }
+        const Dfs::FileLink link { owner_id, stored.file_id };
+        if (stored.state != Dfs::FileState::Removed && stored.type == Dfs::FileType::Collection
+            && (mode() == DfsMode::Full || is_priority(link) || is_forced_file(link))
+            && !is_file_already_downloaded(owner_id, stored.file_id, stored.hash))
+            request_collection(link, peer);
         if (on_accepted) {
             boost::asio::post(node->serial_executor(),
                               ExtraChain::Core::Runtime::guard_handler("accepted catalog metadata",

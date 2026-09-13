@@ -365,6 +365,7 @@ public:
         std::chrono::steady_clock::time_point deadline;
     };
     std::map<std::string, CollectionPending> collection_pending_;
+    std::map<Dfs::FileLink, std::string>     collection_sources_;
     std::uint64_t                            collection_source_cursor_ = 0;
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
@@ -584,7 +585,9 @@ public:
                                                    const std::string &file_id,
                                                    uint32_t           id);
 
-    void request_collection(const Dfs::FileLink &link, const std::string &preferred = "");
+    void request_collection(const Dfs::FileLink &link,
+                            const std::string   &preferred    = "",
+                            bool                 continuation = false);
     void network_request_collection(const ActorId     &owner_id,
                                     const std::string &file_id,
                                     const Responder   &responder,

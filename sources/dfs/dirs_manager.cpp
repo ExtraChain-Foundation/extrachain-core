@@ -484,7 +484,7 @@ void DirsManager::merge_catalog_rows(const std::vector<Dfs::DirRow> &rows, const
         if (stored.state == Dfs::FileState::Removed)
             continue;
         const bool vector = stored.type == Dfs::FileType::Vector || stored.type == Dfs::FileType::Dictionary;
-        if (stored.type == Dfs::FileType::File || vector) {
+        if (stored.type == Dfs::FileType::File || stored.type == Dfs::FileType::Collection || vector) {
             const auto &target = vector ? row : stored;
             if (!node->dfs()->is_file_already_downloaded(row.owner_id, stored.file_id, target.hash))
                 todo.push_back(target);
