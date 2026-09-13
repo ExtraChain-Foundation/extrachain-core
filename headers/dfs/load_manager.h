@@ -61,12 +61,12 @@ struct LoadInfo {
 
     Dfs::DirRow dir_row;
 
-    size_t                                amount_fragments;
+    std::size_t                           amount_fragments = 0;
     FragmentSet                           fragments_left;
     std::chrono::system_clock::time_point last_fragment_received {};
     std::chrono::system_clock::time_point queued {};
 
-    bool notify_neighbours;
+    bool notify_neighbours = false;
     bool forced { false };
     // Count of full source-exhaustion restarts: after 3 cycles the download goes
     // into an exponential cooldown instead of being dropped — the only reachable
@@ -175,7 +175,7 @@ private:
 
     struct ReadStorage {
         // uint64_t current_size;
-        std::size_t      amount_fragments;
+        std::size_t           amount_fragments = 0;
         LoadInfo::FragmentSet fragments_achieved;
         // std::map<uint64_t, bool> offsets_read_progress;
     };

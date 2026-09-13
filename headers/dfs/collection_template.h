@@ -167,7 +167,7 @@ namespace Dfs {
         }
 
         std::string                             m_name;
-        FieldType                               m_type;
+        FieldType                               m_type = FieldType::String;
         std::optional<bool>                     m_required;
         std::optional<bool>                     m_unique;
         std::optional<bool>                     m_is_primary;

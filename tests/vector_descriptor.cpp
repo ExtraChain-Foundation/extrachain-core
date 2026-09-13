@@ -106,6 +106,26 @@ int main() {
     TEST_REQUIRE(probe.table_exists("ExVectorDescriptor"));
     TEST_REQUIRE(probe.query("ROLLBACK"));
     TEST_REQUIRE(!probe.table_exists("ExVectorDescriptor") && !probe.table_exists("ExVectorIndex"));
+    const auto disabled_flags = [](const Dfs::FieldBuilder& field, std::initializer_list<const char*> flags) {
+        auto object = boost::json::parse(Json::serialize(field)).as_object();
+        for (const auto* flag : flags) {
+            TEST_REQUIRE(object.contains(flag) && object.at(flag).as_bool());
+            object.at(flag) = false;
+        }
+        return Json::deserialize<Dfs::FieldBuilder>(boost::json::serialize(object)).value();
+    };
+    auto optional_schema = Dfs::CollectionTemplate::create("flag_options").value();
+    optional_schema.add_fields(
+        { disabled_flags(Dfs::Field::Integer("id").primary_key(), { "is_primary" }),
+          disabled_flags(Dfs::Field::String("payload").not_null().unique(), { "required", "unique" }),
+          disabled_flags(Dfs::Field::Timestamp("created").default_now(), { "default_now" }) });
+    auto optional_storage = optional_schema.to_db_schema().value();
+    optional_storage.set_table_name("FlagOptions");
+    TEST_REQUIRE(probe.create_table(optional_storage).has_value());
+    TEST_REQUIRE(probe.query(
+        "INSERT INTO FlagOptions (id, payload) VALUES (1, NULL), (1, NULL), (1, 'same'), (1, 'same')"));
+    const auto timestamps = probe.select("SELECT created FROM FlagOptions WHERE created IS NOT NULL");
+    TEST_REQUIRE(timestamps.empty());
     TEST_REQUIRE(probe.close());
     node.reset();
     std::filesystem::current_path(original);

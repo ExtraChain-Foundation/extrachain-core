@@ -90,23 +90,23 @@ namespace Dfs {
 
         DbColumn column(m_name, map_type_to_column(m_type));
 
-        if (m_is_primary && m_autoincrement.has_value()) {
+        if (m_is_primary.value_or(false) && m_autoincrement.has_value()) {
             column.primary_key(m_autoincrement.value());
             return column;
         }
 
-        if (m_required) {
+        if (m_required.value_or(false)) {
             column.not_null();
         }
 
-        if (m_unique) {
+        if (m_unique.value_or(false)) {
             column.unique();
         }
 
-        if (m_default_now && m_type == FieldType::Timestamp) {
+        if (m_default_now.value_or(false) && m_type == FieldType::Timestamp) {
             column.default_value("(unixepoch() * 1000)");
-        } else if (m_default) {
-            column.default_value(*m_default);
+        } else if (m_default.has_value()) {
+            column.default_value(m_default.value());
         }
 
         std::vector<std::string> checks;
