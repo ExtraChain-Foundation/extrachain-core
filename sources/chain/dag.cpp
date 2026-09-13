@@ -2091,7 +2091,7 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
         }
         return prove == TransactionProveError::NoError;
     }
-    if (transaction.signature().empty()) {
+    if (Utils::is_container_empty(transaction.signature())) {
         if (report_failure) {
             eWarning("[Dag] Repair transaction has no signature: {}", transaction.hash());
         }
@@ -2976,7 +2976,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
 
     if (tx.type() == TransactionType::EpochChange) {
         if (tx.amount() != 0 || !tx.token().is_zero() || !tx.meta().has_value() || tx.meta()->empty()
-            || tx.meta()->size() > 256 * 1024 || tx.signature().empty() || !tx.consensus_intent().has_value()) {
+            || tx.meta()->size() > 256 * 1024 || Utils::is_container_empty(tx.signature())
+            || !tx.consensus_intent().has_value()) {
             return TransactionProveError::InvalidContractPayload;
         }
         return verify_stored_hash() ? TransactionProveError::NoError : TransactionProveError::InvalidSignature;
@@ -2984,7 +2985,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
 
     if (tx.type() == TransactionType::TokenMigration) {
         if (targetReceiver.is_zero() || targetSender == targetReceiver || tx.token().is_zero()
-            || !tx.meta().has_value() || tx.meta()->size() > 64 * 1024 || tx.signature().empty()) {
+            || !tx.meta().has_value() || tx.meta()->size() > 64 * 1024
+            || Utils::is_container_empty(tx.signature())) {
             return TransactionProveError::TokenMigrationInvalid;
         }
         const auto receiver_actor = node->actor_index()->read_actor_old(targetReceiver);
@@ -3008,7 +3010,7 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
             return tx.type() == TransactionType::ContractDeploy ? TransactionProveError::ContractDependencyMissing
                                                                 : TransactionProveError::ReceiverNotExists;
         }
-        if (tx.signature().empty()) {
+        if (Utils::is_container_empty(tx.signature())) {
             return TransactionProveError::MissingSignature;
         }
         if (!verify_stored_hash()) {
@@ -3094,7 +3096,7 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     }
 
     // Verify signature
-    if (tx.signature().empty()) {
+    if (Utils::is_container_empty(tx.signature())) {
         return TransactionProveError::MissingSignature;
     }
 
@@ -5140,7 +5142,7 @@ bool Dag::validate_received_pack(Pack::PackId id, const Pack::Reader &reader) co
                 }
                 continue;
             }
-            if (tx.signature().empty())
+            if (Utils::is_container_empty(tx.signature()))
                 return reject("missing transaction signature");
 
             const auto sender_id = tx.sender().to_string();

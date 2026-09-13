@@ -229,6 +229,18 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(!socket->is_active());
     });
 
+    run("an all-zero fixed-size signature is missing", [&] {
+        Transaction transaction;
+        transaction.set_sender(owner.id());
+        transaction.set_receiver(wallet.id());
+        transaction.set_section(SectionId(10));
+        transaction.set_amount(BigNumberFloat(1));
+        transaction.update_hash();
+        const SectionId frontier(10);
+        TEST_REQUIRE_EQ(node->dag()->prove_transaction(transaction, { }, nullptr, &frontier),
+                        TransactionProveError::MissingSignature);
+    });
+
     run("legacy rewards never authorize emission", [&] {
         for (const auto amount : { "0.00000001", "2", "3", "1000000" }) {
             Transaction reward;

@@ -350,7 +350,7 @@ private:
 
                 const auto sender = actors.find(transaction.sender());
                 result.sender_exists = sender != actors.end() && !sender->second.empty();
-                if (result.sender_exists.value() && !transaction.signature().empty()) {
+                if (result.sender_exists.value() && !Utils::is_container_empty(transaction.signature())) {
                     if (transaction.consensus_intent().has_value()) {
                         result.signature_valid = transaction.verify(sender->second);
                     } else {
