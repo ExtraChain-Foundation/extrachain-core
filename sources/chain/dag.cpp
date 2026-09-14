@@ -2949,8 +2949,36 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
                                                         const SectionId                       *validation_frontier,
                                                         const TransactionValidationFacts      *facts,
                                                         bool stage_contract_change) {
-    if (tx.type() == TransactionType::Reward)
-        return TransactionProveError::MiningProofRequired;
+    if (tx.type() == TransactionType::Reward) {
+        // A legacy reward carries no mining proof and never will: the proof-bearing
+        // types (MiningSettlement and the mining requests below) were introduced
+        // later and are checked on their own paths. Rejecting every Reward outright
+        // also rejected the ones already written into the chain, so a node starting
+        // from scratch stopped at the first historical reward and never finished
+        // syncing (stand: stuck at section 19999 of 25000, prove=37 every 30 s).
+        //
+        // History is judged by the rules of its time, so a stored reward stays
+        // valid; only a reward that is still being admitted now is refused, since
+        // current miners must use the proof-bearing transactions.
+        // Replaying history versus admitting a new emission. While the node is
+        // syncing it is reading a chain the network already accepted, and those
+        // rewards predate the proof-bearing transaction types; refusing them
+        // stopped a from-scratch node at the first historical reward and it never
+        // finished syncing (stand: stuck at section 19999 of 25000, prove=37 every
+        // 30 s). Once the node is live, every reward must bring a mining proof —
+        // the section number is no evidence, since a fresh emission may claim any
+        // old section.
+        const auto replaying = status_ == DagStatus::Sync
+                               || (validation_frontier != nullptr && tx.section() < *validation_frontier
+                                   && find_transaction(tx.section(), tx.hash()).has_value());
+        if (!replaying) {
+            return TransactionProveError::MiningProofRequired;
+        }
+        if (tx.amount() > 3) {
+            return TransactionProveError::BigReward;
+        }
+        return TransactionProveError::NoError;
+    }
 
     if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance) {
         return validate_initial_transaction(tx);
