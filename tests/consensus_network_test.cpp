@@ -527,6 +527,33 @@ int main() {
     check("settlement rejects the wrong section",
           !verify_mining_settlement(settlement, 160, mining_verifier).has_value()
               && !verify_mining_settlement(settlement, 162, mining_verifier).has_value());
+    // An epoch past the schedule has no sections at all: every derived number would overflow. A
+    // local node cannot build such a record, but a peer can put one on the wire, so the decode and
+    // verify paths must refuse it instead of unwrapping a schedule that does not exist.
+    for (const std::uint64_t epoch : { UINT64_MAX, UINT64_MAX / 2, UINT64_MAX / 8 }) {
+        if (mining_epoch_schedule(epoch).has_value())
+            continue;
+        auto beyond           = settlement;
+        beyond.witness.epoch.epoch = epoch;
+        check("settlement transaction cannot be built for an epoch past the schedule",
+              !make_mining_settlement_transaction(beyond).has_value());
+        // Forge the wire form by hand, since the builder above refuses to make one.
+        for (const std::uint64_t section : { std::uint64_t(0), std::uint64_t(161), UINT64_MAX }) {
+            Transaction forged;
+            forged.set_type(TransactionType::MiningSettlement);
+            forged.set_receiver(committee.governance.id());
+            forged.set_section(SectionId(section));
+            forged.set_meta(Utils::to_base64(MessagePack::serialize(beyond)));
+            forged.update_hash();
+            check("forged settlement for an impossible epoch is refused on every path",
+                  !decode_mining_settlement_transaction(forged).has_value()
+                      && !verify_mining_settlement_transaction(forged,
+                                                               committee.governance.id(),
+                                                               mining_verifier)
+                              .has_value()
+                      && !mining_settlement_deltas(forged).has_value());
+        }
+    }
     auto changed_settlement = settlement;
     changed_settlement.witness.epoch.budget_units += 1;
     check("settlement rejects an altered epoch budget",

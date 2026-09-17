@@ -63,11 +63,14 @@ namespace ExtraChain::Consensus {
         const auto record = decode_mining_settlement_transaction(transaction);
         if (!record.has_value())
             return std::unexpected(record.error());
-        return verify_mining_settlement(record.value(),
-                                        mining_epoch_schedule(record.value().witness.epoch.epoch)
-                                            .value()
-                                            .settlement_first_section,
-                                        verifier);
+        // The epoch number arrives from the wire. decode_ already refuses an epoch with no
+        // schedule, so this lookup succeeds today — but that makes the safety of an unchecked
+        // .value() here a property of a function two calls away. Check it where it is used, so a
+        // later change to decode_ cannot turn a peer's message into std::bad_expected_access.
+        const auto schedule = mining_epoch_schedule(record.value().witness.epoch.epoch);
+        if (!schedule.has_value())
+            return std::unexpected(schedule.error());
+        return verify_mining_settlement(record.value(), schedule.value().settlement_first_section, verifier);
     }
 
     std::expected<std::map<ActorId, BigNumberFloat>, ConsensusError> mining_settlement_deltas(
