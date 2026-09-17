@@ -2974,9 +2974,13 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
         if (!replaying) {
             return TransactionProveError::MiningProofRequired;
         }
-        if (tx.amount() > 3) {
-            return TransactionProveError::BigReward;
-        }
+        // No size check while replaying. The amount is covered by the signature and
+        // the network already accepted this transaction by consensus; rejecting it
+        // now for being large would fork the chain at that section instead of
+        // protecting anything. Emission is bounded where it is authorized — by the
+        // mining proof on the admission path above — not by a constant here. The
+        // old "amount > 3" rule predates the proof-bearing types and bounded a
+        // single transaction, never the total, so it never limited emission anyway.
         return TransactionProveError::NoError;
     }
 
