@@ -39,6 +39,7 @@ class ShutdownCheckpointTest(unittest.TestCase):
             home = self.work / 'bootstrap' / ('server' if index == 0 else f'client{index}') / 'data'
             (home / 'consensus').mkdir(parents=True)
             (home / 'dag/hot').mkdir(parents=True)
+            (home / 'dag/range').write_text(json.dumps({'last': str(200 + 20 * index)}))
             with closing(sqlite3.connect(home / 'consensus/safety.sqlite')) as database, database:
                 database.executescript(
                     'CREATE TABLE consensus_finality_proofs (last_section INTEGER, finalized_hash TEXT);'
@@ -54,10 +55,12 @@ class ShutdownCheckpointTest(unittest.TestCase):
         self.checkpoint = self.work / 'checkpoint.json'
         self.checkpoint.write_text(json.dumps(capture_checkpoint(self.homes, self.mining)))
 
-    def verify(self, checkpoint=True):
+    def verify(self, checkpoint=True, checkpoint_only=False):
         arguments = ['shadow_verify.py', str(self.work)]
         if checkpoint:
             arguments += ['--checkpoint', str(self.checkpoint)]
+        if checkpoint_only:
+            arguments += ['--checkpoint-only']
         with patch.object(sys, 'argv', arguments), redirect_stdout(io.StringIO()):
             return main()
 
@@ -68,6 +71,25 @@ class ShutdownCheckpointTest(unittest.TestCase):
     def test_retains_shared_checkpoint_with_valid_shutdown_suffixes(self):
         self.assertEqual(self.verify(checkpoint=False), 1)
         self.assertEqual(self.verify(), 0)
+
+    def test_live_gate_accepts_newer_tips_with_the_recorded_checkpoint(self):
+        self.assertEqual(self.verify(checkpoint_only=True), 0)
+
+    def test_live_gate_rejects_a_tip_before_the_checkpoint(self):
+        (Path(self.homes[-1][1]) / 'dag/range').write_text('{"last": "199"}')
+        self.assertEqual(self.verify(checkpoint_only=True), 1)
+
+    def test_live_gate_requires_the_recorded_batch(self):
+        self.mutate('consensus/safety.sqlite', 'DELETE FROM consensus_batches')
+        self.assertEqual(self.verify(checkpoint_only=True), 1)
+
+    def test_live_gate_rejects_a_missing_checkpoint(self):
+        self.checkpoint.unlink()
+        self.assertEqual(self.verify(checkpoint_only=True), 1)
+
+    def test_live_gate_rejects_changed_membership(self):
+        with patch.dict(os.environ, {'EXC_VERIFY_SKIP': '7'}):
+            self.assertEqual(self.verify(checkpoint_only=True), 1)
 
     def test_lagging_live_node_cannot_capture_checkpoint(self):
         self.mining[-1]['section'] = 180

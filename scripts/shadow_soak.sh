@@ -595,8 +595,8 @@ fi
 
 # A receipt proves that the submitting node applied the checkpoint. Other nodes
 # can still be importing the same certified height. Keep the committee alive
-# until every node reports the seed node's finalized count, so the audits test a
-# converged snapshot instead of a shutdown race.
+# until all nodes retain the agreed checkpoint. Without a recorded checkpoint,
+# require equal current finalized counts before the stopped-data audits.
 if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     convergence_deadline=$(( $(date +%s) + RECOVERY_SECONDS ))
     if [ "${EXC_SHADOW_EXTERNAL_CONTROL:-0}" = "1" ]; then
@@ -605,18 +605,23 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     fi
     [ "$convergence_deadline" -le "$deadline" ] || convergence_deadline="$deadline"
     while :; do
-        # Every surviving node has to report one finalized count; the first
-        # survivor (the seed, unless it died) is the reference.
-        reference=""
         converged=1
-        for index in $(seq 0 $((NODE_COUNT - 1))); do
-            is_dead "$index" && continue
-            node_finalized="$(finalized_height "$index")"
-            [ -n "$node_finalized" ] || { converged=0; continue; }
-            [ -n "$reference" ] || reference="$node_finalized"
-            [ "$node_finalized" = "$reference" ] || converged=0
-        done
-        [ -n "$reference" ] || converged=0
+        if [ -n "${EXC_SHADOW_CHECKPOINT:-}" ]; then
+            EXC_VERIFY_SKIP="$DEAD_NODES" python3 "$SHADOW_VERIFY" "$WORK" \
+                --checkpoint "$EXC_SHADOW_CHECKPOINT" --checkpoint-only \
+                > "$WORK/live-checkpoint.log" 2>&1 || converged=0
+        else
+            # Without a recorded common checkpoint, current finalized counts must agree.
+            reference=""
+            for index in $(seq 0 $((NODE_COUNT - 1))); do
+                is_dead "$index" && continue
+                node_finalized="$(finalized_height "$index")"
+                [ -n "$node_finalized" ] || { converged=0; continue; }
+                [ -n "$reference" ] || reference="$node_finalized"
+                [ "$node_finalized" = "$reference" ] || converged=0
+            done
+            [ -n "$reference" ] || converged=0
+        fi
         if [ "${EXC_SHADOW_MINING_TEST:-0}" = 1 ]; then
             for index in $(seq 0 $((NODE_COUNT - 1))); do
                 is_dead "$index" && continue
@@ -624,8 +629,7 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
             done
         fi
         if [ "$converged" -eq 1 ]; then
-            # Heights agree; the ExDFS mesh has to be complete as well before the
-            # audits read a snapshot.
+            # The consensus checkpoint does not prove that ExDFS replication is complete.
             if dfs_audit 0 && vector_audit 0 && history_audit 0; then
                 if [ "$verdict" != "pass" ] || [ -z "${EXC_SHADOW_RECEIPTS_PYTHON:-}" ]; then
                     break
@@ -772,7 +776,12 @@ case "$verdict" in
         fail "nodes finished their ${RUN_SECONDS}s window with $done_nodes/$SENDERS senders finalized" ;;
     deadline) fail "harness deadline reached with $done_nodes/$SENDERS senders finalized" ;;
     load-incomplete) fail "load phases did not finish before the deadline" ;;
-    convergence) fail "committee did not converge on one finalized height before the recovery deadline" ;;
+    convergence)
+        if [ -n "${EXC_SHADOW_CHECKPOINT:-}" ]; then
+            fail "committee did not retain the recorded checkpoint before the recovery deadline"
+        fi
+        fail "committee did not converge on one finalized height before the recovery deadline"
+        ;;
     dfs-incomplete)
         dfs_audit 1 >&2
         vector_audit 1 >&2

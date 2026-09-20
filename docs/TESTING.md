@@ -247,6 +247,10 @@ be attributed.
     replay, balances, mining state, receipts, and DFS audits must still pass. Runs without
     this recorded live checkpoint retain the existing stopped-height check. A failed run
     cannot be reclassified by creating a checkpoint after shutdown.
+    The pre-shutdown gate must verify this recorded checkpoint as well. Comparing
+    sequential log samples of the moving tip can fail while all nodes retain the
+    same finalized work. A missing, changed, or incomplete checkpoint must fail;
+    runs without a recorded checkpoint still require equal current heights.
 13. **Callbacks can publish messages before their prerequisite.** Applying a new local
     quorum certificate runs finality and mining work. That work can cancel expired
     requests while peers still retain them. Send the verified certificate before those

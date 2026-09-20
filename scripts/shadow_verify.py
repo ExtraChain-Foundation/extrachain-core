@@ -128,12 +128,27 @@ def main():
     parser.add_argument('work')
     parser.add_argument('--checkpoint', type=Path,
                         help='Durable checkpoint agreed by all live nodes before shutdown')
+    parser.add_argument('--checkpoint-only', action='store_true',
+                        help='Check the recorded live checkpoint before stopping the nodes')
     args = parser.parse_args()
     work = args.work
     homes = node_dirs(work)
     if len(homes) < 2:
         print(f"FAIL: need at least two node homes under {work}")
         return 1
+
+    if args.checkpoint_only:
+        if args.checkpoint is None:
+            parser.error('--checkpoint-only requires --checkpoint')
+        try:
+            tips = {name: int(json.loads((Path(path) / 'dag/range').read_text())['last'])
+                    for name, path in homes}
+            verify_checkpoint(json.loads(args.checkpoint.read_text()), homes, tips)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, sqlite3.Error) as error:
+            print(f'FAIL: live checkpoint: {error}')
+            return 1
+        print('PASS: all nodes retain the recorded live checkpoint')
+        return 0
 
     print(f"=== cross-node content verification: {work} ===\n")
     per_node = {}
