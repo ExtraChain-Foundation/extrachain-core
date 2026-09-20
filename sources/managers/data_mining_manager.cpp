@@ -97,6 +97,7 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
     std::mutex                                                   mutex;
     std::mutex                                                   progress_mutex;
     std::map<std::string, LocalJob>                              jobs;
+    std::string                                                  last_submitted_job;
     std::map<std::string, std::chrono::steady_clock::time_point> retry_after;
     std::vector<boost::signals2::scoped_connection>              connections;
     bool                                                         enabled   = false;
@@ -396,24 +397,30 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
         local.clear();
         for (const auto& [_, entry] : datasets)
             local.insert(entry);
-        std::size_t submissions = 0;
-        const auto  submit      = [&](const std::string& key,
-                                      LocalJob&          job,
-                                      IntentOperation    operation,
-                                      const auto&        value,
-                                      std::uint64_t      epoch = 0) {
-            if (submissions >= MaximumSubmissionsPerProgress)
+        std::size_t submissions       = 0;
+        bool        admission_blocked = false;
+        const auto  submit            = [&](const std::string& key,
+                                            LocalJob&          job,
+                                            IntentOperation    operation,
+                                            const auto&        value,
+                                            std::uint64_t      epoch = 0) {
+            if (admission_blocked || submissions >= MaximumSubmissionsPerProgress)
                 return;
             const auto accepted =
                 node->consensus()->submit_mining_request(operation,
                                                          Utils::to_base64(MessagePack::serialize(value)),
                                                          provider);
-            if (!accepted.has_value())
+            if (!accepted.has_value()) {
+                admission_blocked = accepted.error() == ConsensusError::PoolFull
+                                    || accepted.error() == ConsensusError::DataUnavailable
+                                    || accepted.error() == ConsensusError::NotReady;
                 return;
-            job.pending   = accepted.value();
-            job.provider  = provider.id();
-            job.operation = operation;
-            job.epoch     = epoch;
+            }
+            job.pending        = accepted.value();
+            job.provider       = provider.id();
+            job.operation      = operation;
+            job.epoch          = epoch;
+            last_submitted_job = key;
             {
                 std::lock_guard lock(mutex);
                 const auto      found = jobs.find(key);
@@ -427,7 +434,13 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
             }
             ++submissions;
         };
-        for (auto& [key, job] : local) {
+        auto cursor = local.upper_bound(last_submitted_job);
+        for (std::size_t visited = 0; visited < local.size(); ++visited) {
+            if (admission_blocked)
+                break;
+            if (cursor == local.end())
+                cursor = local.begin();
+            auto& [key, job] = *cursor++;
             if (!job.dataset.has_value())
                 continue;
             const auto identity = storage_dataset_id(work.value().network, job.dataset.value());

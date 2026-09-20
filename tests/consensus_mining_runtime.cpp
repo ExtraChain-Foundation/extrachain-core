@@ -546,6 +546,43 @@ int main() {
             // A certified nonce must remain reserved even when its pending copy is gone.
             ConsensusStateTestFixture::expire(service, hash_intent(ready.front().intent));
             TEST_REQUIRE_EQ(ConsensusStateTestFixture::next_nonce(service, provider.id()).value(), 2);
+            std::vector<std::string> queued_requests;
+            for (std::size_t index = 0; index < 64; ++index) {
+                const StorageDataset extra { .bytes = 1,
+                                             .root =
+                                                 Utils::calculate_hash("background-" + std::to_string(index)) };
+                const auto           accepted =
+                    service.submit_mining_request(IntentOperation::StorageRegister,
+                                                  Utils::to_base64(MessagePack::serialize(extra)),
+                                                  provider);
+                if (accepted.has_value())
+                    queued_requests.push_back(accepted.value());
+                else
+                    TEST_REQUIRE(accepted.error() == ConsensusError::PoolFull);
+            }
+            TEST_REQUIRE(!queued_requests.empty());
+            const TransactionIntentV2 foreground { .network_id           = network.id(),
+                                                   .sender               = provider.id(),
+                                                   .receiver             = network.id(),
+                                                   .amount               = "0.00000001",
+                                                   .operation            = IntentOperation::Transfer,
+                                                   .expires_after_height = 1000 };
+            for (std::size_t index = 0; index < 48; ++index) {
+                const auto accepted =
+                    service.submit_local_intent(foreground, "foreground-" + std::to_string(index), provider);
+                TEST_REQUIRE(accepted.has_value());
+                queued_requests.push_back(accepted.value());
+            }
+            for (const auto& hash : queued_requests)
+                ConsensusStateTestFixture::expire(service, hash);
+            TEST_REQUIRE_EQ(ConsensusStateTestFixture::next_nonce(service, provider.id()).value(), 2);
+            const StorageDataset resumed_dataset { .bytes = 1, .root = Utils::calculate_hash("resumed-mining") };
+            const auto           resumed =
+                service.submit_mining_request(IntentOperation::StorageRegister,
+                                              Utils::to_base64(MessagePack::serialize(resumed_dataset)),
+                                              provider);
+            TEST_REQUIRE(resumed.has_value());
+            ConsensusStateTestFixture::expire(service, resumed.value());
             std::vector<std::string> window_requests;
             for (std::uint64_t nonce = 2; nonce <= 64; ++nonce) {
                 const auto request = make_intent(TransactionIntentV2 { .network_id    = network.id(),
@@ -862,6 +899,48 @@ int main() {
         TEST_REQUIRE_EQ(database.select("SELECT hash FROM consensus_batches WHERE height = 12").size(),
                         std::size_t(1));
     }
+    for (const auto& envelope : service.ready_intents(64, 8 * 1024 * 1024))
+        ConsensusStateTestFixture::expire(service, hash_intent(envelope.intent));
+    node->data_mining_manager()->set_enabled(true);
+    std::set<std::string> expected_roots;
+    for (unsigned index = 0; index < 16; ++index) {
+        const auto payload   = "mining-order-" + std::to_string(index);
+        const auto committed = commit_storage_dataset(payload.size(), [&](std::uint64_t) {
+            return std::expected<std::string, ConsensusError>(payload);
+        });
+        TEST_REQUIRE(committed.has_value());
+        expected_roots.insert(committed.value().root);
+        Dfs::DirRow row { .actor_id = provider.id(),
+                          .owner_id = provider.id(),
+                          .file_id  = fmt::format("{:064x}", index + 1),
+                          .hash     = Utils::calculate_hash(payload),
+                          .name     = "mining-order.bin",
+                          .size     = payload.size(),
+                          .type     = Dfs::FileType::File,
+                          .state    = Dfs::FileState::Ready };
+        const auto  path = Dfs::Path::file_path(provider.id(), row.file_id).value();
+        TEST_REQUIRE(FileIo::write_atomic(path.native(), payload).has_value());
+        node->dfs()->notify_stored(provider.id(), row);
+    }
+    std::set<std::string> requested_roots;
+    const auto            progress_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (requested_roots != expected_roots && std::chrono::steady_clock::now() < progress_deadline) {
+        node->data_mining_manager()->consensus_progress();
+        for (const auto& envelope : service.ready_intents(64, 8 * 1024 * 1024)) {
+            if (envelope.intent.operation != IntentOperation::StorageRegister)
+                continue;
+            const auto bytes = Utils::from_base64(envelope.metadata);
+            TEST_REQUIRE(bytes.has_value());
+            const auto registered = MessagePack::deserialize<StorageDataset>(bytes.value());
+            TEST_REQUIRE(registered.has_value());
+            if (expected_roots.contains(registered.value().root))
+                requested_roots.insert(registered.value().root);
+            ConsensusStateTestFixture::expire(service, hash_intent(envelope.intent));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    TEST_REQUIRE(requested_roots == expected_roots);
+    node->data_mining_manager()->set_enabled(false);
     service.deactivate();
     node->cleanUp();
     node.reset();

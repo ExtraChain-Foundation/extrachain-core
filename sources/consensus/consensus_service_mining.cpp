@@ -11,6 +11,7 @@ namespace ExtraChain::Consensus {
     namespace {
         constexpr std::size_t      MaximumMiningSnapshotBytes = 16 * 1024 * 1024;
         constexpr std::size_t      MaximumCachedMiningStates  = 8;
+        constexpr std::uint64_t    MaximumPendingMiningNonces = 8;
         constexpr std::string_view MiningSnapshotFile         = "mining-state.msgpack";
 
         bool has_mining_records(const SectionBatchData& batch) {
@@ -126,6 +127,11 @@ namespace ExtraChain::Consensus {
         const auto nonce = next_local_nonce(provider.id());
         if (!nonce.has_value())
             return std::unexpected(nonce.error());
+        const auto committed       = committed_nonces_.find(provider.id());
+        const auto committed_nonce = committed == committed_nonces_.end() ? 0 : committed->second;
+        // Background proofs must leave nonce capacity for wallet operations and gap repair.
+        if (nonce.value() - committed_nonce > MaximumPendingMiningNonces)
+            return std::unexpected(ConsensusError::PoolFull);
         const auto height   = intent_height();
         const auto duration = operation == IntentOperation::StorageProof ? 1ULL : 64ULL;
         if (height > UINT64_MAX - duration)
