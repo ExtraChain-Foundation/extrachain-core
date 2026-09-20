@@ -150,11 +150,6 @@ bool DbConnector::close() {
     } else {
         m_open = false;
 
-        if (std::filesystem::exists(m_file) && std::filesystem::file_size(m_file) == 0) {
-            std::error_code error;
-            std::filesystem::remove(m_file, error);
-        }
-
         if (m_type == DbConnectorType::Compressed) {
             const auto data = FileIo::read_all(m_file);
             if (!data.has_value()) {
