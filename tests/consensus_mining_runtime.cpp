@@ -7,6 +7,7 @@
 #include "dfs/dfs_service.h"
 #include <thread>
 #include "test_support.h"
+#include "dag_admission_fixture.h"
 #include "utils/exc_utils.h"
 #include "utils/file_io.h"
 #include "utils/db_connector.h"
@@ -266,6 +267,19 @@ int main() {
     auto* engine  = &shadow.value()->engine();
     auto& service = *node->consensus();
     ConsensusStateTestFixture::attach(service, std::move(shadow.value()));
+    {
+        Transaction reward;
+        reward.set_type(TransactionType::Reward);
+        reward.set_sender(provider.id());
+        reward.set_receiver(provider.id());
+        reward.set_amount(BigNumberFloat(4));
+        for (const auto section : { 19, 20, 21 }) {
+            reward.set_section(SectionId(section));
+            TEST_REQUIRE(reward.sign(provider));
+            for (const auto repair : { false, true })
+                TEST_REQUIRE_EQ(DagAdmissionTestFixture::history(*node->dag(), reward, repair), section < 20);
+        }
+    }
     auto                                      parent             = engine->genesis_certificate();
     std::string                               prior_section_root = std::string(64, 'a');
     std::string                               prior_state;

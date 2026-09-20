@@ -358,7 +358,7 @@ struct ChainIndex::Impl {
         if (version != nullptr)
             sqlite3_finalize(version);
         derived_index_ready = stored_version == DERIVED_INDEX_VERSION;
-        if (rows == 0 && !derived_index_ready) {
+        if (rows == 0 && stored_version.empty()) {
             derived_index_ready = exec(
                 "INSERT OR REPLACE INTO index_meta(key, value)"
                 " VALUES ('derived_index_version', '2')");
@@ -795,7 +795,7 @@ std::uint64_t ChainIndex::count_for_actor_by_type_since(const std::string &actor
     return result;
 }
 
-void ChainIndex::rebuild_from_disk() {
+void ChainIndex::rebuild_from_disk(std::stop_token stop) {
     if (!impl_->db || !impl_->node)
         return;
 
@@ -807,20 +807,27 @@ void ChainIndex::rebuild_from_disk() {
 
     std::lock_guard<std::mutex> lock(impl_->write_mutex);
 
-    impl_->flush_write_batch();
+    if (!impl_->flush_write_batch())
+        return;
+
+    impl_->derived_index_ready = false;
+    if (!impl_->exec(
+            "INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', 'rebuilding')")
+        || stop.stop_requested())
+        return;
 
     impl_->exec("PRAGMA journal_mode = MEMORY");
     impl_->exec("PRAGMA synchronous = OFF");
     struct Restore {
         Impl *i;
         ~Restore() {
+            i->actor_cache.map.clear();
+            i->token_cache.map.clear();
             i->exec("PRAGMA synchronous = NORMAL");
             i->exec("PRAGMA journal_mode = WAL");
         }
     } restore_on_exit { impl_.get() };
 
-    impl_->derived_index_ready = false;
-    impl_->exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', 'rebuilding')");
     impl_->exec("DELETE FROM tx_index");
     impl_->exec("DELETE FROM contract_tx_index");
     impl_->exec("DELETE FROM actors");
@@ -836,11 +843,15 @@ void ChainIndex::rebuild_from_disk() {
     std::uint64_t   count = 0;
 
     for (SectionId i = first; i <= last; i = i + 1) {
+        if (stop.stop_requested()) {
+            impl_->exec("ROLLBACK");
+            return;
+        }
         auto section = dag->read_section(i);
         if (!section.has_value())
             continue;
         for (const auto &tx : section->transactions) {
-            if (!impl_->insert_tx(tx, section->id)) {
+            if (stop.stop_requested() || !impl_->insert_tx(tx, section->id)) {
                 impl_->exec("ROLLBACK");
                 return;
             }
@@ -858,6 +869,8 @@ void ChainIndex::rebuild_from_disk() {
         impl_->exec("ROLLBACK");
         return;
     }
+    if (stop.stop_requested())
+        return;
     impl_->exec("ANALYZE");
     impl_->derived_index_ready =
         impl_->exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', '2')");

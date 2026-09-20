@@ -3,6 +3,7 @@
 
 #include "chain/actor_index.h"
 #include "chain/dag.h"
+#include "chain/chain_index.h"
 #include "chain/private_profile.h"
 #include "core/extrachain_node.h"
 #include "managers/data_mining_manager.h"
@@ -11,6 +12,7 @@
 #include "managers/luminance_manager.h"
 #include "network/network_service.h"
 #include "test_support.h"
+#include "dag_admission_fixture.h"
 #include "utils/file_io.h"
 #include "utils/db_iterator.h"
 
@@ -265,6 +267,53 @@ int main(int argc, char** argv) {
         }
     });
 
+    run("sync status cannot authorize a new legacy reward", [&] {
+        Transaction reward;
+        reward.set_type(TransactionType::Reward);
+        reward.set_sender(owner.id());
+        reward.set_receiver(owner.id());
+        reward.set_section(SectionId(10));
+        reward.set_amount(BigNumberFloat(1));
+        TEST_REQUIRE(reward.sign(owner));
+        const auto prior_status = node->dag()->status();
+        node->dag()->set_status(DagStatus::Sync);
+        const SectionId frontier(10);
+        const auto      result = node->dag()->prove_transaction(reward, { }, nullptr, &frontier);
+        node->dag()->set_status(prior_status);
+        TEST_REQUIRE_EQ(result, TransactionProveError::MiningProofRequired);
+    });
+
+    run("requested legacy reward history retains transaction validation", [&] {
+        Transaction reward;
+        reward.set_type(TransactionType::Reward);
+        reward.set_sender(owner.id());
+        reward.set_receiver(owner.id());
+        reward.set_section(SectionId(10));
+        reward.set_amount(BigNumberFloat(4));
+        TEST_REQUIRE(reward.sign(owner));
+        for (const auto repair : { false, true }) {
+            TEST_REQUIRE(DagAdmissionTestFixture::history(*node->dag(), reward, repair));
+            auto invalid = reward;
+            invalid.set_amount(BigNumberFloat(5));
+            TEST_REQUIRE(!DagAdmissionTestFixture::history(*node->dag(), invalid, repair));
+            invalid.update_hash();
+            TEST_REQUIRE(!DagAdmissionTestFixture::history(*node->dag(), invalid, repair));
+            invalid = reward;
+            invalid.set_receiver(wallet.id());
+            TEST_REQUIRE(invalid.sign(owner));
+            TEST_REQUIRE(!DagAdmissionTestFixture::history(*node->dag(), invalid, repair));
+            for (const auto amount : { 0, -1 }) {
+                invalid = reward;
+                invalid.set_amount(BigNumberFloat(amount));
+                TEST_REQUIRE(invalid.sign(owner));
+                TEST_REQUIRE(!DagAdmissionTestFixture::history(*node->dag(), invalid, repair));
+            }
+        }
+        const SectionId frontier(11);
+        TEST_REQUIRE_EQ(node->dag()->prove_transaction(reward, { }, nullptr, &frontier),
+                        TransactionProveError::MiningProofRequired);
+    });
+
     run("conversion checks source balance including pending debits", [&] {
         const auto  source_key = std::pair { owner.id(), owner.id() };
         Transaction initial_balance;
@@ -375,6 +424,43 @@ int main(int argc, char** argv) {
             TEST_REQUIRE(!node->dag()->hash_interval(range.first, range.second).has_value());
         }
         TEST_REQUIRE_EQ(sender.responses, std::size_t(0));
+    });
+
+    run("cancelled index rebuild retains rows and stays incomplete after reopen", [&] {
+        auto* index = node->dag()->chain_index();
+        TEST_REQUIRE(index != nullptr);
+        Transaction transaction;
+        transaction.set_sender(owner.id());
+        transaction.set_receiver(owner.id());
+        transaction.set_section(SectionId(100000));
+        transaction.set_amount(BigNumberFloat(1));
+        TEST_REQUIRE(transaction.sign(owner));
+        index->on_section_written({ .id = transaction.section(), .transactions = { transaction } });
+        index->flush();
+        const auto rows = index->row_count();
+        TEST_REQUIRE(rows > 0);
+        std::stop_source stop;
+        stop.request_stop();
+        index->rebuild_from_disk(stop.get_token());
+        TEST_REQUIRE_EQ(index->row_count(), rows);
+        TEST_REQUIRE(!index->derived_index_ready());
+        {
+            ChainIndex reopened(node.get());
+            TEST_REQUIRE(!reopened.derived_index_ready());
+        }
+        index->clear();
+        index->rebuild_from_disk(stop.get_token());
+        TEST_REQUIRE_EQ(index->row_count(), std::uint64_t(0));
+        {
+            ChainIndex reopened(node.get());
+            TEST_REQUIRE(!reopened.derived_index_ready());
+        }
+        node->dag()->stop();
+        node->dag()->start();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!index->derived_index_ready() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        TEST_REQUIRE(index->derived_index_ready());
     });
 
     node->cleanUp();

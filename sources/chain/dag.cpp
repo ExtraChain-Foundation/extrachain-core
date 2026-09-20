@@ -323,6 +323,10 @@ void Dag::start() {
     if (started_.exchange(true)) {
         return;
     }
+    if (index_rebuild_stop_.stop_requested())
+        index_rebuild_stop_ = std::stop_source { };
+    if (mode_ == DagMode::Full && node->dag() == this && chain_index_ && !chain_index_->derived_index_ready())
+        schedule_index_rebuild();
     accepting_messages_.store(true);
     set_admission_accepting(true);
 
@@ -363,6 +367,7 @@ void Dag::start() {
 }
 
 void Dag::stop() {
+    index_rebuild_stop_.request_stop();
     // First close the door on incoming work, then tear down the pieces that
     // would otherwise race against a late callback.
     bool was_started = started_.exchange(false);
@@ -655,6 +660,12 @@ const ChainIndex *Dag::chain_index() const {
 
 bool Dag::chain_index_enabled() const {
     return chain_index_enabled_;
+}
+
+void Dag::schedule_index_rebuild() {
+    node->post_storage([index = chain_index_.get(), stop = index_rebuild_stop_.get_token()] {
+        index->rebuild_from_disk(stop);
+    });
 }
 
 StateProjectionSnapshot Dag::state_projection() const {
@@ -2070,7 +2081,8 @@ std::optional<std::map<SectionId, std::string>> Dag::collect_repair_vote(
 bool Dag::validate_repair_transaction(const Transaction           &transaction,
                                       const std::set<Transaction> &pending,
                                       bool                         report_failure,
-                                      const Balances              *balances_before) {
+                                      const Balances              *balances_before,
+                                      bool                         historical) {
     const auto hash = transaction.hash();
     if (hash != transaction.calculate_hash() && hash != transaction.calculate_hash_hex()) {
         if (report_failure) {
@@ -2128,9 +2140,18 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
         return false;
     }
 
-    const std::set<Transaction>      empty;
-    const auto                       frontier = transaction.section();
-    TransactionValidationFacts       facts {
+    if (transaction.type() == TransactionType::Reward) {
+        const auto section = transaction.section().to_int();
+        // Legacy rewards belong only to requested history, before Shadow took control.
+        return historical && section.has_value() && section.value() >= 0 && transaction.amount() > 0
+               && transaction.sender() == transaction.receiver() && !transaction.consensus_intent().has_value()
+               && (node->consensus() == nullptr
+                   || !node->consensus()->controls_section(static_cast<std::uint64_t>(section.value())));
+    }
+
+    const std::set<Transaction> empty;
+    const auto                  frontier = transaction.section();
+    TransactionValidationFacts  facts {
         .hash            = hash,
         .hash_valid      = true,
         .sender_exists   = true,
@@ -2181,7 +2202,7 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_repair_candidate(
             if (transaction.section() != section_id) {
                 return std::nullopt;
             }
-            if (!validate_repair_transaction(transaction, accepted_transactions)) {
+            if (!validate_repair_transaction(transaction, accepted_transactions, true, nullptr, true)) {
                 eWarning("[Dag] Reject repair candidate transaction {}", transaction.hash());
                 return std::nullopt;
             }
@@ -2272,7 +2293,7 @@ std::optional<std::map<SectionId, std::string>> Dag::validated_sync_candidate(
                 cache_.process_transaction(transaction, balances);
                 continue;
             }
-            if (!validate_repair_transaction(transaction, pending, true, &balances)) {
+            if (!validate_repair_transaction(transaction, pending, true, &balances, true)) {
                 return std::nullopt;
             }
             cache_.process_transaction(transaction, balances);
@@ -2949,40 +2970,8 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
                                                         const SectionId                       *validation_frontier,
                                                         const TransactionValidationFacts      *facts,
                                                         bool stage_contract_change) {
-    if (tx.type() == TransactionType::Reward) {
-        // A legacy reward carries no mining proof and never will: the proof-bearing
-        // types (MiningSettlement and the mining requests below) were introduced
-        // later and are checked on their own paths. Rejecting every Reward outright
-        // also rejected the ones already written into the chain, so a node starting
-        // from scratch stopped at the first historical reward and never finished
-        // syncing (stand: stuck at section 19999 of 25000, prove=37 every 30 s).
-        //
-        // History is judged by the rules of its time, so a stored reward stays
-        // valid; only a reward that is still being admitted now is refused, since
-        // current miners must use the proof-bearing transactions.
-        // Replaying history versus admitting a new emission. While the node is
-        // syncing it is reading a chain the network already accepted, and those
-        // rewards predate the proof-bearing transaction types; refusing them
-        // stopped a from-scratch node at the first historical reward and it never
-        // finished syncing (stand: stuck at section 19999 of 25000, prove=37 every
-        // 30 s). Once the node is live, every reward must bring a mining proof —
-        // the section number is no evidence, since a fresh emission may claim any
-        // old section.
-        const auto replaying = status_ == DagStatus::Sync
-                               || (validation_frontier != nullptr && tx.section() < *validation_frontier
-                                   && find_transaction(tx.section(), tx.hash()).has_value());
-        if (!replaying) {
-            return TransactionProveError::MiningProofRequired;
-        }
-        // No size check while replaying. The amount is covered by the signature and
-        // the network already accepted this transaction by consensus; rejecting it
-        // now for being large would fork the chain at that section instead of
-        // protecting anything. Emission is bounded where it is authorized — by the
-        // mining proof on the admission path above — not by a constant here. The
-        // old "amount > 3" rule predates the proof-bearing types and bounded a
-        // single transaction, never the total, so it never limited emission anyway.
-        return TransactionProveError::NoError;
-    }
+    if (tx.type() == TransactionType::Reward)
+        return TransactionProveError::MiningProofRequired;
 
     if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance) {
         return validate_initial_transaction(tx);
@@ -4039,7 +4028,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 cache_.check_and_update_cache_thread(current_section_);
             }
             if (chain_index_enabled_ && chain_index_) {
-                chain_index_->rebuild_from_disk();
+                chain_index_->rebuild_from_disk(index_rebuild_stop_.get_token());
             }
             if (!recovery_incidents.empty()
                 && !replay_repaired_state(expected_range->first, expected_range->second)) {
@@ -4108,10 +4097,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             // tail into packs and bulk-rebuild the tx index off the network thread.
             try_pack_hot();
             if (mode_ == DagMode::Full && chain_index_enabled_ && chain_index_) {
-                auto *index = chain_index_.get();
-                node->post_storage([index]() {
-                    index->rebuild_from_disk();
-                });
+                schedule_index_rebuild();
             }
             return;
         }
@@ -5003,10 +4989,7 @@ void Dag::issue_next_pack_request(const Responder &responder) {
             try_pack_hot();
 
             if (installed_any && chain_index_enabled_ && chain_index_) {
-                auto *index = chain_index_.get();
-                node->post_storage([index]() {
-                    index->rebuild_from_disk();
-                });
+                schedule_index_rebuild();
             }
         }
     }

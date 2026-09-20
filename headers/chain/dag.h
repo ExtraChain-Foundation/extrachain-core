@@ -22,6 +22,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <stop_token>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -972,7 +973,10 @@ private:
     // Persistent tx index (by hash / sender / receiver / token / time).
     // Full mode: every tx. Light mode: only tx involving local wallets.
     std::unique_ptr<ChainIndex> chain_index_;
+    std::stop_source            index_rebuild_stop_;
     bool                        chain_index_enabled_ = false;
+
+    void schedule_index_rebuild();
 
     // Read-side accelerator for control hashes (section_id -> hash). Always on:
     // control lookups are on the sync hot path. Rebuildable, not consensus.
@@ -1044,7 +1048,8 @@ private:
     bool validate_repair_transaction(const Transaction           &transaction,
                                      const std::set<Transaction> &pending,
                                      bool                         report_failure  = true,
-                                     const Balances              *balances_before = nullptr);
+                                     const Balances              *balances_before = nullptr,
+                                     bool                         historical      = false);
 
     std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
 
@@ -1314,4 +1319,5 @@ public:
 
     friend class ExtraChain::Core::ExtraChainNode;
     friend class DagCache;
+    friend class DagAdmissionTestFixture;
 };

@@ -401,6 +401,8 @@ namespace ExtraChain::Core {
 
         node_enabled = true;
         dag_->repair_control_chain();
+        if (dag_->mode() == DagMode::Full && dag_->chain_index_ && !dag_->chain_index_->derived_index_ready())
+            dag_->schedule_index_rebuild();
         initialized_event_.publish();
     }
 
