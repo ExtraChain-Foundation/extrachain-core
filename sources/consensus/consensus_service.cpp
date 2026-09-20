@@ -845,9 +845,10 @@ namespace ExtraChain::Consensus {
         // This payload may be exactly what an earlier certificate was waiting for.
         catch_up_deferred_finalization();
         if (already_certified) {
-            pending_proposals_.erase(proposal);
-        } else {
-            vote_for_proposal(proposal->second, peer_identifier);
+            pending_proposals_.erase(batch.header_hash);
+        } else if (const auto pending = pending_proposals_.find(batch.header_hash);
+                   pending != pending_proposals_.end()) {
+            vote_for_proposal(pending->second, peer_identifier);
         }
         // An ancestor can unblock pending requests on followers and observers too.
         queue_next_checkpoint();
@@ -1342,6 +1343,15 @@ namespace ExtraChain::Consensus {
             return false;
         }
         catch_up_deferred_finalization();
+        const auto finalized_height = consensus_->engine().safety_state().finalized_height;
+        const auto applied_height =
+            consensus_->configuration().mode == ShadowMode::Finality
+                ? (applied_checkpoint_.has_value() ? applied_checkpoint_.value().height : 0)
+                : finalized_height;
+        std::erase_if(pending_proposals_,
+                      [height = std::min(finalized_height, applied_height)](const auto& entry) {
+                          return entry.second.header.height <= height;
+                      });
         queue_next_checkpoint();
         return true;
     }

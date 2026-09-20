@@ -51,6 +51,37 @@ namespace ExtraChain::Consensus {
             service.receive_batch_data(batch, peer);
             service.voting_enabled_ = voting;
         }
+        static void receive_observer_proposal(ConsensusService&       service,
+                                              const Proposal&         proposal,
+                                              const ValidatorSetView& validators,
+                                              const KeyPrivate&       key,
+                                              const std::string&      peer) {
+            TEST_REQUIRE(!service.voting_enabled_);
+            if (!service.authenticator_)
+                service.authenticator_ = std::make_unique<PeerAuthenticator>(validators, std::nullopt);
+            authenticate(service, validators, key, peer);
+            service.receive_proposal(proposal, peer);
+            TEST_REQUIRE(service.pending_proposals_.contains(hash_header(proposal.header)));
+        }
+        static void require_pending_retention(ConsensusService& service) {
+            TEST_REQUIRE(!service.voting_enabled_);
+            TEST_REQUIRE(service.applied_checkpoint_.has_value());
+            const auto certificate = service.consensus_->engine().safety_state().highest_certificate.value();
+            const auto pending     = service.pending_proposals_.size();
+            auto       invalid     = certificate;
+            invalid.signatures.front().front() = '?';
+            TEST_REQUIRE(!service.apply_certificate(invalid));
+            TEST_REQUIRE_EQ(service.pending_proposals_.size(), pending);
+            TEST_REQUIRE(service.apply_certificate(certificate));
+            if (service.pending_proposals_.size() != 2)
+                std::fprintf(stderr,
+                             "Observer retains %zu proposals after applied height %llu\n",
+                             service.pending_proposals_.size(),
+                             static_cast<unsigned long long>(service.applied_checkpoint_.value().height));
+            TEST_REQUIRE_EQ(service.pending_proposals_.size(), std::size_t(2));
+            for (const auto& [hash, proposal] : service.pending_proposals_)
+                TEST_REQUIRE(proposal.header.height > service.applied_checkpoint_.value().height);
+        }
         static auto stage(ConsensusService& service, const SectionBatchData& batch) {
             return service.consensus_->engine().stage_batch(batch);
         }
@@ -498,6 +529,11 @@ int main() {
         }
         TEST_REQUIRE(engine->observe_proposal(proposal).has_value());
         TEST_REQUIRE(engine->stage_batch(batch).has_value());
+        ConsensusStateTestFixture::receive_observer_proposal(service,
+                                                             proposal,
+                                                             view,
+                                                             *signer,
+                                                             view.find(proposal.proposer_id)->node_identifier);
         QuorumCertificate certificate { .network_id    = network.id(),
                                         .epoch         = 1,
                                         .height        = height,
@@ -652,6 +688,7 @@ int main() {
         prior_state        = proposal.header.state_commitment;
         prior_section_root = root;
     }
+    ConsensusStateTestFixture::require_pending_retention(service);
     TEST_REQUIRE(paid.has_value());
     Balances balances;
     node->dag()->cache().process_transaction(paid.value(), balances);
