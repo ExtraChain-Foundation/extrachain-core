@@ -269,6 +269,13 @@ struct ChainIndex::Impl {
         return flush_write_batch();
     }
 
+    bool invalidate_derived_index() {
+        derived_index_ready = false;
+        return flush_write_batch()
+               && exec(
+                   "INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', 'rebuilding')");
+    }
+
     sqlite3_stmt *prepare(const char *sql) {
         sqlite3_stmt *s = nullptr;
         if (sqlite3_prepare_v2(db, sql, -1, &s, nullptr) != SQLITE_OK) {
@@ -710,6 +717,13 @@ bool ChainIndex::derived_index_ready() const {
     return impl_->derived_index_ready;
 }
 
+bool ChainIndex::invalidate_derived_index() {
+    if (!impl_->db)
+        return false;
+    std::lock_guard<std::mutex> lock(impl_->write_mutex);
+    return impl_->invalidate_derived_index();
+}
+
 std::vector<ChainIndexEntry> ChainIndex::find_for_actor(const std::string &actor,
                                                         const std::string &token,
                                                         std::uint64_t      before_timestamp,
@@ -807,13 +821,7 @@ void ChainIndex::rebuild_from_disk(std::stop_token stop) {
 
     std::lock_guard<std::mutex> lock(impl_->write_mutex);
 
-    if (!impl_->flush_write_batch())
-        return;
-
-    impl_->derived_index_ready = false;
-    if (!impl_->exec(
-            "INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', 'rebuilding')")
-        || stop.stop_requested())
+    if (!impl_->invalidate_derived_index() || stop.stop_requested())
         return;
 
     impl_->exec("PRAGMA journal_mode = MEMORY");

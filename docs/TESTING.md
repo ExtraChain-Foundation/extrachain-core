@@ -263,6 +263,11 @@ be attributed.
     can still be waiting in reconnect backoff. Keep the existing connection deadline
     and full stopped-data audits. Run `python -m unittest discover -s scripts
     -p 'test_shadow_endurance.py' -v` with the validation environment's `msgpack` package.
+15. **Recovery markers must have a durable completion path.** After restart invalidates
+    the balance cache, persist the pending index rebuild before removing the pack replay
+    marker. A second restart must retain the rebuilt balance snapshot. A failed cache
+    reset must keep the replay marker. Check both restart paths and reopen the index
+    database to verify that pending reconstruction survives a process stop.
 
 ---
 

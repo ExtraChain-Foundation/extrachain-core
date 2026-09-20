@@ -1050,7 +1050,7 @@ bool DagCache::init_db() {
     return true;
 }
 
-void DagCache::reset_db() {
+bool DagCache::reset_db() {
     invalidate_live_balances();
     std::unique_lock<std::recursive_mutex> lock(mutex_);
     std::unique_lock<std::mutex>           catalog_lock(contract_catalog_mutex_);
@@ -1062,10 +1062,11 @@ void DagCache::reset_db() {
             static_cast<void>(cache_db_->query("ROLLBACK"));
         }
         eCritical("[DagCache] Failed to reset derived cache state");
-        return;
+        return false;
     }
     contract_catalog_scanned_ = false;
     cached_section_           = SectionId(-1);
+    return true;
 }
 
 bool DagCache::ensure_balance_cache_schema() {

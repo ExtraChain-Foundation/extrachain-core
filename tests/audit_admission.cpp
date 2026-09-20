@@ -439,6 +439,13 @@ int main(int argc, char** argv) {
         index->flush();
         const auto rows = index->row_count();
         TEST_REQUIRE(rows > 0);
+        TEST_REQUIRE(index->invalidate_derived_index());
+        TEST_REQUIRE_EQ(index->row_count(), rows);
+        TEST_REQUIRE(!index->derived_index_ready());
+        {
+            ChainIndex reopened(node.get());
+            TEST_REQUIRE(!reopened.derived_index_ready());
+        }
         std::stop_source stop;
         stop.request_stop();
         index->rebuild_from_disk(stop.get_token());

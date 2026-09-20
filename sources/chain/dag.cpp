@@ -198,8 +198,8 @@ Dag::Dag(ExtraChain::Core::ExtraChainNode *node)
     }
     std::error_code replay_error;
     pack_history_dirty_ = std::filesystem::exists(ChainConst::PACK_REPLAY_REQUIRED, replay_error);
-    if (pack_history_dirty_) {
-        cache_.reset_db();
+    if (pack_history_dirty_ && cache_.reset_db()) {
+        clear_pack_history_dirty();
     }
     update_range(true);
     eLog("[Dag] Loaded: {}, first: {}, last cached: {}", current_section_, first_saved_section_, cache_.section());
@@ -4090,8 +4090,8 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
                 // The balance cache is derived state. Rebuild it from the
                 // verified local sections instead of trusting a peer snapshot.
-                cache_.reset_db();
-                clear_pack_history_dirty();
+                if (cache_.reset_db())
+                    clear_pack_history_dirty();
                 cache_.init_db();
                 cache_.check_and_update_cache_thread(current_section_);
                 repair_control_chain();
@@ -4982,8 +4982,8 @@ void Dag::issue_next_pack_request(const Responder &responder) {
             sync_finish_event_.publish();
 
             if (installed_any) {
-                cache_.reset_db();
-                clear_pack_history_dirty();
+                if (cache_.reset_db())
+                    clear_pack_history_dirty();
                 cache_.init_db();
             }
             cache_.check_and_update_cache_thread(current_section_);
@@ -5053,6 +5053,12 @@ void Dag::clear_pack_history_dirty() {
     if (cache_.section() != SectionId(-1))
         return;
     std::lock_guard lock(pack_sync_mutex_);
+    if (!pack_history_dirty_)
+        return;
+    if (chain_index_ && !chain_index_->invalidate_derived_index()) {
+        eWarning("[Dag] Cannot retain pending index reconstruction");
+        return;
+    }
     std::error_code error;
     std::filesystem::remove(ChainConst::PACK_REPLAY_REQUIRED, error);
     if (error) {
