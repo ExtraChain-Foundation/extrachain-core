@@ -109,6 +109,7 @@ class Endurance(Cycle):
         return child
 
     def start_member(self, index, resume=True):
+        (self.barrier / f'node-{index}').unlink(missing_ok=True)
         remaining = max(10, int(self.deadline - time.monotonic()) + 120)
         count = self.args.per_sender if index < self.args.senders else 0
         environment = dict(self.environment, EXC_BIND_IP=f'127.0.0.{index + 1}', EXC_DEBUG_LOG='1',
@@ -178,6 +179,8 @@ class Endurance(Cycle):
         def complete():
             if self.observer_online and self.observer.poll() is not None:
                 raise RuntimeError('Observer stopped before convergence')
+            if any(not (self.barrier / f'node-{index}').is_file() for index in range(nodes)):
+                return False
             receipts = audit(self.work, expected, self.submissions, self.cursors, nodes)
             files = audit_waves(self.work, self.wave + 1, nodes, self.args.file_bytes, self.file_cache)
             (self.work / 'live-wave-receipts.json').write_text(json.dumps(receipts, indent=2))

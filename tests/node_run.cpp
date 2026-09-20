@@ -324,15 +324,19 @@ int main(int argc, char* argv[]) {
             if (peer != node_index && adjacent(peer))
                 ++required_peers;
         }
-        for (std::size_t peer = 0; peer < node_index; ++peer) {
-            if (!adjacent(peer)) {
-                continue;
+        const auto request_peers = [&] {
+            // Peers can still be in reconnect backoff after a long restart.
+            const auto limit = resumed ? node_count : node_index;
+            for (std::size_t peer = 0; peer < limit; ++peer) {
+                if (peer == node_index || !adjacent(peer))
+                    continue;
+                node->network()->request_endpoint("127.0.0." + std::to_string(peer + 1),
+                                                  static_cast<std::uint16_t>(first_port + peer),
+                                                  false,
+                                                  true);
             }
-            node->network()->request_endpoint("127.0.0." + std::to_string(peer + 1),
-                                              static_cast<std::uint16_t>(first_port + peer),
-                                              false,
-                                              true);
-        }
+        };
+        request_peers();
         const auto  connect_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
         std::size_t connect_attempt  = 0;
         std::size_t stable_samples   = 0;
@@ -345,15 +349,7 @@ int main(int argc, char* argv[]) {
                 stable_samples = 0;
             }
             if (stable_samples == 0 && connect_attempt % 3 == 0) {
-                for (std::size_t peer = 0; peer < node_index; ++peer) {
-                    if (!adjacent(peer)) {
-                        continue;
-                    }
-                    node->network()->request_endpoint("127.0.0." + std::to_string(peer + 1),
-                                                      static_cast<std::uint16_t>(first_port + peer),
-                                                      false,
-                                                      true);
-                }
+                request_peers();
             }
         }
         const auto connected = node->network()->active_connections_count();

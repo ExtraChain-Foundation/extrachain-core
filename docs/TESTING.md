@@ -256,6 +256,13 @@ be attributed.
     requests while peers still retain them. Send the verified certificate before those
     callbacks. A publication-order regression must observe the outgoing certificate
     when the finality callback runs and reject an invalid certificate before any send.
+14. **Durable receipts do not prove restart readiness.** Remove the previous process's
+    ready marker before each restart and wait for the replacement to establish its
+    required authenticated links before recording convergence. A resumed committee
+    runner must request all adjacent peers, including higher-index peers: those peers
+    can still be waiting in reconnect backoff. Keep the existing connection deadline
+    and full stopped-data audits. Run `python -m unittest discover -s scripts
+    -p 'test_shadow_endurance.py' -v` with the validation environment's `msgpack` package.
 
 ---
 
