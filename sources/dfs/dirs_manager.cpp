@@ -273,19 +273,10 @@ std::shared_ptr<DbConnector> DirsManager::get_db_instance() {
 
 std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std::vector<ActorId> &only) {
     std::vector<Dfs::Packets::CatalogDigest> digests;
-    const std::set<ActorId>                  filter(only.begin(), only.end());
-    DbConnector                              reader(db_->file());
-    if (!reader.open(false))
-        return digests;
-    auto rows = reader.select_while(
-        "SELECT owner_id,file_id,sign,hash,type,state FROM ActorsFiles "
-        "WHERE metadata_revision > 0 ORDER BY owner_id,file_id",
-        "ActorsFiles");
-    if (!rows)
-        return digests;
-    std::optional<ActorId> current;
-    std::uint64_t          count = 0;
-    blake3_hasher          hasher;
+    Dfs::CatalogRowsRequest                  request { .owners = only };
+    std::optional<ActorId>                   current;
+    std::uint64_t                            count = 0;
+    blake3_hasher                            hasher;
     blake3_hasher_init(&hasher);
     const auto flush = [&] {
         if (!current.has_value())
@@ -301,35 +292,41 @@ std::vector<Dfs::Packets::CatalogDigest> DirsManager::catalog_digests(const std:
     const auto append = [&](std::string_view value) {
         blake3_hasher_update(&hasher, value.data(), value.size());
     };
-    while (rows->next()) {
+    while (true) {
         if (work_->stopped.load())
             return { };
-        const auto owner = ActorId::create(rows->getString(0));
-        if (!owner.has_value() || owner.value().is_zero() || (!filter.empty() && !filter.contains(owner.value())))
-            continue;
-        if (current.has_value() && current.value() != owner.value()) {
-            flush();
-            if (digests.size() > Dfs::CatalogOwnerLimit)
-                return digests;
+        // Release the catalog read transaction before inspecting vector storage.
+        // A blocked vector read must not prevent a catalog writer from committing.
+        const auto page = Dfs::read_catalog_page(db_, request);
+        if (!page.has_value())
+            return { };
+        for (const auto &row : page.value().rows) {
+            if (work_->stopped.load())
+                return { };
+            if (row.owner_id.is_zero())
+                continue;
+            if (current.has_value() && current.value() != row.owner_id) {
+                flush();
+                if (digests.size() > Dfs::CatalogOwnerLimit)
+                    return digests;
+            }
+            current   = row.owner_id;
+            auto hash = row.hash;
+            if (row.state != Dfs::FileState::Removed
+                && (row.type == Dfs::FileType::Vector || row.type == Dfs::FileType::Dictionary))
+                hash = local_vector_content(row.owner_id, row.file_id).first;
+            append(row.file_id);
+            append(std::string_view("\0", 1));
+            append(Utils::to_base64(row.sign));
+            append(std::string_view("\0", 1));
+            append(hash);
+            append("\n");
+            ++count;
         }
-        current            = owner.value();
-        const auto file_id = rows->getString(1);
-        auto       hash    = rows->getString(3);
-        const auto type    = rows->getString(4);
-        if (rows->getString(5) != std::to_string(std::to_underlying(Dfs::FileState::Removed))
-            && (type == std::to_string(std::to_underlying(Dfs::FileType::Vector))
-                || type == std::to_string(std::to_underlying(Dfs::FileType::Dictionary))))
-            hash = local_vector_content(owner.value(), file_id).first;
-        append(file_id);
-        append(std::string_view("\0", 1));
-        append(rows->getString(2));
-        append(std::string_view("\0", 1));
-        append(hash);
-        append("\n");
-        ++count;
+        if (!page.value().next.has_value())
+            break;
+        request.after = page.value().next.value();
     }
-    if (rows->failed())
-        return { };
     flush();
     return digests;
 }

@@ -399,6 +399,36 @@ int main() {
         TEST_REQUIRE(dirs.catalog_digests({ owner.id() }).front().digest == new_digest);
     }
 
+    {
+        Actor<KeyPrivate> paged_owner;
+        paged_owner.create(ActorType::User);
+        const auto  count    = 2 * Dfs::CatalogPageRows + 3;
+        auto        database = dirs.get_db_instance();
+        std::string expected;
+        TEST_REQUIRE(database->query("BEGIN IMMEDIATE"));
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto row    = file_row(paged_owner, fmt::format("{:064x}", index), "paged", index + 1);
+            const auto fields = Utils::to_dbrow(row);
+            TEST_REQUIRE(database->insert("ActorsFiles", fields));
+            expected += row.file_id;
+            expected.push_back('\0');
+            expected += fields.at("sign");
+            expected.push_back('\0');
+            expected += row.hash;
+            expected.push_back('\n');
+        }
+        TEST_REQUIRE(database->query("COMMIT"));
+        const auto digest = dirs.catalog_digests({ paged_owner.id() });
+        TEST_REQUIRE_EQ(digest.size(), std::size_t(1));
+        TEST_REQUIRE_EQ(digest.front().rows, count);
+        TEST_REQUIRE_EQ(digest.front().digest, Utils::calculate_hash(expected));
+        const auto all   = dirs.catalog_digests();
+        const auto found = digest_of(all, paged_owner.id());
+        TEST_REQUIRE(found != nullptr);
+        TEST_REQUIRE_EQ(found->rows, count);
+        TEST_REQUIRE_EQ(found->digest, digest.front().digest);
+    }
+
     node->cleanUp();
     node.reset();
     std::error_code ignored;

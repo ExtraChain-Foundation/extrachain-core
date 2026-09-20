@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <sqlite3.h>
 
 #include "chain/actor.h"
 #include "core/extrachain_node.h"
@@ -23,6 +24,25 @@
 #include "utils/exc_utils.h"
 
 namespace {
+    struct DigestReadProbe {
+        std::string              file;
+        std::promise<void>       opened;
+        std::shared_future<void> resume;
+    };
+    thread_local DigestReadProbe *digest_read_probe = nullptr;
+
+    int pause_vector_open(sqlite3 *database, char **, const sqlite3_api_routines *) {
+        if (digest_read_probe == nullptr)
+            return SQLITE_OK;
+        const auto file = sqlite3_db_filename(database, "main");
+        if (file == nullptr || std::filesystem::path(file).filename() != digest_read_probe->file)
+            return SQLITE_OK;
+        auto *probe = std::exchange(digest_read_probe, nullptr);
+        probe->opened.set_value();
+        probe->resume.wait_for(std::chrono::seconds(5));
+        return SQLITE_OK;
+    }
+
     // network_vector_add runs on the storage executor, which is a thread pool: a
     // barrier job proves the pool is alive, not that the job posted before it has
     // finished. Barrier, then settle, so a rejection is actually observed.
@@ -80,6 +100,38 @@ int main() {
     };
     const auto hash_empty   = catalog_row().hash;
     const auto digest_empty = owner_digest();
+
+    {
+        auto database = dirs.get_db_instance();
+        TEST_REQUIRE(database->query("CREATE TABLE digest_probe(value INTEGER)"));
+        std::promise<void> resume;
+        DigestReadProbe    probe { file_id, { }, resume.get_future().share() };
+        auto               opened = probe.opened.get_future();
+        const auto         hook   = reinterpret_cast<void (*)()>(pause_vector_open);
+        TEST_REQUIRE_EQ(sqlite3_auto_extension(hook), SQLITE_OK);
+        auto        digest = std::async(std::launch::async, [&] {
+            digest_read_probe = &probe;
+            return dirs.catalog_digests({ owner_id });
+        });
+        const bool  paused = opened.wait_for(std::chrono::seconds(5)) == std::future_status::ready;
+        DbConnector writer(database->file());
+        TEST_REQUIRE(writer.open(false));
+        TEST_REQUIRE_EQ(sqlite3_busy_timeout(writer.getDb(), 0), SQLITE_OK);
+        const bool began     = writer.query("BEGIN IMMEDIATE");
+        const bool inserted  = began && writer.query("INSERT INTO digest_probe VALUES(1)");
+        const bool committed = inserted && writer.query("COMMIT");
+        if (began && !committed)
+            writer.query("ROLLBACK");
+        resume.set_value();
+        const auto result = digest.get();
+        sqlite3_cancel_auto_extension(hook);
+        TEST_REQUIRE(paused);
+        TEST_REQUIRE_MESSAGE(committed, "Vector inspection must not hold a catalog read transaction");
+        TEST_REQUIRE_EQ(result.size(), std::size_t(1));
+        TEST_REQUIRE_EQ(result.front().digest, digest_empty);
+        TEST_REQUIRE_EQ(database->count("digest_probe"), std::uint64_t(1));
+        TEST_REQUIRE(database->drop_table("digest_probe"));
+    }
 
     // A genuine row through the local path: the baseline.
     // Ids are inserted out of their sort order on purpose: "row_1" first, then
