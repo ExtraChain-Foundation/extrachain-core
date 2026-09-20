@@ -71,7 +71,7 @@ int main() {
     const auto       alice_large = make_storage_proof(network, alice, large, challenge, large_reader).value();
     TEST_REQUIRE(!accept_mining_proof(state, alice, small_id, 100, alice_small).has_value());
     TEST_REQUIRE(!settle_mining_epoch(state, 1000).has_value());
-    TEST_REQUIRE(!claim_mining_reward(state, alice).has_value());
+    TEST_REQUIRE(state.rewards.empty());
     TEST_REQUIRE(!open_mining_proof_window(state, challenge, 40).has_value());
     TEST_REQUIRE(!open_mining_proof_window(state, challenge, 81).has_value());
     TEST_REQUIRE(!open_mining_proof_window(state, challenge, 121).has_value());
@@ -106,12 +106,15 @@ int main() {
     TEST_REQUIRE_EQ(mining_epoch_root(restored.value()), mining_epoch_root(state));
     TEST_REQUIRE_EQ(state.rewards.at(alice.to_string()), std::uint64_t(8));
     TEST_REQUIRE_EQ(state.rewards.at(bob.to_string()), std::uint64_t(1));
-    TEST_REQUIRE(!settle_mining_epoch(state, 160).has_value());
+    const auto settled_root = mining_epoch_root(state);
+    const auto repeated     = settle_mining_epoch(state, 160);
+    TEST_REQUIRE(!repeated.has_value() && repeated.error() == ConsensusError::Replay);
+    TEST_REQUIRE_EQ(mining_epoch_root(state), settled_root);
     TEST_REQUIRE(!accept_mining_proof(state, bob, large_id, 140, alice_large).has_value());
-    TEST_REQUIRE_EQ(claim_mining_reward(state, alice).value(), std::uint64_t(8));
-    TEST_REQUIRE(!claim_mining_reward(state, alice).has_value());
-    TEST_REQUIRE_EQ(claim_mining_reward(state, bob).value(), std::uint64_t(1));
-    TEST_REQUIRE(!claim_mining_reward(state, outsider).has_value());
+    TEST_REQUIRE(!state.rewards.contains(outsider.to_string()));
+    const auto settled_copy = MessagePack::deserialize<MiningEpochState>(MessagePack::serialize(state));
+    TEST_REQUIRE(settled_copy.has_value());
+    TEST_REQUIRE_EQ(mining_epoch_root(settled_copy.value()), settled_root);
 
     auto unused = frozen.value();
     TEST_REQUIRE(open_mining_proof_window(unused, challenge, 101).has_value());

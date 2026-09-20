@@ -162,19 +162,6 @@ namespace ExtraChain::Consensus {
         return { };
     }
 
-    std::expected<std::uint64_t, ConsensusError> claim_mining_reward(MiningEpochState& state,
-                                                                     const ActorId&    provider) {
-        if (!state.settled)
-            return std::unexpected(ConsensusError::NotReady);
-        const auto actor  = provider.to_string();
-        const auto reward = state.rewards.find(actor);
-        if (reward == state.rewards.end() || reward->second == 0)
-            return std::unexpected(ConsensusError::InvalidIntent);
-        if (!state.claimed.insert(actor).second)
-            return std::unexpected(ConsensusError::Replay);
-        return reward->second;
-    }
-
     std::string mining_epoch_root(const MiningEpochState& state) {
         return Utils::calculate_hash("EXC_MINING_EPOCH_V1" + MessagePack::serialize(state),
                                      Utils::HashAlgorithm::Blake3);

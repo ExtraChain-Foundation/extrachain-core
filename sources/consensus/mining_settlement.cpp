@@ -9,7 +9,6 @@ namespace ExtraChain::Consensus {
         const auto& proposal = record.closure.finalized_proposal;
         if (!schedule.has_value() || section != schedule.value().settlement_first_section
             || record.witness.epoch.settled || !record.witness.epoch.rewards.empty()
-            || !record.witness.epoch.claimed.empty()
             || !verify_mining_epoch_witness(record.witness, proposal.state.mining_state_root)
             || hash_state_commitment(proposal.state) != proposal.header.state_commitment)
             return std::unexpected(ConsensusError::InvalidProof);

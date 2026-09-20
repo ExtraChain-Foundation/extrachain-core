@@ -44,7 +44,6 @@ namespace ExtraChain::Consensus {
         std::uint64_t                              proof_last_section  = 0;
         bool                                       settled             = false;
         std::map<std::string, std::uint64_t>       rewards;
-        std::set<std::string>                      claimed;
 
         MSGPACK_DEFINE(network,
                        epoch,
@@ -54,8 +53,7 @@ namespace ExtraChain::Consensus {
                        proof_first_section,
                        proof_last_section,
                        settled,
-                       rewards,
-                       claimed)
+                       rewards)
     };
 
     std::expected<std::uint64_t, ConsensusError>    reserve_mining_emission(std::uint64_t reserved_units,
@@ -77,8 +75,6 @@ namespace ExtraChain::Consensus {
                                                                      const StorageProof& proof);
     std::expected<void, ConsensusError>          settle_mining_epoch(MiningEpochState& state,
                                                                      std::uint64_t     finalized_section);
-    std::expected<std::uint64_t, ConsensusError> claim_mining_reward(MiningEpochState& state,
-                                                                     const ActorId&    provider);
     std::string                                  mining_epoch_root(const MiningEpochState& state);
     std::expected<void, ConsensusError>          open_mining_proof_window(MiningEpochState&          state,
                                                                           const FinalityProof&       checkpoint,
