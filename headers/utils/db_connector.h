@@ -168,6 +168,8 @@ public:
 public:
     static std::string sqlite_version();
 
+    [[nodiscard]] std::unique_lock<std::recursive_mutex> transaction_lock() const;
+
     bool                        open(bool create_if_missing = true);
     bool                        close();
     std::vector<DbRow>          select(std::string query, std::string tableName = "", DbRow binds = {});

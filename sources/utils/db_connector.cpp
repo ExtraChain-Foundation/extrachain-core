@@ -97,6 +97,10 @@ std::string DbConnector::sqlite_version() {
     return sqlite3_libversion();
 }
 
+std::unique_lock<std::recursive_mutex> DbConnector::transaction_lock() const {
+    return std::unique_lock(m_database_mutex);
+}
+
 bool DbConnector::open(bool create_if_missing) {
     const std::unique_lock lock(m_database_mutex);
     if (is_open()) {

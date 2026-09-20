@@ -161,6 +161,7 @@ private:
     std::atomic_bool                                             reconcile_scheduled_ { false };
     std::size_t                                                  reconcile_round_ = 0;
     std::mutex                                                   delayed_tasks_mutex_;
+    bool                                                         delayed_tasks_stopped_ = false;
     std::vector<std::shared_ptr<ExtraChain::Core::DeadlineTask>> delayed_tasks_;
 
     void schedule_after(std::chrono::steady_clock::duration delay, std::function<void()> callback);

@@ -264,27 +264,33 @@ void DfsService::notify_vector_row_removed(const ActorId &owner_id, const Dfs::D
 }
 
 void DfsService::prepare_shutdown() {
+    {
+        std::lock_guard lock(delayed_tasks_mutex_);
+        delayed_tasks_stopped_ = true;
+        for (const auto &task : delayed_tasks_) {
+            task->cancel();
+        }
+        delayed_tasks_.clear();
+    }
     dirs_manager_.stop();
     vector_write_budget_->budget.stop();
     vector_sync_->stop();
     load_manager_.stop();
-    std::lock_guard lock(delayed_tasks_mutex_);
-    for (const auto &task : delayed_tasks_) {
-        task->cancel();
-    }
-    delayed_tasks_.clear();
 }
 
 void DfsService::schedule_after(std::chrono::steady_clock::duration delay, std::function<void()> callback) {
-    auto task = ExtraChain::Core::DeadlineTask::create(node->serial_executor(), std::move(callback));
-    task->schedule_after(delay);
-    {
+    // Arm timers before inactive-task cleanup can discard their pending registration.
+    boost::asio::dispatch(node->serial_executor(), [this, delay, callback = std::move(callback)]() mutable {
         std::lock_guard lock(delayed_tasks_mutex_);
+        if (delayed_tasks_stopped_)
+            return;
+        auto task = ExtraChain::Core::DeadlineTask::create(node->serial_executor(), std::move(callback));
+        task->schedule_after(delay);
         std::erase_if(delayed_tasks_, [](const auto &pending) {
             return !pending->active();
         });
         delayed_tasks_.push_back(task);
-    }
+    });
 }
 
 std::shared_ptr<DbConnector> DfsService::get_db_instance() {

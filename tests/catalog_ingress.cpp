@@ -1,4 +1,5 @@
 #include <fstream>
+#include <future>
 #include <thread>
 
 #include "core/extrachain_node.h"
@@ -22,6 +23,20 @@ int main() {
     node->account_controller()->create_profile("catalog-ingress", ActorType::User, owner);
     auto      &dfs  = *node->dfs();
     auto       db   = dfs.get_db_instance();
+    std::promise<void> executor_blocked, release_executor;
+    auto               release = release_executor.get_future();
+    boost::asio::post(node->serial_executor(), [&] {
+        executor_blocked.set_value();
+        release.wait();
+    });
+    executor_blocked.get_future().wait();
+    std::atomic_uint delayed_callbacks { 0 };
+    for (unsigned i = 0; i < 2; ++i) {
+        dfs.schedule_delayed(0ms, [&] {
+            ++delayed_callbacks;
+        });
+    }
+    release_executor.set_value();
     const auto sign = [&](Dfs::DirRow &row) {
         row.sign = owner.key().sign(row.calculate_hash(owner.id())).value();
     };
@@ -45,6 +60,9 @@ int main() {
             std::this_thread::sleep_for(5ms);
         TEST_REQUIRE(condition());
     };
+    wait([&] {
+        return delayed_callbacks.load() == 2;
+    });
     DbConnector blocker(db->file());
     TEST_REQUIRE(blocker.open(false) && blocker.query("BEGIN IMMEDIATE"));
     std::atomic_uint accepted { 0 };
@@ -142,6 +160,12 @@ int main() {
     dfs.refresh_calculate();
     TEST_REQUIRE_EQ(dfs.totalDfsSize(), std::numeric_limits<std::size_t>::max());
     dfs.prepare_shutdown();
+    std::promise<void> late_callback;
+    auto               late_result = late_callback.get_future();
+    dfs.schedule_delayed(0ms, [&] {
+        late_callback.set_value();
+    });
+    TEST_REQUIRE(late_result.wait_for(1s) == std::future_status::timeout);
     TEST_REQUIRE(!dfs.network_store_file(owner.id(), make(43), Dfs::NetworkStoreFile::Sync, "peer"));
     TEST_REQUIRE(blocker.close());
     node.reset();

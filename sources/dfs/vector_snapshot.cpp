@@ -10,7 +10,7 @@ Dfs::VectorSnapshot::VectorSnapshot(const FsPath& path, const std::string& prima
 }
 
 Dfs::VectorSnapshot::~VectorSnapshot() {
-    if (database_.is_open())
+    if (database_.is_open() && sqlite3_get_autocommit(database_.getDb()) == 0)
         database_.query("ROLLBACK");
 }
 

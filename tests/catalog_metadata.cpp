@@ -1,5 +1,9 @@
+#include <array>
+#include <atomic>
+#include <barrier>
 #include <filesystem>
 #include <memory>
+#include <thread>
 
 #include "dfs/catalog_metadata.h"
 #include "dfs/legacy_catalog.h"
@@ -162,6 +166,45 @@ int main() {
     TEST_REQUIRE(Dfs::store_catalog_metadata(migrated.value(), second, owner.to_public()).value().changed);
     TEST_REQUIRE(migrated.value()->count("ActorsFiles") == 2);
     TEST_REQUIRE(migrated.value()->close());
+    constexpr std::size_t                              writer_count = 6;
+    constexpr std::size_t                              revisions    = 64;
+    std::array<std::vector<Dfs::DirRow>, writer_count> writes;
+    for (std::size_t writer = 0; writer < writer_count; ++writer) {
+        auto row    = first;
+        row.file_id = Utils::calculate_hash("parallel catalog writer " + std::to_string(writer));
+        row.prev_file_id.reset();
+        for (std::size_t revision = 1; revision <= revisions; ++revision) {
+            row.metadata_revision = revision;
+            row.name              = "revision " + std::to_string(revision);
+            sign(row);
+            writes[writer].push_back(row);
+        }
+    }
+    std::barrier             ready(static_cast<std::ptrdiff_t>(writer_count));
+    std::atomic<std::size_t> failures = 0;
+    const auto               signer   = owner.to_public();
+    {
+        std::vector<std::jthread> workers;
+        for (std::size_t writer = 0; writer < writer_count; ++writer) {
+            workers.emplace_back([&, writer] {
+                ready.arrive_and_wait();
+                for (const auto &row : writes[writer]) {
+                    const auto stored = Dfs::store_catalog_metadata(database, row, signer);
+                    if (!stored.has_value() || !stored.value().changed)
+                        ++failures;
+                }
+            });
+        }
+    }
+    TEST_REQUIRE_EQ(failures.load(), 0U);
+    for (const auto &writer : writes) {
+        const auto &expected = writer.back();
+        const auto stored = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(database, owner.id(), expected.file_id);
+        TEST_REQUIRE(stored.has_value());
+        TEST_REQUIRE_EQ(stored.value().metadata_revision, revisions);
+        TEST_REQUIRE_EQ(stored.value().name, expected.name);
+        TEST_REQUIRE(Dfs::valid_catalog_metadata(stored.value(), signer));
+    }
     TEST_REQUIRE(database->close());
     database.reset();
     std::filesystem::current_path(original);

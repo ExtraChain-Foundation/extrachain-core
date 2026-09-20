@@ -73,8 +73,9 @@ std::expected<Dfs::CatalogUpdate, std::string> Dfs::store_catalog_metadata(
         received.state == FileState::Removed
             ? catalog_tombstone(received.owner_id, received.file_id, received.metadata_revision, received.sign)
             : received;
-    // A dedicated SQLite connection keeps this transaction separate from other
-    // storage workers that use the shared catalog connection.
+    // Serialize catalog writers before SQLite's busy timeout starts. Keep the
+    // separate connection so the transaction cannot include shared-connection work.
+    const auto catalog_lock = database->transaction_lock();
     auto transaction = std::make_shared<DbConnector>(database->file());
     if (!transaction->open(false) || !transaction->query("BEGIN IMMEDIATE")) {
         return std::unexpected("Catalog transaction unavailable");
