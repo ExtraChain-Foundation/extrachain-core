@@ -196,6 +196,11 @@ Dag::Dag(ExtraChain::Core::ExtraChainNode *node)
     if (!cache_.init_db()) {
         eCritical("[Dag] Failed to initialize derived cache state");
     }
+    std::error_code replay_error;
+    pack_history_dirty_ = std::filesystem::exists(ChainConst::PACK_REPLAY_REQUIRED, replay_error);
+    if (pack_history_dirty_) {
+        cache_.reset_db();
+    }
     update_range(true);
     eLog("[Dag] Loaded: {}, first: {}, last cached: {}", current_section_, first_saved_section_, cache_.section());
 
@@ -325,7 +330,13 @@ void Dag::start() {
     }
     if (index_rebuild_stop_.stop_requested())
         index_rebuild_stop_ = std::stop_source { };
-    if (mode_ == DagMode::Full && node->dag() == this && chain_index_ && !chain_index_->derived_index_ready())
+    bool replay_pack_history;
+    {
+        std::lock_guard lock(pack_sync_mutex_);
+        replay_pack_history = pack_history_dirty_;
+    }
+    if (mode_ == DagMode::Full && node->dag() == this && chain_index_
+        && (replay_pack_history || !chain_index_->derived_index_ready()))
         schedule_index_rebuild();
     accepting_messages_.store(true);
     set_admission_accepting(true);
@@ -1343,15 +1354,6 @@ std::optional<bool> Dag::write_section(const Section &section) {
                 auto path = FsPath::create(this->file_path(section.id));
                 if (!path.has_value() || !Utils::write_file_content(path.value(), serialized).has_value()) {
                     return std::nullopt;
-                }
-            }
-            if (status_ != DagStatus::Sync) {
-                std::lock_guard cache_lock(pack_hot_cache_mutex_);
-                pack_hot_cache_.insert_or_assign(section.id, std::move(serialized));
-                while (pack_hot_cache_.size() > PACK_HOT_CACHE_LIMIT) {
-                    // Preserve the oldest range because it is the next range
-                    // that try_pack_hot() must seal after a previous failure.
-                    pack_hot_cache_.erase(std::prev(pack_hot_cache_.end()));
                 }
             }
         }
@@ -2776,10 +2778,6 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
             || !hot_section_store_->commit_batch(sections, std::pair { committed_first, committed_last })) {
             return std::unexpected(ConsensusError::StorageFailure);
         }
-        std::lock_guard cache_lock(pack_hot_cache_mutex_);
-        for (const auto &[section_id, bytes] : sections) {
-            pack_hot_cache_.insert_or_assign(section_id, bytes);
-        }
     }
 
     first_saved_section_ = committed_first;
@@ -4077,7 +4075,12 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 control_index_ready_.store(false);
             }
 
-            if (this->status_ != DagStatus::Ready) {
+            bool pack_history_dirty;
+            {
+                std::lock_guard pack_sync_lock(pack_sync_mutex_);
+                pack_history_dirty = pack_history_dirty_;
+            }
+            if (this->status_ != DagStatus::Ready || pack_history_dirty) {
                 this->start_control();
 
                 this->process_cached_transactions();
@@ -4088,6 +4091,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 // The balance cache is derived state. Rebuild it from the
                 // verified local sections instead of trusting a peer snapshot.
                 cache_.reset_db();
+                clear_pack_history_dirty();
                 cache_.init_db();
                 cache_.check_and_update_cache_thread(current_section_);
                 repair_control_chain();
@@ -4763,10 +4767,6 @@ void Dag::clear_dag() {
     if (pack_registry_)
         pack_registry_->rescan();
     next_pack_index_ = SectionId(0);
-    {
-        std::lock_guard lock(pack_hot_cache_mutex_);
-        pack_hot_cache_.clear();
-    }
     if (chain_index_enabled_ && chain_index_)
         chain_index_->clear();
     if (control_index_)
@@ -4858,6 +4858,7 @@ void Dag::network_pack_list_response(const PackList &list, const Responder &resp
     if (!pack_registry_)
         return;
 
+    std::lock_guard response_lock(file_sync_response_mutex_);
     const auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
     const auto meta    = node->network()->peer_meta_for(peer_id);
     if (!meta.has_value() || !meta->supports_pack_sync() || list.packs.size() > PACK_SYNC_MAX_PACKS) {
@@ -4893,7 +4894,6 @@ void Dag::network_pack_list_response(const PackList &list, const Responder &resp
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
         pack_sync_pending_       = std::move(missing);
         pack_sync_in_flight_     = false;
-        pack_sync_installed_any_ = false;
         pack_sync_peer_          = peer_id;
         pack_sync_fallback_from_ = std::nullopt;
     }
@@ -4916,8 +4916,7 @@ void Dag::issue_next_pack_request(const Responder &responder) {
             eLog("[Dag] Pack sync: all packs received");
             finished                 = true;
             fallback_from            = pack_sync_fallback_from_;
-            installed_any            = pack_sync_installed_any_;
-            pack_sync_installed_any_ = false;
+            installed_any            = pack_history_dirty_;
         } else {
             next_id = pack_sync_pending_.front();
             pack_sync_pending_.erase(pack_sync_pending_.begin());
@@ -4974,7 +4973,7 @@ void Dag::issue_next_pack_request(const Responder &responder) {
         // A chain can end exactly at a pack boundary. There is no hot tail in
         // that case, so finish the same derived-state work as file sync.
         if (mode_ == DagMode::Full) {
-            if (control_index_) {
+            if (installed_any && control_index_) {
                 control_index_->clear();
                 control_index_ready_.store(false);
             }
@@ -4982,8 +4981,11 @@ void Dag::issue_next_pack_request(const Responder &responder) {
             process_cached_transactions();
             sync_finish_event_.publish();
 
-            cache_.reset_db();
-            cache_.init_db();
+            if (installed_any) {
+                cache_.reset_db();
+                clear_pack_history_dirty();
+                cache_.init_db();
+            }
             cache_.check_and_update_cache_thread(current_section_);
             repair_control_chain();
             try_pack_hot();
@@ -5033,10 +5035,38 @@ void Dag::issue_pack_window(const Responder &responder) {
     }
 }
 
+bool Dag::mark_pack_history_dirty() {
+    std::lock_guard lock(pack_sync_mutex_);
+    if (pack_history_dirty_)
+        return true;
+    // Persist before the pack becomes visible: a stop between installation and
+    // cache replay must not make the previous balance snapshot authoritative.
+    if (!FileIo::write_atomic(ChainConst::PACK_REPLAY_REQUIRED, { }).has_value()) {
+        eWarning("[Dag] Cannot record pending pack history replay");
+        return false;
+    }
+    pack_history_dirty_ = true;
+    return true;
+}
+
+void Dag::clear_pack_history_dirty() {
+    if (cache_.section() != SectionId(-1))
+        return;
+    std::lock_guard lock(pack_sync_mutex_);
+    std::error_code error;
+    std::filesystem::remove(ChainConst::PACK_REPLAY_REQUIRED, error);
+    if (error) {
+        eWarning("[Dag] Cannot clear pending pack history replay: {}", error.message());
+        return;
+    }
+    pack_history_dirty_ = false;
+}
+
 void Dag::network_pack_data_response(const PackData &data, const Responder &responder) {
     if (!pack_registry_)
         return;
 
+    std::lock_guard response_lock(file_sync_response_mutex_);
     const auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
     const auto meta    = node->network()->peer_meta_for(peer_id);
     if (!meta.has_value() || !meta->supports_pack_sync()) {
@@ -5093,13 +5123,14 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
 
     // All offsets are present. Finalization verifies the complete pack before
     // it becomes visible in the registry.
-    auto finalized = pack_registry_->install_chunk(data.pack_id,
-                                                   data.total_size,
-                                                   {},
-                                                   true,
-                                                   [this, id = data.pack_id](const Pack::Reader &reader) {
-                                                       return validate_received_pack(id, reader);
-                                                   });
+    auto finalized =
+        pack_registry_->install_chunk(data.pack_id,
+                                      data.total_size,
+                                      { },
+                                      true,
+                                      [this, id = data.pack_id](const Pack::Reader &reader) {
+                                          return validate_received_pack(id, reader) && mark_pack_history_dirty();
+                                      });
     if (!finalized.has_value()) {
         eWarning("[Dag] Pack {} finalization failed: error {}", data.pack_id, static_cast<int>(finalized.error()));
         {
@@ -5119,8 +5150,7 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
     history_revision_.fetch_add(1, std::memory_order_release);
     {
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
-        pack_sync_in_flight_     = false;
-        pack_sync_installed_any_ = true;
+        pack_sync_in_flight_ = false;
         pack_sync_outstanding_offsets_.clear();
         pack_sync_received_offsets_.clear();
     }
@@ -5129,7 +5159,8 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
     issue_next_pack_request(responder);
 }
 
-bool Dag::validate_pack_controls(Pack::PackId id, const std::map<SectionId, Section> &sections) const {
+bool Dag::validate_pack_controls(Pack::PackId                                                    id,
+                                 const std::function<std::optional<Section>(const SectionId &)> &read) const {
     const auto reject = [id](std::string_view reason) {
         eWarning("[Dag] Reject pack {}: {}", id, reason);
         return false;
@@ -5138,15 +5169,10 @@ bool Dag::validate_pack_controls(Pack::PackId id, const std::map<SectionId, Sect
         return reject("pack id overflow");
 
     const SectionId expected_first(id * Pack::SECTIONS_PER_PACK);
-    const SectionId expected_last = expected_first + Pack::SECTIONS_PER_PACK - 1;
-    if (sections.size() != Pack::SECTIONS_PER_PACK || sections.begin()->first != expected_first
-        || sections.rbegin()->first != expected_last) {
-        return reject("incomplete section range");
-    }
-
-    const auto read_for_control = [&](const SectionId &section_id) -> std::optional<Section> {
-        if (const auto it = sections.find(section_id); it != sections.end())
-            return it->second;
+    const SectionId expected_last    = expected_first + Pack::SECTIONS_PER_PACK - 1;
+    const auto      read_for_control = [&](const SectionId &section_id) -> std::optional<Section> {
+        if (section_id >= expected_first && section_id <= expected_last)
+            return read(section_id);
         return read_section(section_id);
     };
 
@@ -5202,11 +5228,6 @@ bool Dag::validate_received_pack(Pack::PackId id, const Pack::Reader &reader) co
         return reject("header range mismatch");
     }
 
-    const auto rows = reader.read_range(expected_first, expected_last);
-    if (rows.size() != Pack::SECTIONS_PER_PACK)
-        return reject("incomplete section range");
-
-    std::map<SectionId, Section>                      sections;
     std::unordered_map<std::string, Actor<KeyPublic>> actor_cache;
 
     const auto valid_control = [](const std::optional<std::string> &control) {
@@ -5217,57 +5238,82 @@ bool Dag::validate_received_pack(Pack::PackId id, const Pack::Reader &reader) co
                });
     };
 
-    for (const auto &[section_id, payload] : rows) {
-        WireFormat::Scope canonical(WireFormat::Mode::Canonical);
-        auto              section = Json::deserialize<Section>(payload);
-        if (!section.has_value())
-            return reject("section parse failed");
-        // The pack frame index is the authoritative section location. Existing
-        // readers apply the same normalization to older packed payloads.
-        section->id = section_id;
-        if (!valid_control(section->control))
-            return reject("invalid control encoding");
+    for (SectionId frame_first = expected_first; frame_first <= expected_last;
+         frame_first += Pack::SECTIONS_PER_FRAME) {
+        const auto frame_last = std::min(expected_last, frame_first + Pack::SECTIONS_PER_FRAME - 1);
+        const auto rows       = reader.read_range(frame_first, frame_last);
+        if (SectionId(rows.size()) != frame_last - frame_first + 1)
+            return reject("incomplete section range");
+        for (const auto &[section_id, payload] : rows) {
+            WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+            auto              section = Json::deserialize<Section>(payload);
+            if (!section.has_value())
+                return reject("section parse failed");
+            // The pack frame index is the authoritative section location. Existing
+            // readers apply the same normalization to older packed payloads.
+            section.value().id = section_id;
+            if (!valid_control(section.value().control))
+                return reject("invalid control encoding");
 
-        for (const auto &tx : section->transactions) {
-            if (tx.section() != section_id)
-                return reject("transaction section mismatch");
-            if (tx.hash() != tx.calculate_hash() && tx.hash() != tx.calculate_hash_hex())
-                return reject("transaction hash mismatch");
-            if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance) {
-                if (validate_initial_transaction(tx) != TransactionProveError::NoError) {
-                    return reject("invalid network initialization transaction");
+            for (const auto &tx : section.value().transactions) {
+                if (tx.section() != section_id)
+                    return reject("transaction section mismatch");
+                if (tx.hash() != tx.calculate_hash() && tx.hash() != tx.calculate_hash_hex())
+                    return reject("transaction hash mismatch");
+                if (tx.type() == TransactionType::Genesis || tx.type() == TransactionType::Balance) {
+                    if (validate_initial_transaction(tx) != TransactionProveError::NoError) {
+                        return reject("invalid network initialization transaction");
+                    }
+                    continue;
                 }
-                continue;
-            }
-            if (tx.type() == TransactionType::MiningSettlement) {
-                if (node->consensus() == nullptr || !node->consensus()->verify_mining_transaction(tx))
-                    return reject("invalid mining settlement proof");
-                continue;
-            }
-            if (tx.type() == TransactionType::IntentCancel && !tx.consensus_intent().has_value())
-                return reject("missing cancellation intent");
-            if (Utils::is_container_empty(tx.signature()))
-                return reject("missing transaction signature");
+                if (tx.type() == TransactionType::MiningSettlement) {
+                    if (node->consensus() == nullptr || !node->consensus()->verify_mining_transaction(tx))
+                        return reject("invalid mining settlement proof");
+                    continue;
+                }
+                if (tx.type() == TransactionType::IntentCancel && !tx.consensus_intent().has_value())
+                    return reject("missing cancellation intent");
+                if (Utils::is_container_empty(tx.signature()))
+                    return reject("missing transaction signature");
 
-            const auto sender_id = tx.sender().to_string();
-            auto       sender    = actor_cache.find(sender_id);
-            if (sender == actor_cache.end()) {
-                auto loaded = node->actor_index()->read_actor_old(tx.sender());
-                if (loaded.empty())
-                    return reject("unknown transaction sender");
-                sender = actor_cache.emplace(sender_id, std::move(loaded)).first;
-            }
+                const auto sender_id = tx.sender().to_string();
+                auto       sender    = actor_cache.find(sender_id);
+                if (sender == actor_cache.end()) {
+                    auto loaded = node->actor_index()->read_actor_old(tx.sender());
+                    if (loaded.empty())
+                        return reject("unknown transaction sender");
+                    sender = actor_cache.emplace(sender_id, std::move(loaded)).first;
+                }
 
-            // The content hash was checked above. Verify the signature against
-            // that exact stored hash, instead of recalculating and checking both
-            // canonical and legacy preimages for every transaction.
-            if (!tx.verify(sender->second))
-                return reject("invalid transaction signature");
+                // The content hash was checked above. Verify the signature against
+                // that exact stored hash, instead of recalculating and checking both
+                // canonical and legacy preimages for every transaction.
+                if (!tx.verify(sender->second))
+                    return reject("invalid transaction signature");
+            }
         }
-        sections.emplace(section_id, std::move(*section));
     }
 
-    return validate_pack_controls(id, sections);
+    std::map<SectionId, std::string> frame;
+    return validate_pack_controls(id, [&](const SectionId &section_id) -> std::optional<Section> {
+        if (!frame.contains(section_id)) {
+            frame.clear();
+            const SectionId first = section_id - (section_id - expected_first) % Pack::SECTIONS_PER_FRAME;
+            for (auto &[key, payload] :
+                 reader.read_range(first, std::min(expected_last, first + Pack::SECTIONS_PER_FRAME - 1))) {
+                frame.emplace(key, std::move(payload));
+            }
+        }
+        const auto found = frame.find(section_id);
+        if (found == frame.end())
+            return std::nullopt;
+        WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+        auto              section = Json::deserialize<Section>(found->second);
+        if (!section.has_value())
+            return std::nullopt;
+        section.value().id = section_id;
+        return std::move(section.value());
+    });
 }
 
 // ---- Balance-cache snapshot (peers with dag_version >= 100) ------------------
@@ -5393,10 +5439,13 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
                 // but it can also be a repair that landed after packing. Dropping it
                 // wholesale rolls that repair back to the stale pack contents, so
                 // only discard rows the pack already agrees with.
-                auto hot = hot_section_store_->read_range(pack_first, packed_last);
-                if (!hot.empty()) {
+                for (auto first = pack_first; first <= packed_last; first += Pack::SECTIONS_PER_FRAME) {
+                    const auto last = std::min(packed_last, first + Pack::SECTIONS_PER_FRAME - 1);
+                    const auto hot  = hot_section_store_->read_range(first, last);
+                    if (hot.empty())
+                        continue;
                     std::map<SectionId, std::string> packed;
-                    for (auto &[section, bytes] : pack_registry_->read_sections(pack_first, packed_last)) {
+                    for (auto &[section, bytes] : pack_registry_->read_sections(first, last)) {
                         packed.emplace(section, std::move(bytes));
                     }
                     for (const auto &[section, bytes] : hot) {
@@ -5432,18 +5481,7 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
         // — so absence is an empty section, not pending data.
         std::map<SectionId, std::string> sections = hot_section_store_
                                                         ? hot_section_store_->read_range(pack_first, pack_last)
-                                                        : std::map<SectionId, std::string> {};
-        {
-            // Copy the complete candidate range under one lock. Do not lock
-            // once per section and do not keep the lock during disk I/O.
-            std::lock_guard cache_lock(pack_hot_cache_mutex_);
-            auto            cached = pack_hot_cache_.lower_bound(pack_first);
-            const auto      end    = pack_hot_cache_.upper_bound(pack_last);
-            while (cached != end) {
-                sections.emplace(cached->first, cached->second);
-                ++cached;
-            }
-        }
+                                                        : std::map<SectionId, std::string> { };
         const std::string empty_serialized = Json::serialize(Section { .id = SectionId(0) });
         for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
             if (sections.contains(s))
@@ -5471,22 +5509,37 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
             pid = static_cast<Pack::PackId>(*candidate_int);
         }
 
-        std::map<SectionId, Section> parsed_sections;
-        for (const auto &[section_id, payload] : sections) {
-            auto section = Json::deserialize<Section>(payload);
-            if (!section.has_value()) {
-                eWarning("[Dag] Defer pack {}: section {} cannot be parsed", pid, section_id);
-                return;
-            }
+        const auto read_candidate = [&](const SectionId &section_id) -> std::optional<Section> {
+            const auto found = sections.find(section_id);
+            if (found == sections.end())
+                return std::nullopt;
+            auto section = Json::deserialize<Section>(found->second);
+            if (!section.has_value())
+                return std::nullopt;
             section.value().id = section_id;
-            parsed_sections.emplace(section_id, std::move(section.value()));
-        }
-        if (!validate_pack_controls(pid, parsed_sections)) {
+            return std::move(section.value());
+        };
+        if (!validate_pack_controls(pid, read_candidate)) {
             eWarning("[Dag] Defer pack {} until its control intervals are complete", pid);
             return;
         }
+        for (auto section_id = pack_last - CONTROL_INTERVAL_DIFF + 1; section_id <= pack_last; section_id += 1) {
+            if (!read_candidate(section_id).has_value()) {
+                eWarning("[Dag] Defer pack {}: section {} cannot be parsed", pid, section_id);
+                return;
+            }
+        }
 
-        auto res = pack_registry_->create_pack(pid, sections);
+        auto res =
+            pack_registry_->create_pack(pid,
+                                        pack_first,
+                                        pack_last,
+                                        [&sections](const SectionId &section_id) -> std::optional<std::string> {
+                                            const auto found = sections.find(section_id);
+                                            if (found == sections.end())
+                                                return std::nullopt;
+                                            return std::move(found->second);
+                                        });
         if (!res.has_value()) {
             eWarning("[Dag] Failed to pack sections {}..{} (error {})",
                      pack_first,
@@ -5505,12 +5558,6 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
         for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
             std::error_code ec;
             std::filesystem::remove(this->file_path(s), ec);
-        }
-        {
-            std::lock_guard cache_lock(pack_hot_cache_mutex_);
-            const auto      first = pack_hot_cache_.lower_bound(pack_first);
-            const auto      last  = pack_hot_cache_.upper_bound(pack_last);
-            pack_hot_cache_.erase(first, last);
         }
 
         eLog("[Dag] Packed sections {}..{} into pack {}", pack_first, pack_last, pid);
@@ -5534,12 +5581,6 @@ void Dag::remove_sections(const SectionId &from) {
 
     if (hot_section_store_)
         hot_section_store_->erase_from(correct_from);
-
-    {
-        std::lock_guard cache_lock(pack_hot_cache_mutex_);
-        const auto      first = pack_hot_cache_.lower_bound(correct_from);
-        pack_hot_cache_.erase(first, pack_hot_cache_.end());
-    }
 
     eLog("[Dag] Clear from {}", correct_from);
 

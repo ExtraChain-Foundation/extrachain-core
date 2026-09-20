@@ -1,9 +1,11 @@
 #include "chain/actor_index.h"
 #include "chain/dag.h"
 #include "core/extrachain_node.h"
+#include "dag_admission_fixture.h"
 #include "managers/account_controller.h"
 #include "network/network_service.h"
 #include "test_support.h"
+#include "utils/db_connector.h"
 #include "utils/legacy_compression.h"
 #include <chrono>
 #include <thread>
@@ -53,6 +55,9 @@ namespace {
         std::string last_request() {
             std::lock_guard lock(mutex_);
             return last_request_;
+        }
+        void enable_pack_sync() {
+            peer_meta_.dag_version = CURRENT_DAG_VERSION;
         }
         std::pair<SectionId, SectionId> range() {
             std::lock_guard lock(mutex_);
@@ -184,8 +189,54 @@ int main() {
     const auto stored = dag.read_section(SectionId(21));
     TEST_REQUIRE(stored.has_value() && stored.value().transactions.contains(valid));
     TEST_REQUIRE(dag.read_section(SectionId(1)).value().transactions.contains(initial));
+    dag.stop();
+    dag.set_status(DagStatus::Ready);
+    dag.set_current_section(SectionId(120));
+    dag.cache().check_and_update_cache_thread(dag.current_section());
+    const auto cached_before = dag.cache().read_cached_balances();
+    TEST_REQUIRE(cached_before.first >= SectionId(20));
+    DbConnector cache_probe(ChainConst::BALANCE_CACHE);
+    TEST_REQUIRE(cache_probe.open());
+    const auto data_version = [&] {
+        const auto rows = cache_probe.select("PRAGMA data_version");
+        TEST_REQUIRE_EQ(rows.size(), std::size_t(1));
+        return rows.front().at("data_version");
+    };
+    const auto version_before = data_version();
+    peer->enable_pack_sync();
+    for (int repeat = 0; repeat < 3; ++repeat) {
+        dag.network_pack_list_response(PackList { }, peer_response);
+        TEST_REQUIRE_EQ(dag.status(), DagStatus::Ready);
+        TEST_REQUIRE_EQ(dag.cache().read_cached_balances(), cached_before);
+        TEST_REQUIRE_EQ(data_version(), version_before);
+    }
+    TEST_REQUIRE(DagAdmissionTestFixture::installed_pack(dag, dag.current_section() + 20));
+    dag.network_pack_list_response(PackList { }, peer_response);
+    TEST_REQUIRE(DagAdmissionTestFixture::pack_history_dirty(dag));
+    TEST_REQUIRE(std::filesystem::exists(ChainConst::PACK_REPLAY_REQUIRED));
+    TEST_REQUIRE_EQ(data_version(), version_before);
+    dag.set_current_section(dag.current_section() + 20);
+    dag.network_pack_list_response(PackList { }, peer_response);
+    TEST_REQUIRE(!DagAdmissionTestFixture::pack_history_dirty(dag));
+    TEST_REQUIRE(!std::filesystem::exists(ChainConst::PACK_REPLAY_REQUIRED));
+    TEST_REQUIRE(data_version() != version_before);
+    TEST_REQUIRE_EQ(dag.cache().read_cached_balances().second, cached_before.second);
+    const auto version_after = data_version();
+    dag.network_pack_list_response(PackList { }, peer_response);
+    TEST_REQUIRE_EQ(data_version(), version_after);
+    cache_probe.close();
+    TEST_REQUIRE(DagAdmissionTestFixture::installed_pack(dag, dag.current_section()));
     node->cleanUp();
     peer.reset();
+    node.reset();
+    node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 0);
+    node->process();
+    TEST_REQUIRE_EQ(node->dag()->cache().section(), SectionId(-1));
+    TEST_REQUIRE(DagAdmissionTestFixture::pack_history_dirty(*node->dag()));
+    TEST_REQUIRE(node->dag()->cache().read_cached_balances().second.empty());
+    node->dag()->cache().check_and_update_cache_thread(node->dag()->current_section());
+    TEST_REQUIRE_EQ(node->dag()->cache().read_cached_balances().second, cached_before.second);
+    node->cleanUp();
     node.reset();
     std::filesystem::current_path(original);
     std::filesystem::remove_all(home);

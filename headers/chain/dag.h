@@ -65,10 +65,7 @@ static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 // being sealed into an immutable pack. Covers Light client's 15-section cache
 // lag, control-search backoff (~37), and a buffer for late-arriving sync data
 // or modest reorgs. 200 == 10 control intervals — cheap on disk (~400KB).
-static constexpr int HOT_PACK_LAG = 200;
-// Keep at most two not-yet-packed ranges in memory. The hot store remains the
-// source of truth, so dropping a cache entry only causes a later database read.
-static constexpr std::size_t   PACK_HOT_CACHE_LIMIT     = Pack::SECTIONS_PER_PACK * 2;
+static constexpr int           HOT_PACK_LAG             = 200;
 static constexpr std::size_t   PACK_SYNC_MAX_PACKS      = 100000;
 static constexpr std::uint64_t PACK_SYNC_MAX_PACK_BYTES = 512ULL * 1024ULL * 1024ULL;
 
@@ -895,7 +892,6 @@ private:
     std::unique_ptr<HotSectionStore>               hot_section_store_;
     SectionId                                      next_pack_index_ = SectionId(0);
     std::mutex                                     pack_mutex_;
-    std::mutex                                     pack_hot_cache_mutex_;
     // Shared with the queued pack worker (#77). `scheduled` stops a second worker
     // from being queued; `running` is set only once the worker actually executes.
     // stop() waits for `running` alone: a worker that is still queued when the
@@ -913,7 +909,6 @@ private:
     std::shared_ptr<PackHotCompletion>             pack_hot_completion_ = std::make_shared<PackHotCompletion>();
     std::atomic_uint64_t                           pack_hot_generation_ = 0;
     std::atomic_uint64_t                           history_revision_    = 0;
-    std::map<SectionId, std::string>               pack_hot_cache_;
     std::mutex                                     file_sync_response_mutex_;
     ExtraChain::Core::WorkBudget file_sync_budget_ { { 384 * 1024 * 1024, 3, 320 * 1024 * 1024, 1 } };
     std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;
@@ -1066,7 +1061,7 @@ private:
     std::mutex                        pack_sync_mutex_;
     std::vector<Pack::PackId>         pack_sync_pending_;
     bool                              pack_sync_in_flight_     = false;
-    bool                              pack_sync_installed_any_ = false;
+    bool                              pack_history_dirty_      = false;
     Pack::PackId                      pack_sync_current_id_    = 0;
     std::uint64_t                     pack_sync_next_offset_   = 0;
     std::uint64_t                     pack_sync_total_size_    = 0;
@@ -1079,7 +1074,10 @@ private:
     // Called after each pack is received (or after PackList arrives).
     void issue_next_pack_request(const Responder &responder);
     void issue_pack_window(const Responder &responder);
-    bool validate_pack_controls(Pack::PackId id, const std::map<SectionId, Section> &sections) const;
+    bool mark_pack_history_dirty();
+    void clear_pack_history_dirty();
+    bool validate_pack_controls(Pack::PackId                                                    id,
+                                const std::function<std::optional<Section>(const SectionId &)> &read) const;
     bool validate_received_pack(Pack::PackId id, const Pack::Reader &reader) const;
 
     std::optional<BigNumberFloat> frozen_token_allocation(const ActorId &actor, const TokenId &token);

@@ -75,7 +75,10 @@ class Endurance(Cycle):
             except FileNotFoundError as error:
                 raise RuntimeError(f'Node {index} disappeared during resource sampling') from error
             if rss > 4 * 1024 ** 3 or fds > 4096 or log_bytes > 16 * 1024 ** 3:
-                raise RuntimeError(f'Node {index} exceeded its RSS, file descriptor or log limit')
+                self.event('resource-limit', node=index, pid=pid, rss_bytes=rss,
+                           fds=fds, log_bytes=log_bytes)
+                raise RuntimeError(f'Node {index} exceeded its RSS, file descriptor or log limit: '
+                                   f'rss_bytes={rss}, fds={fds}, log_bytes={log_bytes}')
             nodes.append(dict(node=index, pid=pid, rss_bytes=rss, threads=threads, fds=fds,
                               log_bytes=log_bytes, cpu_ticks=int(process_stat[11]) + int(process_stat[12]),
                               start_ticks=int(process_stat[19])))

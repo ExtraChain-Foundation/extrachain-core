@@ -385,6 +385,58 @@ public:
         TEST_REQUIRE(!std::filesystem::exists(path));
     }
 
+    void packWriterSupportsLargeHistory() {
+        const auto path    = std::filesystem::temp_directory_path() / "exc_large_history.pack";
+        const auto payload = [](const SectionId &id) {
+            return id.to_string() + std::string(28 * 1024, 'x');
+        };
+        std::size_t reads = 0;
+        TEST_REQUIRE(Pack::write(path,
+                                 0,
+                                 SectionId(0),
+                                 SectionId(9999),
+                                 [&](const SectionId &id) -> std::optional<std::string> {
+                                     TEST_REQUIRE_EQ(id, SectionId(reads));
+                                     ++reads;
+                                     return payload(id);
+                                 })
+                         .has_value());
+        TEST_REQUIRE_EQ(reads, Pack::SECTIONS_PER_PACK);
+        const auto reader = Pack::Reader::open(path);
+        TEST_REQUIRE(reader.has_value());
+        for (std::size_t first = 0; first < Pack::SECTIONS_PER_PACK; first += Pack::SECTIONS_PER_FRAME) {
+            const auto last = std::min(first + Pack::SECTIONS_PER_FRAME, Pack::SECTIONS_PER_PACK) - 1;
+            const auto rows = reader.value().read_range(SectionId(first), SectionId(last));
+            TEST_REQUIRE_EQ(rows.size(), last - first + 1);
+            for (const auto &[id, bytes] : rows)
+                TEST_REQUIRE_EQ(bytes, payload(id));
+        }
+        TEST_REQUIRE(reader.value().read_range(SectionId(0), SectionId(9999)).empty());
+        TEST_REQUIRE_EQ(reader.value().read(SectionId(9999)),
+                        std::optional<std::string>(payload(SectionId(9999))));
+        const auto missing = Pack::write(path,
+                                         0,
+                                         SectionId(0),
+                                         SectionId(40),
+                                         [&](const SectionId &id) -> std::optional<std::string> {
+                                             if (id == SectionId(35))
+                                                 return std::nullopt;
+                                             return payload(id);
+                                         });
+        TEST_REQUIRE(!missing.has_value());
+        TEST_REQUIRE_EQ(missing.error(), Pack::Error::ReadFailed);
+        const auto unchanged = Pack::Reader::open(path);
+        TEST_REQUIRE(unchanged.has_value());
+        TEST_REQUIRE_EQ(unchanged.value().count(), Pack::SECTIONS_PER_PACK);
+        const auto oversized =
+            Pack::write(path, 0, SectionId(0), SectionId(0), [](const SectionId &) -> std::optional<std::string> {
+                return std::string(64 * 1024 * 1024, 'x');
+            });
+        TEST_REQUIRE(!oversized.has_value());
+        TEST_REQUIRE_EQ(oversized.error(), Pack::Error::InvalidFormat);
+        std::filesystem::remove(path);
+    }
+
     void hotSectionStorePersistsAndPrunesRevisions() {
         const auto dir  = std::filesystem::temp_directory_path() / "exc_hot_section_store";
         const auto path = dir / "HotSections.db";
@@ -932,6 +984,9 @@ int main() {
     });
     runner.run("oversized pack section range", [&] {
         tests.packWriterRejectsOversizedSectionRange();
+    });
+    runner.run("large packed history", [&] {
+        tests.packWriterSupportsLargeHistory();
     });
     runner.run("hot section store revisions", [&] {
         tests.hotSectionStorePersistsAndPrunesRevisions();

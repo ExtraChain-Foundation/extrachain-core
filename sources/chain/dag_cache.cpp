@@ -795,7 +795,8 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         start_section = first_saved_section;
     }
 
-    auto hot_sections = dag->read_hot_sections(start_section, genesis_section);
+    std::map<SectionId, Section> hot_sections;
+    SectionId                    hot_through = start_section - 1;
 
     if (!cache_db_->query("BEGIN IMMEDIATE TRANSACTION")) {
         return { false, start_section };
@@ -817,6 +818,11 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
+        if (i > hot_through) {
+            hot_sections.clear();
+            hot_through  = std::min(genesis_section, i + Pack::SECTIONS_PER_FRAME - 1);
+            hot_sections = dag->read_hot_sections(i, hot_through);
+        }
         auto hot = hot_sections.find(i);
         auto section =
             hot != hot_sections.end() ? std::optional<Section>(std::move(hot->second)) : read_section_callback(i);
@@ -876,11 +882,17 @@ std::optional<StateTransitionViolation> DagCache::validate_state_to(const Sectio
         return std::nullopt;
     }
 
-    auto hot_sections = dag->read_hot_sections(from, current_section);
+    std::map<SectionId, Section> hot_sections;
+    SectionId                    hot_through = from - 1;
     for (auto section_id = from; section_id <= current_section; ++section_id) {
+        if (section_id > hot_through) {
+            hot_sections.clear();
+            hot_through  = std::min(current_section, section_id + Pack::SECTIONS_PER_FRAME - 1);
+            hot_sections = dag->read_hot_sections(section_id, hot_through);
+        }
         const auto hot = hot_sections.find(section_id);
-        auto       section =
-            hot != hot_sections.end() ? std::optional<Section>(hot->second) : dag->read_section(section_id);
+        auto       section = hot != hot_sections.end() ? std::optional<Section>(std::move(hot->second))
+                                                       : dag->read_section(section_id);
         if (!section.has_value()) {
             continue;
         }
