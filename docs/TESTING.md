@@ -6,11 +6,9 @@ classes of consensus and integrity bugs, none of which were visible by reading t
 
 Stands live in a separate worktree, never in a working repository.
 
-For detached stage execution, bounded status, immutable inputs, and verified archive
-cleanup, use the [autonomous validation controller](STAND.md).
-Let the controller run the sequence locally. Read compact status for an operational
-decision or a user request; do not use repeated model calls to wait for a run. On a
-failure, read the bounded diagnostic first, then request only the needed log ranges.
+Use the [autonomous validation controller](STAND.md) to run stand sequences on the
+Linux systemd host. The driver and fault-injection details below describe the checks
+inside that sequence. They do not replace the controller's process and result handling.
 
 > **Rule: any change to the core is validated on a combined DAG + DFS stand — both at
 > once, not one at a time.** Every bug in the 2026-08 sessions came from the interaction:
@@ -19,6 +17,45 @@ failure, read the bounded diagnostic first, then request only the needed log ran
 > perfectly healthy. A DAG-only run and a DFS-only run were both green on builds where
 > the combined run diverged within minutes. If a change touches the network layer,
 > storage, or the chain, it is not tested until it has survived a combined run.
+
+## Stand operation
+
+1. Read [STAND.md](STAND.md) and copy [stand.example.json](stand.example.json) to a
+   profile directory outside the clean validation checkout. Set the absolute paths,
+   executable hash, required stages, expected results, deadlines, and disk budget.
+   List all external inputs that can affect the result. Use `purpose: validation`
+   for a short check or reproduction; use the complete acceptance profile for acceptance.
+2. Freeze the profile, then start one detached job. Keep the generated manifest
+   outside the source checkout. Do not change the source, controller, or declared
+   inputs while that job runs.
+
+   ```sh
+   python scripts/stand.py prepare /stand/profiles/profile.json --output /stand/profiles/frozen.json
+   python scripts/stand.py start /stand/profiles/frozen.json
+   ```
+
+3. Save the returned run directory and report path. Let systemd run the sequence.
+   Use `status` for an operational decision or a user request. Do not use repeated
+   model calls to wait or repeatedly collect full logs. Local events and the final
+   result can be read by a scheduler; the controller does not send notifications itself.
+4. On failure, use `diagnose` first. It returns less than 20 KiB. Request additional
+   evidence through `--file`, `--offset`, and `--limit`; each read is at most 16 KiB.
+   Keep the original logs and data. Fix the cause, then use a new run and manifest
+   for changed inputs. A reproduction remains separate from continuous acceptance.
+5. Use `stop` for a requested interruption. Only the controller's completed `PASS`
+   establishes success for the declared profile. `FAIL`, `INTERRUPTED`, `INFRA_ERROR`,
+   stale heartbeats, and incomplete states do not. Exit code zero alone is insufficient.
+6. Read `report` and the evidence before recording a result. Acceptance requires the
+   prerequisite stages, six uninterrupted hours, and a final short check with full
+   stopped-data audits, as specified in `STAND.md`. Do not reuse long or final results
+   or add interrupted durations. Optional command-stage reuse needs exact matching
+   inputs and unchanged evidence. Review tracker/PR drafts before publication.
+7. Archive only stopped runs. The controller checks archive integrity and compares
+   the archive with the source before `--remove-source` can remove data. Retain
+   failures, current acceptance evidence, and directories referenced by cached results.
+
+The five-second local resource sampling and full correctness checks remain enabled.
+Reduced output must not reduce the workload, fault coverage, or audit requirements.
 
 ---
 

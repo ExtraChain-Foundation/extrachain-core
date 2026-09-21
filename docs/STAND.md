@@ -9,9 +9,11 @@ sampling, durable receipts, or stopped-data audits in `shadow_endurance.py`.
 
 ## Prepare and run
 
-1. Use a clean source checkout and a separate run root. Set the absolute paths in a
-   copy of [stand.example.json](stand.example.json). Use the Python environment with
-   the harness dependencies. List every external executable, fixture, configuration,
+1. Use a clean source checkout and a separate run root. Store profiles and frozen
+   manifests outside that checkout, in an existing directory such as `/stand/profiles`.
+   Set the absolute paths in a copy of [stand.example.json](stand.example.json).
+   Use the Python environment with the harness dependencies. List every external
+   executable, fixture, configuration,
    and dependency that can affect the result in `inputs`. Source-controlled scripts
    are covered by the source revision and tree. Do not change inputs during a run.
 2. Set `expect.binary_sha256` to the SHA-256 of `extrachain-node-run`. Set the disk
@@ -19,8 +21,8 @@ sampling, durable receipts, or stopped-data audits in `shadow_endurance.py`.
 3. Freeze the manifest and start the service:
 
 ```sh
-python scripts/stand.py prepare profile.json --output frozen.json
-python scripts/stand.py start frozen.json
+python scripts/stand.py prepare /stand/profiles/profile.json --output /stand/profiles/frozen.json
+python scripts/stand.py start /stand/profiles/frozen.json
 ```
 
 `start` returns the run directory, service name, events path, and report path. The

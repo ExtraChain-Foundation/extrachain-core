@@ -133,6 +133,32 @@ Inherit from `JanusBidBase` / `JanusItemBase`, BOOST_DESCRIBE_STRUCT, then:
 
 ## Scripts
 - `scripts/clang_format.js` — format code (clang-format runner).
+- `scripts/stand.py` — prepare, run, stop, inspect, and archive validation jobs.
+
+## Validation workflow
+
+Read [docs/TESTING.md](docs/TESTING.md) for required checks and
+[docs/STAND.md](docs/STAND.md) for the controller commands and manifest format.
+Use `scripts/stand.py` as the stand entry point on the Linux systemd host.
+
+- Use a clean validation checkout and fixed binaries, fixtures, and dependencies.
+  Keep profiles, frozen manifests, and run data outside that checkout. Freeze the
+  declared inputs with `prepare`, then launch the detached service with `start`.
+- Put the stage sequence and workload settings in the profile. Keep the existing
+  combined DAG + DFS workload and full audits. Do not copy supervisor scripts for
+  each revision or replace the controller with a manual SSH polling loop.
+- Use `status` for an operational decision or a user request. Let the service run
+  without repeated model calls. Read `report` after completion. On failure, read
+  `diagnose` first, then only the required file ranges with `--file`, `--offset`,
+  and `--limit`. Full logs remain on the stand host.
+- Stop a run with `stop`, so the controller records the requested interruption and
+  systemd cleans up descendants. Do not treat stale or incomplete state as PASS.
+- Follow the acceptance and cache rules in `docs/STAND.md`. A short validation PASS
+  does not establish full acceptance. Long and final checks cannot use cached
+  results or combine interrupted intervals.
+- Review the generated report and tracker/PR drafts before publication. Archive
+  stopped runs with the controller's integrity and full-comparison checks. Preserve
+  failure evidence, current acceptance artifacts, and referenced cache sources.
 
 ## Commits
 
