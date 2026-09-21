@@ -6,6 +6,12 @@ classes of consensus and integrity bugs, none of which were visible by reading t
 
 Stands live in a separate worktree, never in a working repository.
 
+For detached stage execution, bounded status, immutable inputs, and verified archive
+cleanup, use the [autonomous validation controller](STAND.md).
+Let the controller run the sequence locally. Read compact status for an operational
+decision or a user request; do not use repeated model calls to wait for a run. On a
+failure, read the bounded diagnostic first, then request only the needed log ranges.
+
 > **Rule: any change to the core is validated on a combined DAG + DFS stand — both at
 > once, not one at a time.** Every bug in the 2026-08 sessions came from the interaction:
 > bulk file traffic delayed consensus messages until transactions fell out of the

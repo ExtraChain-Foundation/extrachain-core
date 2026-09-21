@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "name": "combined-preview",
+  "purpose": "validation",
+  "root": "/stand/runs",
+  "source": {"path": "/stand/source"},
+  "min_free_bytes": 85899345920,
+  "inputs": [
+    {"path": "/stand/seed"},
+    {"path": "/stand/python/bin/python"},
+    {"path": "/stand/build/extrachain-node-run"},
+    {"path": "/stand/build/extrachain-shadow-bundle"},
+    {"path": "/stand/build/extrachain-dag-audit"}
+  ],
+  "required_stages": ["combined-short"],
+  "stages": [{
+    "name": "combined-short",
+    "kind": "endurance",
+    "timeout_s": 5400,
+    "expect": {
+      "duration_s": 600,
+      "interval_s": 150,
+      "senders": 6,
+      "per_sender": 48,
+      "file_bytes": 1024,
+      "binary_sha256": "REPLACE_WITH_SHA256_OF_NODE_RUN"
+    },
+    "command": [
+      "/stand/python/bin/python", "/stand/source/scripts/shadow_endurance.py",
+      "--work", "{stage}/work", "--build", "/stand/build", "--seed", "/stand/seed",
+      "--port", "26840", "--duration", "600", "--interval", "150",
+      "--recovery", "300", "--audit-timeout", "3600", "--senders", "6",
+      "--per-sender", "48", "--file-bytes", "1024"
+    ]
+  }]
+}
