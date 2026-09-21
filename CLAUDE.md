@@ -139,7 +139,13 @@ Inherit from `JanusBidBase` / `JanusItemBase`, BOOST_DESCRIBE_STRUCT, then:
 
 Read [docs/TESTING.md](docs/TESTING.md) for required checks and
 [docs/STAND.md](docs/STAND.md) for the controller commands and manifest format.
-Use `scripts/stand.py` as the stand entry point on the Linux systemd host.
+For a new device, start with [docs/STAND_SETUP.md](docs/STAND_SETUP.md). Select the
+execution environment from the task and probe its capabilities once. No server,
+account name, path, or previous conversation is a prerequisite. The controller requires
+Linux with systemd and working namespace and traffic-control support. On macOS or
+Windows, use a capable Linux guest on the selected device; retain separate native
+platform checks. Do not present a guest result as validation of its host OS.
+Use `scripts/stand.py` as the stand entry point in that execution environment.
 
 - Use a clean validation checkout and fixed binaries, fixtures, and dependencies.
   Keep profiles, frozen manifests, and run data outside that checkout. Freeze the
@@ -151,6 +157,14 @@ Use `scripts/stand.py` as the stand entry point on the Linux systemd host.
   without repeated model calls. Read `report` after completion. On failure, read
   `diagnose` first, then only the required file ranges with `--file`, `--offset`,
   and `--limit`. Full logs remain on the stand host.
+- Save a compact handoff record outside the checkout: environment, source/dependency
+  revisions, build and Python paths, manifest, run ID, report, and next action. On
+  resumption, read that record and one status. Do not reconstruct old conversations
+  or repeatedly read complete instructions and logs. Batch independent local checks.
+- Start with the preview on a new environment. Choose later checks by change scope;
+  broaden them for a failure or unresolved concern. Do not weaken required coverage
+  to fit a small device. Documentation-only edits need documentation review and command
+  checks, not another runtime endurance run.
 - Stop a run with `stop`, so the controller records the requested interruption and
   systemd cleans up descendants. Do not treat stale or incomplete state as PASS.
 - Follow the acceptance and cache rules in `docs/STAND.md`. A short validation PASS

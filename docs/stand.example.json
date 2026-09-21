@@ -5,11 +5,13 @@
   "root": "/stand/runs",
   "source": {"path": "/stand/source"},
   "min_free_bytes": 85899345920,
+  "environment": {"PATH": "/stand/python/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
   "inputs": [
     {"path": "/stand/seed"},
     {"path": "/stand/python/bin/python"},
     {"path": "/stand/build/extrachain-node-run"},
     {"path": "/stand/build/extrachain-shadow-bundle"},
+    {"path": "/stand/build/extrachain-sync-check"},
     {"path": "/stand/build/extrachain-dag-audit"}
   ],
   "required_stages": ["combined-short"],

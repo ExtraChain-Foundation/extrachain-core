@@ -20,6 +20,13 @@ inside that sequence. They do not replace the controller's process and result ha
 
 ## Stand operation
 
+For the first run on a selected device, complete [STAND_SETUP.md](STAND_SETUP.md).
+It supplies the platform routes, capability probes, isolated layout, dependency and
+build commands, generated fixture, and profile generation. Use existing recorded
+inputs when they match; a missing environment is not a reason to search old sessions
+or assume access to a named shared server. Save a small handoff record for the next
+operator. For later runs, use that record and read only the relevant procedure section.
+
 1. Read [STAND.md](STAND.md) and copy [stand.example.json](stand.example.json) to a
    profile directory outside the clean validation checkout. Set the absolute paths,
    executable hash, required stages, expected results, deadlines, and disk budget.

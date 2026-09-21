@@ -7,14 +7,21 @@ final report. No remote session or repeated model request is needed to keep a ru
 The controller does not change the node workload, network faults, five-second resource
 sampling, durable receipts, or stopped-data audits in `shadow_endurance.py`.
 
+For setup on a new device, follow [STAND_SETUP.md](STAND_SETUP.md). It supplies the
+Linux, macOS-guest, and Windows/WSL2 routes, capability probes, build and fixture
+commands, and a profile with paths filled from the chosen environment. This page is
+the operation reference for an already prepared stand.
+
 ## Prepare and run
 
 1. Use a clean source checkout and a separate run root. Store profiles and frozen
    manifests outside that checkout, in an existing directory such as `/stand/profiles`.
    Set the absolute paths in a copy of [stand.example.json](stand.example.json).
    Use the Python environment with the harness dependencies. List every external
-   executable, fixture, configuration,
-   and dependency that can affect the result in `inputs`. Source-controlled scripts
+   executable, fixture, configuration, and dependency that can affect the result in
+   `inputs`. Include the bootstrap's `extrachain-sync-check` as well as the node,
+   bundle, and DAG auditor. Set `environment.PATH` to use the selected Python
+   environment for shell-invoked `python3`. Source-controlled scripts
    are covered by the source revision and tree. Do not change inputs during a run.
 2. Set `expect.binary_sha256` to the SHA-256 of `extrachain-node-run`. Set the disk
    budget for the complete sequence. The runtime reserve defaults to 10 GiB.
