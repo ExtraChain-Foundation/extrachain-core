@@ -145,6 +145,11 @@ def main():
             wait_for(lambda: transferred(client_home), 90, 'old client file delivery through old node', client)
             event('old-client-read', file_bytes=size, current_nodes_paused=len(paused))
         finally:
+            for pid in paused:
+                try:
+                    os.kill(pid, signal.SIGCONT)
+                except ProcessLookupError:
+                    pass
             if client is not None and client.poll() is None:
                 client.terminate()
                 try:
@@ -152,11 +157,6 @@ def main():
                 except subprocess.TimeoutExpired:
                     client.kill()
                     client.wait(timeout=10)
-            for pid in paused:
-                try:
-                    os.kill(pid, signal.SIGCONT)
-                except ProcessLookupError:
-                    pass
         if old.poll() is None:
             old.terminate()
             try:
