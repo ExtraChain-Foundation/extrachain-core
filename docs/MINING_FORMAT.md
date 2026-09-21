@@ -82,6 +82,11 @@ nine-field epoch into a snapshot and requires a load failure without replacing t
 file. Restoring the original snapshot permits normal recovery. `peer-identity`
 checks restricted signed v5 sessions and authenticated access after update.
 
+`shadow_legacy_update.py` also downloads the verified payload to a second old client
+through the old node. All seven current nodes are paused during that download, so a
+direct connection to them cannot establish a false success. The test resumes them
+on failure as well as success, then checks the same-directory update and full audits.
+
 Run these checks first, then the combined DAG + DFS and legacy-update profiles via
 [the stand controller](STAND.md). Full branch acceptance remains subject to
 [TESTING.md](TESTING.md); a short profile does not complete six-hour acceptance.

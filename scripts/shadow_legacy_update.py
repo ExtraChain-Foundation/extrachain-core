@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -108,8 +109,8 @@ def main():
         wait_for(lambda: 'restricted data access; Shadow and rewards disabled' in text(stand / 'node-0.log'),
                  90, 'old peer restricted access')
 
-        def transferred():
-            path = home / 'dfs' / owner / file_id
+        def transferred(directory=home):
+            path = directory / 'dfs' / owner / file_id
             if path.is_symlink() or not path.is_file() or path.stat().st_size != size:
                 return False
             with path.open('rb') as stream:
@@ -119,6 +120,43 @@ def main():
         wait_for(lambda: re.search(r'committee node=0 conns=7 shadow_peers=6 ', text(stand / 'node-0.log')),
                  120, 'old peer excluded from Shadow')
         event('restricted-access', connected=True, shadow_peers=6, file_bytes=size)
+        # Pause the current nodes so the old client cannot download from them directly.
+        paused = []
+        client = None
+        try:
+            for index in range(7):
+                marker = barrier / f'pid-{index}'
+                if not marker.exists():
+                    marker = barrier / f'initial-pid-{index}'
+                pid = int(marker.read_text())
+                if pid <= 1 or not Path(f'/proc/{pid}/cwd').resolve().is_relative_to(stand):
+                    raise RuntimeError('Committee PID does not belong to this stand')
+                os.kill(pid, signal.SIGSTOP)
+                paused.append(pid)
+            wait_for(lambda: all(Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0] == 'T'
+                                 for pid in paused), 5, 'committee pause')
+            client_parent = work / 'old-client'
+            client_parent.mkdir(exist_ok=False)
+            client_home = client_parent / 'data'
+            client = start([str(old_binary), 'join', 'data', '127.0.0.8', '9223372036854775807',
+                            str(args.port + 28), str(args.port + 27), owner, 'combined-network.bin', str(size)],
+                           work / 'old-client.log', cwd=client_parent,
+                           env=dict(join_env, EXC_BIND_IP='127.0.0.9'))
+            wait_for(lambda: transferred(client_home), 90, 'old client file delivery through old node', client)
+            event('old-client-read', file_bytes=size, current_nodes_paused=len(paused))
+        finally:
+            if client is not None and client.poll() is None:
+                client.terminate()
+                try:
+                    client.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    client.kill()
+                    client.wait(timeout=10)
+            for pid in paused:
+                try:
+                    os.kill(pid, signal.SIGCONT)
+                except ProcessLookupError:
+                    pass
         if old.poll() is None:
             old.terminate()
             try:
