@@ -32,7 +32,13 @@
 
 namespace {
     constexpr std::size_t MAX_LEGACY_DATABASE_BYTES = 512U * 1024U * 1024U;
-}
+    constexpr std::size_t CONNECTION_LIFECYCLE_STRIPES = 256;
+
+    std::mutex &connection_lifecycle_mutex(std::size_t stripe) {
+        static std::array<std::mutex, CONNECTION_LIFECYCLE_STRIPES> locks;
+        return locks[stripe];
+    }
+} // namespace
 
 DbConnector::DbConnector(const std::string &filePath, DbConnectorType type) {
     if (filePath.empty()) {
@@ -76,12 +82,13 @@ DbConnector::DbConnector(DbConnector &&rhs) {
         return;
 
     const std::scoped_lock lock(rhs.m_database_mutex);
-    this->m_file = std::move(rhs.m_file);
-    this->m_open = rhs.m_open;
-    this->db     = rhs.db;
-    this->m_type = rhs.m_type;
-    rhs.m_open   = false;
-    rhs.db       = nullptr;
+    this->m_file             = std::move(rhs.m_file);
+    this->m_open             = rhs.m_open;
+    this->db                 = rhs.db;
+    this->m_type             = rhs.m_type;
+    this->m_lifecycle_stripe = rhs.m_lifecycle_stripe;
+    rhs.m_open               = false;
+    rhs.db                   = nullptr;
 }
 
 DbConnector::~DbConnector() {
@@ -112,6 +119,17 @@ bool DbConnector::open(bool create_if_missing) {
         return false;
     }
 
+    if (m_file == ":memory:") {
+        m_lifecycle_stripe = 0;
+    } else {
+        std::error_code error;
+        const auto      path = std::filesystem::weakly_canonical(m_file, error);
+        if (error)
+            return false;
+        m_lifecycle_stripe = 1 + std::filesystem::hash_value(path) % (CONNECTION_LIFECYCLE_STRIPES - 1);
+    }
+    const std::lock_guard lifecycle_lock(connection_lifecycle_mutex(m_lifecycle_stripe));
+
     int flags = SQLITE_OPEN_READWRITE | (create_if_missing ? SQLITE_OPEN_CREATE : 0);
     int rc    = sqlite3_open_v2(m_file.c_str(), &db, flags, nullptr);
     if (rc) {
@@ -137,6 +155,14 @@ bool DbConnector::open(bool create_if_missing) {
         // compared with losing data; contention here is short-lived by nature.
         sqlite3_busy_timeout(db, 5000);
 
+        // Register this connection before a last-close WAL checkpoint can start.
+        if (sqlite3_exec(db, "PRAGMA schema_version", nullptr, nullptr, nullptr) != SQLITE_OK) {
+            eWarning("[DbConnector] {}, cannot read database schema: {}", m_file, sqlite3_errmsg(db));
+            sqlite3_close_v2(db);
+            db = nullptr;
+            return false;
+        }
+
         m_open = true;
         return true;
     }
@@ -146,6 +172,8 @@ bool DbConnector::close() {
     const std::unique_lock lock(m_database_mutex);
     if (!m_open)
         return true;
+
+    const std::lock_guard lifecycle_lock(connection_lifecycle_mutex(m_lifecycle_stripe));
 
     int rc = sqlite3_close_v2(db);
     if (rc) {

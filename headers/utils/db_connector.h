@@ -152,9 +152,10 @@ enum class DbConnectorType {
 class EXTRACHAIN_EXPORT DbConnector {
 protected:
     std::string                  m_file;
-    bool                         m_open = false;
-    sqlite3                     *db     = nullptr;
-    DbConnectorType              m_type = DbConnectorType::Regular;
+    bool                         m_open             = false;
+    sqlite3                     *db                 = nullptr;
+    DbConnectorType              m_type             = DbConnectorType::Regular;
+    std::size_t                  m_lifecycle_stripe = 0;
     mutable std::recursive_mutex m_database_mutex;
 
 public:
