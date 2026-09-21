@@ -16,6 +16,7 @@ namespace ExtraChain::Consensus {
             if (epoch.network.is_zero() || epoch.datasets.size() > MaximumMiningDatasets
                 || epoch.budget_units > MaximumMiningEmissionUnits
                 || epoch.rewards.size() > MaximumMiningRegistrations
+                || epoch.claimed.size() > MaximumMiningRegistrations
                 || (epoch.challenge.has_value() && epoch.challenge.value().checkpoint.size() != 64))
                 return false;
             std::size_t providers  = 0;
@@ -31,9 +32,11 @@ namespace ExtraChain::Consensus {
                     return false;
                 providers += dataset.providers.size();
             }
-            return std::ranges::all_of(epoch.rewards, [&](const auto& item) {
-                return actor_name(item.first);
-            });
+            return std::ranges::all_of(epoch.rewards,
+                                       [&](const auto& item) {
+                                           return actor_name(item.first);
+                                       })
+                   && std::ranges::all_of(epoch.claimed, actor_name);
         }
 
         std::expected<std::map<std::string, std::string>, ConsensusError> state_entries(const MiningState& state) {

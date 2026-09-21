@@ -669,6 +669,22 @@ int main() {
                 engine->finality_proof_for_section((height - 2) * ShadowSectionInterval).value().value();
             TEST_REQUIRE(ConsensusStateTestFixture::persist(service, proof, batches.at(height - 2)).has_value());
             TEST_REQUIRE(ConsensusStateTestFixture::persist(service, proof, batches.at(height - 2)).has_value());
+            if (height == 5) {
+                const auto saved = FileIo::read_all("consensus/mining-state.msgpack").value();
+                auto decoded = msgpack::unpack(saved.data(), saved.size());
+                auto& epochs = decoded.get().via.array.ptr[1].via.array.ptr[6];
+                TEST_REQUIRE(epochs.type == msgpack::type::MAP && epochs.via.map.size > 0);
+                auto& epoch = epochs.via.map.ptr[0].val;
+                TEST_REQUIRE(epoch.type == msgpack::type::ARRAY && epoch.via.array.size == 10);
+                epoch.via.array.size = 9;
+                const auto incompatible = MessagePack::serialize(decoded.get());
+                TEST_REQUIRE(FileIo::write_atomic("consensus/mining-state.msgpack", incompatible).has_value());
+                ConsensusStateTestFixture::forget(service);
+                const auto rejected = ConsensusStateTestFixture::persist(service, proof, batches.at(height - 2));
+                TEST_REQUIRE(!rejected.has_value() && rejected.error() == ConsensusError::StorageFailure);
+                TEST_REQUIRE_EQ(FileIo::read_all("consensus/mining-state.msgpack").value(), incompatible);
+                TEST_REQUIRE(FileIo::write_atomic("consensus/mining-state.msgpack", saved).has_value());
+            }
             // Restore the snapshot before the applied marker advances: interrupted commit is idempotent.
             ConsensusStateTestFixture::forget(service);
             TEST_REQUIRE(ConsensusStateTestFixture::persist(service, proof, batches.at(height - 2)).has_value());

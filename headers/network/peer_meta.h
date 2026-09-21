@@ -28,7 +28,8 @@ inline constexpr std::string_view DAG_TX_BATCH_CAPABILITY     = "dag_tx_batch_v1
 inline constexpr std::string_view TOKEN_MIGRATION_CAPABILITY  = "contract_token_migration_v1";
 inline constexpr std::string_view DAG_REPAIR_CAPABILITY       = "dag_repair_v1";
 inline constexpr std::string_view SHADOW_RELAY_CAPABILITY     = "shadow_relay_v1";
-inline constexpr std::string_view SHADOW_CONSENSUS_CAPABILITY = "shadow_consensus_v5";
+// v5 also shipped a nine-field mining epoch. v6 requires the historical ten-field encoding.
+inline constexpr std::string_view SHADOW_CONSENSUS_CAPABILITY = "shadow_consensus_v6";
 
 #include "core/types.h"
 

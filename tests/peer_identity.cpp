@@ -261,16 +261,23 @@ int main() {
         TEST_REQUIRE(updated->peer_meta().supports_shadow_consensus());
         TEST_REQUIRE(updated->identifier() == old.local_node_identifier());
         // Signed old protocol versions get the same restricted data access.
-        auto signed_old         = full;
-        signed_old.capabilities = std::set<std::string> { "shadow_consensus_v4", "shadow_relay_v1" };
-        signed_old.signature    = { };
-        signed_old.signature =
-            old.actor.key()
-                .sign(ByteArray("extrachain-peer-handshake-v1:" + Json::serialize(signed_old)).toBytes())
-                .value();
-        TEST_REQUIRE(updated->check_first_message(signed_old));
-        TEST_REQUIRE(updated->peer_meta().update_required && updated->peer_meta().authenticated);
-        TEST_REQUIRE(!updated->peer_meta().supports_shadow_consensus());
+        for (const auto version : { "shadow_consensus_v4", "shadow_consensus_v5" }) {
+            auto signed_old = full;
+            signed_old.capabilities = std::set<std::string> { version, "shadow_relay_v1" };
+            signed_old.signature = { };
+            signed_old.signature =
+                old.actor.key()
+                    .sign(ByteArray("extrachain-peer-handshake-v1:" + Json::serialize(signed_old)).toBytes())
+                    .value();
+            TEST_REQUIRE(updated->check_first_message(signed_old));
+            TEST_REQUIRE(updated->peer_meta().update_required && updated->peer_meta().authenticated);
+            TEST_REQUIRE(!updated->peer_meta().supports_shadow_consensus());
+            TEST_REQUIRE(updated->peer_meta().capabilities.empty());
+            signed_old.capabilities = full.capabilities;
+            TEST_REQUIRE(!updated->check_first_message(signed_old));
+        }
+        TEST_REQUIRE(updated->check_first_message(full));
+        TEST_REQUIRE(updated->peer_meta().supports_shadow_consensus());
     }
     for (int type = 120; type <= 135; ++type) {
         for (const auto status : { MessageStatus::NoStatus, MessageStatus::Request, MessageStatus::Response }) {

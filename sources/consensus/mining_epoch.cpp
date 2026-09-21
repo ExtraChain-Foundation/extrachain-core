@@ -140,6 +140,8 @@ namespace ExtraChain::Consensus {
                                                             std::uint64_t     finalized_section) {
         if (state.settled)
             return std::unexpected(ConsensusError::Replay);
+        if (!state.claimed.empty() || !state.rewards.empty())
+            return std::unexpected(ConsensusError::InvalidIntent);
         if (!state.challenge.has_value() || finalized_section < state.proof_last_section)
             return std::unexpected(ConsensusError::InvalidHeight);
         std::map<std::string, std::uint64_t> rewards;

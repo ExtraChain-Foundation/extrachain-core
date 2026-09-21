@@ -6,6 +6,10 @@ classes of consensus and integrity bugs, none of which were visible by reading t
 
 Stands live in a separate worktree, never in a working repository.
 
+For mining serialization or peer-version changes, follow [MINING_FORMAT.md](MINING_FORMAT.md).
+Preserve fixed historical bytes and proofs, and use a fresh network for incompatible
+test-only formats. Never clear a production snapshot to bypass a root mismatch.
+
 Use the [autonomous validation controller](STAND.md) to run stand sequences on the
 Linux systemd host. The driver and fault-injection details below describe the checks
 inside that sequence. They do not replace the controller's process and result handling.

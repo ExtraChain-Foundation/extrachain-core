@@ -44,16 +44,40 @@ namespace ExtraChain::Consensus {
         std::uint64_t                              proof_last_section  = 0;
         bool                                       settled             = false;
         std::map<std::string, std::uint64_t>       rewards;
+        // Historical bytes and proof roots include this field. New epochs never use individual claims.
+        std::set<std::string> claimed;
 
-        MSGPACK_DEFINE(network,
-                       epoch,
-                       budget_units,
-                       datasets,
-                       challenge,
-                       proof_first_section,
-                       proof_last_section,
-                       settled,
-                       rewards)
+    private:
+        static auto fields(auto& state) {
+            return msgpack::type::make_define_array(state.network,
+                                                    state.epoch,
+                                                    state.budget_units,
+                                                    state.datasets,
+                                                    state.challenge,
+                                                    state.proof_first_section,
+                                                    state.proof_last_section,
+                                                    state.settled,
+                                                    state.rewards,
+                                                    state.claimed);
+        }
+
+    public:
+        template <typename Packer>
+        void msgpack_pack(Packer& packer) const {
+            fields(*this).msgpack_pack(packer);
+        }
+
+        void msgpack_unpack(const msgpack::object& object) {
+            // MessagePack's default adapter accepts missing or extra fields and can change a signed root.
+            if (object.type != msgpack::type::ARRAY || object.via.array.size != 10)
+                throw msgpack::type_error();
+            fields(*this).msgpack_unpack(object);
+        }
+
+        template <typename Object>
+        void msgpack_object(Object* object, msgpack::zone& zone) const {
+            fields(*this).msgpack_object(object, zone);
+        }
     };
 
     std::expected<std::uint64_t, ConsensusError>    reserve_mining_emission(std::uint64_t reserved_units,
@@ -65,21 +89,21 @@ namespace ExtraChain::Consensus {
         const std::vector<MiningRegistration>& registrations);
 
     // The consensus caller must authenticate the fixed finalized checkpoint before opening the window.
-    std::expected<void, ConsensusError>          open_mining_proof_window(MiningEpochState&       state,
-                                                                          const StorageChallenge& challenge,
-                                                                          std::uint64_t           first_section);
-    std::expected<void, ConsensusError>          accept_mining_proof(MiningEpochState&   state,
-                                                                     const ActorId&      provider,
-                                                                     const std::string&  dataset_id,
-                                                                     std::uint64_t       section,
-                                                                     const StorageProof& proof);
-    std::expected<void, ConsensusError>          settle_mining_epoch(MiningEpochState& state,
-                                                                     std::uint64_t     finalized_section);
-    std::string                                  mining_epoch_root(const MiningEpochState& state);
-    std::expected<void, ConsensusError>          open_mining_proof_window(MiningEpochState&          state,
-                                                                          const FinalityProof&       checkpoint,
-                                                                          const LightClientVerifier& verifier);
-    std::expected<void, ConsensusError>          settle_mining_epoch(MiningEpochState&          state,
-                                                                     const FinalityProof&       checkpoint,
-                                                                     const LightClientVerifier& verifier);
+    std::expected<void, ConsensusError> open_mining_proof_window(MiningEpochState&       state,
+                                                                 const StorageChallenge& challenge,
+                                                                 std::uint64_t           first_section);
+    std::expected<void, ConsensusError> accept_mining_proof(MiningEpochState&   state,
+                                                            const ActorId&      provider,
+                                                            const std::string&  dataset_id,
+                                                            std::uint64_t       section,
+                                                            const StorageProof& proof);
+    std::expected<void, ConsensusError> settle_mining_epoch(MiningEpochState& state,
+                                                            std::uint64_t     finalized_section);
+    std::string                         mining_epoch_root(const MiningEpochState& state);
+    std::expected<void, ConsensusError> open_mining_proof_window(MiningEpochState&          state,
+                                                                 const FinalityProof&       checkpoint,
+                                                                 const LightClientVerifier& verifier);
+    std::expected<void, ConsensusError> settle_mining_epoch(MiningEpochState&          state,
+                                                            const FinalityProof&       checkpoint,
+                                                            const LightClientVerifier& verifier);
 } // namespace ExtraChain::Consensus

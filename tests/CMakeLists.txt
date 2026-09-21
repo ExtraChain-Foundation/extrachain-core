@@ -382,6 +382,9 @@ add_test(NAME funded-sync COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_D
 set_tests_properties(funded-sync PROPERTIES TIMEOUT 360 RUN_SERIAL TRUE)
 
 add_core_test_executable(extrachain-mining-epoch mining_epoch.cpp)
+add_core_test_executable(extrachain-mining-format mining_format.cpp)
+add_test(NAME mining-format COMMAND extrachain-mining-format)
+set_tests_properties(mining-format PROPERTIES TIMEOUT 30)
 add_test(NAME mining-epoch COMMAND extrachain-mining-epoch)
 set_tests_properties(mining-epoch PROPERTIES TIMEOUT 30)
 
