@@ -19,9 +19,18 @@ namespace {
                        bool               claimed) {
         auto epoch = MessagePack::deserialize<MiningEpochState>(encoded_epoch);
         TEST_REQUIRE(epoch.has_value());
+        TEST_REQUIRE_EQ(epoch.value().network.to_string(), std::string(40, 'a'));
+        TEST_REQUIRE_EQ(epoch.value().epoch, std::uint64_t(0));
+        TEST_REQUIRE_EQ(epoch.value().budget_units, std::uint64_t(7));
+        TEST_REQUIRE(epoch.value().datasets.empty() && !epoch.value().challenge.has_value());
+        TEST_REQUIRE_EQ(epoch.value().proof_first_section, std::uint64_t(81));
+        TEST_REQUIRE_EQ(epoch.value().proof_last_section, std::uint64_t(120));
+        TEST_REQUIRE(epoch.value().settled);
         TEST_REQUIRE_EQ(MessagePack::serialize(epoch.value()), encoded_epoch);
         TEST_REQUIRE_EQ(mining_epoch_root(epoch.value()), epoch_root);
         TEST_REQUIRE_EQ(epoch.value().claimed.size(), std::size_t(claimed));
+        TEST_REQUIRE_EQ(epoch.value().claimed.contains(std::string(40, 'b')), claimed);
+        TEST_REQUIRE_EQ(epoch.value().rewards.size(), std::size_t(1));
         TEST_REQUIRE_EQ(epoch.value().rewards.at(std::string(40, 'b')), std::uint64_t(7));
         TEST_REQUIRE(!settle_mining_epoch(epoch.value(), 180).has_value());
         TEST_REQUIRE_EQ(MessagePack::serialize(epoch.value()), encoded_epoch);
@@ -29,6 +38,15 @@ namespace {
         using Snapshot      = std::pair<std::string, MiningState>;
         const auto snapshot = MessagePack::deserialize<Snapshot>(encoded_snapshot);
         TEST_REQUIRE(snapshot.has_value());
+        TEST_REQUIRE_EQ(snapshot.value().first, std::string(64, 'c'));
+        TEST_REQUIRE_EQ(snapshot.value().second.network.to_string(), std::string(40, 'a'));
+        TEST_REQUIRE_EQ(snapshot.value().second.section, std::uint64_t(160));
+        TEST_REQUIRE_EQ(snapshot.value().second.reserved_units, std::uint64_t(7));
+        TEST_REQUIRE_EQ(snapshot.value().second.minted_units, std::uint64_t(7));
+        TEST_REQUIRE(snapshot.value().second.emission_policy_hash.empty());
+        TEST_REQUIRE(snapshot.value().second.registrations.empty());
+        TEST_REQUIRE_EQ(snapshot.value().second.epochs.size(), std::size_t(1));
+        TEST_REQUIRE_EQ(MessagePack::serialize(snapshot.value().second.epochs.at(0)), encoded_epoch);
         TEST_REQUIRE_EQ(MessagePack::serialize(snapshot.value()), encoded_snapshot);
         TEST_REQUIRE_EQ(mining_state_root(snapshot.value().second), state_root);
         const auto witness = MessagePack::deserialize<MiningEpochWitness>(encoded_witness);
