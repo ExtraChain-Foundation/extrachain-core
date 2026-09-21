@@ -1161,60 +1161,65 @@ void Dag::request_contract_section(const SectionId &section_id) {
 
 std::optional<Section> Dag::read_section(const SectionId &section_id) const {
     try {
-        std::shared_lock<std::shared_mutex> lock(section_mutex_);
-
-        // On-disk sections are always canonical (decimal), regardless of any
-        // wire-format scope a network handler may have left active on this thread.
-        WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
-
-        // Current storage: one WAL database for the mutable tail. This avoids
-        // one filesystem create operation for every accepted transaction.
-        if (hot_section_store_) {
-            auto content = hot_section_store_->get(section_id);
-            if (content.has_value()) {
-                auto section = Json::deserialize<Section>(*content);
-                if (section.has_value()) {
-                    section->id = section_id;
-                    return section.value();
-                }
-                // Bytes that will not parse are corruption, not absence, and the
-                // callers below cannot tell the two apart: save_transaction would
-                // build a fresh section over this row and lose whatever was in it.
-                // Say so, so the audit has something to find.
-                eWarning("[Dag] Section {} is stored but does not parse ({} bytes)", section_id, content->size());
-            }
-        }
-
-        // Migration fallback: section files written by earlier storage code.
-        auto p    = this->file_path(section_id);
-        auto path = FsPath::create(p);
-        if (path.has_value()) {
-            auto content = Utils::read_file_content(path.value());
-            if (content.has_value()) {
-                auto section = Json::deserialize<Section>(content.value());
-                if (section.has_value()) {
-                    section->id = section_id;
-                    return section.value();
-                }
-            }
-        }
-
-        // Cold path: look up in packs
-        if (pack_registry_) {
-            auto packed = pack_registry_->read_section(section_id);
-            if (packed.has_value()) {
-                auto section = Json::deserialize<Section>(*packed);
-                if (section.has_value()) {
-                    section->id = section_id;
-                    return section.value();
-                }
-            }
-        }
-
-        return std::nullopt;
-    } catch (const std::system_error &e) {
+        std::shared_lock lock(section_mutex_);
+        return read_section_unlocked(section_id, true);
+    } catch (const std::system_error &) {
         return std::nullopt;
     }
+}
+
+std::optional<Section> Dag::read_section_unlocked(const SectionId &section_id, bool include_packs) const {
+    // On-disk sections are always canonical (decimal), regardless of any
+    // wire-format scope a network handler may have left active on this thread.
+    WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
+
+    // Current storage: one WAL database for the mutable tail. This avoids
+    // one filesystem create operation for every accepted transaction.
+    if (hot_section_store_) {
+        auto content = hot_section_store_->get(section_id);
+        if (content.has_value()) {
+            auto section = Json::deserialize<Section>(content.value());
+            if (section.has_value()) {
+                section.value().id = section_id;
+                return section.value();
+            }
+            // Bytes that will not parse are corruption, not absence, and the
+            // callers below cannot tell the two apart: save_transaction would
+            // build a fresh section over this row and lose whatever was in it.
+            // Say so, so the audit has something to find.
+            eWarning("[Dag] Section {} is stored but does not parse ({} bytes)",
+                     section_id,
+                     content.value().size());
+        }
+    }
+
+    // Migration fallback: section files written by earlier storage code.
+    auto p    = this->file_path(section_id);
+    auto path = FsPath::create(p);
+    if (path.has_value()) {
+        auto content = Utils::read_file_content(path.value());
+        if (content.has_value()) {
+            auto section = Json::deserialize<Section>(content.value());
+            if (section.has_value()) {
+                section.value().id = section_id;
+                return section.value();
+            }
+        }
+    }
+
+    // Cold path: look up in packs
+    if (include_packs && pack_registry_) {
+        auto packed = pack_registry_->read_section(section_id);
+        if (packed.has_value()) {
+            auto section = Json::deserialize<Section>(packed.value());
+            if (section.has_value()) {
+                section.value().id = section_id;
+                return section.value();
+            }
+        }
+    }
+
+    return std::nullopt;
 }
 
 std::expected<SectionId, ExtraChain::Consensus::ConsensusError> Dag::prepare_shadow_activation(
@@ -1281,20 +1286,40 @@ std::expected<SectionId, ExtraChain::Consensus::ConsensusError> Dag::prepare_sha
     return boundary;
 }
 
-std::map<SectionId, Section> Dag::read_hot_sections(const SectionId &from, const SectionId &to) const {
+std::map<SectionId, Section> Dag::read_section_batch(const SectionId &from, const SectionId &to) const {
     std::map<SectionId, Section> result;
-    if (!hot_section_store_ || from > to)
+    if (from < SectionId(0) || from > to || to - from >= SectionId(Pack::SECTIONS_PER_FRAME))
         return result;
 
     try {
-        std::shared_lock<std::shared_mutex> lock(section_mutex_);
-        WireFormat::Scope                   disk_scope(WireFormat::Mode::Canonical);
-        for (auto &[section_id, payload] : hot_section_store_->read_range(from, to)) {
-            auto section = Json::deserialize<Section>(payload);
-            if (!section.has_value())
+        std::shared_lock  lock(section_mutex_);
+        WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
+        if (hot_section_store_) {
+            for (auto &[section_id, payload] : hot_section_store_->read_range(from, to)) {
+                auto section = Json::deserialize<Section>(payload);
+                if (!section.has_value())
+                    continue;
+                section.value().id = section_id;
+                result.emplace(section_id, std::move(section.value()));
+            }
+        }
+        for (auto section_id = from; section_id <= to; ++section_id) {
+            if (result.contains(section_id))
                 continue;
-            section.value().id = section_id;
-            result.emplace(section_id, std::move(section.value()));
+            auto section = read_section_unlocked(section_id, false);
+            if (section.has_value())
+                result.emplace(section_id, std::move(section.value()));
+        }
+        if (pack_registry_ && SectionId(result.size()) != to - from + 1) {
+            for (auto &[section_id, payload] : pack_registry_->read_sections(from, to)) {
+                if (result.contains(section_id))
+                    continue;
+                auto section = Json::deserialize<Section>(payload);
+                if (!section.has_value())
+                    continue;
+                section.value().id = section_id;
+                result.emplace(section_id, std::move(section.value()));
+            }
         }
     } catch (const std::system_error &) {
         return {};
@@ -1362,8 +1387,12 @@ std::optional<bool> Dag::write_section(const Section &section) {
         update_range();
         // Full nodes rebuild the complete index after sync. Light nodes index
         // their small local subset here and avoid a full DAG scan on a phone.
-        if ((status_ != DagStatus::Sync || mode_ == DagMode::Light) && chain_index_enabled_ && chain_index_) {
-            chain_index_->on_section_written(section);
+        if (chain_index_enabled_ && chain_index_) {
+            if (status_ != DagStatus::Sync || mode_ == DagMode::Light) {
+                chain_index_->on_section_written(section);
+            } else if (chain_index_->derived_index_ready()) {
+                static_cast<void>(chain_index_->invalidate_derived_index());
+            }
         }
         // Keep the control index in step with the section's control field. Only
         // control-bearing sections touch it, so this is cheap even during sync,
@@ -3977,6 +4006,10 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                                                                         ? received_first
                                                                         : std::min(first_saved_section_, received_first);
             const auto                            committed_last  = std::max(current_section_, received_last);
+            if (chain_index_enabled_ && chain_index_ && !chain_index_->invalidate_derived_index()) {
+                eWarning("[Dag] Cannot retain pending index reconstruction before section sync");
+                return;
+            }
             if (!hot_section_store_->commit_batch(sections_to_store,
                                                   std::pair { committed_first, committed_last })) {
                 eWarning("[Dag] Failed to store a section sync batch");
@@ -4220,26 +4253,33 @@ void Dag::network_response_light(const std::string &serialized, const Responder 
     if (!reservation) {
         return;
     }
-    node->post_storage([this, serialized, responder, reservation = std::move(reservation)] {
+    node->post_storage([this, payload = serialized, responder, reservation = std::move(reservation)]() mutable {
         if (reservation->stopped()) {
             return;
         }
         std::unique_lock lock(light_response_mutex_);
         if (mode_ != DagMode::Light || !matches_light_response(responder)
-            || !MessagePack::has_bounded_structure(serialized, 1'000'000, MaximumSnapshotBalances, 16)) {
+            || !MessagePack::has_bounded_structure(payload, 1'000'000, MaximumSnapshotBalances, 16)) {
             return;
         }
         WireFormat::Scope canonical(WireFormat::Mode::Canonical);
-        const auto        snapshot = MessagePack::deserialize<BalanceSnapshotV1>(serialized);
-        if (!snapshot.has_value()) {
-            return;
+        SectionId         section;
+        {
+            const auto snapshot = MessagePack::deserialize<BalanceSnapshotV1>(payload);
+            if (!snapshot.has_value()) {
+                return;
+            }
+            section = SectionId(snapshot.value().proof.finalized_proposal.header.dag_section);
+            if (section < cache_.section() || node->consensus() == nullptr
+                || !node->consensus()->accept_balance_snapshot(snapshot.value())
+                || !cache_.write_cached_balances(snapshot.value().balances, section)) {
+                return;
+            }
         }
-        const auto section = SectionId(snapshot.value().proof.finalized_proposal.header.dag_section);
-        if (section < cache_.section() || node->consensus() == nullptr
-            || !node->consensus()->accept_balance_snapshot(snapshot.value())
-            || !cache_.write_cached_balances(snapshot.value().balances, section)) {
-            return;
-        }
+        // Completion callbacks can request the next snapshot immediately.
+        // Release both decoded data and its budget before publishing readiness.
+        std::string().swap(payload);
+        reservation.reset();
         current_section_ = section;
         set_state_projection(StateProjectionStatus::Ready, section);
         pending_light_response_.reset();

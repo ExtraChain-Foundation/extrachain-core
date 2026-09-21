@@ -585,6 +585,8 @@ public:
      * @return std::optional<Section> The section if found, or nullopt
      */
     std::optional<Section> read_section(const SectionId &section_id) const;
+    // Read at most one frame of history; preserve hot, legacy, then pack precedence.
+    std::map<SectionId, Section> read_section_batch(const SectionId &from, const SectionId &to) const;
     // Changes when stored history changes, including repair and backfill.
     [[nodiscard]] std::uint64_t history_revision() const noexcept {
         return history_revision_.load(std::memory_order_acquire);
@@ -1046,7 +1048,7 @@ private:
                                      const Balances              *balances_before = nullptr,
                                      bool                         historical      = false);
 
-    std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
+    std::optional<Section> read_section_unlocked(const SectionId &section_id, bool include_packs) const;
 
     // Pack hot sections into an immutable pack when enough have accumulated.
     // Called from write_section when the hot range crosses a pack boundary.

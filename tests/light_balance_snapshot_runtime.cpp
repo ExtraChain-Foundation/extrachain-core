@@ -7,6 +7,8 @@
 #include "consensus/balance_snapshot.h"
 #include "consensus/consensus_service.h"
 #include "utils/file_io.h"
+#include <atomic>
+#include <future>
 #include <chrono>
 #include <thread>
 
@@ -128,6 +130,13 @@ bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV
         dag.network_response_light(MessagePack::serialize(forged), response);
         std::this_thread::sleep_for(std::chrono::milliseconds(150));
         TEST_REQUIRE(unchanged() && !dag.state_projection_ready());
+        std::promise<void> release_finished;
+        const auto         released            = release_finished.get_future().share();
+        auto               finished_entered    = std::make_shared<std::atomic_bool>(false);
+        auto               finished_connection = dag.sync_finish_event().subscribe([finished_entered, released] {
+            if (!finished_entered->exchange(true))
+                released.wait_for(std::chrono::seconds(5));
+        });
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         while (!dag.state_projection_ready() && std::chrono::steady_clock::now() < deadline) {
             dag.network_response_light(payload, response);
@@ -151,8 +160,13 @@ bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV
             response.set_message_id(peer->last_request());
             return true;
         };
+        const auto finished_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!finished_entered->load() && std::chrono::steady_clock::now() < finished_deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        TEST_REQUIRE(finished_entered->load());
         TEST_REQUIRE(request_again());
         dag.network_response_light(MessagePack::serialize(newer), response);
+        release_finished.set_value();
         const auto newer_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         const auto newer_section  = SectionId(newer.proof.finalized_proposal.header.dag_section);
         while (dag.cache().section() != newer_section && std::chrono::steady_clock::now() < newer_deadline) {

@@ -845,12 +845,19 @@ std::vector<TokenManager::MigrationPlanRecord> TokenManager::migration_plans() c
         }
     }
 
+    std::map<SectionId, Section> sections;
+    SectionId                    read_through = first - 1;
     for (SectionId section_id = first; section_id <= current; section_id += SectionId(1)) {
-        const auto section = node->dag()->read_section(section_id);
-        if (!section.has_value()) {
+        if (section_id > read_through) {
+            sections.clear();
+            read_through = std::min(current, section_id + Pack::SECTIONS_PER_FRAME - 1);
+            sections     = node->dag()->read_section_batch(section_id, read_through);
+        }
+        const auto section = sections.find(section_id);
+        if (section == sections.end()) {
             continue;
         }
-        for (const auto &transaction : section->transactions) {
+        for (const auto &transaction : section->second.transactions) {
             if (transaction.type() != TransactionType::TokenMigration || !transaction.meta().has_value()) {
                 continue;
             }

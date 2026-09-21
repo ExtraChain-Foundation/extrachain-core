@@ -4,6 +4,10 @@
 
 class DagAdmissionTestFixture {
 public:
+    static void refresh_packs(Dag& dag) {
+        dag.pack_registry_->rescan();
+    }
+
     static bool history(Dag& dag, const Transaction& transaction, bool repair) {
         const Section section { .id = transaction.section(), .transactions = { transaction } };
         const std::map<SectionId, std::string> sections { { section.id, Json::serialize(section) } };
