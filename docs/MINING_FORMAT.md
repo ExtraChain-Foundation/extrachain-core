@@ -42,6 +42,11 @@ builds advertised `shadow_consensus_v5` with two different mining layouts. They 
 update before participating. This capability revision does not change the existing
 consensus document protocol version or rewrite signed historical documents.
 
+Current nodes also advertise `shadow_consensus_v5` so an old v5 node does not block
+its own outgoing file requests to them. This advertisement permits the old data path;
+only v6 grants Shadow access at the current node. Do not use v5 for current peer
+selection or admission. Test both directions with an actual v5 executable.
+
 Old peers retain the existing restricted data and update paths. They cannot submit
 mining work, earn new rewards, or participate in Shadow. Their handshake capabilities
 are cleared in restricted mode. A new authenticated session after update can regain

@@ -260,6 +260,9 @@ int main() {
         TEST_REQUIRE(!updated->peer_meta().update_required && updated->peer_meta().authenticated);
         TEST_REQUIRE(updated->peer_meta().supports_shadow_consensus());
         TEST_REQUIRE(updated->identifier() == old.local_node_identifier());
+        // The old v5 gate must permit its own outgoing file requests to an updated peer.
+        TEST_REQUIRE(full.capabilities.value().contains("shadow_consensus_v5"));
+        TEST_REQUIRE(full.capabilities.value().contains("shadow_consensus_v6"));
         // Signed old protocol versions get the same restricted data access.
         for (const auto version : { "shadow_consensus_v4", "shadow_consensus_v5" }) {
             auto signed_old = full;
