@@ -1138,18 +1138,26 @@ void ExtraChainNode::timer_reward_request() {
 
 void ExtraChainNode::start_mining() {
     dag_->force_full_mode();
-    if (timer_reward_ && !timer_reward_->isActive()) {
-        timer_reward_->start(MINING_TIMER_TICK);
-    }
+    set_reward_timer_active(true);
     eLog("[Mining] Started");
 }
 
 void ExtraChainNode::stop_mining() {
-    if (timer_reward_ && timer_reward_->isActive()) {
-        timer_reward_->stop();
-    }
+    set_reward_timer_active(false);
     dag_->force_light_mode();
     eLog("[Mining] Stopped");
+}
+
+void ExtraChainNode::set_reward_timer_active(bool active) {
+    if (!timer_reward_) {
+        return;
+    }
+
+    if (active && !timer_reward_->isActive()) {
+        timer_reward_->start(MINING_TIMER_TICK);
+    } else if (!active && timer_reward_->isActive()) {
+        timer_reward_->stop();
+    }
 }
 
 void ExtraChainNode::timer_luminance_autoremove() {

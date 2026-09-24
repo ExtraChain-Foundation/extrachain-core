@@ -2183,6 +2183,22 @@ void Dag::clear_dag_folder() {
         }).detach();
     }
 
+    #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    // Sections clear_dag() renamed for deletion but the app was killed before they were gone
+    QDir        dag_dir(dag_path);
+    QStringList leftovers;
+    for (const QString &name : dag_dir.entryList({ "*_del_*" }, QDir::Dirs | QDir::NoDotAndDotDot)) {
+        leftovers << dag_dir.filePath(name);
+    }
+    if (!leftovers.isEmpty()) {
+        std::thread([leftovers]() {
+            for (const QString &path : leftovers) {
+                QDir(path).removeRecursively();
+            }
+        }).detach();
+    }
+    #endif
+
     // One-time migration: if dag exists and not yet migrated
     if (QDir(dag_path).exists() && !QFile::exists(migrated_path)) {
         (void)QFile(migrated_path).open(QFile::WriteOnly);
@@ -2209,12 +2225,30 @@ void Dag::clear_dag() {
     QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
 
     #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    // No QProcess here, and deleting a full chain inline holds the node thread for minutes
+    QStringList to_delete;
+    QDir        parent_dir(QString::fromStdString(ChainConst::DAG_FOLDER));
+    auto        suffix = QString::fromStdString(Utils::generate_random_hex(4));
+
     for (SectionId i = SectionId(0); i <= max_section; ++i) {
-        QString path = QString::fromStdString(ChainConst::DAG_FOLDER + "/" + i.to_string());
-        QDir    dir(path);
-        if (dir.exists()) {
-            dir.removeRecursively();
+        QString old_name = QString::fromStdString(i.to_string());
+        if (!parent_dir.exists(old_name)) {
+            continue;
         }
+        QString new_name = old_name + "_del_" + suffix;
+        if (parent_dir.rename(old_name, new_name)) {
+            to_delete << parent_dir.filePath(new_name);
+        } else {
+            QDir(parent_dir.filePath(old_name)).removeRecursively();
+        }
+    }
+
+    if (!to_delete.isEmpty()) {
+        std::thread([to_delete]() {
+            for (const QString &path : to_delete) {
+                QDir(path).removeRecursively();
+            }
+        }).detach();
     }
     #else
     QStringList to_delete;
