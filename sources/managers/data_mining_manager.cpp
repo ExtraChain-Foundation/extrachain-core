@@ -37,6 +37,7 @@ namespace {
     constexpr std::size_t       MaximumLocalJobs              = MaximumMiningDatasets;
     constexpr std::size_t       MaximumLocalJobBytes          = 4 * 1024 * 1024;
     constexpr std::size_t       MaximumSubmissionsPerProgress = 8;
+    constexpr auto              ProgressRetryInterval         = std::chrono::milliseconds(250);
     const std::filesystem::path LocalJobPath                  = "consensus/mining-local.msgpack";
 
     struct LocalJob {
@@ -96,6 +97,13 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
     ExtraChain::Core::ExtraChainNode*                            node;
     std::mutex                                                   mutex;
     std::mutex                                                   progress_mutex;
+    // Consensus progress arrives with every consensus message, relayed duplicates and
+    // timeout certificates included. The mining work state changes only with a new
+    // certificate or finalized checkpoint, while every pass copies the whole
+    // MiningState once and again for each submission. Guarded by progress_mutex.
+    std::uint64_t                                                progress_certificates = UINT64_MAX;
+    std::uint64_t                                                progress_finalized    = UINT64_MAX;
+    std::chrono::steady_clock::time_point                        progress_attempt { };
     std::map<std::string, LocalJob>                              jobs;
     std::string                                                  last_submitted_job;
     std::map<std::string, std::chrono::steady_clock::time_point> retry_after;
@@ -314,10 +322,24 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
         prepare_next();
     }
 
-    void advance() {
+    // Job changes and explicit requests always run a pass. Consensus progress runs one
+    // at once after a new certificate or finalized checkpoint; otherwise at most once
+    // per ProgressRetryInterval, which still lets queued submissions follow admission
+    // that expiry frees without a certificate.
+    void advance(bool consensus_progress = false) {
         std::unique_lock progress_lock(progress_mutex, std::try_to_lock);
         if (!progress_lock.owns_lock())
             return;
+        if (!node->account_controller()->has_current_profile() || node->consensus() == nullptr)
+            return;
+        const auto metrics = node->consensus()->metrics();
+        const auto now     = std::chrono::steady_clock::now();
+        if (consensus_progress && metrics.certificates == progress_certificates
+            && metrics.finalized == progress_finalized && now - progress_attempt < ProgressRetryInterval)
+            return;
+        progress_certificates = metrics.certificates;
+        progress_finalized    = metrics.finalized;
+        progress_attempt      = now;
         std::map<std::string, LocalJob> local;
         {
             std::lock_guard lock(mutex);
@@ -325,8 +347,6 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
                 return;
             local = jobs;
         }
-        if (!node->account_controller()->has_current_profile() || node->consensus() == nullptr)
-            return;
         const auto provider = node->account_controller()->system_actor();
         for (std::size_t attempt = 0; attempt < 8; ++attempt) {
             const auto repaired = node->consensus()->repair_local_nonce_gap(provider);
@@ -409,7 +429,8 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
             const auto accepted =
                 node->consensus()->submit_mining_request(operation,
                                                          Utils::to_base64(MessagePack::serialize(value)),
-                                                         provider);
+                                                         provider,
+                                                         work.value());
             if (!accepted.has_value()) {
                 admission_blocked = accepted.error() == ConsensusError::PoolFull
                                     || accepted.error() == ConsensusError::DataUnavailable
@@ -561,7 +582,7 @@ void DataMiningManager::request_reward() {
 void DataMiningManager::consensus_progress() {
     work_->discover();
     work_->prepare_next();
-    work_->advance();
+    work_->advance(true);
 }
 void DataMiningManager::set_enabled(bool enabled) {
     {

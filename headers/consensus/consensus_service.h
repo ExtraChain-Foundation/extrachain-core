@@ -111,6 +111,12 @@ namespace ExtraChain::Consensus {
         std::expected<std::string, ConsensusError> submit_mining_request(IntentOperation          operation,
                                                                          std::string              metadata,
                                                                          const Actor<KeyPrivate>& provider);
+        // Same, validated against a work state the caller already built under this
+        // consensus progress. Building one per request replays the parent batch again.
+        std::expected<std::string, ConsensusError> submit_mining_request(IntentOperation          operation,
+                                                                         std::string              metadata,
+                                                                         const Actor<KeyPrivate>& provider,
+                                                                         const MiningState&       work);
         // Fill an unused local nonce before already signed pending requests. No asset effect.
         std::expected<bool, ConsensusError> repair_local_nonce_gap(const Actor<KeyPrivate>& sender);
         [[nodiscard]] bool verify_mining_transaction(const Transaction& transaction) const;
@@ -238,8 +244,9 @@ namespace ExtraChain::Consensus {
                                                                                    std::size_t              depth = 0) const;
         std::expected<MiningState, ConsensusError> project_mining_state(const SectionBatchData&  batch,
                                                                         const QuorumCertificate& parent) const;
-        std::expected<void, ConsensusError>        persist_mining_state(const FinalityProof&    proof,
-                                                                        const SectionBatchData& batch);
+        // Stores the state already projected for this proof and checked against its
+        // signed mining_state_root; projecting it a second time replays the batch again.
+        std::expected<void, ConsensusError> persist_mining_state(const FinalityProof& proof, MiningState state);
         std::expected<std::optional<Transaction>, ConsensusError> next_mining_settlement(
             const MiningState& parent,
             std::uint64_t      first_section) const;

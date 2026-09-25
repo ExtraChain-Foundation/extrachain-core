@@ -1419,8 +1419,13 @@ namespace ExtraChain::Consensus {
         const auto initialized_mining = initialize_mining_state();
         if (!initialized_mining.has_value())
             return std::unexpected(initialized_mining.error());
-        const auto mining = finalized_mining_.value().header_hash == checkpoint.header_hash
+        // The certified proposal's state is usually staged already: the node projected
+        // it when that certificate became its highest. The signed root is checked below.
+        const auto staged = staged_mining_.find(checkpoint.header_hash);
+        auto       mining = finalized_mining_.value().header_hash == checkpoint.header_hash
                                 ? std::expected<MiningState, ConsensusError> { finalized_mining_.value().state }
+                            : staged != staged_mining_.end()
+                                ? std::expected<MiningState, ConsensusError> { staged->second }
                                 : project_mining_state(batch.value(), proposal.parent_certificate);
         if (!mining.has_value() || mining_state_root(mining.value()) != proposal.state.mining_state_root)
             return std::unexpected(mining.has_value() ? ConsensusError::InvalidRoot : mining.error());
@@ -1439,7 +1444,7 @@ namespace ExtraChain::Consensus {
         if (!epoch_changes.has_value()) {
             return std::unexpected(epoch_changes.error());
         }
-        const auto mining_committed = persist_mining_state(proof, batch.value());
+        const auto mining_committed = persist_mining_state(proof, std::move(mining.value()));
         if (!mining_committed.has_value())
             return std::unexpected(mining_committed.error());
         const auto intents_committed = finalize_intents(finalized.value(), checkpoint);

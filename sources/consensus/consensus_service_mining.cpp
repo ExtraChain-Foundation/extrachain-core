@@ -121,10 +121,19 @@ namespace ExtraChain::Consensus {
         std::string              metadata,
         const Actor<KeyPrivate>& provider) {
         std::lock_guard lock(mutex_);
-        auto            work = mining_work_state();
+        const auto      work = mining_work_state();
         if (!work.has_value())
             return std::unexpected(work.error());
-        const auto nonce = next_local_nonce(provider.id());
+        return submit_mining_request(operation, std::move(metadata), provider, work.value());
+    }
+
+    std::expected<std::string, ConsensusError> ConsensusService::submit_mining_request(
+        IntentOperation          operation,
+        std::string              metadata,
+        const Actor<KeyPrivate>& provider,
+        const MiningState&       work) {
+        std::lock_guard lock(mutex_);
+        const auto      nonce = next_local_nonce(provider.id());
         if (!nonce.has_value())
             return std::unexpected(nonce.error());
         const auto committed       = committed_nonces_.find(provider.id());
@@ -136,9 +145,9 @@ namespace ExtraChain::Consensus {
         const auto duration = operation == IntentOperation::StorageProof ? 1ULL : 64ULL;
         if (height > UINT64_MAX - duration)
             return std::unexpected(ConsensusError::InvalidHeight);
-        IntentEnvelope envelope { .intent   = TransactionIntentV2 { .network_id           = work.value().network,
+        IntentEnvelope envelope { .intent   = TransactionIntentV2 { .network_id           = work.network,
                                                                     .sender               = provider.id(),
-                                                                    .receiver             = work.value().network,
+                                                                    .receiver             = work.network,
                                                                     .amount               = "0",
                                                                     .operation            = operation,
                                                                     .account_nonce        = nonce.value(),
@@ -151,13 +160,13 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(request.error());
             const auto& proof    = std::get<MiningProofSubmission>(request.value());
             const auto  schedule = mining_epoch_schedule(proof.epoch);
-            if (!schedule.has_value() || work.value().section < schedule.value().proof_first_section
-                || work.value().section > schedule.value().proof_last_section)
+            if (!schedule.has_value() || work.section < schedule.value().proof_first_section
+                || work.section > schedule.value().proof_last_section)
                 return std::unexpected(ConsensusError::InvalidHeight);
             const auto before =
-                (work.value().section - schedule.value().proof_first_section) / ShadowSectionInterval;
+                (work.section - schedule.value().proof_first_section) / ShadowSectionInterval;
             const auto after =
-                (schedule.value().proof_last_section - work.value().section) / ShadowSectionInterval;
+                (schedule.value().proof_last_section - work.section) / ShadowSectionInterval;
             if (height < before || height > UINT64_MAX - after)
                 return std::unexpected(ConsensusError::InvalidHeight);
             // Use the complete proof window, including a submission in its last Shadow interval.
@@ -168,7 +177,8 @@ namespace ExtraChain::Consensus {
         if (!intent.has_value())
             return std::unexpected(intent.error());
         envelope.intent           = intent.value();
-        const auto     applicable = apply_mining_request(work.value(), envelope);
+        auto           scratch    = work;
+        const auto     applicable = apply_mining_request(scratch, envelope);
         if (!applicable.has_value())
             return std::unexpected(applicable.error());
         return accept_intent(envelope, true);
@@ -447,8 +457,8 @@ namespace ExtraChain::Consensus {
         return std::optional<Transaction> { };
     }
 
-    std::expected<void, ConsensusError> ConsensusService::persist_mining_state(const FinalityProof&    proof,
-                                                                               const SectionBatchData& batch) {
+    std::expected<void, ConsensusError> ConsensusService::persist_mining_state(const FinalityProof& proof,
+                                                                               MiningState          state) {
         const auto initialized = initialize_mining_state();
         if (!initialized.has_value())
             return std::unexpected(initialized.error());
@@ -456,18 +466,19 @@ namespace ExtraChain::Consensus {
         const auto  header   = hash_header(proposal.header);
         if (finalized_mining_.value().header_hash == header)
             return { };
-        auto state = project_mining_state(batch, proposal.parent_certificate);
-        if (!state.has_value())
-            return std::unexpected(state.error());
-        if (mining_state_root(state.value()) != proposal.state.mining_state_root)
-            return std::unexpected(ConsensusError::InvalidRoot);
-        MiningSnapshot snapshot { header, std::move(state.value()) };
+        MiningSnapshot snapshot { header, std::move(state) };
         const auto     bytes = MessagePack::serialize(snapshot);
         if (bytes.size() > MaximumMiningSnapshotBytes
             || !FileIo::write_atomic(directory_ / MiningSnapshotFile, bytes).has_value())
             return std::unexpected(ConsensusError::StorageFailure);
         finalized_mining_ = std::move(snapshot);
-        staged_mining_.clear();
+        // A staged state is keyed by a certified header and depends only on its ancestry,
+        // so projections above the finalized section stay valid. Clearing them all made
+        // the next mining_state_for() replay a batch this node had just projected.
+        const auto finalized_section = finalized_mining_.value().state.section;
+        std::erase_if(staged_mining_, [finalized_section](const auto& entry) {
+            return entry.second.section <= finalized_section;
+        });
         return { };
     }
 } // namespace ExtraChain::Consensus

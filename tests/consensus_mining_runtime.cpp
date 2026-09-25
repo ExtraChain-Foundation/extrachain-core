@@ -96,8 +96,22 @@ namespace ExtraChain::Consensus {
         static auto settlement(ConsensusService& service, const MiningState& parent, std::uint64_t section) {
             return service.next_mining_settlement(parent, section);
         }
-        static auto persist(ConsensusService& service, const FinalityProof& proof, const SectionBatchData& batch) {
-            return service.persist_mining_state(proof, batch);
+        // Mirrors apply_finalized_checkpoint: project and check the signed root, then persist.
+        static std::expected<void, ConsensusError> persist(ConsensusService&       service,
+                                                           const FinalityProof&    proof,
+                                                           const SectionBatchData& batch) {
+            const auto initialized = service.initialize_mining_state();
+            if (!initialized.has_value())
+                return std::unexpected(initialized.error());
+            const auto& proposal = proof.finalized_proposal;
+            if (service.finalized_mining_.value().header_hash == hash_header(proposal.header))
+                return service.persist_mining_state(proof, service.finalized_mining_.value().state);
+            auto state = service.project_mining_state(batch, proposal.parent_certificate);
+            if (!state.has_value())
+                return std::unexpected(state.error());
+            if (mining_state_root(state.value()) != proposal.state.mining_state_root)
+                return std::unexpected(ConsensusError::InvalidRoot);
+            return service.persist_mining_state(proof, std::move(state.value()));
         }
         static auto next_nonce(ConsensusService& service, const ActorId& sender) {
             return service.next_local_nonce(sender);
