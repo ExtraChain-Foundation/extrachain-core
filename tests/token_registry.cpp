@@ -45,6 +45,14 @@ int main() {
     TEST_REQUIRE(rows.has_value());
     TEST_REQUIRE_EQ(rows->size(), std::size_t(1));
     TEST_REQUIRE_EQ(rows->front().at("token_id"), TokenId().to_string());
+    TEST_REQUIRE(node->token_manager()->validate_registry_row(rows.value().front()));
+    auto forged        = rows.value().front();
+    forged["actor"]    = std::string(40, 'a');
+    forged["owner_id"] = forged.at("actor");
+    TEST_REQUIRE(!node->token_manager()->validate_registry_row(forged));
+    forged             = rows.value().front();
+    forged["token_id"] = std::string(40, 'a');
+    TEST_REQUIRE(!node->token_manager()->validate_registry_row(forged));
 
     const auto native_token = node->token_manager()->token(TokenId());
     TEST_REQUIRE(native_token.has_value());

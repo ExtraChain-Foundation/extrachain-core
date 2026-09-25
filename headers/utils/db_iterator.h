@@ -21,6 +21,7 @@
 #define DB_ITERATOR_H
 
 #include <string>
+#include <optional>
 #include <unordered_map>
 
 enum class DbColumnType {
@@ -39,6 +40,10 @@ public:
     ~DbIterator();
 
     bool next();
+    static std::optional<std::string> read_value(sqlite3_stmt* statement, int column);
+    bool                              failed() const {
+        return m_failed;
+    }
 
     std::string getString(int column);
     int64_t     getInt64(int column);
@@ -55,5 +60,6 @@ public:
 private:
     sqlite3_stmt* m_stmt;
     bool          m_done;
+    bool          m_failed = false;
 };
 #endif // DB_ITERATOR_H

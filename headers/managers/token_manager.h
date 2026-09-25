@@ -35,6 +35,7 @@
 
 #include "chain/actor.h"
 #include "chain/transaction.h"
+#include "utils/db_connector.h"
 #include "contracts/contract_transaction.h"
 #include "contracts/toolchain_registry.h"
 #include "runtime/event.h"
@@ -238,6 +239,7 @@ public:
             ExtraChain::Contracts::ToolchainLanguage::AssemblyScript);
 
     void final_token_creation(const Transaction &transaction);
+    bool validate_registry_row(const DbRow &row) const;
 
     static bool is_valid_token_name(const std::string &name);
     static bool id_valid_token_ticker(const std::string &ticker);
@@ -283,9 +285,13 @@ private:
     mutable std::mutex                         migration_mutex_;
     mutable std::optional<SectionId>           migration_plan_cache_section_;
     mutable std::vector<MigrationPlanRecord>   migration_plan_cache_;
-    std::map<std::string, std::map<std::string, TokenMigrationReadinessResponse>> migration_readiness_;
+    struct MigrationReadinessSlot {
+        std::string                                    message_id;
+        std::chrono::steady_clock::time_point          sent;
+        std::optional<TokenMigrationReadinessResponse> response;
+    };
+    std::map<std::pair<std::string, std::string>, MigrationReadinessSlot>         migration_readiness_;
     std::map<TokenId, LegacyTokenMigrationStatus>                                 migration_statuses_;
-    std::map<std::string, std::uint64_t>                                          readiness_requested_at_;
     ExtraChain::Core::Event<std::string>       validation_error_event_;
     ExtraChain::Core::Event<ActorId, TokenId>  added_event_;
     ExtraChain::Core::Event<const LegacyTokenMigrationStatus &>                   migration_status_event_;

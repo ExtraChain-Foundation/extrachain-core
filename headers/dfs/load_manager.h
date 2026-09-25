@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <semaphore>
+
 #include <array>
 #include <map>
 #include <queue>
@@ -29,6 +31,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <boost/signals2/connection.hpp>
+#include <boost/icl/interval_set.hpp>
 #include "dfs/dfs_utils.h"
 #include "chain/actor_id.h"
 #include "utils/safeptr.h"
@@ -49,6 +52,7 @@ enum class DownloadError {
 };
 
 struct LoadInfo {
+    using FragmentSet = boost::icl::interval_set<std::size_t>;
     struct Attempts {
         int                                   counter { 0 };
         bool                                  refused { false };
@@ -57,12 +61,12 @@ struct LoadInfo {
 
     Dfs::DirRow dir_row;
 
-    size_t                                amount_fragments;
-    std::set<size_t>                      fragments_left;
+    std::size_t                           amount_fragments = 0;
+    FragmentSet                           fragments_left;
     std::chrono::system_clock::time_point last_fragment_received {};
     std::chrono::system_clock::time_point queued {};
 
-    bool notify_neighbours;
+    bool notify_neighbours = false;
     bool forced { false };
     // Count of full source-exhaustion restarts: after 3 cycles the download goes
     // into an exponential cooldown instead of being dropped — the only reachable
@@ -99,6 +103,8 @@ public:
     ~LoadManager();
 
     void stop();
+    std::unique_lock<std::mutex> lock_file(const Dfs::FileLink& link);
+    void                         cancel_download(const Dfs::FileLink& link);
 
     bool add_node_identifier(const Dfs::FileLink& file_link, std::string identifier);
     /// A peer answered Ready for this file: ask it first, ahead of the guessed sources.
@@ -120,7 +126,9 @@ public:
     void share_stored_file(const Dfs::FileLinkFragment& file_link_fragment, const Responder& responder);
     void broadcast_file_exist(const ActorId& owner_id, const std::string& file_id);
 
-    void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier);
+    void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content,
+                                const std::string&                identifier,
+                                const std::string&                message_id);
 
     void finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row);
 
@@ -156,13 +164,19 @@ private:
 
     SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads;
     SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads_priority;
-    SafePtr<std::map<Dfs::FileLinkFragment, std::chrono::system_clock::time_point>>
-        m_amount_file_fragments_requests;
+    std::counting_semaphore<128>                         fragment_write_slots_ { 128 };
+
+    struct FragmentRequest {
+        std::chrono::steady_clock::time_point sent;
+        std::string                           peer;
+        std::string                           message_id;
+    };
+    SafePtr<std::map<Dfs::FileLinkFragment, FragmentRequest>> m_amount_file_fragments_requests;
 
     struct ReadStorage {
         // uint64_t current_size;
-        std::size_t      amount_fragments;
-        std::set<size_t> fragments_achieved;
+        std::size_t           amount_fragments = 0;
+        LoadInfo::FragmentSet fragments_achieved;
         // std::map<uint64_t, bool> offsets_read_progress;
     };
 

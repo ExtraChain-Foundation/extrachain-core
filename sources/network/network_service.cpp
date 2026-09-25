@@ -1,3 +1,4 @@
+#include "network/peer_access.h"
 /*
  * ExtraChain Core
  * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
@@ -17,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include "utils/msgpack_limits.h"
 #include "chain/actor_index.h"
 #include "chain/dag.h"
 #include "consensus/consensus_service.h"
@@ -27,6 +29,7 @@
 #include "core/extrachain_node.h"
 #include "managers/luminance_manager.h"
 #include "network/network_service.h"
+#include "dfs/vector_sync.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
 #include "utils/msgpack_limits.h"
@@ -237,6 +240,24 @@ void NetworkService::adopt_network_id(const ActorId &network_id) {
 
 std::string NetworkService::local_node_identifier() const {
     return node->node_identifier();
+}
+
+std::optional<Actor<KeyPublic>> NetworkService::local_system_actor() const {
+    if (node->account_controller()->empty()) {
+        return std::nullopt;
+    }
+    return node->account_controller()->system_actor().to_public();
+}
+
+std::string NetworkService::local_node_nonce() const {
+    return node->node_nonce();
+}
+
+std::expected<Signature, Cryptography::CryptoError> NetworkService::sign_handshake(const Bytes &transcript) const {
+    if (node->account_controller()->empty()) {
+        return std::unexpected(Cryptography::CryptoError::EmptyKey);
+    }
+    return node->account_controller()->system_actor().key().sign(transcript);
 }
 
 DfsMode NetworkService::local_dfs_mode() const {
@@ -574,7 +595,8 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
             socket_activated_event_.publish(activated->ip(), activated->identifier());
             socket_ready_event_.publish();
 
-            if (activated->mode() == SocketMode::Full && activated->direction() == SocketDirection::Outgoing) {
+            if ((activated->mode() == SocketMode::Full || activated->peer_meta().update_required)
+                && activated->direction() == SocketDirection::Outgoing) {
                 // Only a completed outbound handshake proves a listening endpoint.
                 // An accepted socket's remote port is an ephemeral client port.
                 const NetworkReconnect endpoint { activated->ip(),
@@ -598,11 +620,34 @@ void NetworkService::connectWsService(const std::shared_ptr<WebSocketService> &s
             }
         });
     };
-    service->on_message = [this](SocketService::Ptr, std::string message, std::string ip, std::string identifier) {
-        dispatch_serial(
-            [this, message = std::move(message), ip = std::move(ip), identifier = std::move(identifier)] {
+    service->on_message = [this](SocketService::Ptr              socket,
+                                 SocketService::ReceivedMessage &message,
+                                 std::string                     ip,
+                                 std::string                     identifier) {
+        if (stopping_.load(std::memory_order_acquire)) {
+            socket->close_connection();
+            return true;
+        }
+        if (!message.reservation)
+            message.reservation = incoming_budget_.reserve_waiting(identifier, message.data.size());
+        if (!message.reservation) {
+            eWarning("[Network] Inbound byte or waiting-frame budget exhausted for {}: message={} bytes",
+                     identifier,
+                     message.data.size());
+            socket->close_connection();
+            return true;
+        }
+        if (!message.reservation->try_start())
+            return false;
+        dispatch_serial([this,
+                         ticket     = std::move(message.reservation),
+                         message    = std::move(message.data),
+                         ip         = std::move(ip),
+                         identifier = std::move(identifier)] {
+            if (!ticket->stopped())
                 message_received(message, ip, identifier);
-            });
+        });
+        return true;
     };
     service->on_share_connections = [this](SocketService::Ptr,
                                            const std::set<SocketService::SocketPair> &connections) {
@@ -732,6 +777,7 @@ NetworkService::~NetworkService() {
 }
 
 void NetworkService::prepare_shutdown() {
+    incoming_budget_.stop();
     if (stopping_.exchange(true, std::memory_order_acq_rel)) {
         return;
     }
@@ -813,8 +859,29 @@ void NetworkService::start_network() {
         network_runtime_->listen(ExtraChain::Core::NetworkConfig { .bind_address = node->bind_address(),
                                                                    .port         = ws_port_ },
                                  [this](ExtraChain::Core::NetworkRuntime::Tcp::socket socket) {
-                                     if (active_connections_count() >= max_connections()) {
-                                         boost::system::error_code error;
+                                     boost::system::error_code error;
+                                     const auto                endpoint = socket.remote_endpoint(error);
+                                     if (error) {
+                                         socket.close(error);
+                                         return;
+                                     }
+                                     const auto  ip              = endpoint.address().to_string();
+                                     std::size_t pending         = 0;
+                                     std::size_t pending_from_ip = 0;
+                                     std::size_t active          = 0;
+                                     for (const auto &connection : connection_snapshot()) {
+                                         if (connection->is_closed()) {
+                                             continue;
+                                         }
+                                         if (connection->is_active()) {
+                                             ++active;
+                                         } else {
+                                             ++pending;
+                                             pending_from_ip += connection->ip() == ip ? 1 : 0;
+                                         }
+                                     }
+                                     if (active >= static_cast<std::size_t>(max_connections()) || pending >= 32
+                                         || pending_from_ip >= 4) {
                                          socket.close(error);
                                          return;
                                      }
@@ -1208,12 +1275,18 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
     SocketService::Priority priority = SocketService::Priority::Normal;
 
     if (message_type == MessageType::DfsFileExistNotification || message_type == MessageType::DfsFileFragment
-        || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows) {
+        || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows
+        || message_type == MessageType::DfsSyncDigest || message_type == MessageType::DfsSyncDigestReply
+        || message_type == MessageType::DfsVectorSyncReply
+        || (message_type == MessageType::DagLightData
+            && non_serialized_message.status == MessageStatus::Response)) {
+        // The digest reply must not overtake the rows it announces (#75): same lane.
         priority = SocketService::Priority::Low;
     }
 
     const bool high_priority_dag_sync =
-        message_type == MessageType::DagSections || message_type == MessageType::DagLightData
+        message_type == MessageType::DagSections
+        || (message_type == MessageType::DagLightData && non_serialized_message.status == MessageStatus::Request)
         || message_type == MessageType::DagFileSections || message_type == MessageType::DagPackData
         || message_type == MessageType::DagCacheSnapshotData;
     const bool high_priority_shadow =
@@ -1225,9 +1298,9 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
     const bool high_priority_shadow_control =
         message_type == MessageType::ConsensusBootstrapRequest || message_type == MessageType::ConsensusRecovery
         || (message_type == MessageType::ConsensusRelay && non_serialized_message.data.size() <= 1024 * 1024);
-    if (message_type == MessageType::Custom || message_type == MessageType::NewActor
-        || message_type == MessageType::DagTransactionResult || message_type == MessageType::DagIntervalHash
-        || message_type == MessageType::DagSyncLastInfo || message_type == MessageType::DagControlRangeRequest
+    if (message_type == MessageType::NewActor || message_type == MessageType::DagTransactionResult
+        || message_type == MessageType::DagIntervalHash || message_type == MessageType::DagSyncLastInfo
+        || message_type == MessageType::DagControlRangeRequest
         || message_type == MessageType::DagControlRangeResponse || message_type == MessageType::DagPackList
         || message_type == MessageType::DagPackRequest || message_type == MessageType::DagCacheSnapshotRequest
         || message_type == MessageType::TokenMigrationReadiness || high_priority_dag_sync || high_priority_shadow
@@ -1242,7 +1315,11 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         const int                       randoms = send_mode == SendMode::NeighboursRandom ? 3 : 1;
 
         for (const auto &service : connections) {
-            if (service->is_active()) {
+            if (service->is_active()
+                && (!service->peer_meta().update_required
+                    || Network::restricted_peer_message_allowed(message_type,
+                                                                non_serialized_message.status,
+                                                                false))) {
                 active_identifiers.push_back(service);
             }
         }
@@ -1287,6 +1364,9 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
     int sent_to          = 0;
 
     for (const auto &service : connections) {
+        if (service->peer_meta().update_required
+            && !Network::restricted_peer_message_allowed(message_type, non_serialized_message.status, false))
+            continue;
         if (!service->is_active()) {
             ++skipped_inactive;
             continue;
@@ -1728,6 +1808,7 @@ std::vector<std::string> NetworkService::active_full_peers_with_capability(std::
     identifiers.reserve(connections_snapshot.size());
     for (const auto &service : connections_snapshot) {
         if (service == nullptr || !service->is_active() || service->mode() != SocketMode::Full
+            || service->peer_meta().update_required
             || !service->peer_meta().capabilities.contains(std::string(capability))) {
             continue;
         }
@@ -1891,12 +1972,14 @@ void NetworkService::message_received(const std::string &message,
         return;
     }
 
-    if (message.size() < crypto_sign_BYTES) {
+    if (message.size() < crypto_sign_BYTES || message.size() > 72 * 1024 * 1024) {
         return;
     }
     const std::string_view msg(message.data(), message.size() - crypto_sign_BYTES);
     const std::string_view sign(message.data() + msg.size(), crypto_sign_BYTES);
 
+    if (!MessagePack::has_bounded_structure(msg, 4096, 1024, 8))
+        return;
     auto message_body_expected = MessagePack::deserialize<MessageBody>(msg);
     if (!message_body_expected.has_value()) {
         eWarning("[NetworkService] message_received: can't deserialize message body");
@@ -1904,6 +1987,40 @@ void NetworkService::message_received(const std::string &message,
     }
 
     MessageBody message_body = std::move(message_body_expected).value();
+    const auto  access       = peer_meta_for(identifier);
+    if (access.has_value() && access.value().update_required
+        && !Network::restricted_peer_message_allowed(message_body.message_type, message_body.status, true))
+        return;
+    const auto  bounded_identifier = [](const std::string &value) {
+        return value.size() <= 64;
+    };
+    if (!bounded_identifier(message_body.init_sender_identifier)
+        || !std::ranges::all_of(message_body.nodes_identifiers_to_ignore, bounded_identifier)
+        || !std::ranges::all_of(message_body.nodes_identifiers_to_ignore_later, bounded_identifier))
+        return;
+    std::size_t payload_limit = 0;
+    switch (message_body.message_type) {
+    case MessageType::Custom:
+    case MessageType::DfsVectorAdd:
+        payload_limit = 1024 * 1024;
+        break;
+    case MessageType::DfsStoreFile:
+        payload_limit = 64 * 1024;
+        break;
+    case MessageType::DfsFileRemove:
+        payload_limit = 4096;
+        break;
+    case MessageType::DfsVectorCreation:
+        payload_limit = 256 * 1024;
+        break;
+    default:
+        break;
+    }
+    if (payload_limit != 0
+        && (message_body.data.size() > payload_limit
+            || !MessagePack::has_bounded_structure(message_body.data, 8192, 2048, 16)
+            || !broadcast_budget_.accept(identifier, message.size())))
+        return;
     const auto  node_id =
         NodeId { .actor_id = message_body.init_sender_id, .node_identifier = message_body.init_sender_identifier };
 
@@ -2012,17 +2129,11 @@ void NetworkService::message_received(const std::string &message,
 
 #ifndef NDEBUG
     if (Network::networkDebug) {
-        msgpack::object_handle oh           = msgpack::unpack(serialized.data(),
-                                                    serialized.size(),
-                                                    nullptr,
-                                                    nullptr,
-                                                    MessagePack::unpack_limits(serialized.size()));
-        msgpack::object        deserialized = oh.get();
-        eLog("[Network Message] Received: type {}, status {}, id {}, body: {}",
+        eLog("[Network Message] Received: type {}, status {}, id {}, bytes {}",
              type,
              status,
              message_id,
-             (std::stringstream() << deserialized).str());
+             serialized.size());
     }
 #endif
 
@@ -2331,75 +2442,49 @@ void NetworkService::message_received(const std::string &message,
         //     break;
         // }
 
-    case MessageType::DfsSyncDirs: {
-        if (status == MessageStatus::Request) {
-            node->dfs_service()->dirs_manager().network_request_sync(responder);
-        } else if (status == MessageStatus::Response) {
-            auto last_modified_result = MessagePack::deserialize<std::uint64_t>(serialized);
-
-            if (!last_modified_result.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for last modified", type);
-                break;
-            }
-
-            node->dfs_service()->dirs_manager().network_response_sync(last_modified_result.value(), responder);
-        }
-
+    case MessageType::DfsSyncDirs:
+    case MessageType::DfsSyncDirsRows:
         break;
-    }
-
-    case MessageType::DfsSyncDirsRows: {
-        auto dirs_rows_result =
-            MessagePack::deserialize<std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>>(serialized);
-        if (!dirs_rows_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for dirs rows", type);
+    case MessageType::DfsTempSyncAll: {
+        if (!access.has_value() || !access.value().update_required || status != MessageStatus::Response
+            || serialized.size() > 256 * 1024 || !MessagePack::has_bounded_structure(serialized, 16384, 8192, 8))
+            return;
+        const auto all = MessagePack::deserialize<bool>(serialized);
+        if (all.has_value()) {
+            if (all.value())
+                node->dfs_service()->dirs_manager().network_request_legacy_files({ }, responder);
             break;
         }
-
-        node->dfs_service()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value(),
-                                                                                responder);
-
+        const auto owners = MessagePack::deserialize<std::vector<ActorId>>(serialized);
+        if (owners.has_value())
+            node->dfs_service()->dirs_manager().network_request_legacy_files(owners.value(), responder);
         break;
     }
-
     case MessageType::DfsSyncDirRows: {
         if (status == MessageStatus::Request) {
-            auto dirs_row_result = MessagePack::deserialize<Dfs::Tables::DirsFile::DirsSpace::DirsRow>(serialized);
-            if (!dirs_row_result.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for dirs row", type);
+            if (serialized.size() > 256 * 1024 || !MessagePack::has_bounded_structure(serialized, 16384, 8192, 8))
                 return;
-            }
-
-            node->dfs_service()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), responder);
+            const auto request = MessagePack::deserialize<Dfs::CatalogRowsRequest>(serialized);
+            if (request.has_value())
+                node->dfs_service()->dirs_manager().network_request_catalog_rows(request.value(), responder);
         } else if (status == MessageStatus::Response) {
-            auto dirs_row_result =
-                MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(serialized);
-            if (!dirs_row_result.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for dir rows", type);
-                return;
-            }
-
-            node->dfs_service()->dirs_manager().network_response_dir_rows(dirs_row_result.value(), responder);
+            node->dfs_service()->dirs_manager().network_response_dir_rows(serialized, responder);
         }
         break;
     }
-
-    case MessageType::DfsTempSyncAll: {
-        auto res = MessagePack::deserialize<bool>(serialized);
-        if (res.has_value()) {
-            node->dfs_service()->dirs_manager().network_request_all(responder);
-            break;
-        }
-
-        auto actors_result = MessagePack::deserialize<std::vector<ActorId>>(serialized);
-        if (!actors_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for startup DFS sync request", type);
-            break;
-        }
-
-        node->dfs_service()->dirs_manager().network_request_all(responder, actors_result.value());
+    case MessageType::DfsSyncDigest: {
+        if (status != MessageStatus::Request || serialized.size() > 1024 * 1024
+            || !MessagePack::has_bounded_structure(serialized, 65536, 8192, 8))
+            return;
+        const auto request = MessagePack::deserialize<Dfs::Packets::CatalogDigestRequest>(serialized);
+        if (request.has_value())
+            node->dfs_service()->dirs_manager().network_request_digest(request.value(), responder);
         break;
     }
+    case MessageType::DfsSyncDigestReply:
+        if (status == MessageStatus::Response)
+            node->dfs_service()->dirs_manager().network_response_digest(serialized, responder);
+        break;
 
     case MessageType::DfsStoreFile: {
         auto file_link_result = MessagePack::deserialize<Dfs::FileData>(serialized);
@@ -2408,11 +2493,13 @@ void NetworkService::message_received(const std::string &message,
             return;
         }
 
-        file_link_result->dir_row.state = Dfs::FileState::Known;
-        node->dfs_service()->network_store_file(file_link_result->owner_id,
-                                                file_link_result->dir_row,
-                                                Dfs::NetworkStoreFile::Broadcast);
-        send_broadcast_message_further(package_data);
+        node->dfs_service()->network_store_file(file_link_result.value().owner_id,
+                                                file_link_result.value().dir_row,
+                                                Dfs::NetworkStoreFile::Broadcast,
+                                                identifier,
+                                                [this, package_data] {
+                                                    send_broadcast_message_further(package_data);
+                                                });
 
         break;
     }
@@ -2428,21 +2515,16 @@ void NetworkService::message_received(const std::string &message,
         break;
     }
     case MessageType::DfsFileFragment: {
-        // Bulk payload off the dispatch thread: during a replication wave the
-        // MB-sized deserialize + disk write queued for seconds ahead of consensus
-        // messages and delayed transactions fell out of the accept window
-        // (TooSectionDiff). Per-file striped locks serialize disk writes, and
-        // SafePtr guards bookkeeping, so pool execution is safe.
-        node->post_storage([this, serialized = std::string(serialized), identifier]() {
-            auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
-            if (!fragment_data_result.has_value()) {
-                eWarning("[NetworkService] DfsFileFragment deserialization failed");
-                return;
-            }
-            node->dfs_service()->download_manager().file_fragment_achieved(fragment_data_result.value(),
-                                                                           identifier);
-        });
-
+        if (serialized.size() > Dfs::Basic::FRAGMENT_SIZE + 2048) {
+            return;
+        }
+        auto fragment = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
+        if (!fragment.has_value()) {
+            return;
+        }
+        node->dfs_service()->download_manager().file_fragment_achieved(fragment.value(),
+                                                                       identifier,
+                                                                       responder.message_id());
         break;
     }
 
@@ -2503,28 +2585,39 @@ void NetworkService::message_received(const std::string &message,
             return;
         }
 
-        node->dfs_service()->network_remove_stored_file(file_remove->owner_id,
-                                                        file_remove->file_id,
-                                                        file_remove->sign,
-                                                        file_remove->last_modified);
-        // if sign not verify only -> not broadrcast
-        send_broadcast_message_further(package_data);
+        const auto &remove = file_remove.value();
+        node->dfs_service()->network_store_file(remove.owner_id,
+                                                Dfs::catalog_tombstone(remove.owner_id,
+                                                                       remove.file_id,
+                                                                       remove.last_modified,
+                                                                       remove.sign),
+                                                Dfs::NetworkStoreFile::Broadcast,
+                                                identifier,
+                                                [this, package_data] {
+                                                    send_broadcast_message_further(package_data);
+                                                });
         break;
     }
 
     case MessageType::DfsCollectionRequest: {
-        auto db_request_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        if (status != MessageStatus::Request || serialized.size() > 1024)
+            return;
+        auto db_request_result =
+            MessagePack::deserialize<std::tuple<ActorId, std::string, std::uint64_t>>(serialized);
         if (!db_request_result.has_value()) {
             eWarning("[NetworkService] {} deserialization failed for collection request", type);
             return;
         }
-        const auto &[actor_id, file_id] = db_request_result.value();
-        node->dfs_service()->network_request_collection(actor_id, file_id, responder);
+        const auto &[actor_id, file_id, after] = db_request_result.value();
+        node->dfs_service()->network_request_collection(actor_id, file_id, responder, after);
 
         break;
     }
 
     case MessageType::DfsCollectionHistory: {
+        if (status != MessageStatus::Response || serialized.size() > HistoricalCollection::MaxPageBytes + 4096
+            || !MessagePack::has_bounded_structure(serialized, 16384, 128, 8))
+            return;
         auto db_history_result =
             MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<HistoricalCollectionRow>>>(
                 serialized);
@@ -2533,23 +2626,17 @@ void NetworkService::message_received(const std::string &message,
             return;
         }
         const auto &[actor_id, file_id, historical_rows] = db_history_result.value();
-        node->dfs_service()->network_response_historical_collection(actor_id, file_id, historical_rows);
+        node->dfs_service()->network_response_historical_collection(actor_id, file_id, historical_rows, responder);
         break;
     }
 
-    case MessageType::DfsCollectionContent: {
-        auto db_content_result =
-            MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<DbRow>>>(serialized);
-        if (!db_content_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for collection content", type);
-            return;
-        }
-        const auto &[actor_id, file_id, db_rows] = db_content_result.value();
-        node->dfs_service()->network_response_content_collection(actor_id, file_id, db_rows);
+    case MessageType::DfsCollectionContent:
         break;
-    }
 
     case MessageType::DfsCollectionRowChange: {
+        if (serialized.size() > HistoricalCollection::MaxEventBytes + 4096
+            || !MessagePack::has_bounded_structure(serialized, 256, 128, 8))
+            return;
         auto db_add_result =
             MessagePack::deserialize<std::tuple<ActorId, std::string, HistoricalCollectionRow>>(serialized);
         if (!db_add_result.has_value()) {
@@ -2561,21 +2648,26 @@ void NetworkService::message_received(const std::string &message,
         break;
     }
 
-    case MessageType::DfsVectorCreation:
-    case MessageType::DfsVectorContent: {
-        auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
-        if (!db_content_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for vector content", type);
-            return;
-        }
-
-        node->dfs_service()->network_response_content_vector(db_content_result.value());
-
-        if (type == MessageType::DfsVectorCreation) {
-            send_broadcast_message_further(package_data);
-        }
+    case MessageType::DfsVectorSyncRequest: {
+        if (status == MessageStatus::Request)
+            node->dfs_service()->vector_sync().receive_request(serialized, responder);
         break;
     }
+    case MessageType::DfsVectorSyncReply: {
+        if (status == MessageStatus::Response)
+            node->dfs_service()->vector_sync().receive_reply(serialized, responder);
+        break;
+    }
+    case MessageType::DfsVectorCreation: {
+        if (serialized.size() > 256 * 1024)
+            return;
+        const auto metadata = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
+        if (metadata.has_value() && metadata.value().content.empty())
+            node->dfs_service()->request_vector_content(metadata.value().owner_id, metadata.value().file_id);
+        break;
+    }
+    case MessageType::DfsVectorContent:
+        break;
 
     case MessageType::DfsVectorAdd: {
         auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowAdd>(serialized);
@@ -2584,11 +2676,21 @@ void NetworkService::message_received(const std::string &message,
             return;
         }
 
-        node->dfs_service()->network_vector_add(db_content_result->owner_id,
-                                                db_content_result->file_id,
-                                                db_content_result->row);
-
-        send_broadcast_message_further(package_data);
+        {
+            static std::atomic<std::uint64_t> received_rows { 0 };
+            const auto count = received_rows.fetch_add(1) + 1;
+            if (count % 500 == 0) {
+                eLog("[NetworkService] DfsVectorAdd received so far: {}", count);
+            }
+        }
+        const auto relay = std::make_shared<NetworkPackageStorage>(package_data);
+        node->dfs_service()->network_vector_add(db_content_result.value().owner_id,
+                                                db_content_result.value().file_id,
+                                                db_content_result.value().row,
+                                                identifier,
+                                                [this, relay] {
+                                                    send_broadcast_message_further(*relay);
+                                                });
         break;
     }
 
@@ -2743,6 +2845,8 @@ void NetworkService::message_received(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
+        if (status != MessageStatus::Response)
+            break;
 #ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
         if (!is_luminance) {
             return;
@@ -2759,24 +2863,8 @@ void NetworkService::message_received(const std::string &message,
         break;
     }
 
-    case MessageType::DagSections: {
-        if (status == MessageStatus::Request) {
-            auto range = MessagePack::deserialize<SectionRange>(serialized);
-            if (!range.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for dag sync vector", type);
-                break;
-            }
-
-            auto first = BigNumber::create(range->first);
-            auto last  = BigNumber::create(range->last);
-            if (!first.has_value() || !last.has_value()) {
-                break;
-            }
-
-            node->dag()->network_request_sections(first.value(), last.value(), responder);
-        }
+    case MessageType::DagSections:
         break;
-    }
 
     case MessageType::DagFileSections: {
         if (status == MessageStatus::Request) {
@@ -2788,19 +2876,16 @@ void NetworkService::message_received(const std::string &message,
 
             // SectionRange ids are wire-format strings (hex during the legacy
             // transition), matching how request_file_sections encodes them.
-            bool wire_hex = WireFormat::wire() == WireFormat::Mode::Legacy;
-            if (wire_hex) {
-                node->dag()->network_request_file_sections(BigNumber::from_hex(range->first),
-                                                           BigNumber::from_hex(range->last),
-                                                           responder);
-            } else {
-                auto first = BigNumber::create(range->first);
-                auto last  = BigNumber::create(range->last);
-                if (!first.has_value() || !last.has_value()) {
-                    break;
-                }
-                node->dag()->network_request_file_sections(first.value(), last.value(), responder);
+            const auto base = WireFormat::wire() == WireFormat::Mode::Legacy ? NumeralBase::Hex : NumeralBase::Dec;
+            if (range.value().first.empty() || range.value().last.empty()) {
+                break;
             }
+            const auto first = BigNumber::create(range.value().first, base);
+            const auto last  = BigNumber::create(range.value().last, base);
+            if (!first.has_value() || !last.has_value()) {
+                break;
+            }
+            node->dag()->network_request_file_sections(first.value(), last.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto data = MessagePack::deserialize<std::string>(serialized);
             if (!data.has_value()) {
@@ -2887,38 +2972,14 @@ void NetworkService::message_received(const std::string &message,
 
             node->dag()->network_request_light(responder);
         } else if (status == MessageStatus::Response) {
-            auto light = MessagePack::deserialize<DagLightPackage>(serialized);
-            if (!light.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for dag sync light", type);
-                break;
-            }
-
-            node->dag()->network_response_light(light.value(), responder);
+            node->dag()->network_response_light(serialized, responder);
         }
         break;
     }
 
-    case MessageType::CoinReward: {
-        auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
-        if (!reward_request_result.has_value()) {
-            eWarning("[NetworkService] {} deserialization failed for coin reward", type);
-            break;
-        }
-        const auto &reward_request = reward_request_result.value();
-        switch (status) {
-        case MessageStatus::Request: {
-            auto res = node->data_mining_manager()->network_request_coin_reward(reward_request, responder);
-
-            if (res) {
-                send_broadcast_message_further(package_data);
-            }
-            break;
-        }
-        default:
-            break;
-        }
+    case MessageType::CoinReward:
+        // The legacy reward message carries no consensus storage proof.
         break;
-    }
 
     case MessageType::DagSyncLastInfo: {
 #ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority

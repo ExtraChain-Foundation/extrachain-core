@@ -22,6 +22,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <stop_token>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -42,6 +43,7 @@
 #include "chain/pack_registry.h"
 #include "chain/hot_section_store.h"
 #include "runtime/event.h"
+#include "runtime/work_budget.h"
 
 #include "3rdparty/rustex.h"
 
@@ -63,10 +65,7 @@ static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 // being sealed into an immutable pack. Covers Light client's 15-section cache
 // lag, control-search backoff (~37), and a buffer for late-arriving sync data
 // or modest reorgs. 200 == 10 control intervals — cheap on disk (~400KB).
-static constexpr int HOT_PACK_LAG = 200;
-// Keep at most two not-yet-packed ranges in memory. The hot store remains the
-// source of truth, so dropping a cache entry only causes a later database read.
-static constexpr std::size_t   PACK_HOT_CACHE_LIMIT     = Pack::SECTIONS_PER_PACK * 2;
+static constexpr int           HOT_PACK_LAG             = 200;
 static constexpr std::size_t   PACK_SYNC_MAX_PACKS      = 100000;
 static constexpr std::uint64_t PACK_SYNC_MAX_PACK_BYTES = 512ULL * 1024ULL * 1024ULL;
 
@@ -196,14 +195,6 @@ struct DagControl {
 };
 BOOST_DESCRIBE_STRUCT(DagControl, (), (section_id, control))
 
-struct SectionSync {
-    SectionId               to;
-    std::set<Transaction>   txs;
-    std::vector<DagControl> controls; // need map?
-    SectionId               last_section;
-};
-BOOST_DESCRIBE_STRUCT(SectionSync, (), (to, txs, controls))
-
 struct SectionFileData {
     SectionId   section_id;
     std::string file_bytes;
@@ -313,20 +304,6 @@ struct DagLastInfo {
 BOOST_DESCRIBE_STRUCT(DagLastInfo,
                       (),
                       (last_section_id, last_control_hash, last_control_section_id, zero_date, status))
-
-/**
- * @brief Package of data for light mode synchronization
- *
- * Contains cached balances, the ID of the cached section,
- * and transactions needed for light mode synchronization
- */
-struct DagLightPackage {
-    Balances                                       cache;         // Cached account balances
-    SectionId                                      cache_section; // Id of the section corresponding to the cache
-    std::set<Transaction>                          txs;           // Transactions since the cached section
-    std::vector<std::pair<SectionId, std::string>> controls;      // Control hashs
-};
-BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs, controls))
 
 struct DagControlRangeRequest {
     SectionId from;
@@ -573,7 +550,7 @@ public:
      *
      * @param transaction The transaction that was sent
      */
-    void add_transaction_sended(const Transaction &transaction);
+    void add_transaction_sended(const Transaction &transaction, const Responder &request);
 
     /**
      * @brief Update the chain range information
@@ -608,6 +585,8 @@ public:
      * @return std::optional<Section> The section if found, or nullopt
      */
     std::optional<Section> read_section(const SectionId &section_id) const;
+    // Read at most one frame of history; preserve hot, legacy, then pack precedence.
+    std::map<SectionId, Section> read_section_batch(const SectionId &from, const SectionId &to) const;
     // Changes when stored history changes, including repair and backfill.
     [[nodiscard]] std::uint64_t history_revision() const noexcept {
         return history_revision_.load(std::memory_order_acquire);
@@ -621,9 +600,11 @@ public:
                               const SectionId                                          &last_section,
                               std::uint64_t                                             logical_time,
                               const std::vector<ExtraChain::Consensus::IntentEnvelope> &intents,
+                              std::uint64_t                                             maximum_payload_bytes,
                               std::string                                               header_hash,
                               std::optional<std::string> previous_section_bytes = std::nullopt,
-                              std::string                previous_section_root  = {});
+                              std::string                previous_section_root  = { },
+                              std::optional<Transaction> settlement             = std::nullopt);
     std::expected<std::string, ExtraChain::Consensus::ConsensusError> shadow_batch_section_root(
         const ExtraChain::Consensus::SectionBatchData &batch) const;
     std::vector<Transaction> unprovable_batch_transactions(const ExtraChain::Consensus::SectionBatchData &batch,
@@ -675,23 +656,6 @@ public:
      */
     void network_status_sync_response(const DagLastInfo &last_info, const Responder &responder);
 
-    /**
-     * @brief Request specific sections from the network
-     *
-     * @param from The starting section ID
-     * @param to The ending section ID
-     * @param responder The responder to send the request to
-     */
-    void network_request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
-
-    /**
-     * @brief Process a sections response from the network
-     *
-     * @param compressed The compressed sections data
-     * @param responder The responder that sent the data
-     */
-    void network_request_sections_response(const std::string &compressed, const Responder &responder);
-
     void network_request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder);
     void network_file_sections_response(const std::string &compressed, const Responder &responder);
 
@@ -718,21 +682,22 @@ public:
     /**
      * @brief Request light mode data from the network
      *
-     * Requests cached balances and recent transactions for light mode operation.
+     * Returns balances with a finality proof for Light mode.
      *
      * @param responder The responder to send the request to
      */
     void network_request_light(const Responder &responder);
+    void request_light(const Responder &responder);
 
     /**
      * @brief Process light mode data received from the network
      *
-     * Stores cached balances and processes recent transactions for light mode operation.
+     * Verifies a requested finality proof before the atomic balance cache update.
      *
-     * @param dag_light The light mode data package
+     * @param serialized The canonical balance snapshot and its finality proof
      * @param responder The responder that sent the data
      */
-    void network_response_light(const DagLightPackage &dag_light, const Responder &responder);
+    void network_response_light(const std::string &serialized, const Responder &responder);
 
     /**
      * @brief network_hash_interval
@@ -759,17 +724,21 @@ public:
     void request_contract_section(const SectionId &section_id);
 
     std::unordered_map<std::string, Transaction> sended_transactions() {
+        std::lock_guard lock(sent_transactions_mutex_);
         return sended_transactions_;
     }
 
     std::unordered_map<std::string, Transaction> failed_transactions() {
+        std::lock_guard lock(sent_transactions_mutex_);
         return failed_transactions_;
     }
 
     size_t sended_transactions_size() const {
+        std::lock_guard lock(sent_transactions_mutex_);
         return sended_transactions_.size();
     }
     size_t failed_transactions_size() const {
+        std::lock_guard lock(sent_transactions_mutex_);
         return failed_transactions_.size();
     }
     size_t last_txs_size() const {
@@ -812,6 +781,7 @@ private:
         std::optional<bool> sender_exists;
         std::optional<bool> receiver_exists;
         std::optional<bool> signature_valid;
+        std::optional<BigNumberFloat> sender_balance;
     };
     struct DeferredContractTransaction {
         Transaction                transaction;
@@ -852,6 +822,13 @@ private:
     ExtraChain::Core::Event<>                             control_search_ended_event_;
     ExtraChain::Core::ExtraChainNode                     *node;               // Parent node reference
     TransactionCache                                      transaction_cache_; // Transaction cache for fast lookups
+    struct PendingTransactionResponse {
+        std::string           message_id;
+        std::set<std::string> peers;
+        bool                  processing = false;
+    };
+    mutable std::mutex                                          sent_transactions_mutex_;
+    std::unordered_map<std::string, PendingTransactionResponse> pending_transaction_responses_;
     std::unordered_map<std::string, Transaction>          sended_transactions_; // Transactions sent but not yet
     std::unordered_map<std::string, Transaction>          failed_transactions_; // Transactions failed
     std::unordered_map<NodeId, std::uint64_t>             last_txs_;
@@ -896,7 +873,14 @@ private:
     std::uint64_t                                historical_audit_started_ms_  = 0;
     bool                                         historical_recent_audit_done_ = false;
     bool                                         pending_audit_recent_         = false;
-    bool                                         light_requested_              = false;
+    struct PendingLightResponse {
+        std::string                     message_id;
+        std::unordered_set<std::string> peers;
+        std::uint64_t                   created_at_ms = 0;
+    };
+    std::mutex                          light_response_mutex_;
+    std::optional<PendingLightResponse> pending_light_response_;
+    bool                                matches_light_response(const Responder &responder) const;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
     std::mutex                           cached_tx_responders_mutex_;
@@ -910,14 +894,25 @@ private:
     std::unique_ptr<HotSectionStore>               hot_section_store_;
     SectionId                                      next_pack_index_ = SectionId(0);
     std::mutex                                     pack_mutex_;
-    std::mutex                                     pack_hot_cache_mutex_;
-    std::mutex                                     pack_hot_completion_mutex_;
-    std::condition_variable                        pack_hot_completion_;
-    std::atomic_bool                               pack_hot_running_    = false;
+    // Shared with the queued pack worker (#77). `scheduled` stops a second worker
+    // from being queued; `running` is set only once the worker actually executes.
+    // stop() waits for `running` alone: a worker that is still queued when the
+    // storage pool has been stopped (the audit tool stops the runtime first) may
+    // never execute, and waiting for it hung forever. If it does execute later, the
+    // bumped generation makes it return at once. The guard in the handler clears
+    // both flags on destruction, whether the handler ran or was dropped; shared
+    // ownership keeps it safe even if the handler outlives this Dag.
+    struct PackHotCompletion {
+        std::mutex              mutex;
+        std::condition_variable finished;
+        std::atomic_bool        scheduled = false;
+        std::atomic_bool        running   = false;
+    };
+    std::shared_ptr<PackHotCompletion>             pack_hot_completion_ = std::make_shared<PackHotCompletion>();
     std::atomic_uint64_t                           pack_hot_generation_ = 0;
     std::atomic_uint64_t                           history_revision_    = 0;
-    std::map<SectionId, std::string>               pack_hot_cache_;
     std::mutex                                     file_sync_response_mutex_;
+    ExtraChain::Core::WorkBudget file_sync_budget_ { { 384 * 1024 * 1024, 3, 320 * 1024 * 1024, 1 } };
     std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;
     std::recursive_mutex                           sync_last_info_mutex_;
 
@@ -975,7 +970,10 @@ private:
     // Persistent tx index (by hash / sender / receiver / token / time).
     // Full mode: every tx. Light mode: only tx involving local wallets.
     std::unique_ptr<ChainIndex> chain_index_;
+    std::stop_source            index_rebuild_stop_;
     bool                        chain_index_enabled_ = false;
+
+    void schedule_index_rebuild();
 
     // Read-side accelerator for control hashes (section_id -> hash). Always on:
     // control lookups are on the sync hot path. Rebuildable, not consensus.
@@ -1012,9 +1010,9 @@ private:
                                      bool                file_response,
                                      bool                repair_response = false,
                                      SyncRequestPriority priority        = SyncRequestPriority::Tip);
-    std::optional<std::pair<SectionId, SectionId>> pending_sync_range(const Responder &responder,
-                                                                      const SectionId &to,
-                                                                      bool             file_response) const;
+    std::optional<std::pair<SectionId, SectionId>> pending_sync_range(const Responder                &responder,
+                                                                      const std::optional<SectionId> &to,
+                                                                      bool file_response) const;
     void                     consume_pending_sync_response(const Responder &responder, bool file_response);
     bool                     pending_sync_is_repair(const Responder &responder) const;
     void                     set_state_projection(StateProjectionStatus status,
@@ -1038,14 +1036,19 @@ private:
     /// @param prior transactions already committed by certified-but-unfinalized
     ///        ancestors; they are not in the canonical chain yet, so balance proofs
     ///        must account for them explicitly. Empty for ordinary repair traffic.
+    TransactionProveError validate_initial_transaction(const Transaction &transaction) const;
+    std::optional<std::map<SectionId, std::string>> validated_sync_candidate(
+        const std::map<SectionId, std::string> &peer_sections);
     std::optional<std::map<SectionId, std::string>> validated_repair_candidate(
         const std::map<SectionId, std::string> &peer_sections,
         const std::set<Transaction>            &prior = {});
     bool validate_repair_transaction(const Transaction           &transaction,
                                      const std::set<Transaction> &pending,
-                                     bool                         report_failure = true);
+                                     bool                         report_failure  = true,
+                                     const Balances              *balances_before = nullptr,
+                                     bool                         historical      = false);
 
-    std::map<SectionId, Section> read_hot_sections(const SectionId &from, const SectionId &to) const;
+    std::optional<Section> read_section_unlocked(const SectionId &section_id, bool include_packs) const;
 
     // Pack hot sections into an immutable pack when enough have accumulated.
     // Called from write_section when the hot range crosses a pack boundary.
@@ -1060,7 +1063,7 @@ private:
     std::mutex                        pack_sync_mutex_;
     std::vector<Pack::PackId>         pack_sync_pending_;
     bool                              pack_sync_in_flight_     = false;
-    bool                              pack_sync_installed_any_ = false;
+    bool                              pack_history_dirty_      = false;
     Pack::PackId                      pack_sync_current_id_    = 0;
     std::uint64_t                     pack_sync_next_offset_   = 0;
     std::uint64_t                     pack_sync_total_size_    = 0;
@@ -1073,7 +1076,10 @@ private:
     // Called after each pack is received (or after PackList arrives).
     void issue_next_pack_request(const Responder &responder);
     void issue_pack_window(const Responder &responder);
-    bool validate_pack_controls(Pack::PackId id, const std::map<SectionId, Section> &sections) const;
+    bool mark_pack_history_dirty();
+    void clear_pack_history_dirty();
+    bool validate_pack_controls(Pack::PackId                                                    id,
+                                const std::function<std::optional<Section>(const SectionId &)> &read) const;
     bool validate_received_pack(Pack::PackId id, const Pack::Reader &reader) const;
 
     std::optional<BigNumberFloat> frozen_token_allocation(const ActorId &actor, const TokenId &token);
@@ -1085,7 +1091,6 @@ private:
      * @param to Ending section ID
      * @param responder Responder to send the request to
      */
-    void request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
 
     void request_file_sections(const SectionId &from,
                                const SectionId &to,
@@ -1314,4 +1319,5 @@ public:
 
     friend class ExtraChain::Core::ExtraChainNode;
     friend class DagCache;
+    friend class DagAdmissionTestFixture;
 };

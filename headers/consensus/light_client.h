@@ -97,6 +97,14 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] const ValidatorSetView* validators_for(std::uint64_t epoch,
                                                              std::uint64_t height) const noexcept;
         [[nodiscard]] const EpochBootstrapV1* bootstrap_for(std::uint64_t epoch) const noexcept;
+        void                                  retain_active_epoch(std::uint64_t finalized_height);
+
+        struct HistoricalValidators {
+            ValidatorSetView                validators;
+            std::optional<EpochBootstrapV1> bootstrap;
+            std::uint64_t                   finalized_height;
+        };
+        std::map<std::uint64_t, HistoricalValidators> historical_validators_;
 
         ValidatorSetView                 active_;
         std::optional<EpochBootstrapV1>  active_bootstrap_;

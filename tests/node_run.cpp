@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <fstream>
 #include <csignal>
 #include <cstdlib>
 #include <cstdio>
@@ -45,9 +46,11 @@
 #include <vector>
 
 #include "chain/dag.h"
+#include "chain/actor_index.h"
 #include "consensus/consensus_protocol.h"
 #include "consensus/consensus_service.h"
 #include "core/extrachain_node.h"
+#include "dfs/collection_template.h"
 #include "dfs/dfs_service.h"
 #include "managers/account_controller.h"
 #include "network/network_service.h"
@@ -91,6 +94,8 @@ int main(int argc, char* argv[]) {
         listen_port = static_cast<std::uint16_t>(std::atoi(argv[3]));
     } else if (mode == "join" && argc > 5) {
         listen_port = static_cast<std::uint16_t>(std::atoi(argv[5]));
+    } else if (mode == "light" && argc > 4) {
+        listen_port = static_cast<std::uint16_t>(std::atoi(argv[4]));
     } else if (mode == "committee" && argc > 5) {
         listen_port = static_cast<std::uint16_t>(std::atoi(argv[5]));
     }
@@ -107,14 +112,18 @@ int main(int argc, char* argv[]) {
 
     // For a joining node, point first_node at the peer and force a fresh node id
     // BEFORE the node initialises (initialize_first_node reads settings on init).
-    if (mode == "join") {
+    if (mode == "join" || mode == "light") {
         if (argc < 5) {
             std::printf("usage: %s join <home> <peer-ip> <target-section> [listen-port] [peer-port]\n", argv[0]);
             return 64;
         }
         auto settings            = Utils::read_settings();
+        if (mode == "light") {
+            settings.dag_mode = DagMode::Light;
+        }
         settings.first_node      = std::string(argv[3]);
         settings.node_identifier = std::nullopt;
+        settings.node_nonce      = std::nullopt;
         Utils::write_settings(settings);
     }
 
@@ -145,6 +154,55 @@ int main(int argc, char* argv[]) {
                                                                                       : std::string(bind_ip));
     node->process();
 
+    if (mode == "light") {
+        using namespace ExtraChain::Consensus;
+        if (argc < 6) {
+            std::printf("usage: %s light <home> <peer-ip> <listen-port> <peer-port> [minimum-height]\n", argv[0]);
+            return 64;
+        }
+        const auto bytes = FileIo::read_all("consensus/validator-set.msgpack");
+        if (!bytes.has_value()) {
+            return 65;
+        }
+        const auto validators = MessagePack::deserialize<ValidatorSet>(bytes.value());
+        if (!validators.has_value() || !LightClientVerifier::create(validators.value()).has_value()) {
+            return 65;
+        }
+        node->actor_index()->set_network_id(validators.value().network_id);
+        node->account_controller()->create_profile(joiner_login_hash(), ActorType::User);
+        const auto peer_port      = static_cast<std::uint16_t>(std::atoi(argv[5]));
+        const auto minimum_height = argc > 6 ? std::strtoull(argv[6], nullptr, 10) : 1;
+        const auto deadline       = std::chrono::steady_clock::now() + std::chrono::seconds(150);
+        int        result         = 1;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (node->dag()->state_projection_ready()) {
+                const auto verifier = LightClientVerifier::load("consensus/light-client.msgpack");
+                if (verifier.has_value() && verifier.value().trusted_height() >= minimum_height
+                    && !node->dag()->read_section(SectionId(0)).has_value()
+                    && !node->dag()->cache().read_cached_balances().second.empty()) {
+                    std::printf("PASS: Light snapshot verified height=%llu section=%s without DAG history\n",
+                                static_cast<unsigned long long>(verifier.value().trusted_height()),
+                                node->dag()->cache().section().to_string().c_str());
+                    result = 0;
+                    break;
+                }
+            }
+            if (node->network()->active_connections_count() == 0) {
+                node->network()->request_endpoint(argv[3], peer_port, true, true);
+            } else {
+                node->dag()->start_check();
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+        }
+        if (result != 0) {
+            std::printf("FAIL: Light snapshot timeout status=%d section=%s\n",
+                        static_cast<int>(node->dag()->state_projection().status),
+                        node->dag()->cache().section().to_string().c_str());
+        }
+        node->cleanUp();
+        return result;
+    }
+
     if (mode == "committee") {
         using namespace ExtraChain::Consensus;
 
@@ -166,6 +224,31 @@ int main(int argc, char* argv[]) {
         const auto first_intent_nonce =
             static_cast<std::uint64_t>(argc > 11 ? std::strtoull(argv[11], nullptr, 10) : 1);
         const bool stay_until_deadline = argc > 12 && std::atoi(argv[12]) != 0;
+        const char* mining_test_flag    = std::getenv("EXC_SHADOW_MINING_TEST");
+        if (mining_test_flag != nullptr && std::string_view(mining_test_flag) != "1")
+            return 64;
+        const bool mining_test = mining_test_flag != nullptr;
+        const auto parse_wave_option = [](const char* name, std::size_t fallback) -> std::optional<std::size_t> {
+            const char* raw = std::getenv(name);
+            if (raw == nullptr)
+                return fallback;
+            std::string_view text(raw);
+            std::size_t      value  = 0;
+            const auto       parsed = std::from_chars(text.data(), text.data() + text.size(), value);
+            if (text.empty() || parsed.ec != std::errc { } || parsed.ptr != text.data() + text.size())
+                return std::nullopt;
+            return value;
+        };
+        const auto wave_option   = parse_wave_option("EXC_SHADOW_WAVES", 1);
+        const auto resume_option = parse_wave_option("EXC_SHADOW_RESUME_WAVE", 0);
+        const bool resumed       = std::getenv("EXC_SHADOW_RESUME_WAVE") != nullptr;
+        if (!wave_option.has_value() || !resume_option.has_value() || wave_option.value() < 1
+            || wave_option.value() > 256 || resume_option.value() >= wave_option.value()
+            || (wave_option.value() > 1
+                && (barrier_directory.empty() || !stay_until_deadline || intent_count > 64)))
+            return 64;
+        const auto wave_count = wave_option.value();
+        auto       wave       = resume_option.value();
         if ((role != "seed" && role != "joiner")
             || (node_count != ShadowCommitteeSize && node_count != ShadowCommitteeSize + 1)
             || node_index >= node_count || run_seconds < 10 || first_intent_nonce == 0
@@ -182,6 +265,15 @@ int main(int argc, char* argv[]) {
             return 2;
         }
         node->dag()->set_mode(DagMode::Full);
+        // ExDFS runs Light by default (DfsService hard-codes it): a Light node never
+        // pulls a payload it only knows from the catalog, so replication under
+        // message loss rests on gossip alone. EXC_DFS_MODE=full makes the committee
+        // pull every Known row too, which is what a storage node has to do.
+        if (const char* dfs_mode = std::getenv("EXC_DFS_MODE");
+            dfs_mode != nullptr && std::string(dfs_mode) == "full") {
+            node->dfs()->set_mode(DfsMode::Full);
+            std::printf("[node-run] DFS mode: full\n");
+        }
         std::printf("[node-run] local node identifier=%s network=%s\n",
                     node->node_identifier().c_str(),
                     node->network_id().to_string().c_str());
@@ -232,15 +324,19 @@ int main(int argc, char* argv[]) {
             if (peer != node_index && adjacent(peer))
                 ++required_peers;
         }
-        for (std::size_t peer = 0; peer < node_index; ++peer) {
-            if (!adjacent(peer)) {
-                continue;
+        const auto request_peers = [&] {
+            // Peers can still be in reconnect backoff after a long restart.
+            const auto limit = resumed ? node_count : node_index;
+            for (std::size_t peer = 0; peer < limit; ++peer) {
+                if (peer == node_index || !adjacent(peer))
+                    continue;
+                node->network()->request_endpoint("127.0.0." + std::to_string(peer + 1),
+                                                  static_cast<std::uint16_t>(first_port + peer),
+                                                  false,
+                                                  true);
             }
-            node->network()->request_endpoint("127.0.0." + std::to_string(peer + 1),
-                                              static_cast<std::uint16_t>(first_port + peer),
-                                              false,
-                                              true);
-        }
+        };
+        request_peers();
         const auto  connect_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
         std::size_t connect_attempt  = 0;
         std::size_t stable_samples   = 0;
@@ -253,15 +349,7 @@ int main(int argc, char* argv[]) {
                 stable_samples = 0;
             }
             if (stable_samples == 0 && connect_attempt % 3 == 0) {
-                for (std::size_t peer = 0; peer < node_index; ++peer) {
-                    if (!adjacent(peer)) {
-                        continue;
-                    }
-                    node->network()->request_endpoint("127.0.0." + std::to_string(peer + 1),
-                                                      static_cast<std::uint16_t>(first_port + peer),
-                                                      false,
-                                                      true);
-                }
+                request_peers();
             }
         }
         const auto connected = node->network()->active_connections_count();
@@ -382,10 +470,12 @@ int main(int argc, char* argv[]) {
                         node->cleanUp();
                         return 5;
                     }
-                    const auto submitted = node->consensus()->submit_intent(IntentEnvelope {
-                        .intent   = intent.value(),
-                        .metadata = metadata,
-                    });
+                    const auto submitted =
+                        mining_test ? node->consensus()->submit_local_intent(intent.value(), metadata, funder)
+                                    : node->consensus()->submit_intent(IntentEnvelope {
+                                          .intent   = intent.value(),
+                                          .metadata = metadata,
+                                      });
                     if (!submitted.has_value()) {
                         std::printf("[node-run] funding submission failed for node %zu (error %d)\n",
                                     target,
@@ -438,13 +528,144 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        std::vector<std::string> submitted_hashes;
+        const auto               sender = node->account_controller()->system_actor();
+        ActorId                  receiver;
+        for (const auto& account : node->account_controller()->accounts()) {
+            if (account.id() != sender.id()) {
+                receiver = account.id();
+                break;
+            }
+        }
+        if (intent_count > 0
+            && (receiver.is_zero()
+                || funding_nonces > std::numeric_limits<std::uint64_t>::max() - first_intent_nonce
+                || intent_count > std::numeric_limits<std::uint64_t>::max() / wave_count
+                || intent_count * wave_count - 1
+                       > std::numeric_limits<std::uint64_t>::max() - first_intent_nonce - funding_nonces)) {
+            node->cleanUp();
+            return 5;
+        }
+        submitted_hashes.reserve(intent_count);
+        const auto submit_next_intent = [&]() {
+            const auto index = submitted_hashes.size();
+            if (index >= intent_count)
+                return true;
+            const auto ordinal  = wave * intent_count + index;
+            const auto metadata = "shadow-live-intent-" + std::to_string(ordinal);
+            const auto nonce    = funding_nonces + first_intent_nonce + ordinal;
+            const auto intent   = make_intent(
+                TransactionIntentV2 {
+                    .network_id           = node->network_id(),
+                    .sender               = sender.id(),
+                    .receiver             = receiver,
+                    .token                = TokenId::create("468faf2f1be6504a9a26f7f027f7e43380b0d77d").value(),
+                    .amount               = "0.0001",
+                    .operation            = IntentOperation::Transfer,
+                    .account_nonce        = nonce,
+                    .valid_after_height   = 0,
+                    .expires_after_height = 1'000'000,
+                },
+                metadata,
+                sender);
+            if (!intent.has_value()) {
+                std::printf("[node-run] intent creation failed (error %d)\n", static_cast<int>(intent.error()));
+                return false;
+            }
+            const auto submitted_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                             std::chrono::steady_clock::now().time_since_epoch())
+                                             .count();
+            const auto submit = [&] {
+                return (mining_test || wave_count > 1)
+                           ? node->consensus()->submit_local_intent(intent.value(), metadata, sender)
+                           : node->consensus()->submit_intent(IntentEnvelope { intent.value(), metadata });
+            };
+            auto submitted = submit();
+            const auto waiting_for_admission = [&] {
+                return !submitted.has_value()
+                       && (submitted.error() == ConsensusError::PoolFull
+                           || submitted.error() == ConsensusError::DataUnavailable);
+            };
+            if (waiting_for_admission()) {
+                // A certificate can arrive before the batch needed to select the next account nonce.
+                std::printf("[node-run] intent admission waiting at %zu (error %d)\n",
+                            index,
+                            static_cast<int>(submitted.error()));
+                std::fflush(stdout);
+                const auto admission_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+                while (stop_requested == 0 && std::chrono::steady_clock::now() < admission_deadline
+                       && waiting_for_admission()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    submitted = submit();
+                }
+            }
+            if (!submitted.has_value()) {
+                std::printf("[node-run] intent submission failed at %zu (error %d)\n",
+                            index,
+                            static_cast<int>(submitted.error()));
+                return false;
+            }
+            submitted_hashes.push_back(submitted.value());
+            std::printf("[node-run] intent hash=%s submitted_at_ms=%lld\n",
+                        submitted.value().c_str(),
+                        static_cast<long long>(submitted_at_ms));
+            std::fflush(stdout);
+            return true;
+        };
+
+        const auto mark_wave_loaded = [&]() {
+            return barrier_directory.empty()
+                   || FileIo::write_atomic(barrier_directory
+                                               / ("loaded-wave-" + std::to_string(wave) + "-"
+                                                  + std::to_string(node_index)),
+                                           "ok")
+                          .has_value();
+        };
+        const auto record_wave_file = [&](const Dfs::DirRow& row) {
+            if (barrier_directory.empty())
+                return true;
+            const DbRow record { { "owner", row.owner_id.to_string() },
+                                 { "file_id", row.file_id },
+                                 { "size", std::to_string(row.size) },
+                                 { "wave", std::to_string(wave) } };
+            return FileIo::write_atomic(barrier_directory
+                                            / ("published-wave-" + std::to_string(wave) + "-"
+                                               + std::to_string(node_index) + ".json"),
+                                        Json::serialize(record))
+                .has_value();
+        };
+        const auto publish_wave_file = [&]() {
+            const auto bytes = parse_wave_option("EXC_DFS_BYTES", 0);
+            if (!bytes.has_value() || bytes.value() == 0 || bytes.value() > 16 * 1024 * 1024)
+                return false;
+            std::vector<std::uint8_t> payload(bytes.value());
+            for (std::size_t index = 0; index < payload.size(); ++index)
+                payload[index] = static_cast<std::uint8_t>(
+                    (index * (131U + node_index) + 17U + node_index * 7U + wave) & 0xffU);
+            const auto owner = sender.id();
+            const auto row   = node->dfs()->store_data_as_file(owner,
+                                                               owner,
+                                                               std::move(payload),
+                                                               "soak",
+                                                               "node-" + std::to_string(node_index) + "-wave-"
+                                                                   + std::to_string(wave) + ".bin");
+            if (!row.has_value() || !record_wave_file(row.value()))
+                return false;
+            std::printf("[node-run] DFS wave=%zu owner=%s file_id=%s size=%zu\n",
+                        wave,
+                        owner.to_string().c_str(),
+                        row.value().file_id.c_str(),
+                        row.value().size);
+            std::fflush(stdout);
+            return true;
+        };
         // Optional ExDFS load: every committee node publishes one file of
         // EXC_DFS_BYTES bytes while consensus runs, so the harness can check that
         // content replicates across the whole mesh — through chaos included. The
         // payload is deterministic per node, so a corrupt copy is told from a
         // missing one.
         if (const char* dfs_bytes_env = std::getenv("EXC_DFS_BYTES");
-            dfs_bytes_env != nullptr && std::strtoull(dfs_bytes_env, nullptr, 10) > 0) {
+            !resumed && dfs_bytes_env != nullptr && std::strtoull(dfs_bytes_env, nullptr, 10) > 0) {
             const auto dfs_bytes = static_cast<std::size_t>(std::strtoull(dfs_bytes_env, nullptr, 10));
             std::vector<std::uint8_t> payload(dfs_bytes);
             for (std::size_t index = 0; index < payload.size(); ++index) {
@@ -462,80 +683,330 @@ int main(int argc, char* argv[]) {
                 node->cleanUp();
                 return 5;
             }
+            if (!record_wave_file(row.value())) {
+                node->cleanUp();
+                return 5;
+            }
             std::printf("[node-run] DFS stored owner=%s file_id=%s size=%zu\n",
                         owner.to_string().c_str(),
                         row->file_id.c_str(),
                         row->size);
             std::fflush(stdout);
+
+            // Network removal (EXC_DFS_REMOVE_AFTER_S): a second, small file is
+            // published now and removed by its owner that many seconds later. The
+            // tombstone travels by DfsFileRemove gossip and by catalog sync, and the
+            // harness expects every node to end with the row Removed and no payload.
+            if (const char* remove_env = std::getenv("EXC_DFS_REMOVE_AFTER_S");
+                remove_env != nullptr && std::strtoull(remove_env, nullptr, 10) > 0) {
+                const auto remove_after = std::strtoull(remove_env, nullptr, 10);
+                std::vector<std::uint8_t> doomed(65536);
+                for (std::size_t index = 0; index < doomed.size(); ++index) {
+                    doomed[index] = static_cast<std::uint8_t>((index * 7U + node_index) & 0xffU);
+                }
+                const auto doomed_row = node->dfs()->store_data_as_file(owner,
+                                                                        owner,
+                                                                        std::move(doomed),
+                                                                        "soak",
+                                                                        "doomed-" + std::to_string(node_index) + ".bin");
+                if (!doomed_row.has_value()) {
+                    std::printf("[node-run] DFS doomed store failed (error %d)\n", static_cast<int>(doomed_row.error()));
+                    node->cleanUp();
+                    return 5;
+                }
+                std::printf("[node-run] DFS doomed owner=%s file_id=%s size=%zu\n",
+                            owner.to_string().c_str(),
+                            doomed_row->file_id.c_str(),
+                            doomed_row->size);
+                std::fflush(stdout);
+                std::thread([node = node.get(), owner, file_id = doomed_row->file_id, remove_after, node_index]() {
+                    for (unsigned long long waited = 0; waited < remove_after && stop_requested == 0; ++waited) {
+                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                    }
+                    if (stop_requested != 0) {
+                        return;
+                    }
+                    const auto removed = node->dfs()->remove_stored_file(owner, file_id);
+                    std::printf("[node-run] DFS removed owner=%s file_id=%s ok=%d\n",
+                                owner.to_string().c_str(),
+                                file_id.c_str(),
+                                removed.has_value() ? 1 : 0);
+                    std::fflush(stdout);
+                }).detach();
+            }
         }
 
-        std::vector<std::string> submitted_hashes;
-        if (intent_count > 0) {
-            const auto&              sender   = node->account_controller()->system_actor();
-            const Actor<KeyPrivate>* receiver = nullptr;
-            for (const auto& account : node->account_controller()->accounts()) {
-                if (account.id() != sender.id()) {
-                    receiver = &account;
-                    break;
-                }
-            }
-            if (receiver == nullptr) {
-                std::printf("[node-run] a distinct intent receiver is absent\n");
+        if (const char* rows_env = std::getenv("EXC_DFS_HISTORY_ROWS");
+            !resumed && rows_env != nullptr && std::strtoull(rows_env, nullptr, 10) >= 3) {
+            const auto count  = std::min<std::size_t>(10000, std::strtoull(rows_env, nullptr, 10));
+            const auto owner  = node->account_controller()->system_actor().id();
+            auto       schema = Dfs::CollectionTemplate::create("HistoryItems").value();
+            schema.add_fields(
+                { Dfs::Field::String("payload").not_null(), Dfs::Field::Integer("position").not_null() });
+            auto file = node->dfs()->store_collection(owner, owner, "soak_history", schema);
+            if (!file.has_value()) {
+                std::printf("[node-run] history creation failed\n");
                 node->cleanUp();
                 return 5;
             }
-            submitted_hashes.reserve(intent_count);
-            for (std::size_t index = 0; index < intent_count; ++index) {
-                const auto metadata = "shadow-live-intent-" + std::to_string(index);
-                const auto nonce    = funding_nonces + first_intent_nonce + index;
-                const auto intent   = make_intent(
-                    TransactionIntentV2 {
-                          .network_id           = node->network_id(),
-                          .sender               = sender.id(),
-                          .receiver             = receiver->id(),
-                          .token                = TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"),
-                          .amount               = "0.0001",
-                          .operation            = IntentOperation::Transfer,
-                          .account_nonce        = nonce,
-                          .valid_after_height   = 0,
-                          .expires_after_height = 1'000'000,
-                    },
-                    metadata,
-                    sender);
-                if (!intent.has_value()) {
-                    std::printf("[node-run] intent creation failed (error %d)\n",
-                                static_cast<int>(intent.error()));
+            for (std::size_t index = 0; index < count; ++index) {
+                auto added = node->dfs()->add_collection_row(owner,
+                                                             file.value().file_id,
+                                                             { { "payload",
+                                                                 "history_" + std::to_string(node_index) + "_"
+                                                                     + std::to_string(index) },
+                                                               { "position", std::to_string(index) } });
+                if (!added.has_value()) {
+                    std::printf("[node-run] history add failed at %zu\n", index);
                     node->cleanUp();
                     return 5;
                 }
-                const auto submitted_at_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                 std::chrono::steady_clock::now().time_since_epoch())
-                                                 .count();
-                const auto submitted = node->consensus()->submit_intent(IntentEnvelope {
-                    .intent   = intent.value(),
-                    .metadata = metadata,
-                });
-                if (!submitted.has_value()) {
-                    std::printf("[node-run] intent submission failed at %zu (error %d)\n",
-                                index,
-                                static_cast<int>(submitted.error()));
-                    node->cleanUp();
-                    return 5;
+            }
+            auto updated = node->dfs()->update_collection_row(owner,
+                                                              file.value().file_id,
+                                                              1,
+                                                              { { "payload", "updated" }, { "position", "0" } });
+            auto removed = node->dfs()->remove_collection_row(owner, file.value().file_id, 2);
+            if (!updated.has_value() || !removed.has_value()) {
+                std::printf("[node-run] history update or removal failed\n");
+                node->cleanUp();
+                return 5;
+            }
+            std::printf("[node-run] DFS history owner=%s file_id=%s rows=%zu hash=%s\n",
+                        owner.to_string().c_str(),
+                        file.value().file_id.c_str(),
+                        count - 1,
+                        removed.value().first.hash.c_str());
+            std::fflush(stdout);
+        }
+
+        // Optional ExDFS vector load: every committee node creates a vector from
+        // its own template and appends EXC_DFS_VECTOR_ROWS rows to it. Vectors
+        // replicate row by row over a different path than plain files (gossiped
+        // DfsVectorAdd rather than fragment transfers), so the harness can tell
+        // the two apart when one of them stops working.
+        const auto vector_parameter = [](const char* name, std::uint64_t maximum) -> std::optional<std::uint64_t> {
+            const char* raw = std::getenv(name);
+            if (raw == nullptr)
+                return 0;
+            const std::string_view text(raw);
+            std::uint64_t          value  = 0;
+            const auto             parsed = std::from_chars(text.data(), text.data() + text.size(), value);
+            if (parsed.ec != std::errc { } || parsed.ptr != text.data() + text.size() || value > maximum)
+                return std::nullopt;
+            return value;
+        };
+        const auto configured_rows    = vector_parameter("EXC_DFS_VECTOR_ROWS", 1000000);
+        const auto configured_payload = vector_parameter("EXC_DFS_VECTOR_PAYLOAD_BYTES", 65536);
+        if (!configured_rows.has_value() || !configured_payload.has_value()
+            || (configured_payload.value() != 0
+                && configured_rows.value() > (1024ULL * 1024 * 1024) / configured_payload.value())) {
+            node->cleanUp();
+            return 64;
+        }
+        if (!resumed && configured_rows.value() != 0) {
+            const auto  row_count           = static_cast<std::size_t>(configured_rows.value());
+            const auto  payload_bytes       = configured_payload.value();
+            const auto& owner     = node->account_controller()->system_actor().id();
+            const auto  name      = "soak_vector_" + std::to_string(node_index);
+            auto        collection_template = Dfs::CollectionTemplate::create(name);
+            if (!collection_template.has_value()) {
+                std::printf("[node-run] vector template creation failed\n");
+                node->cleanUp();
+                return 5;
+            }
+            auto vector_template = collection_template.value()
+                                       .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
+                                       .use_id()
+                                       .add_fields({ Dfs::Field::String("payload").not_null(),
+                                                     Dfs::Field::Integer("position").not_null() });
+            // Store the template first and create the vector from that stored row:
+            // the variant overload is ambiguous against the (actor, file id) one.
+            const auto stored_template = node->dfs()->store_template(owner, vector_template);
+            if (!stored_template.has_value()) {
+                std::printf("[node-run] vector template store failed (error %d)\n",
+                            static_cast<int>(stored_template.error()));
+                node->cleanUp();
+                return 5;
+            }
+            const auto row =
+                node->dfs()->store_vector(owner, owner, name, owner, stored_template->file_id);
+            if (!row.has_value()) {
+                std::printf("[node-run] vector creation failed (error %d)\n", static_cast<int>(row.error()));
+                node->cleanUp();
+                return 5;
+            }
+            const auto intent_stride =
+                std::max<std::size_t>(1, row_count / (std::min(row_count, intent_count) + 1));
+            std::size_t appended = 0;
+            for (std::size_t index = 0; index < row_count && stop_requested == 0; ++index) {
+                DbRow entry;
+                // use_id() makes "id" the primary field, and DfsVector::calculate_hash
+                // reads it with .at() without checking — an absent id terminates the
+                // process. The caller must supply it.
+                entry["id"]       = name + "_" + std::to_string(index);
+                entry["payload"]  = name + "_row_" + std::to_string(index);
+                if (payload_bytes != 0)
+                    entry["payload"].resize(payload_bytes, 'm');
+                entry["position"] = std::to_string(index);
+                if (node->dfs()->add_vector_row(owner, row->file_id, entry)) {
+                    ++appended;
                 }
-                submitted_hashes.push_back(submitted.value());
-                std::printf("[node-run] intent hash=%s submitted_at_ms=%lld\n",
-                            submitted.value().c_str(),
-                            static_cast<long long>(submitted_at_ms));
+                if ((index + 1) % intent_stride == 0 && submitted_hashes.size() < intent_count) {
+                    if (!submit_next_intent()) {
+                        node->cleanUp();
+                        return 5;
+                    }
+                    std::printf("[node-run] vector workload rows=%zu submitted=%zu logical_payload_bytes=%llu\n",
+                                appended,
+                                submitted_hashes.size(),
+                                static_cast<unsigned long long>(appended * payload_bytes));
+                    std::fflush(stdout);
+                }
+            }
+            std::printf("[node-run] DFS vector owner=%s file_id=%s rows=%zu/%zu\n",
+                        owner.to_string().c_str(),
+                        row->file_id.c_str(),
+                        appended,
+                        row_count);
+            std::fflush(stdout);
+            if (appended != row_count) {
+                node->cleanUp();
+                return 5;
+            }
+
+            // Multi-writer vectors (a chat is one): with EXC_DFS_VECTOR_CROSS=K every
+            // node also appends K rows to every other node's vector, signed with its
+            // own actor. The handle travels through the barrier directory; the vector
+            // itself has to arrive over the network first (creation broadcast or
+            // catalog sync), so each target is polled until it is readable here.
+            const char* cross_env = std::getenv("EXC_DFS_VECTOR_CROSS");
+            const auto  cross_rows =
+                cross_env ? static_cast<std::size_t>(std::strtoull(cross_env, nullptr, 10)) : std::size_t(0);
+            if (!barrier_directory.empty()) {
+                (void)FileIo::write_atomic(barrier_directory / ("vector-" + std::to_string(node_index)),
+                                           owner.to_string() + " " + row->file_id);
+            }
+            // Row removal (EXC_DFS_REMOVE_AFTER_S, shared with the doomed file): the
+            // owner flips its row 0 to a tombstone after that many seconds. The
+            // tombstone travels by DfsVectorAdd gossip and, when that is lost, by the
+            // catalog digest (the vector's content hash changes), and every node
+            // must end with row 0 at status 0.
+            if (const char* remove_env = std::getenv("EXC_DFS_REMOVE_AFTER_S");
+                remove_env != nullptr && std::strtoull(remove_env, nullptr, 10) > 0) {
+                const auto remove_after = std::strtoull(remove_env, nullptr, 10);
+                std::thread([node = node.get(), owner, file_id = row->file_id, name, remove_after]() {
+                    for (unsigned long long waited = 0; waited < remove_after && stop_requested == 0; ++waited) {
+                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                    }
+                    if (stop_requested != 0) {
+                        return;
+                    }
+                    const bool removed = node->dfs()->remove_vector_row(owner, file_id, name + "_0");
+                    std::printf("[node-run] DFS vector row removed owner=%s file_id=%s id=%s ok=%d\n",
+                                owner.to_string().c_str(),
+                                file_id.c_str(),
+                                (name + "_0").c_str(),
+                                removed ? 1 : 0);
+                    std::fflush(stdout);
+                }).detach();
+            }
+
+            if (cross_rows > 0 && !barrier_directory.empty()) {
+                std::size_t targets = 0, targets_done = 0;
+                for (std::size_t other = 0; other < node_count; ++other) {
+                    if (other == node_index) {
+                        continue;
+                    }
+                    ++targets;
+                    const auto handle_path = barrier_directory / ("vector-" + std::to_string(other));
+                    std::string owner_text, file_id_other;
+                    const auto  handle_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(90);
+                    while (stop_requested == 0 && std::chrono::steady_clock::now() < handle_deadline) {
+                        std::ifstream handle(handle_path);
+                        if (handle >> owner_text >> file_id_other) {
+                            break;
+                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    }
+                    if (owner_text.empty() || file_id_other.empty()) {
+                        std::printf("[node-run] DFS cross target=%zu: no vector handle\n", other);
+                        continue;
+                    }
+                    const ActorId owner_other(owner_text);
+                    // Wait for the vector to be readable locally (it replicates over the network).
+                    bool       readable      = false;
+                    const auto ready_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+                    while (stop_requested == 0 && std::chrono::steady_clock::now() < ready_deadline) {
+                        if (node->dfs()->read_vector_rows(owner_other, file_id_other).has_value()) {
+                            readable = true;
+                            break;
+                        }
+                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                    }
+                    if (!readable) {
+                        std::printf("[node-run] DFS cross target=%zu: vector never became readable\n", other);
+                        continue;
+                    }
+                    std::size_t cross_appended = 0;
+                    for (std::size_t index = 0; index < cross_rows; ++index) {
+                        DbRow entry;
+                        entry["id"]       = "from_" + std::to_string(node_index) + "_" + std::to_string(index);
+                        entry["payload"]  = "cross_" + std::to_string(node_index) + "_" + std::to_string(index);
+                        entry["position"] = std::to_string(1000 * (node_index + 1) + index);
+                        if (node->dfs()->add_vector_row(owner_other, file_id_other, entry, owner)) {
+                            ++cross_appended;
+                        }
+                    }
+                    std::printf("[node-run] DFS cross target=%zu owner=%s rows=%zu/%zu\n",
+                                other,
+                                owner_text.c_str(),
+                                cross_appended,
+                                cross_rows);
+                    std::fflush(stdout);
+                    if (cross_appended == cross_rows) {
+                        ++targets_done;
+                    }
+                }
+                std::printf("[node-run] DFS cross done targets=%zu/%zu\n", targets_done, targets);
                 std::fflush(stdout);
             }
+        }
+
+        // Every ExDFS load phase (file, vector, cross-writes) is over: tell the
+        // stand. A fault controller that hits before this cuts a publication short, and
+        // a node it relaunches has none of the load knobs, so the vector would
+        // never exist anywhere — a harness artifact, not a finding.
+        if (!resumed && !barrier_directory.empty()) {
+            (void)FileIo::write_atomic(barrier_directory / ("loaded-" + std::to_string(node_index)), "ok");
+        }
+
+        while (!resumed && submitted_hashes.size() < intent_count) {
+            if (!submit_next_intent()) {
+                node->cleanUp();
+                return 5;
+            }
+        }
+        if (!resumed && intent_count > 0) {
             std::printf("[node-run] submitted intents=%zu\n", submitted_hashes.size());
             std::fflush(stdout);
         }
 
+        if (!resumed && !mark_wave_loaded()) {
+            node->cleanUp();
+            return 5;
+        }
         const auto run_deadline          = std::chrono::steady_clock::now() + std::chrono::seconds(run_seconds);
         bool       all_finalized         = submitted_hashes.empty();
         bool       finalization_reported = false;
         while (stop_requested == 0 && std::chrono::steady_clock::now() < run_deadline) {
+            if (mining_test) {
+                const auto state = node->consensus()->finalized_mining_state();
+                if (state.has_value() && state.value().minted_units > 0)
+                    std::printf("[node-run] native payout section=%llu minted_units=%llu\n",
+                                static_cast<unsigned long long>(state.value().section),
+                                static_cast<unsigned long long>(state.value().minted_units));
+            }
             const auto metrics = node->consensus()->metrics();
             const auto ready   = node->consensus()->ready_intents(10'000, 8ULL * 1024ULL * 1024ULL).size();
             const auto shadow_peers =
@@ -572,12 +1043,47 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
+            if (wave_count > 1 && all_finalized) {
+                std::ifstream request(barrier_directory / "wave", std::ios::binary);
+                if (request.is_open()) {
+                    char data[4] { };
+                    request.read(data, sizeof(data));
+                    const std::string_view text(data, static_cast<std::size_t>(request.gcount()));
+                    std::size_t next_wave = 0;
+                    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), next_wave);
+                    if (request.bad() || text.empty() || text.size() > 3 || parsed.ec != std::errc { }
+                        || parsed.ptr != text.data() + text.size() || next_wave >= wave_count
+                        || next_wave > wave + 1) {
+                        node->cleanUp();
+                        return 5;
+                    }
+                    if (next_wave == wave + 1) {
+                        wave = next_wave;
+                        if (!publish_wave_file()) {
+                            node->cleanUp();
+                            return 5;
+                        }
+                        submitted_hashes.clear();
+                        finalization_reported = false;
+                        while (submitted_hashes.size() < intent_count)
+                            if (!submit_next_intent()) {
+                                node->cleanUp();
+                                return 5;
+                            }
+                        all_finalized = submitted_hashes.empty();
+                        if (!mark_wave_loaded()) {
+                            node->cleanUp();
+                            return 5;
+                        }
+                    }
+                }
+            }
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
         const auto metrics    = node->consensus()->metrics();
         const bool progressed = metrics.certificates > 0 && metrics.finalized > 0;
         node->cleanUp();
-        return progressed && all_finalized ? 0 : 6;
+        return progressed && all_finalized && wave + 1 == wave_count ? 0 : 6;
     }
 
     if (mode == "serve") {

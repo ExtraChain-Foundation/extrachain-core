@@ -270,6 +270,7 @@ int main() {
             .activation_height      = 10,
             .activation_dag_section = 200,
             .validator_set_hash     = finality_fixture.view.hash(),
+            .mining_policy          = MiningEmissionPolicy { 11, { { 10, 7 }, { 10, 3 } } },
         };
         const auto manifest_authorization =
             authorize_action(governance_policy.value(),
@@ -282,6 +283,10 @@ int main() {
                   .has_value());
         const auto finality = ShadowConsensus::load(finality_directory, finality_fixture.governance.id());
         check("finality loads only after governed activation", finality.has_value());
+        check("finality restores the signed mining schedule",
+              finality.has_value() && finality.value()->mining_policy().has_value()
+                  && mining_policy_budget(finality.value()->mining_policy().value(), 11).value() == 7
+                  && mining_policy_budget(finality.value()->mining_policy().value(), 21).value() == 3);
     }
 
     std::vector<std::unique_ptr<ConsensusEngine>> engines;

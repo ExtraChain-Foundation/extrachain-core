@@ -44,6 +44,7 @@
 #include "dfs/dirs_manager.h"
 #include "dfs/dfs_vector.h"
 #include "dfs/dfs_utils.h"
+#include "dfs/catalog_metadata.h"
 #include "dfs/historical_collection.h"
 #include "dfs/load_manager.h"
 #include "runtime/event.h"
@@ -53,6 +54,9 @@ namespace ExtraChain::Core {
 }
 class DirsManager;
 class LoadManager;
+namespace Dfs {
+    class VectorSync;
+}
 namespace ExtraChain::Core {
     class DeadlineTask;
 }
@@ -128,6 +132,9 @@ public:
 
 private:
     ExtraChain::Core::ExtraChainNode *node;
+    std::unique_ptr<Dfs::VectorSync>  vector_sync_;
+    struct VectorWriteBudget;
+    std::shared_ptr<VectorWriteBudget> vector_write_budget_;
 
     FileEvent                                       stored_event_;
     FileEvent                                       added_event_;
@@ -151,13 +158,17 @@ private:
     std::mutex           size_state_mutex_;
 
     std::atomic_uint64_t                                         staged_startup_response_count_ { 0 };
+    std::atomic_bool                                             reconcile_scheduled_ { false };
+    std::size_t                                                  reconcile_round_ = 0;
     std::mutex                                                   delayed_tasks_mutex_;
+    bool                                                         delayed_tasks_stopped_ = false;
     std::vector<std::shared_ptr<ExtraChain::Core::DeadlineTask>> delayed_tasks_;
 
     void schedule_after(std::chrono::steady_clock::duration delay, std::function<void()> callback);
 
 public:
     explicit DfsService(ExtraChain::Core::ExtraChainNode *node);
+    Dfs::VectorSync &vector_sync();
     virtual ~DfsService();
 
     DfsService(const DfsService &)            = delete;
@@ -275,7 +286,17 @@ public:
         download_rank_overrides_.erase(actor_id);
     }
 
-    void request_vector_content(const ActorId &owner_id, const std::string &file_id);
+    void request_vector_content(const ActorId &owner_id, const std::string &file_id, bool force = false);
+    // How many forced snapshot retries a short vector may still ask for, and what
+    // it looked like last time: a retry that does not grow the copy is pointless.
+    struct VectorRepair {
+        int                                   attempts_left = 0;
+        std::size_t                           last_rows     = 0;
+        std::chrono::steady_clock::time_point next_attempt {};
+        int                                   idle_rounds = 0;
+    };
+    std::mutex                                     vector_repair_mutex_;
+    std::map<Dfs::FileLink, VectorRepair>           vector_repair_;
 
     // Per-actor filename overrides win over per-actor ranks; used to pull a specific vector
     // off the critical path (e.g. the large network Usernames vector -> RANK_OTHER_VECTORS).
@@ -296,6 +317,9 @@ public:
 
     void mark_startup_sync_response() {
         staged_startup_response_count_.fetch_add(1, std::memory_order_relaxed);
+    }
+    void schedule_delayed(std::chrono::steady_clock::duration delay, std::function<void()> callback) {
+        schedule_after(delay, std::move(callback));
     }
 
     void set_mode(DfsMode mode) {
@@ -335,6 +359,21 @@ public:
     // window and blocked the state-response -> add_to_queue path.
     std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> request_vector_times_;
     std::mutex                                                     request_times_mutex_;
+    struct CollectionPending {
+        Dfs::FileLink                         link;
+        std::string                           peer;
+        std::uint64_t                         after;
+        std::chrono::steady_clock::time_point deadline;
+    };
+    std::map<std::string, CollectionPending> collection_pending_;
+    struct CollectionSources {
+        std::string                           last;
+        std::set<std::string>                 attempted;
+        std::uint64_t                         after = 0;
+        std::chrono::steady_clock::time_point started;
+    };
+    std::map<Dfs::FileLink, CollectionSources> collection_sources_;
+    std::uint64_t                            collection_source_cursor_ = 0;
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
@@ -479,7 +518,8 @@ public:
         const std::string           &file_id,
         const std::string           &where_statement = "",
         const Dfs::DataSecurityData &security_data   = Dfs::DataSecurityData(),
-        Dfs::FileType                file_type       = Dfs::FileType::Vector);
+        Dfs::FileType                file_type       = Dfs::FileType::Vector,
+        const DbRow                 &binds           = { });
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_dictionary(
         const ActorId               &owner_id,
@@ -552,12 +592,17 @@ public:
                                                    const std::string &file_id,
                                                    uint32_t           id);
 
+    void request_collection(const Dfs::FileLink &link,
+                            const std::string   &preferred    = "",
+                            bool                 continuation = false);
     void network_request_collection(const ActorId     &owner_id,
                                     const std::string &file_id,
-                                    const Responder   &responder);
+                                    const Responder   &responder,
+                                    std::uint64_t      after = 0);
     void network_response_historical_collection(const ActorId                              &owner_id,
                                                 const std::string                          &file_id,
-                                                const std::vector<HistoricalCollectionRow> &historical_rows);
+                                                const std::vector<HistoricalCollectionRow> &historical_rows,
+                                                const Responder                            &responder);
     void network_response_content_collection(const ActorId            &owner_id,
                                              const std::string        &file_id,
                                              const std::vector<DbRow> &db_rows);
@@ -578,7 +623,11 @@ public:
 
     void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
     void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
-    void network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+    bool network_vector_add(const ActorId        &owner_id,
+                            const std::string    &file_id,
+                            const DbRow          &row,
+                            std::string_view      peer        = { },
+                            std::function<void()> on_accepted = { });
 
     void network_request_file_state(const ActorId     &owner_id,
                                     const std::string &file_id,
@@ -606,9 +655,13 @@ public:
     void sync_stored(const Dfs::FileData &file_data, const Responder &responder);
 
     // External interfaces
-    std::string network_store_file(const ActorId        &owner_id,
-                                   const Dfs::DirRow    &dir_row,
-                                   Dfs::NetworkStoreFile network_stote);
+    std::expected<Dfs::CatalogUpdate, std::string> accept_catalog_row(const ActorId     &owner_id,
+                                                                      const Dfs::DirRow &row);
+    bool                                           network_store_file(const ActorId        &owner_id,
+                                                                      const Dfs::DirRow    &row,
+                                                                      Dfs::NetworkStoreFile origin,
+                                                                      std::string_view      peer,
+                                                                      std::function<void()> on_accepted = { });
     std::string getFileFromStorage(const ActorId &owner_id, const std::string &file_name);
 
     // Unique file ID: hash+msec+salt
@@ -617,7 +670,7 @@ public:
     std::uint64_t sizeTaken() const;
     std::uint64_t totalDfsSize() const;
     void          increaseSizeTaken(uintmax_t value);
-    void          completeDownloadedFile(const ActorId &owner_id, const Dfs::DirRow &dir_row);
+    bool          completeDownloadedFile(const ActorId &owner_id, const Dfs::DirRow &dir_row);
     std::expected<void, ExportFileError> export_file(const ActorId                &owner_id,
                                                      const std::string            &file_id,
                                                      const FsPath                 &output_folder,
@@ -629,6 +682,16 @@ public:
     size_t       load_manager_downloads_size();
 
     void sync(const std::string &identifier);
+
+    // Full-catalog sync as it was before #75; the fallback for peers without digest sync.
+
+    void request_catalog(const std::string &identifier);
+    // Catalog reconciliation is otherwise a handshake-only event; a row lost to
+    // gossip while the connection survived (a partition healed before TCP gave
+    // up) was never repaired. One peer per tick, round-robin.
+    void ensure_periodic_reconcile();
+    void reconcile_tick();
+    static std::chrono::seconds reconcile_period();
     bool refresh_actors(const std::vector<ActorId> &actors);
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
     void refresh_calculate();

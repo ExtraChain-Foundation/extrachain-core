@@ -16,6 +16,7 @@
 
 #include <charconv>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <set>
@@ -286,6 +287,23 @@ int main(int argc, char* argv[]) {
         .activation_dag_section = activation_section,
         .validator_set_hash     = hash_validator_set(validators.value()),
     };
+    const char* mining_test_flag = std::getenv("EXC_SHADOW_MINING_TEST");
+    if (mining_test_flag != nullptr && std::string_view(mining_test_flag) != "1") {
+        std::fprintf(stderr, "[shadow-bundle] EXC_SHADOW_MINING_TEST must be 1 when set\n");
+        return 64;
+    }
+    const bool mining_test = mining_test_flag != nullptr;
+    const char* long_test_flag = std::getenv("EXC_SHADOW_MINING_LONG_TEST");
+    if (long_test_flag != nullptr && (!mining_test || std::string_view(long_test_flag) != "1"))
+        return 64;
+    if (mining_test) {
+        // Explicit fixtures: 32 ExC, or 1,000 ExC across the long test. Neither is a production schedule.
+        const MiningEmissionSegment segment = long_test_flag == nullptr
+                                                  ? MiningEmissionSegment { 32, NativeCoinUnits }
+                                                  : MiningEmissionSegment { 100'000, NativeCoinUnits / 100 };
+        activation.mining_policy =
+            MiningEmissionPolicy { activation_section / ShadowSectionInterval + 1, { segment } };
+    }
     const auto activation_authorization =
         authorize_action(governance.value(),
                          1,
@@ -303,7 +321,7 @@ int main(int argc, char* argv[]) {
         .activation_dag_section = activation.activation_dag_section,
         .proposal_timeout_ms    = 2'000,
         .maximum_timeout_ms     = 16'000,
-        .maximum_batch_bytes    = 4ULL * 1024ULL * 1024ULL,
+        .maximum_batch_bytes    = (mining_test ? 16ULL : 4ULL) * 1024ULL * 1024ULL,
     };
 
     bool written = true;

@@ -133,6 +133,46 @@ Inherit from `JanusBidBase` / `JanusItemBase`, BOOST_DESCRIBE_STRUCT, then:
 
 ## Scripts
 - `scripts/clang_format.js` — format code (clang-format runner).
+- `scripts/stand.py` — prepare, run, stop, inspect, and archive validation jobs.
+
+## Validation workflow
+
+Read [docs/TESTING.md](docs/TESTING.md) for required checks and
+[docs/STAND.md](docs/STAND.md) for the controller commands and manifest format.
+For a new device, start with [docs/STAND_SETUP.md](docs/STAND_SETUP.md). Select the
+execution environment from the task and probe its capabilities once. No server,
+account name, path, or previous conversation is a prerequisite. The controller requires
+Linux with systemd and working namespace and traffic-control support. On macOS or
+Windows, use a capable Linux guest on the selected device; retain separate native
+platform checks. Do not present a guest result as validation of its host OS.
+Use `scripts/stand.py` as the stand entry point in that execution environment.
+
+- Use a clean validation checkout and fixed binaries, fixtures, and dependencies.
+  Keep profiles, frozen manifests, and run data outside that checkout. Freeze the
+  declared inputs with `prepare`, then launch the detached service with `start`.
+- Put the stage sequence and workload settings in the profile. Keep the existing
+  combined DAG + DFS workload and full audits. Do not copy supervisor scripts for
+  each revision or replace the controller with a manual SSH polling loop.
+- Use `status` for an operational decision or a user request. Let the service run
+  without repeated model calls. Read `report` after completion. On failure, read
+  `diagnose` first, then only the required file ranges with `--file`, `--offset`,
+  and `--limit`. Full logs remain on the stand host.
+- Save a compact handoff record outside the checkout: environment, source/dependency
+  revisions, build and Python paths, manifest, run ID, report, and next action. On
+  resumption, read that record and one status. Do not reconstruct old conversations
+  or repeatedly read complete instructions and logs. Batch independent local checks.
+- Start with the preview on a new environment. Choose later checks by change scope;
+  broaden them for a failure or unresolved concern. Do not weaken required coverage
+  to fit a small device. Documentation-only edits need documentation review and command
+  checks, not another runtime endurance run.
+- Stop a run with `stop`, so the controller records the requested interruption and
+  systemd cleans up descendants. Do not treat stale or incomplete state as PASS.
+- Follow the acceptance and cache rules in `docs/STAND.md`. A short validation PASS
+  does not establish full acceptance. Long and final checks cannot use cached
+  results or combine interrupted intervals.
+- Review the generated report and tracker/PR drafts before publication. Archive
+  stopped runs with the controller's integrity and full-comparison checks. Preserve
+  failure evidence, current acceptance artifacts, and referenced cache sources.
 
 ## Commits
 

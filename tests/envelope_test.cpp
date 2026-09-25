@@ -63,6 +63,58 @@ int main() {
     node->network()->message_received(envelope(peer, peer.id(), false), "127.0.0.1", "peer-node");
     TEST_REQUIRE_EQ(delivered, std::size_t(1));
 
+    for (const auto size : { std::size_t(1024 * 1024), std::size_t(2 * 1024 * 1024) }) {
+        const auto body =
+            make_init_message(MessagePack::serialize(
+                                  CustomMessage { .owner = peer.id(), .data = std::string(size, 'x') }),
+                              SendMode::Focused,
+                              MessageType::Custom,
+                              MessageStatus::NoStatus,
+                              peer.id(),
+                              { },
+                              "peer-node");
+        const auto signature = peer.key().sign(ByteArray(body.calculate_hash()).toBytes()).value();
+        node->network()->message_received(body.serialize() + ByteArray(signature).toString(),
+                                          "127.0.0.1",
+                                          "peer-node");
+        TEST_REQUIRE_EQ(delivered, std::size_t(1));
+    }
+    for (unsigned field = 0; field < 3; ++field) {
+        auto body =
+            make_init_message(MessagePack::serialize(CustomMessage { .owner = peer.id(), .data = "hello" }),
+                              SendMode::Focused,
+                              MessageType::Custom,
+                              MessageStatus::NoStatus,
+                              peer.id(),
+                              { },
+                              "peer-node");
+        if (field == 0)
+            body.init_sender_identifier = std::string(65, 'a');
+        else if (field == 1)
+            body.nodes_identifiers_to_ignore.insert(std::string(65, 'a'));
+        else
+            body.nodes_identifiers_to_ignore_later.insert(std::string(65, 'a'));
+        const auto signature = peer.key().sign(ByteArray(body.calculate_hash()).toBytes()).value();
+        node->network()->message_received(body.serialize() + ByteArray(signature).toString(),
+                                          "127.0.0.1",
+                                          "peer-node");
+        TEST_REQUIRE_EQ(delivered, std::size_t(1));
+    }
+    const std::string impossible_array("\xdd\xff\xff\xff\xff", 5);
+    node->network()->message_received(impossible_array + std::string(64, 'x'), "127.0.0.1", "peer-node");
+    const auto malformed_body      = make_init_message(impossible_array,
+                                                       SendMode::Focused,
+                                                       MessageType::Custom,
+                                                       MessageStatus::NoStatus,
+                                                       peer.id(),
+                                                       { },
+                                                       "peer-node");
+    const auto malformed_signature = peer.key().sign(ByteArray(malformed_body.calculate_hash()).toBytes()).value();
+    node->network()->message_received(malformed_body.serialize() + ByteArray(malformed_signature).toString(),
+                                      "127.0.0.1",
+                                      "peer-node");
+    TEST_REQUIRE_EQ(delivered, std::size_t(1));
+
     // Corrupted signature from a known actor: dropped.
     node->network()->message_received(envelope(peer, peer.id(), true), "127.0.0.1", "peer-node");
     TEST_REQUIRE_EQ(delivered, std::size_t(1));

@@ -32,6 +32,22 @@
     #include <malloc.h>
 #endif
 
+#if defined(__linux__) && !defined(__ANDROID__) && defined(__GLIBC__)
+    #include <cstdlib>
+
+namespace {
+    // glibc gives threads their own heap arenas, up to eight per core, and keeps the
+    // partially used ones. A full node runs about twenty threads that allocate and free
+    // short-lived consensus data. On the Ubuntu stand the median node heap after a
+    // 30-minute combined run was 176 MiB with the default and 127 MiB with two arenas.
+    // An explicit MALLOC_ARENA_MAX from the operator still takes precedence.
+    void limit_allocator_arenas() {
+        if (std::getenv("MALLOC_ARENA_MAX") == nullptr)
+            mallopt(M_ARENA_MAX, 2);
+    }
+} // namespace
+#endif
+
 #include <msgpack.hpp>
 #include <sodium/core.h>
 
@@ -51,6 +67,7 @@
 #include "managers/janus_manager.h"
 #include "dfs/collection_template.h"
 #include "network/network_service.h"
+#include "network/peer_identity.h"
 #include "network/network_runtime.h"
 #include "network/wire_format.h"
 #include "runtime/deadline_task.h"
@@ -249,6 +266,11 @@ namespace ExtraChain::Core {
             runtime_profile_ = is_client_application_ ? RuntimeProfile::DesktopLight : RuntimeProfile::FullNode;
 #endif
         }
+#if defined(__linux__) && !defined(__ANDROID__) && defined(__GLIBC__)
+        // Before the runtime starts its threads; an embedding application keeps its own policy.
+        if (runtime_profile_ == RuntimeProfile::FullNode)
+            limit_allocator_arenas();
+#endif
         const auto limits = runtime_limits();
         runtime_          = std::make_unique<NetworkRuntime>(RuntimeConfig {
                      .io_threads      = limits.io_workers,
@@ -400,6 +422,14 @@ namespace ExtraChain::Core {
 
         node_enabled = true;
         dag_->repair_control_chain();
+        bool replay_pack_history;
+        {
+            std::lock_guard lock(dag_->pack_sync_mutex_);
+            replay_pack_history = dag_->pack_history_dirty_;
+        }
+        if (dag_->mode() == DagMode::Full && dag_->chain_index_
+            && (replay_pack_history || !dag_->chain_index_->derived_index_ready()))
+            dag_->schedule_index_rebuild();
         initialized_event_.publish();
     }
 
@@ -452,6 +482,8 @@ namespace ExtraChain::Core {
         reward_timer_.reset();
         info_timer_.reset();
         luminance_timer_.reset();
+        if (dmm_)
+            dmm_->prepare_shutdown();
         if (consensus_service_) {
             consensus_service_->deactivate();
         }
@@ -562,7 +594,8 @@ namespace ExtraChain::Core {
     bool ExtraChainNode::create_usernames_vector() {
         auto vector_template = Dfs::CollectionTemplate::create("Usernames")
                                    .value()
-                                   .add_fields({ Dfs::Field::String("name").unique() });
+                                   .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
+                                   .add_fields({ Dfs::Field::String("name") });
 
         auto system_actor_id = account_controller()->system_actor().id();
         auto template_res    = dfs()->store_template(system_actor_id, vector_template);
@@ -586,8 +619,11 @@ namespace ExtraChain::Core {
 
     bool ExtraChainNode::create_chat_templates() {
         auto system_actor_id = account_controller()->system_actor().id();
-        auto chat_template   = Dfs::CollectionTemplate::create("Chat").value().use_id().add_fields(
-            { Dfs::Field::Json("message").not_null() });
+        auto chat_template   = Dfs::CollectionTemplate::create("Chat")
+                                   .value()
+                                   .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
+                                   .use_id()
+                                   .add_fields({ Dfs::Field::Json("message").not_null() });
 
         auto chat_result = dfs()->store_template(system_actor_id, chat_template);
         if (!chat_result.has_value()) {
@@ -603,6 +639,7 @@ namespace ExtraChain::Core {
     bool ExtraChainNode::create_subscription_template() {
         auto subscription_template = Dfs::CollectionTemplate::create("Subscription")
                                          .value()
+                                         .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
                                          .add_fields({ Dfs::Field::Integer("type").not_null(),
                                                        Dfs::Field::Integer("date_start").not_null(),
                                                        Dfs::Field::Bool("auto_renew").not_null().between(0, 1),
@@ -630,17 +667,18 @@ namespace ExtraChain::Core {
             return existing->state == Dfs::FileState::Ready;
         }
 
-        auto tokens_template = Dfs::CollectionTemplate::create("TokensRegistry")
-                                   .value()
-                                   .add_fields({ Dfs::Field::String("name").not_null().unique().length(3, 20),
-                                                 Dfs::Field::String("ticker").not_null().unique().length(2, 5),
-                                                 Dfs::Field::String("count").not_null(),
-                                                 Dfs::Field::ActorId("owner_id").not_null(),
-                                                 Dfs::Field::String("color").not_null(),
-                                                 Dfs::Field::String("smart"),
-                                                 Dfs::Field::Integer("decimals").not_null().between(0, 18),
-                                                 Dfs::Field::String("section_id").not_null(),
-                                                 Dfs::Field::String("tx_hash").not_null() });
+        auto tokens_template    = Dfs::CollectionTemplate::create("TokensRegistry")
+                                      .value()
+                                      .set_write_policy(Dfs::VectorWritePolicy::TokenRegistry)
+                                      .add_fields({ Dfs::Field::String("name").not_null().length(3, 20),
+                                                    Dfs::Field::String("ticker").not_null().length(2, 5),
+                                                    Dfs::Field::String("count").not_null(),
+                                                    Dfs::Field::ActorId("owner_id").not_null(),
+                                                    Dfs::Field::String("color").not_null(),
+                                                    Dfs::Field::String("smart"),
+                                                    Dfs::Field::Integer("decimals").not_null().between(0, 18),
+                                                    Dfs::Field::String("section_id").not_null(),
+                                                    Dfs::Field::String("tx_hash").not_null() });
         tokens_template.primary = Dfs::Field::ActorId("token_id").not_null().unique();
 
         auto template_res = dfs_->store_template(network_id, tokens_template);
@@ -967,9 +1005,10 @@ namespace ExtraChain::Core {
 
         auto vector_template = Dfs::CollectionTemplate::create(CHANNELS_VECTOR_NAME)
                                    .value()
+                                   .set_write_policy(Dfs::VectorWritePolicy::ActorNamespace)
                                    .add_fields({ Dfs::Field::String("name"),
                                                  Dfs::Field::String("owner_id").not_null(),
-                                                 Dfs::Field::String("file_id").unique().not_null() });
+                                                 Dfs::Field::String("file_id").not_null() });
 
         auto template_res = dfs()->store_template(system_id, vector_template);
         if (!template_res.has_value()) {
@@ -1073,6 +1112,7 @@ namespace ExtraChain::Core {
     }
 
     void ExtraChainNode::start() {
+        static_cast<void>(node_identifier());
         if (consensus_service_ && !actor_index_->network_id().is_zero()) {
             auto activated = consensus_service_->activate(actor_index_->network_id());
             if (!activated.has_value() && activated.error() == Consensus::ConsensusError::BootstrapIncomplete) {
@@ -1519,8 +1559,13 @@ namespace ExtraChain::Core {
             eWarning("[Contract] Cannot stage transaction artifacts: {}", staged.error().detail);
             return std::unexpected(TransactionError::Unknown);
         }
-        dag_->add_transaction_sended(*prepared);
-        network_service_->send_message(*prepared, MessageType::DagTransaction, SendMode::Broadcast);
+        const auto request = Responder(nullptr).with_new_message_id();
+        dag_->add_transaction_sended(prepared.value(), request);
+        network_service_->send_message(prepared.value(),
+                                       MessageType::DagTransaction,
+                                       SendMode::Broadcast,
+                                       MessageStatus::NoStatus,
+                                       request);
         return *prepared;
     }
 
@@ -2181,7 +2226,8 @@ namespace ExtraChain::Core {
             if (!file) {
                 return std::unexpected(ImportError::FileError);
             }
-            return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+            const std::string content(std::istreambuf_iterator<char>(file), { });
+            return Utils::to_base64(content);
         }
 
         const auto& current_profile = account_controller_->current_profile();
@@ -2204,7 +2250,7 @@ namespace ExtraChain::Core {
             return std::unexpected(ImportError::CryptoError);
         }
 
-        return ByteArray(encrypted.value()).toString();
+        return Utils::to_base64(encrypted.value());
     }
 
     std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(const std::string& data,
@@ -2221,27 +2267,39 @@ namespace ExtraChain::Core {
 
         auto hash = Utils::calculate_hash(login_password);
 
-        if (data.size() < 100) {
-            auto decrypted = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash, true);
-            if (!decrypted.has_value()) {
-                return std::unexpected(ImportProfileError::DecryptError);
-            }
-
-            account_controller_->import_seed(login, password, ByteArray(decrypted.value()).toArray<32>());
-            return hash;
+        if (data.size() > 16 * 1024 * 1024) {
+            return std::unexpected(ImportProfileError::IncorrectJson);
         }
-
-        auto json = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash, false);
+        const auto decoded = Utils::from_base64(data);
+        if (!decoded.has_value()) {
+            return std::unexpected(ImportProfileError::DecryptError);
+        }
+        const bool legacy_seed = decoded.value().size() == 48 && !decoded.value().starts_with("ECP2");
+        auto       json =
+            Cryptography::symmetric_decrypt_password(ByteArray(decoded.value()).toBytes(), hash, legacy_seed);
         if (!json.has_value()) {
             return std::unexpected(ImportProfileError::DecryptError);
         }
-
-        auto imported_user = Json::deserialize<ImportedUser>(json.value());
-        if (!imported_user.has_value()) {
-            return std::unexpected(ImportProfileError::IncorrectJson);
+        if (json.value().size() == 32) {
+            const auto seed = ByteArray(json.value()).toArray<32>();
+            if (!account_controller_->import_seed(login, password, seed)) {
+                return std::unexpected(ImportProfileError::SaveError);
+            }
+            return hash;
         }
 
-        eLog("imported_user", imported_user.value());
+        auto imported_user = Json::deserialize<ImportedUser>(json.value());
+        if (!imported_user.has_value() || imported_user.value().system.is_zero()
+            || imported_user.value().main.is_zero()
+            || std::ranges::none_of(imported_user.value().actors,
+                                    [&](const auto& actor) {
+                                        return !actor.empty() && actor.id() == imported_user.value().system;
+                                    })
+            || std::ranges::none_of(imported_user.value().actors, [&](const auto& actor) {
+                   return !actor.empty() && actor.id() == imported_user.value().main;
+               })) {
+            return std::unexpected(ImportProfileError::IncorrectJson);
+        }
 
         account_controller_->import_old_profile(imported_user.value(), hash);
         return hash;
@@ -2256,7 +2314,9 @@ namespace ExtraChain::Core {
         case ImportProfileError::LoginPasswordEmpty:
             return "Login and password is empty";
         case ImportProfileError::IncorrectJson:
-            return "Json data is empty";
+            return "Profile data is invalid";
+        case ImportProfileError::SaveError:
+            return "Cannot save the imported profile";
         default:
             return "Unknown import error";
         }
@@ -2290,7 +2350,7 @@ namespace ExtraChain::Core {
             return std::unexpected(ImportProfileFileError::Base64DecodeError);
         }
 
-        auto hash_result = import_profile(from_base64.value(), login, password);
+        auto hash_result = import_profile(file_content, login, password);
         if (!hash_result.has_value()) {
             eInfo("Import operation failed: {}", get_import_error_message(hash_result.error()));
             return std::unexpected(ImportProfileFileError::ImportError);
@@ -2416,6 +2476,7 @@ namespace ExtraChain::Core {
 
     void ExtraChainNode::start_mining() {
         dag_->force_full_mode();
+        data_mining_manager()->set_enabled(true);
         if (reward_timer_) {
             reward_timer_->start();
         }
@@ -2423,6 +2484,7 @@ namespace ExtraChain::Core {
     }
 
     void ExtraChainNode::stop_mining() {
+        data_mining_manager()->set_enabled(false);
         if (reward_timer_) {
             reward_timer_->stop();
         }
@@ -2435,7 +2497,8 @@ namespace ExtraChain::Core {
     }
 
     void ExtraChainNode::timer_info_print() {
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        // Q_OS_LINUX is a Qt macro, so the Qt-free node build never compiled this call.
+#if defined(__linux__) && !defined(__ANDROID__) && defined(__GLIBC__)
         malloc_trim(0);
 #endif
 
@@ -2513,30 +2576,57 @@ namespace ExtraChain::Core {
     }
 
     std::string ExtraChainNode::generate_node_identifier() {
-        std::string node_identifier = Utils::generate_random_hex(64);
-
-        auto settings            = Utils::read_settings();
-        settings.node_identifier = node_identifier;
-        Utils::write_settings(settings);
-        node_identifier_ = node_identifier;
-
-        return node_identifier;
+        {
+            std::scoped_lock lock(node_identity_mutex_);
+            auto             settings = Utils::read_settings();
+            node_nonce_               = Utils::generate_random_hex(64);
+            settings.node_nonce       = node_nonce_;
+            settings.node_identifier  = node_nonce_;
+            if (!Utils::write_settings(settings)) {
+                throw std::runtime_error("Cannot persist the node identity");
+            }
+            node_identifier_     = node_nonce_;
+            node_identity_actor_ = ActorId();
+        }
+        return node_identifier();
     }
 
     std::string ExtraChainNode::node_identifier() {
-        if (!node_identifier_.empty()) {
-            return node_identifier_;
+        std::scoped_lock lock(node_identity_mutex_);
+        if (node_nonce_.empty()) {
+            auto settings            = Utils::read_settings();
+            node_nonce_              = settings.node_nonce.value_or(Utils::generate_random_hex(64));
+            node_identifier_         = settings.node_identifier.value_or(node_nonce_);
+            settings.node_nonce      = node_nonce_;
+            settings.node_identifier = node_identifier_;
+            if (!Utils::write_settings(settings)) {
+                throw std::runtime_error("Cannot persist the node identity");
+            }
         }
-
-        auto settings = Utils::read_settings();
-
-        if (!settings.node_identifier.has_value()) {
-            auto new_node_identifier = this->generate_node_identifier();
-            return new_node_identifier;
+        if (account_controller_ && !account_controller_->empty()) {
+            const auto& actor = account_controller_->system_actor();
+            if (node_identity_actor_ != actor.id()) {
+                const auto identifier = Network::peer_identifier(actor.key().public_key(), node_nonce_);
+                if (!identifier.has_value()) {
+                    throw std::runtime_error("Invalid node identity nonce");
+                }
+                auto settings            = Utils::read_settings();
+                settings.node_identifier = identifier.value();
+                settings.node_nonce      = node_nonce_;
+                if (!Utils::write_settings(settings)) {
+                    throw std::runtime_error("Cannot persist the node identity");
+                }
+                node_identifier_     = identifier.value();
+                node_identity_actor_ = actor.id();
+            }
         }
-
-        node_identifier_ = settings.node_identifier.value();
         return node_identifier_;
+    }
+
+    std::string ExtraChainNode::node_nonce() {
+        static_cast<void>(node_identifier());
+        std::scoped_lock lock(node_identity_mutex_);
+        return node_nonce_;
     }
 
     void ExtraChainNode::notification_token(std::string os, std::string actor_id, std::string token) {

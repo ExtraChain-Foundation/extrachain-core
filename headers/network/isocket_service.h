@@ -32,6 +32,7 @@
 #include "extrachain_global.h"
 #include "network/peer_context.h"
 #include "network/peer_meta.h"
+#include "runtime/work_budget.h"
 
 namespace Cryptography {
     class BoxSession;
@@ -68,6 +69,16 @@ public:
         std::optional<int>                   dag_version;
         std::optional<std::string>           node_version;
         std::optional<std::set<std::string>> capabilities;
+        Actor<KeyPublic>                     system_actor;
+        std::string                          node_nonce;
+        PublicKey                            session_key { };
+        PublicKey                            peer_session_key { };
+        Signature                            signature { };
+    };
+
+    struct ReceivedMessage {
+        std::string                                           data;
+        std::shared_ptr<ExtraChain::Core::WorkBudget::Ticket> reservation;
     };
 
     enum class Priority {
@@ -125,7 +136,8 @@ public:
                                                                     on_error;
     std::function<void(Ptr)>                                        on_activated;
     std::function<void(Ptr, const std::set<SocketPair>&)>           on_share_connections;
-    std::function<void(Ptr, std::string, std::string, std::string)> on_message;
+    // Return false without moving the payload to pause reads until the receiver has capacity.
+    std::function<bool(Ptr, ReceivedMessage&, std::string, std::string)> on_message;
 
 protected:
     bool set_peer_key(const PublicKey& key);
@@ -177,9 +189,16 @@ BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
                        your_ip,
                        connections,
                        is_available,
+                       is_constant,
                        socket_mode,
+                       dfs_mode,
                        dag_version,
                        node_version,
-                       capabilities))
+                       capabilities,
+                       system_actor,
+                       node_nonce,
+                       session_key,
+                       peer_session_key,
+                       signature))
 
 BOOST_DESCRIBE_STRUCT(PeerConnection, (), (ip, identifier))

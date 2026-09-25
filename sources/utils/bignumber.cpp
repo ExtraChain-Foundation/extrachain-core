@@ -308,6 +308,10 @@ BigNumber BigNumber::abs() const {
 }
 
 std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bigNumber) {
+    const auto sign_length = !bigNumber.empty() && bigNumber.front() == '-' ? 1U : 0U;
+    if (bigNumber.size() - sign_length > MAX_INPUT_DIGITS) {
+        return std::unexpected(BigNumberError::InvalidNumber);
+    }
     if (bigNumber == "inf") {
         return std::unexpected(BigNumberError::Infinity);
     }
@@ -343,14 +347,27 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
     if (base == NumeralBase::Dec) {
         return create(bigNumber);
     }
-    const auto first =
-        (!bigNumber.empty() && bigNumber.front() == '-') ? bigNumber.begin() + 1 : bigNumber.begin();
-    if (first == bigNumber.end() || !std::all_of(first, bigNumber.end(), [](unsigned char c) {
-            return std::isxdigit(c) != 0;
+    if (base != NumeralBase::Hex) {
+        return std::unexpected(BigNumberError::InvalidNumber);
+    }
+    return from_hex_checked(bigNumber);
+}
+
+std::expected<BigNumber, BigNumberError> BigNumber::from_hex_checked(const std::string &hex) {
+    const auto sign_length = !hex.empty() && hex.front() == '-' ? 1U : 0U;
+    if (hex.size() == sign_length || hex.size() - sign_length > MAX_INPUT_DIGITS) {
+        return std::unexpected(BigNumberError::InvalidNumber);
+    }
+    if (!std::all_of(hex.begin() + sign_length, hex.end(), [](char c) {
+            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         })) {
         return std::unexpected(BigNumberError::InvalidNumber);
     }
-    return from_hex(bigNumber);
+    try {
+        return from_hex(hex);
+    } catch (const std::exception &) {
+        return std::unexpected(BigNumberError::InvalidNumber);
+    }
 }
 
 bool BigNumber::is_hex_string(const std::string &str) {

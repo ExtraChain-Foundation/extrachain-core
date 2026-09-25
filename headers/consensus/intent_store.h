@@ -53,6 +53,7 @@ namespace ExtraChain::Consensus {
         std::expected<std::vector<IntentEnvelope>, ConsensusError>      load_pending();
         std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> load_committed_nonces();
         std::expected<std::optional<AppliedCheckpoint>, ConsensusError> load_applied_checkpoint();
+        // Call only after consensus validation. Finality can include requests never held in the local pool.
         std::expected<void, ConsensusError>                             commit_finalized(
                                         const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized,
                                         std::optional<AppliedCheckpoint>                             checkpoint = std::nullopt);

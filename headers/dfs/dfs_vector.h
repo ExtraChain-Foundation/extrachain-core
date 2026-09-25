@@ -20,6 +20,8 @@
 #pragma once
 
 #include "dfs/dfs_utils.h"
+#include "dfs/vector_index.h"
+#include "dfs/vector_descriptor.h"
 
 namespace ExtraChain::Core {
     class ExtraChainNode;
@@ -52,6 +54,11 @@ private:
     bool                    is_encrypted_;
 
     DfsVector() = default;
+    std::expected<bool, DfsVectorError>                  persist_row(DbRow& row, bool local, bool check);
+    bool                                                 authorized(const DbRow& row);
+    bool                                                 verify_signature(const DbRow& row);
+    std::string                                          row_key(const std::string& key) const;
+    std::expected<Dfs::VectorDescriptor, DfsVectorError> load_descriptor();
     DfsVector(ExtraChain::Core::ExtraChainNode* node,
               const Actor<KeyPrivate>&          actor,
               const ActorId&                    file_actor_id,
@@ -106,7 +113,8 @@ public:
     std::expected<DbRow, DfsVectorError> read_row(const std::string& primary_data);
 
     std::expected<std::vector<DbRow>, DfsVectorError> read_rows(
-        const std::string& where_statement = "where status = '1'");
+        const std::string& where_statement = "where status = '1'",
+        const DbRow&       binds           = { });
 
     std::expected<Dfs::CollectionTemplate, DfsVectorError> read_template();
 
@@ -122,7 +130,7 @@ public:
     bool handle_package(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
     bool                 store_add(DbRow& row);
-    bool                 local_add(const DbRow& row, bool check);
+    std::expected<bool, DfsVectorError> local_add(const DbRow& row, bool check);
     std::optional<DbRow> remove(const std::string& primary_data);
 
     std::pair<std::string, bool> calculate_hash(const DbRow& row);
@@ -130,6 +138,7 @@ public:
     std::optional<std::pair<std::string, std::size_t>> calculate_template_file_hash();
 
     std::optional<std::pair<std::string, uint64_t>> data_hash_size();
+    std::expected<Dfs::VectorIndexRoot, std::string> index_root();
 
     bool verify(const DbRow& row);
 

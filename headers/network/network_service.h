@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "network/broadcast_budget.h"
+#include "runtime/work_budget.h"
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -182,6 +184,8 @@ private:
     std::string first_node_;
     // Envelope verification: actors of message origins, misses and pending
     // actor requests, all keyed by actor id (see verify_envelope).
+    ExtraChain::Core::WorkBudget incoming_budget_ { { 128 * 1024 * 1024, 4096, 96 * 1024 * 1024, 512 } };
+    Network::BroadcastBudget                broadcast_budget_;
     std::mutex                              envelope_actors_mutex_;
     std::map<std::string, Actor<KeyPublic>> envelope_actors_;
     std::map<std::string, std::int64_t>     envelope_actor_misses_;
@@ -426,6 +430,9 @@ public:
     void                      adopt_network_id(const ActorId& network_id) override;
     [[nodiscard]] std::string local_node_identifier() const override;
     [[nodiscard]] DfsMode     local_dfs_mode() const override;
+    [[nodiscard]] std::optional<Actor<KeyPublic>>       local_system_actor() const override;
+    [[nodiscard]] std::string                           local_node_nonce() const override;
+    std::expected<Signature, Cryptography::CryptoError> sign_handshake(const Bytes& transcript) const override;
     [[nodiscard]] bool has_active_duplicate(std::string_view identifier, const SocketService* candidate) override;
     [[nodiscard]] int  active_peer_count() const override;
     [[nodiscard]] int  peer_limit() const override;

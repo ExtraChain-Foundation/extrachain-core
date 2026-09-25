@@ -89,6 +89,31 @@ struct HotSectionStore::Impl {
         return sqlite3_column_int64(meta_get_stmt, 0);
     }
 
+    bool migrate_sections_to_rowid() {
+        auto *statement = prepare("SELECT wr FROM pragma_table_list WHERE schema='main' AND name='sections'");
+        if (statement == nullptr)
+            return false;
+        const auto result        = sqlite3_step(statement);
+        const bool without_rowid = result == SQLITE_ROW && sqlite3_column_int(statement, 0) == 1;
+        const bool complete      = result == SQLITE_ROW && sqlite3_step(statement) == SQLITE_DONE;
+        sqlite3_finalize(statement);
+        if (!complete)
+            return false;
+        if (!without_rowid)
+            return true;
+        if (!exec("BEGIN IMMEDIATE"))
+            return false;
+        // Large payloads must not sit in the key index used by every section lookup.
+        if (!exec("CREATE TABLE sections_rowid(section INTEGER PRIMARY KEY,payload BLOB NOT NULL)")
+            || !exec("INSERT INTO sections_rowid SELECT section,payload FROM sections")
+            || !exec("DROP TABLE sections") || !exec("ALTER TABLE sections_rowid RENAME TO sections")
+            || !exec("COMMIT")) {
+            exec("ROLLBACK");
+            return false;
+        }
+        return true;
+    }
+
     bool open(const std::filesystem::path &path) {
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
@@ -110,9 +135,10 @@ struct HotSectionStore::Impl {
         if (!exec("PRAGMA journal_mode=WAL") || !exec("PRAGMA synchronous=NORMAL")
             || !exec("PRAGMA temp_store=MEMORY")
             || !exec("CREATE TABLE IF NOT EXISTS sections ("
-                     "section INTEGER PRIMARY KEY, payload BLOB NOT NULL) WITHOUT ROWID")
+                     "section INTEGER PRIMARY KEY, payload BLOB NOT NULL)")
             || !exec("CREATE TABLE IF NOT EXISTS chain_meta ("
-                     "key TEXT PRIMARY KEY, value INTEGER NOT NULL) WITHOUT ROWID")) {
+                     "key TEXT PRIMARY KEY, value INTEGER NOT NULL) WITHOUT ROWID")
+            || !migrate_sections_to_rowid()) {
             return false;
         }
 

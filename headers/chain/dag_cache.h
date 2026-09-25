@@ -205,7 +205,7 @@ public:
     /**
      * @brief Reset the database connection
      */
-    void reset_db();
+    bool reset_db();
 
     // NOTE: per-actor transaction index (write_index/read_index/has_section/...) used
     // to live here on top of its own Index.db. It was slow on first pass and is being

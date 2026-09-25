@@ -19,6 +19,7 @@
 #include "contracts/standard_token.h"
 #include "core/extrachain_node.h"
 #include "managers/token_manager.h"
+#include "managers/data_mining_manager.h"
 #include "network/network_service.h"
 #include "network/peer_meta.h"
 #include "network/responder.h"
@@ -26,6 +27,7 @@
 #include "utils/exc_utils.h"
 #include "utils/exc_utils_base64.h"
 #include "utils/serialization.h"
+#include "utils/file_io.h"
 
 namespace ExtraChain::Consensus {
     namespace {
@@ -100,6 +102,34 @@ namespace ExtraChain::Consensus {
                                                   token.section_id.value_or(SectionId(0)).to_int().value_or(0)));
         }
 
+        std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> advance_nonces(
+            std::map<ActorId, std::uint64_t> nonces,
+            const std::vector<Transaction>&  transactions) {
+            std::map<ActorId, std::map<std::uint64_t, SectionId>> by_sender;
+            for (const auto& transaction : transactions) {
+                if (!transaction.consensus_intent().has_value())
+                    continue;
+                const auto envelope = intent_from_transaction(transaction);
+                if (!envelope.has_value())
+                    return std::unexpected(envelope.error());
+                if (!by_sender[envelope.value().intent.sender]
+                         .emplace(envelope.value().intent.account_nonce, transaction.section())
+                         .second)
+                    return std::unexpected(ConsensusError::InvalidNonce);
+            }
+            for (const auto& [sender, entries] : by_sender) {
+                auto&     nonce = nonces[sender];
+                SectionId previous(-1);
+                for (const auto& [next, section] : entries) {
+                    if (nonce == UINT64_MAX || next != nonce + 1 || section < previous)
+                        return std::unexpected(ConsensusError::InvalidNonce);
+                    nonce    = next;
+                    previous = section;
+                }
+            }
+            return nonces;
+        }
+
         std::uint64_t wall_clock_millis() {
             return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                                   std::chrono::system_clock::now().time_since_epoch())
@@ -118,6 +148,9 @@ namespace ExtraChain::Consensus {
 
     std::expected<bool, ConsensusError> ConsensusService::activate(const ActorId& network_id) {
         std::lock_guard lock(mutex_);
+        if (node_.dag()->mode() == DagMode::Light) {
+            return false;
+        }
         if (consensus_) {
             return true;
         }
@@ -167,6 +200,7 @@ namespace ExtraChain::Consensus {
             return std::unexpected(applied_checkpoint.error());
         }
         committed_nonces_     = committed_nonces.value();
+        nonce_frontier_.reset();
         applied_checkpoint_   = applied_checkpoint.value();
         const auto reconciled = reconcile_finalized_checkpoint();
         if (!reconciled.has_value()) {
@@ -189,44 +223,12 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::InvalidValidator);
             }
         }
-        const auto pending_intents = intent_store_->load_pending();
-        if (!pending_intents.has_value()) {
+        const auto restored = restore_pending_intents();
+        if (!restored.has_value() && restored.error() != ConsensusError::DataUnavailable
+            && restored.error() != ConsensusError::NotReady) {
             consensus_.reset();
             intent_store_.reset();
-            return std::unexpected(pending_intents.error());
-        }
-        std::vector<std::string> expired_intents;
-        for (const auto& envelope : pending_intents.value()) {
-            const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
-            if (!actor.has_value()) {
-                eWarning("[Shadow] Pending intent {} waits for sender data", hash_intent(envelope.intent));
-                continue;
-            }
-            const auto accepted = intent_pool_.submit(envelope,
-                                                      Utils::to_base64(actor.value().key().public_key()),
-                                                      committed_nonces_[envelope.intent.sender],
-                                                      intent_height());
-            if (!accepted.has_value() && accepted.error() == ConsensusError::IntentExpired) {
-                expired_intents.push_back(hash_intent(envelope.intent));
-            } else if (!accepted.has_value()) {
-                consensus_.reset();
-                intent_store_.reset();
-                intent_pool_ = IntentPool {};
-                return std::unexpected(accepted.error());
-            } else if (!intent_store_->put(envelope).has_value()) {
-                consensus_.reset();
-                intent_store_.reset();
-                intent_pool_ = IntentPool {};
-                return std::unexpected(ConsensusError::StorageFailure);
-            }
-        }
-        if (!expired_intents.empty()) {
-            if (!intent_store_->expire(expired_intents).has_value()) {
-                consensus_.reset();
-                intent_store_.reset();
-                intent_pool_ = IntentPool {};
-                return std::unexpected(ConsensusError::StorageFailure);
-            }
+            return std::unexpected(restored.error());
         }
         authenticator_ = std::make_unique<PeerAuthenticator>(consensus_->engine().validators(),
                                                              consensus_->engine().identity());
@@ -310,7 +312,9 @@ namespace ExtraChain::Consensus {
         relay_context_.reset();
         intent_store_.reset();
         intent_pool_ = IntentPool {};
+        pending_intents_restored_ = false;
         committed_nonces_.clear();
+        nonce_frontier_.reset();
         if (timeout_task_) {
             timeout_task_->cancel();
         }
@@ -325,12 +329,18 @@ namespace ExtraChain::Consensus {
         intent_batch_task_.reset();
         consensus_.reset();
         applied_checkpoint_.reset();
+        finalized_mining_.reset();
+        staged_mining_.clear();
+        mining_verifier_.reset();
         latest_proposal_.reset();
         latest_certificate_.reset();
         latest_timeout_certificate_.reset();
         pending_checkpoints_.clear();
         pending_batches_.clear();
         pending_proposals_.clear();
+        ancestor_requests_.clear();
+        last_sync_request_ = { };
+        last_sync_peer_.clear();
         voting_enabled_ = false;
         voting_paused_  = false;
     }
@@ -464,6 +474,11 @@ namespace ExtraChain::Consensus {
             }
             const auto value = MessagePack::deserialize<ShadowBootstrapResponse>(serialized);
             if (status == MessageStatus::Response && value.has_value()) {
+                if (accept_light_history(value.value().page)) {
+                    boost::asio::post(node_.serial_executor(), [this, responder] {
+                        node_.dag()->request_light(responder);
+                    });
+                }
                 bootstrap_event_.publish(value.value(), peer_identifier);
             }
             break;
@@ -531,16 +546,7 @@ namespace ExtraChain::Consensus {
                          std::string(peer_identifier),
                          MessageStatus::NoStatus);
         }
-        send_to_peer(
-            ShadowSyncRequest {
-                .protocol_version = ProtocolVersion,
-                .network_id       = consensus_->engine().validators().document().network_id,
-                .epoch            = consensus_->engine().validators().document().epoch,
-                .finalized_height = consensus_->engine().safety_state().finalized_height,
-            },
-            MessageType::ConsensusSyncRequest,
-            std::string(peer_identifier),
-            MessageStatus::Request);
+        request_sync_from(peer_identifier);
     }
 
     void ConsensusService::receive_proposal(const Proposal& proposal, std::string_view peer_identifier) {
@@ -635,9 +641,7 @@ namespace ExtraChain::Consensus {
         }
         if (accepted.value().certificate.has_value()) {
             const auto& certificate = accepted.value().certificate.value();
-            if (apply_certificate(certificate)) {
-                send_to_validators(certificate, MessageType::ConsensusCertificate);
-            }
+            apply_certificate(certificate, true);
         }
     }
 
@@ -653,7 +657,11 @@ namespace ExtraChain::Consensus {
                      peer_identifier.substr(0, 12));
             return;
         }
-        apply_certificate(certificate);
+        if (!apply_certificate(certificate)
+            && !consensus_->engine().proposal_for(certificate.header_hash).has_value()
+            && consensus_->engine().verify_certificate(certificate)) {
+            request_sync_from(peer_identifier);
+        }
     }
 
     void ConsensusService::receive_timeout_vote(const TimeoutVote& vote, std::string_view peer_identifier) {
@@ -662,26 +670,29 @@ namespace ExtraChain::Consensus {
             return;
         }
         const auto accepted = consensus_->receive_timeout_vote(vote, peer_identifier);
-        if (!accepted.has_value()) {
-            // A stale timeout vote is often the ONLY traffic a lagging validator
-            // still produces once the committee has finished its work and gone
-            // quiet: it missed the final certificates and nothing will ever
-            // arrive to reveal the gap. Answer with our verified tip - one
-            // focused certificate per received stale vote, no periodic traffic.
-            const auto& state = consensus_->engine().safety_state();
-            if (state.highest_certificate.has_value() && vote.height <= state.highest_certificate.value().height) {
-                send_to_peer(state.highest_certificate.value(),
-                             MessageType::ConsensusCertificate,
-                             std::string(peer_identifier),
-                             MessageStatus::NoStatus);
-            }
+        if (!accepted.has_value() && accepted.error() != ConsensusError::InvalidParent)
             return;
-        }
-        if (accepted.value().equivocation.has_value()) {
+        if (accepted.has_value() && accepted.value().equivocation.has_value()) {
             eCritical("[Shadow] Conflicting timeout votes from validator {} at height {} round {}",
                       vote.validator_id,
                       vote.height,
                       vote.round);
+            return;
+        }
+        const auto& state = consensus_->engine().safety_state();
+        if (state.highest_certificate.has_value() && vote.height <= state.highest_certificate.value().height) {
+            send_to_peer(state.highest_certificate.value(),
+                         MessageType::ConsensusCertificate,
+                         std::string(peer_identifier),
+                         MessageStatus::NoStatus);
+            return;
+        }
+        // InvalidParent follows signature verification: the peer has named a certificate we lack.
+        if (!accepted.has_value()
+            || (state.highest_certificate.has_value()
+                && vote.height - 1 > state.highest_certificate.value().height)) {
+            request_sync_from(peer_identifier);
+            return;
         }
         if (accepted.value().certificate.has_value()
             && apply_timeout_certificate(accepted.value().certificate.value())) {
@@ -695,7 +706,8 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !authenticator_ || !authenticated_sender(peer_identifier).has_value()) {
             return;
         }
-        if (!apply_timeout_certificate(certificate)) {
+        if (!apply_timeout_certificate(certificate)
+            && consensus_->engine().verify_timeout_certificate(certificate)) {
             const auto& state = consensus_->engine().safety_state();
             if (state.highest_certificate.has_value()
                 && certificate.height <= state.highest_certificate.value().height) {
@@ -712,15 +724,7 @@ namespace ExtraChain::Consensus {
                        || certificate.height > state.highest_certificate.value().height + 1) {
                 // A timeout certificate for a height we have not even certified
                 // means we are the ones behind.
-                send_to_validators(
-                    ShadowSyncRequest {
-                        .protocol_version = ProtocolVersion,
-                        .network_id       = consensus_->engine().validators().document().network_id,
-                        .epoch            = consensus_->engine().validators().document().epoch,
-                        .finalized_height = state.finalized_height,
-                    },
-                    MessageType::ConsensusSyncRequest,
-                    MessageStatus::Request);
+                request_sync_from({ });
             }
         }
     }
@@ -819,8 +823,9 @@ namespace ExtraChain::Consensus {
                      std::to_underlying(admitted.error()));
             return;
         }
-        const auto& highest           = consensus_->engine().safety_state().highest_certificate;
-        const bool  already_certified = highest.has_value() && highest.value().header_hash == batch.header_hash;
+        const bool already_certified =
+            consensus_->engine().certified(batch.header_hash)
+            || proposal->second.header.height <= consensus_->engine().safety_state().finalized_height;
         const auto  staged            = voting_enabled_ && !already_certified
                                             ? consensus_->engine().stage_batch_for_vote(batch)
                                             : consensus_->engine().stage_batch(batch);
@@ -840,19 +845,13 @@ namespace ExtraChain::Consensus {
         // This payload may be exactly what an earlier certificate was waiting for.
         catch_up_deferred_finalization();
         if (already_certified) {
-            pending_proposals_.erase(proposal);
-            queue_next_checkpoint();
-            return;
+            pending_proposals_.erase(batch.header_hash);
+        } else if (const auto pending = pending_proposals_.find(batch.header_hash);
+                   pending != pending_proposals_.end()) {
+            vote_for_proposal(pending->second, peer_identifier);
         }
-        const bool resume_leader =
-            highest.has_value() && proposal->second.header.height < highest.value().height
-            && consensus_->engine().is_local_leader(highest.value().height + 1,
-                                                    consensus_->engine().safety_state().current_round);
-        vote_for_proposal(proposal->second, peer_identifier);
-        // An ancestor can unblock the leader's next batch request before its timeout.
-        if (resume_leader) {
-            queue_next_checkpoint();
-        }
+        // An ancestor can unblock pending requests on followers and observers too.
+        queue_next_checkpoint();
     }
 
     void ConsensusService::receive_sync_request(const ShadowSyncRequest& request,
@@ -926,7 +925,8 @@ namespace ExtraChain::Consensus {
             batches.insert_or_assign(batch.header_hash, batch);
         }
 
-        auto expected_height = consensus_->engine().safety_state().finalized_height + 1;
+        const auto initial_height  = consensus_->engine().safety_state().finalized_height;
+        auto       expected_height = initial_height + 1;
         for (const auto& proof : response.proofs) {
             // A reply answers the height we had when we asked. By the time it is
             // processed we may have moved on, so proofs we no longer need are the
@@ -1000,17 +1000,9 @@ namespace ExtraChain::Consensus {
             return;
         }
         reset_timeout();
-        if (response.proofs.size() == MaximumShadowSyncProofs) {
-            send_to_peer(
-                ShadowSyncRequest {
-                    .protocol_version = ProtocolVersion,
-                    .network_id       = consensus_->engine().validators().document().network_id,
-                    .epoch            = consensus_->engine().validators().document().epoch,
-                    .finalized_height = consensus_->engine().safety_state().finalized_height,
-                },
-                MessageType::ConsensusSyncRequest,
-                std::string(peer_identifier),
-                MessageStatus::Request);
+        if (!response.proofs.empty() && peer_identifier == last_sync_peer_
+            && consensus_->engine().safety_state().finalized_height > initial_height) {
+            request_sync_from(peer_identifier, true);
         }
     }
 
@@ -1112,6 +1104,23 @@ namespace ExtraChain::Consensus {
         return accept_intent(envelope, true);
     }
 
+    std::expected<std::string, ConsensusError> ConsensusService::submit_local_intent(
+        TransactionIntentV2      intent,
+        std::string              metadata,
+        const Actor<KeyPrivate>& sender) {
+        std::lock_guard lock(mutex_);
+        if (!consensus_)
+            return std::unexpected(ConsensusError::NotReady);
+        const auto nonce = next_local_nonce(sender.id());
+        if (!nonce.has_value())
+            return std::unexpected(nonce.error());
+        intent.account_nonce     = nonce.value();
+        const auto signed_intent = make_intent(std::move(intent), metadata, sender);
+        if (!signed_intent.has_value())
+            return std::unexpected(signed_intent.error());
+        return accept_intent(IntentEnvelope { signed_intent.value(), std::move(metadata) }, true);
+    }
+
     std::vector<IntentEnvelope> ConsensusService::ready_intents(std::size_t maximum_count,
                                                                 std::size_t maximum_bytes) const {
         std::lock_guard lock(mutex_);
@@ -1139,9 +1148,7 @@ namespace ExtraChain::Consensus {
             return std::tie(left.first.intent.sender, left.first.intent.account_nonce)
                    < std::tie(right.first.intent.sender, right.first.intent.account_nonce);
         });
-        auto                     next_nonces = committed_nonces_;
-        std::vector<std::string> hashes;
-        hashes.reserve(ordered.size());
+        auto next_nonces = committed_nonces_;
         for (const auto& [envelope, receipt] : ordered) {
             const auto hash          = hash_intent(envelope.intent);
             const auto current_nonce = next_nonces[envelope.intent.sender];
@@ -1152,17 +1159,17 @@ namespace ExtraChain::Consensus {
             if (envelope.intent.account_nonce == current_nonce + 1) {
                 next_nonces[envelope.intent.sender] = envelope.intent.account_nonce;
             }
-            hashes.push_back(hash);
         }
         const auto committed = intent_store_->commit_finalized(ordered, checkpoint);
         if (!committed.has_value()) {
             return std::unexpected(committed.error());
         }
         committed_nonces_ = std::move(next_nonces);
+        nonce_frontier_.reset();
         if (checkpoint.has_value()) {
             applied_checkpoint_ = std::move(checkpoint);
         }
-        intent_pool_.erase(hashes);
+        intent_pool_.discard_committed(committed_nonces_);
         return {};
     }
 
@@ -1227,6 +1234,7 @@ namespace ExtraChain::Consensus {
         }
         authenticator_ = std::make_unique<PeerAuthenticator>(consensus_->engine().validators(),
                                                              consensus_->engine().identity());
+        nonce_frontier_.reset();
         latest_proposal_.reset();
         latest_certificate_.reset();
         latest_timeout_certificate_.reset();
@@ -1258,6 +1266,9 @@ namespace ExtraChain::Consensus {
             || envelope.intent.network_id != consensus_->engine().validators().document().network_id) {
             return std::unexpected(consensus_ ? ConsensusError::InvalidNetwork : ConsensusError::NotReady);
         }
+        const auto restored = restore_pending_intents();
+        if (!restored.has_value())
+            return std::unexpected(restored.error());
         const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
         if (!actor.has_value()) {
             return std::unexpected(ConsensusError::DataUnavailable);
@@ -1302,7 +1313,7 @@ namespace ExtraChain::Consensus {
         return certificate.has_value() ? certificate.value().height + 1 : 1;
     }
 
-    bool ConsensusService::apply_certificate(const QuorumCertificate& certificate) {
+    bool ConsensusService::apply_certificate(const QuorumCertificate& certificate, bool announce) {
         const auto finalized = consensus_->receive_certificate(certificate);
         if (!finalized.has_value()) {
             eWarning("[Consensus] Certificate {} at height {} was rejected with error {}",
@@ -1314,19 +1325,14 @@ namespace ExtraChain::Consensus {
                 // checkpoint deferred for a gap below it — so try to close that gap
                 // locally before asking the committee for a replay.
                 catch_up_deferred_finalization();
-                send_to_validators(
-                    ShadowSyncRequest {
-                        .protocol_version = ProtocolVersion,
-                        .network_id       = consensus_->engine().validators().document().network_id,
-                        .epoch            = consensus_->engine().validators().document().epoch,
-                        .finalized_height = consensus_->engine().safety_state().finalized_height,
-                    },
-                    MessageType::ConsensusSyncRequest,
-                    MessageStatus::Request);
+                request_sync_from({ });
             }
             return false;
         }
         latest_certificate_ = certificate;
+        // Mining callbacks can reuse expired nonces; peers must receive their new height first.
+        if (announce)
+            send_to_validators(certificate, MessageType::ConsensusCertificate);
         if (latest_proposal_.has_value()
             && certificate.header_hash == hash_header(latest_proposal_.value().header)) {
             pending_batches_.erase(latest_proposal_.value().batch.last_section);
@@ -1337,6 +1343,15 @@ namespace ExtraChain::Consensus {
             return false;
         }
         catch_up_deferred_finalization();
+        const auto finalized_height = consensus_->engine().safety_state().finalized_height;
+        const auto applied_height =
+            consensus_->configuration().mode == ShadowMode::Finality
+                ? (applied_checkpoint_.has_value() ? applied_checkpoint_.value().height : 0)
+                : finalized_height;
+        std::erase_if(pending_proposals_,
+                      [height = std::min(finalized_height, applied_height)](const auto& entry) {
+                          return entry.second.header.height <= height;
+                      });
         queue_next_checkpoint();
         return true;
     }
@@ -1401,6 +1416,19 @@ namespace ExtraChain::Consensus {
             }
             batch = std::move(rebuilt.value());
         }
+        const auto initialized_mining = initialize_mining_state();
+        if (!initialized_mining.has_value())
+            return std::unexpected(initialized_mining.error());
+        // The certified proposal's state is usually staged already: the node projected
+        // it when that certificate became its highest. The signed root is checked below.
+        const auto staged = staged_mining_.find(checkpoint.header_hash);
+        auto       mining = finalized_mining_.value().header_hash == checkpoint.header_hash
+                                ? std::expected<MiningState, ConsensusError> { finalized_mining_.value().state }
+                            : staged != staged_mining_.end()
+                                ? std::expected<MiningState, ConsensusError> { staged->second }
+                                : project_mining_state(batch.value(), proposal.parent_certificate);
+        if (!mining.has_value() || mining_state_root(mining.value()) != proposal.state.mining_state_root)
+            return std::unexpected(mining.has_value() ? ConsensusError::InvalidRoot : mining.error());
         const auto installed = node_.dag()->install_shadow_batch(proposal,
                                                                  batch.value(),
                                                                  consensus_->configuration().maximum_batch_bytes,
@@ -1416,6 +1444,9 @@ namespace ExtraChain::Consensus {
         if (!epoch_changes.has_value()) {
             return std::unexpected(epoch_changes.error());
         }
+        const auto mining_committed = persist_mining_state(proof, std::move(mining.value()));
+        if (!mining_committed.has_value())
+            return std::unexpected(mining_committed.error());
         const auto intents_committed = finalize_intents(finalized.value(), checkpoint);
         if (!intents_committed.has_value()) {
             return std::unexpected(intents_committed.error());
@@ -1496,6 +1527,133 @@ namespace ExtraChain::Consensus {
         return true;
     }
 
+    std::expected<BalanceSnapshotV1, ConsensusError> ConsensusService::balance_snapshot() const {
+        std::lock_guard lock(mutex_);
+        if (!consensus_ || node_.dag()->mode() != DagMode::Full) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        const auto height = consensus_->engine().safety_state().finalized_height;
+        if (height == 0) {
+            return std::unexpected(ConsensusError::NotReady);
+        }
+        const auto proofs = consensus_->engine().finality_proofs_after(height - 1, 1);
+        if (!proofs.has_value() || proofs.value().empty()) {
+            return std::unexpected(ConsensusError::DataUnavailable);
+        }
+        const auto& proof = proofs.value().front();
+        if (proof.finalized_proposal.header.height != height) {
+            return std::unexpected(ConsensusError::InvalidHeight);
+        }
+        auto balances =
+            node_.dag()->calculate_actors_balance(node_.actor_index()->read_all_actors_ids(),
+                                                  SectionId(proof.finalized_proposal.header.dag_section));
+        if (balances.size() > MaximumSnapshotBalances
+            || balance_snapshot_root(balances) != proof.finalized_proposal.state.account_state_root) {
+            return std::unexpected(ConsensusError::InvalidRoot);
+        }
+        return BalanceSnapshotV1 { std::move(balances), proof };
+    }
+
+    std::expected<LightClientVerifier, ConsensusError> ConsensusService::load_light_verifier() const {
+        std::error_code error;
+        if (std::filesystem::exists(directory_ / "light-client.msgpack", error)) {
+            return LightClientVerifier::load(directory_ / "light-client.msgpack");
+        }
+        if (error) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        if (std::filesystem::exists(directory_ / "trust-anchor.msgpack", error)) {
+            const auto bytes = FileIo::read_all(directory_ / "trust-anchor.msgpack");
+            if (!bytes.has_value()) {
+                return std::unexpected(ConsensusError::StorageUnavailable);
+            }
+            const auto anchor = MessagePack::deserialize<TrustAnchorV1>(bytes.value());
+            if (!anchor.has_value() || anchor.value().network_id != node_.network_id()) {
+                return std::unexpected(ConsensusError::InvalidNetwork);
+            }
+            return LightClientVerifier::bootstrap(anchor.value());
+        }
+        if (error) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        const auto bytes = FileIo::read_all(directory_ / "validator-set.msgpack");
+        if (!bytes.has_value()) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        const auto validators = MessagePack::deserialize<ValidatorSet>(bytes.value());
+        if (!validators.has_value() || validators.value().network_id != node_.network_id()) {
+            return std::unexpected(ConsensusError::InvalidNetwork);
+        }
+        return LightClientVerifier::create(validators.value());
+    }
+
+    bool ConsensusService::accept_balance_snapshot(const BalanceSnapshotV1& snapshot) {
+        std::lock_guard lock(mutex_);
+        if (node_.dag()->mode() != DagMode::Light
+            || snapshot.proof.finalized_proposal.header.network_id != node_.network_id()) {
+            return false;
+        }
+        if (!light_verifier_.has_value()) {
+            auto loaded = load_light_verifier();
+            if (!loaded.has_value()) {
+                return false;
+            }
+            light_verifier_ = std::move(loaded.value());
+        }
+        const auto trusted = light_verifier_.value().snapshot();
+        if (snapshot.proof.finalized_proposal.header.epoch > trusted.active_validators.epoch
+            && trusted.trust_anchor.has_value()) {
+            request_light_history();
+            return false;
+        }
+        auto candidate = light_verifier_.value();
+        if (!verify_balance_snapshot(snapshot, candidate) || !candidate.advance(snapshot.proof).has_value()
+            || !candidate.save(directory_ / "light-client.msgpack").has_value()) {
+            return false;
+        }
+        light_verifier_ = std::move(candidate);
+        return true;
+    }
+
+    void ConsensusService::request_light_history() {
+        const auto now = std::chrono::steady_clock::now();
+        if (!light_verifier_.has_value() || now - last_light_history_request_ < std::chrono::seconds(5)) {
+            return;
+        }
+        const auto trusted = light_verifier_.value().snapshot();
+        if (trusted.trust_anchor.has_value()) {
+            last_light_history_request_ = now;
+            static_cast<void>(
+                request_bootstrap_history(trusted.trust_anchor.value(), trusted.active_validators.epoch));
+        }
+    }
+
+    bool ConsensusService::accept_light_history(const BootstrapHistoryPageV1& page) {
+        std::lock_guard lock(mutex_);
+        if (node_.dag()->mode() != DagMode::Light || page.network_id != node_.network_id()
+            || page.entries.empty()) {
+            return false;
+        }
+        if (!light_verifier_.has_value()) {
+            auto loaded = load_light_verifier();
+            if (!loaded.has_value()) {
+                return false;
+            }
+            light_verifier_ = std::move(loaded.value());
+        }
+        auto candidate = light_verifier_.value();
+        if (!candidate.apply_history_page(page).has_value()
+            || !candidate.save(directory_ / "light-client.msgpack").has_value()) {
+            return false;
+        }
+        light_verifier_ = std::move(candidate);
+        if (page.next_after_epoch.has_value()) {
+            request_light_history();
+            return false;
+        }
+        return true;
+    }
+
     bool ConsensusService::active() const noexcept {
         std::lock_guard lock(mutex_);
         return consensus_ != nullptr;
@@ -1547,13 +1705,7 @@ namespace ExtraChain::Consensus {
             }
         }
 
-        const ShadowSyncRequest request {
-            .protocol_version = ProtocolVersion,
-            .network_id       = consensus_->engine().validators().document().network_id,
-            .epoch            = consensus_->engine().validators().document().epoch,
-            .finalized_height = consensus_->engine().safety_state().finalized_height,
-        };
-        send_to_validators(request, MessageType::ConsensusSyncRequest, MessageStatus::Request);
+        request_sync_from({ });
         eWarning("[Shadow] DAG section {} waits for a finality proof", section);
         return false;
     }
@@ -1591,16 +1743,7 @@ namespace ExtraChain::Consensus {
             return;
         }
         challenge_peer(identifier, true);
-        send_to_peer(
-            ShadowSyncRequest {
-                .protocol_version = ProtocolVersion,
-                .network_id       = consensus_->engine().validators().document().network_id,
-                .epoch            = consensus_->engine().validators().document().epoch,
-                .finalized_height = consensus_->engine().safety_state().finalized_height,
-            },
-            MessageType::ConsensusSyncRequest,
-            identifier,
-            MessageStatus::Request);
+        request_sync_from(identifier);
     }
 
     void ConsensusService::challenge_peer(const std::string& identifier, bool reset_existing) {
@@ -1691,6 +1834,17 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !consensus_->engine().safety_state().highest_certificate.has_value()) {
             return;
         }
+        std::string missing_ancestor;
+        const auto  nonces = local_nonce_frontier(&missing_ancestor);
+        if (!nonces.has_value()) {
+            if (nonces.error() == ConsensusError::DataUnavailable && !missing_ancestor.empty())
+                request_ancestor_batch(missing_ancestor, { });
+            return;
+        }
+        if (!restore_pending_intents().has_value() || !expire_pending_intents(nonces.value()).has_value())
+            return;
+        if (node_.data_mining_manager() != nullptr)
+            node_.data_mining_manager()->consensus_progress();
         const auto&             highest = consensus_->engine().safety_state().highest_certificate.value();
         auto                    target  = consensus_->configuration().activation_dag_section;
         std::optional<Proposal> highest_proposal;
@@ -1710,15 +1864,7 @@ namespace ExtraChain::Consensus {
                 // A certificate can arrive before its proposal, so recovery must use authenticated sync.
                 eWarning("[Shadow] Proposal for certified height {} is not stored yet; requesting sync",
                          highest.height);
-                send_to_validators(
-                    ShadowSyncRequest {
-                        .protocol_version = ProtocolVersion,
-                        .network_id       = consensus_->engine().validators().document().network_id,
-                        .epoch            = consensus_->engine().validators().document().epoch,
-                        .finalized_height = consensus_->engine().safety_state().finalized_height,
-                    },
-                    MessageType::ConsensusSyncRequest,
-                    MessageStatus::Request);
+                request_sync_from({ });
                 return;
             }
             if (highest_proposal.value().batch.last_section
@@ -1736,14 +1882,40 @@ namespace ExtraChain::Consensus {
                 propose_checkpoint(consensus_->engine().safety_state().current_round);
                 return;
             }
+            const auto parent_mining = mining_state_for(highest);
+            if (!parent_mining.has_value()) {
+                eWarning("[Shadow] Mining parent state is unavailable: {}",
+                         std::to_underlying(parent_mining.error()));
+                return;
+            }
+            const auto settlement =
+                next_mining_settlement(parent_mining.value(), target - ShadowSectionInterval + 1);
+            if (!settlement.has_value()) {
+                eWarning("[Shadow] Mining settlement is unavailable: {}", std::to_underlying(settlement.error()));
+                return;
+            }
+            const auto scheduled_total = consensus_->mining_policy().has_value()
+                                             ? mining_policy_total(consensus_->mining_policy().value()).value_or(0)
+                                             : 0;
+            const bool mining_pending  = !parent_mining.value().epochs.empty()
+                                         || (!parent_mining.value().registrations.empty()
+                                             && parent_mining.value().reserved_units < scheduled_total);
+            const auto projected_nonces = staged_nonces_for(highest, target - ShadowSectionInterval + 1);
+            if (!projected_nonces.has_value()) {
+                eWarning("[Shadow] Certified account nonces are unavailable: {}",
+                         std::to_underlying(projected_nonces.error()));
+                return;
+            }
             const auto flush_pipeline = has_unfinalized_intents();
-            const auto intents        = flush_pipeline
-                                            ? std::vector<IntentEnvelope> {}
-                                            : intent_pool_.ready(committed_nonces_,
-                                                          intent_height(),
-                                                          20 * 256,
-                                                          consensus_->configuration().maximum_batch_bytes / 2);
-            if (intents.empty() && !flush_pipeline) {
+            const auto intents =
+                flush_pipeline && !consensus_->mining_policy().has_value()
+                    ? std::vector<IntentEnvelope> { }
+                    : intent_pool_.ready(projected_nonces.value(),
+                                         intent_height(),
+                                         20 * 256 - static_cast<std::size_t>(settlement.value().has_value()),
+                                         consensus_->configuration().maximum_batch_bytes / 2);
+            if (intents.empty() && !flush_pipeline && !mining_pending
+                && !(highest.phase == Phase::Genesis && consensus_->mining_policy().has_value())) {
                 return;
             }
             const auto first = target == 0 ? SectionId(0) : SectionId(target) - CONTROL_INTERVAL_DIFF;
@@ -1780,9 +1952,11 @@ namespace ExtraChain::Consensus {
                                                                 SectionId(target),
                                                                 highest.height + 1,
                                                                 intents,
-                                                                {},
+                                                                consensus_->configuration().maximum_batch_bytes,
+                                                                { },
                                                                 std::move(previous_section_bytes),
-                                                                std::move(previous_section_root));
+                                                                std::move(previous_section_root),
+                                                                settlement.value());
             if (!batch.has_value()) {
                 eWarning("[Shadow] Leader could not materialize the next intent batch: {}",
                          std::to_underlying(batch.error()));
@@ -1800,6 +1974,28 @@ namespace ExtraChain::Consensus {
             const auto state =
                 build_state_commitment(batch.value(), section_root.value(), highest.height + 1, highest);
             if (!state.has_value()) {
+                std::string invalid_request;
+                const auto  verifier = mining_verifier();
+                if (verifier.has_value())
+                    static_cast<void>(replay_mining_batch(
+                        parent_mining.value(),
+                        consensus_->mining_policy(),
+                        batch.value(),
+                        [this](auto section) {
+                            return mining_finality(section);
+                        },
+                        *verifier.value(),
+                        &invalid_request));
+                if (!invalid_request.empty()) {
+                    const std::vector<std::string> rejected { invalid_request };
+                    if (!intent_store_ || !intent_store_->reject(rejected, state.error()).has_value()) {
+                        pause_voting("a mining rejection receipt could not be stored");
+                        return;
+                    }
+                    intent_pool_.erase(rejected);
+                    if (intent_batch_task_)
+                        intent_batch_task_->schedule_earlier(std::chrono::milliseconds(25));
+                }
                 eWarning("[Shadow] Leader could not calculate the state commitment: {}",
                          std::to_underlying(state.error()));
                 return;
@@ -1956,24 +2152,45 @@ namespace ExtraChain::Consensus {
             return;
         }
         latest_proposal_ = proposal.value();
-        if (accepted.value().certificate.has_value() && apply_certificate(accepted.value().certificate.value())) {
-            send_to_validators(accepted.value().certificate.value(), MessageType::ConsensusCertificate);
-        }
+        if (accepted.value().certificate.has_value())
+            apply_certificate(accepted.value().certificate.value(), true);
         send_to_validators(proposal_value, MessageType::ConsensusProposal);
         reset_timeout();
     }
 
-    void ConsensusService::request_sync_from(std::string_view peer_identifier) {
+    void ConsensusService::request_sync_from(std::string_view peer_identifier, bool page_progress) {
         if (!consensus_) {
             return;
         }
         const auto now = std::chrono::steady_clock::now();
-        if (now - last_sync_request_ < std::chrono::seconds(2)) {
+        if (!(page_progress && peer_identifier == last_sync_peer_)
+            && now - last_sync_request_ < std::chrono::seconds(2)) {
             return;
         }
+        std::string selected(peer_identifier);
+        if (selected.empty() || selected == node_.node_identifier()) {
+            auto peers = node_.network()->active_full_peers_with_capability(SHADOW_CONSENSUS_CAPABILITY);
+            std::erase_if(peers, [&](const auto& peer) {
+                return std::ranges::none_of(consensus_->engine().validators().active(),
+                                            [&](const auto& validator) {
+                                                return validator.node_identifier == peer;
+                                            });
+            });
+            if (peers.empty()) {
+                for (const auto& validator : consensus_->engine().validators().active())
+                    if (validator.node_identifier != node_.node_identifier())
+                        peers.push_back(validator.node_identifier);
+            }
+            if (peers.empty())
+                return;
+            const auto previous = std::ranges::find(peers, last_sync_peer_);
+            selected = previous == peers.end() || std::next(previous) == peers.end() ? peers.front()
+                                                                                     : *std::next(previous);
+        }
         last_sync_request_ = now;
+        last_sync_peer_    = selected;
         eWarning("[Shadow] Requesting finality sync from {} at finalized height {}",
-                 peer_identifier,
+                 selected,
                  consensus_->engine().safety_state().finalized_height);
         send_to_peer(
             ShadowSyncRequest {
@@ -1983,7 +2200,7 @@ namespace ExtraChain::Consensus {
                 .finalized_height = consensus_->engine().safety_state().finalized_height,
             },
             MessageType::ConsensusSyncRequest,
-            std::string(peer_identifier),
+            selected,
             MessageStatus::Request);
     }
 
@@ -1992,34 +2209,37 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || header_hash.empty()) {
             return;
         }
+        const auto now  = std::chrono::steady_clock::now();
+        const auto last = ancestor_requests_.find(header_hash);
+        if (last != ancestor_requests_.end() && now - last->second.sent < std::chrono::seconds(2))
+            return;
+        std::vector<std::string> peers;
+        for (const auto& validator : consensus_->engine().validators().active())
+            if (validator.node_identifier != node_.node_identifier())
+                peers.push_back(validator.node_identifier);
+        if (peers.empty())
+            return;
+        std::string selected(peer_identifier);
+        if (last != ancestor_requests_.end()) {
+            const auto previous = std::ranges::find(peers, last->second.peer);
+            selected = previous == peers.end() || std::next(previous) == peers.end() ? peers.front()
+                                                                                     : *std::next(previous);
+        } else if (std::ranges::find(peers, selected) == peers.end()) {
+            selected = peers.front();
+        }
+        std::erase_if(ancestor_requests_, [now](const auto& entry) {
+            return now - entry.second.sent > std::chrono::minutes(5);
+        });
+        ancestor_requests_[header_hash] = AncestorRequest { now, selected };
         const auto proposal = consensus_->engine().proposal_for(header_hash);
         if (!proposal.has_value()) {
-            // We never saw the ancestor's proposal (cut off from the committee while
-            // it was made), so its payload alone could not be validated or staged
-            // and every copy of it would be dropped. Only a finality sync carries
-            // the proposal together with the proof; ask for that instead.
-            request_sync_from(peer_identifier);
+            request_sync_from(selected);
             return;
         }
         pending_proposals_.insert_or_assign(header_hash, proposal.value());
-        // Once per ancestor per two seconds, from the peer that served the child.
-        // Asking the whole committee on every reply multiplied by six at every
-        // level of the ancestor chain: a node two heights behind got its peers to
-        // serve the same two batches tens of thousands of times a minute and
-        // never caught up. The peer that has the child almost always has the
-        // parent; the timer path retries elsewhere if it does not.
-        const auto now  = std::chrono::steady_clock::now();
-        const auto last = ancestor_requests_.find(header_hash);
-        if (last != ancestor_requests_.end() && now - last->second < std::chrono::seconds(2)) {
-            return;
-        }
-        std::erase_if(ancestor_requests_, [now](const auto& entry) {
-            return now - entry.second > std::chrono::minutes(5);
-        });
-        ancestor_requests_[header_hash] = now;
         eWarning("[Shadow] Ancestor batch {} is missing; requesting it from {}",
                  header_hash.substr(0, 12),
-                 peer_identifier);
+                 selected);
         send_to_peer(
             SectionBatchRequest {
                 .protocol_version = ProtocolVersion,
@@ -2028,7 +2248,7 @@ namespace ExtraChain::Consensus {
                 .header_hash      = header_hash,
             },
             MessageType::ConsensusBatchRequest,
-            std::string(peer_identifier),
+            selected,
             MessageStatus::Request);
     }
 
@@ -2046,6 +2266,12 @@ namespace ExtraChain::Consensus {
     }
 
     void ConsensusService::vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier) {
+        const auto header_hash = hash_header(proposal.header);
+        if (proposal.header.height <= consensus_->engine().safety_state().finalized_height
+            || consensus_->engine().certified(header_hash)) {
+            pending_proposals_.erase(header_hash);
+            return;
+        }
         if (!voting_enabled_) {
             return;
         }
@@ -2070,23 +2296,13 @@ namespace ExtraChain::Consensus {
                 st.highest_certificate.has_value() ? st.highest_certificate.value().height : 0,
                 st.locked_certificate.has_value() ? st.locked_certificate.value().height : 0,
                 st.finalized_height);
-            // A proposal we already finalized past, or one a quorum has certified
-            // without us, will never earn our vote. Keeping it pending only means
-            // every duplicate batch reply re-runs a full validation for a branch
-            // that is settled — measured at ~0.6 s a copy on this hardware, which
-            // is how a lagging node spends its catch-up window on payloads it
-            // cannot use.
-            const auto header_hash = hash_header(proposal.header);
-            if (proposal.header.height <= st.finalized_height || consensus_->engine().certified(header_hash)) {
-                pending_proposals_.erase(header_hash);
-            }
             return;
         }
         send_to_peer(vote.value(),
                      MessageType::ConsensusVote,
                      std::string(peer_identifier),
                      MessageStatus::NoStatus);
-        pending_proposals_.erase(hash_header(proposal.header));
+        pending_proposals_.erase(header_hash);
         reset_timeout();
     }
 
@@ -2205,9 +2421,10 @@ namespace ExtraChain::Consensus {
     }
 
     std::expected<std::vector<Transaction>, ConsensusError> ConsensusService::staged_ancestor_transactions(
-        const QuorumCertificate& parent,
-        std::uint64_t            first_section,
-        std::string*             missing_ancestor) const {
+        const QuorumCertificate&     parent,
+        std::uint64_t                first_section,
+        std::string*                 missing_ancestor,
+        std::optional<std::uint64_t> applied_height) const {
         // Stored sections use decimal numbers even inside a legacy wire callback.
         WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
         if (!consensus_) {
@@ -2218,7 +2435,7 @@ namespace ExtraChain::Consensus {
         std::set<std::string>                 seen;
         auto                                  certificate = parent;
         auto                                  frontier    = first_section;
-        const auto                            finalized   = consensus_->engine().safety_state().finalized_height;
+        const auto finalized = applied_height.value_or(consensus_->engine().safety_state().finalized_height);
 
         while (certificate.phase != Phase::Genesis && certificate.height > finalized) {
             if (certificate.header_hash.empty() || !seen.insert(certificate.header_hash).second
@@ -2330,14 +2547,22 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidRoot);
         }
 
-        const auto ancestry = staged_ancestor_transactions(parent, batch.manifest.first_section);
+        std::string mining_root;
+        if (consensus_->configuration().mode == ShadowMode::Finality) {
+            const auto mining = project_mining_state(batch, parent);
+            if (!mining.has_value())
+                return std::unexpected(mining.error());
+            mining_root = mining_state_root(mining.value());
+        }
+
+        auto ancestry = staged_ancestor_transactions(parent, batch.manifest.first_section);
         if (!ancestry.has_value()) {
             return std::unexpected(ancestry.error());
         }
 
-        std::vector<Transaction> transactions;
+        std::vector<Transaction> transactions = std::move(ancestry.value());
         std::vector<ActorId>     actors = node_.actor_index()->read_all_actors_ids();
-        for (const auto& transaction : ancestry.value()) {
+        for (const auto& transaction : transactions) {
             if (!transaction.sender().is_zero()) {
                 actors.push_back(transaction.sender());
             }
@@ -2365,6 +2590,15 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::InvalidRoot);
             }
         }
+        for (const auto& transaction : transactions) {
+            if (transaction.type() != TransactionType::MiningSettlement)
+                continue;
+            const auto deltas = mining_settlement_deltas(transaction);
+            if (!deltas.has_value())
+                return std::unexpected(deltas.error());
+            for (const auto& [provider, _] : deltas.value())
+                actors.push_back(provider);
+        }
         std::ranges::sort(actors, {}, &ActorId::to_string);
         actors.erase(std::unique(actors.begin(), actors.end()), actors.end());
 
@@ -2375,9 +2609,6 @@ namespace ExtraChain::Consensus {
         // Replay the certified-but-unfinalized ancestors first: their spends are not
         // in the canonical balances above, and our own batch is only valid relative
         // to the state they produced.
-        for (const auto& transaction : ancestry.value()) {
-            node_.dag()->cache().process_transaction(transaction, balances);
-        }
         for (const auto& transaction : transactions) {
             node_.dag()->cache().process_transaction(transaction, balances);
         }
@@ -2489,6 +2720,7 @@ namespace ExtraChain::Consensus {
             .account_state_root        = segmented_state_root("accounts", state_entries(account_state)),
             .contract_state_root       = segmented_state_root("contracts", state_entries(contract_state)),
             .token_registry_root       = segmented_state_root("tokens", state_entries(token_state)),
+            .mining_state_root         = std::move(mining_root),
             .validator_set_hash        = consensus_->engine().validators().hash(),
         };
     }
@@ -2556,6 +2788,156 @@ namespace ExtraChain::Consensus {
             return consensus_->engine().stage_batch_for_vote(std::move(local.value()));
         }
         return consensus_->engine().stage_batch(std::move(local.value()));
+    }
+
+    std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> ConsensusService::staged_nonces_for(
+        const QuorumCertificate& parent,
+        std::uint64_t            first_section,
+        std::string*             missing_ancestor) const {
+        const auto applied   = consensus_->configuration().mode == ShadowMode::Finality
+                                   ? std::optional<std::uint64_t> { applied_checkpoint_.has_value()
+                                                                        ? applied_checkpoint_.value().height
+                                                                        : 0 }
+                                   : std::nullopt;
+        const auto ancestors = staged_ancestor_transactions(parent, first_section, missing_ancestor, applied);
+        if (!ancestors.has_value())
+            return std::unexpected(ancestors.error());
+        return advance_nonces(committed_nonces_, ancestors.value());
+    }
+
+    std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> ConsensusService::local_nonce_frontier(
+        std::string* missing_ancestor) const {
+        if (!consensus_)
+            return std::unexpected(ConsensusError::NotReady);
+        auto        nonces  = committed_nonces_;
+        const auto& highest = consensus_->engine().safety_state().highest_certificate;
+        if (consensus_->configuration().mode == ShadowMode::Finality && highest.has_value()
+            && highest.value().phase != Phase::Genesis) {
+            const auto certificate_hash = hash_certificate(highest.value());
+            if (nonce_frontier_.has_value() && nonce_frontier_.value().certificate_hash == certificate_hash)
+                return nonce_frontier_.value().nonces;
+            const auto proposal = consensus_->engine().proposal_for(highest.value().header_hash);
+            if (!proposal.has_value()) {
+                if (missing_ancestor != nullptr)
+                    *missing_ancestor = highest.value().header_hash;
+                return std::unexpected(ConsensusError::DataUnavailable);
+            }
+            if (proposal.value().batch.last_section
+                >= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+                return std::unexpected(ConsensusError::InvalidHeight);
+            const auto staged =
+                staged_nonces_for(highest.value(), proposal.value().batch.last_section + 1, missing_ancestor);
+            if (!staged.has_value())
+                return std::unexpected(staged.error());
+            nonces = staged.value();
+            // Certified payloads are immutable; retain only their checked nonce frontier.
+            nonce_frontier_ = NonceFrontier { certificate_hash, nonces };
+        }
+        return nonces;
+    }
+
+    std::expected<void, ConsensusError> ConsensusService::restore_pending_intents() {
+        if (pending_intents_restored_)
+            return { };
+        if (!consensus_ || !intent_store_)
+            return std::unexpected(ConsensusError::NotReady);
+        // Observers can restart with certified headers but no unfinalized payloads.
+        // Keep their pending requests on disk until the certified nonce frontier is known.
+        const auto nonce_frontier = local_nonce_frontier();
+        if (!nonce_frontier.has_value())
+            return std::unexpected(nonce_frontier.error());
+        const auto pending_intents = intent_store_->load_pending();
+        if (!pending_intents.has_value())
+            return std::unexpected(pending_intents.error());
+        IntentPool               restored_pool;
+        std::vector<std::string> expired_intents;
+        for (const auto& envelope : pending_intents.value()) {
+            const auto certified = nonce_frontier.value().find(envelope.intent.sender);
+            if (certified != nonce_frontier.value().end() && envelope.intent.account_nonce <= certified->second)
+                continue;
+            const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
+            if (!actor.has_value())
+                return std::unexpected(ConsensusError::DataUnavailable);
+            const auto accepted = restored_pool.submit(envelope,
+                                                       Utils::to_base64(actor.value().key().public_key()),
+                                                       committed_nonces_[envelope.intent.sender],
+                                                       intent_height());
+            if (!accepted.has_value() && accepted.error() == ConsensusError::IntentExpired)
+                expired_intents.push_back(hash_intent(envelope.intent));
+            else if (!accepted.has_value())
+                return std::unexpected(accepted.error());
+        }
+        if (!expired_intents.empty()) {
+            const auto expired = intent_store_->expire(expired_intents);
+            if (!expired.has_value())
+                return std::unexpected(expired.error());
+        }
+        intent_pool_              = std::move(restored_pool);
+        pending_intents_restored_ = true;
+        return { };
+    }
+
+    std::expected<void, ConsensusError> ConsensusService::expire_pending_intents(
+        const std::map<ActorId, std::uint64_t>& nonces) {
+        if (!intent_store_)
+            return std::unexpected(ConsensusError::NotReady);
+        const auto expired = intent_pool_.expired_uncommitted(intent_height(), nonces);
+        if (!expired.empty()) {
+            const auto stored = intent_store_->expire(expired);
+            if (!stored.has_value())
+                return std::unexpected(stored.error());
+            intent_pool_.erase(expired);
+        }
+        return { };
+    }
+
+    std::expected<std::uint64_t, ConsensusError> ConsensusService::next_local_nonce(const ActorId& sender) {
+        const auto restored = restore_pending_intents();
+        if (!restored.has_value())
+            return std::unexpected(restored.error());
+        const auto nonces = local_nonce_frontier();
+        if (!nonces.has_value())
+            return std::unexpected(nonces.error());
+        const auto expired = expire_pending_intents(nonces.value());
+        if (!expired.has_value())
+            return std::unexpected(expired.error());
+        const auto found = nonces.value().find(sender);
+        const auto committed = committed_nonces_.find(sender);
+        return intent_pool_.next_nonce(sender,
+                                       committed == committed_nonces_.end() ? 0 : committed->second,
+                                       found == nonces.value().end() ? 0 : found->second);
+    }
+
+    std::expected<bool, ConsensusError> ConsensusService::repair_local_nonce_gap(const Actor<KeyPrivate>& sender) {
+        std::lock_guard lock(mutex_);
+        if (!consensus_ || consensus_->configuration().mode != ShadowMode::Finality)
+            return std::unexpected(ConsensusError::NotReady);
+        const auto nonce = next_local_nonce(sender.id());
+        if (!nonce.has_value())
+            return std::unexpected(nonce.error());
+        if (!intent_pool_.has_pending_after(sender.id(), nonce.value()))
+            return false;
+        const auto height = intent_height();
+        if (height > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) - 64)
+            return std::unexpected(ConsensusError::InvalidIntent);
+        const auto intent =
+            make_intent(TransactionIntentV2 { .network_id =
+                                                  consensus_->engine().validators().document().network_id,
+                                              .sender               = sender.id(),
+                                              .receiver             = sender.id(),
+                                              .amount               = "0",
+                                              .operation            = IntentOperation::Cancel,
+                                              .account_nonce        = nonce.value(),
+                                              .valid_after_height   = height,
+                                              .expires_after_height = height + 64 },
+                        "",
+                        sender);
+        if (!intent.has_value())
+            return std::unexpected(intent.error());
+        const auto accepted = accept_intent({ intent.value(), "" }, true);
+        if (!accepted.has_value())
+            return std::unexpected(accepted.error());
+        return true;
     }
 
     bool ConsensusService::has_unfinalized_intents() const {
@@ -2663,14 +3045,41 @@ namespace ExtraChain::Consensus {
 
     std::expected<void, ConsensusError> ConsensusService::admit_batch_intents(const Proposal&         proposal,
                                                                               const SectionBatchData& batch) {
+        WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
         const auto finalized = finalized_intents(proposal, batch);
         if (!finalized.has_value()) {
             return std::unexpected(finalized.error());
         }
+        std::size_t system_records = 0;
+        for (const auto& [_, bytes] : batch.sections) {
+            const auto section = Json::deserialize<Section>(bytes);
+            if (!section.has_value())
+                return std::unexpected(ConsensusError::InvalidIntent);
+            for (const auto& transaction : section.value().transactions) {
+                if (transaction.type() != TransactionType::MiningSettlement)
+                    continue;
+                if (++system_records > 1 || !verify_mining_transaction(transaction))
+                    return std::unexpected(ConsensusError::InvalidProof);
+            }
+        }
         if (proposal.header.height >= consensus_->configuration().activation_height
-            && finalized.value().size() != proposal.batch.transaction_hashes.size()) {
+            && finalized.value().size() + system_records != proposal.batch.transaction_hashes.size()) {
             return std::unexpected(ConsensusError::InvalidIntent);
         }
+        auto nonces = staged_nonces_for(proposal.parent_certificate, proposal.batch.first_section);
+        if (!nonces.has_value())
+            return std::unexpected(nonces.error());
+        std::vector<Transaction> transactions;
+        for (const auto& [_, bytes] : batch.sections) {
+            auto section = Json::deserialize<Section>(bytes);
+            if (!section.has_value())
+                return std::unexpected(ConsensusError::InvalidIntent);
+            for (const auto& transaction : section.value().transactions)
+                transactions.push_back(transaction);
+        }
+        const auto next_nonces = advance_nonces(std::move(nonces.value()), transactions);
+        if (!next_nonces.has_value())
+            return std::unexpected(next_nonces.error());
         bool epoch_change_seen = false;
         for (const auto& [envelope, _] : finalized.value()) {
             if (envelope.intent.operation == IntentOperation::EpochChange) {
@@ -2686,10 +3095,18 @@ namespace ExtraChain::Consensus {
                 }
                 epoch_change_seen = true;
             }
-            const auto accepted = accept_intent(envelope, false);
-            if (!accepted.has_value() || accepted.value() != hash_intent(envelope.intent)) {
-                return std::unexpected(accepted.has_value() ? ConsensusError::InvalidIntent : accepted.error());
-            }
+            if (envelope.intent.network_id != consensus_->engine().validators().document().network_id)
+                return std::unexpected(ConsensusError::InvalidNetwork);
+            if (proposal.header.height < envelope.intent.valid_after_height
+                || proposal.header.height > envelope.intent.expires_after_height)
+                return std::unexpected(ConsensusError::IntentExpired);
+            if (envelope.metadata.size() > IntentPoolLimits { }.maximum_metadata_bytes)
+                return std::unexpected(ConsensusError::DataTooLarge);
+            const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
+            if (!actor.has_value())
+                return std::unexpected(ConsensusError::DataUnavailable);
+            if (!verify_intent(envelope, Utils::to_base64(actor.value().key().public_key())))
+                return std::unexpected(ConsensusError::InvalidIntent);
         }
         return {};
     }

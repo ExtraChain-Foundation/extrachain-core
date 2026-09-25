@@ -11,11 +11,19 @@
 #include "network/isocket_service.h"
 
 #include "encryption/box_session.h"
+#include "network/peer_identity.h"
 
 #include "extrachain_version.h"
 #include "utils/exc_logs.h"
 #include "utils/serialization.h"
 #include "utils/version.h"
+
+namespace {
+    Bytes handshake_transcript(SocketService::HandshakeMessage message) {
+        message.signature = { };
+        return ByteArray("extrachain-peer-handshake-v1:" + Json::serialize(message)).toBytes();
+    }
+} // namespace
 
 SocketService::SocketService(PeerContext& context)
     : context_(context) {
@@ -103,18 +111,52 @@ std::int64_t SocketService::pending_bytes() const noexcept {
 bool SocketService::check_first_message(const HandshakeMessage& handshake) {
     eLog("[Socket] First message: {} | IP: {} | network id: {}", direction_, ip_, context_.local_network_id());
 
-    identifier_      = handshake.identifier;
+    const bool legacy = handshake.system_actor.id().is_zero()
+                        && handshake.system_actor.key().public_key() == PublicKey { }
+                        && handshake.node_nonce.empty() && handshake.session_key == PublicKey { }
+                        && handshake.peer_session_key == PublicKey { } && handshake.signature == Signature { };
+    if (!legacy) {
+        if (handshake.system_actor.empty() || !handshake.system_actor.has_valid_id()
+            || handshake.session_key != public_key_.public_key()
+            || handshake.peer_session_key != private_key_.public_key())
+            return false;
+        const auto claimed =
+            Network::peer_identifier(handshake.system_actor.key().public_key(), handshake.node_nonce);
+        if (!claimed.has_value() || claimed.value() != handshake.identifier)
+            return false;
+        const auto verified =
+            handshake.system_actor.key().verify(handshake_transcript(handshake), handshake.signature);
+        if (!verified.has_value() || !verified.value())
+            return false;
+    } else if (public_key_.public_key() == PublicKey { }) {
+        return false;
+    }
+
+    identifier_      = legacy ? Utils::calculate_hash("extrachain-restricted-peer-v1:"
+                                                          + ByteArray(public_key_.public_key()).toString()
+                                                          + ByteArray(private_key_.public_key()).toString(),
+                                                      Utils::HashAlgorithm::Blake3)
+                              : handshake.identifier;
     dfs_mode_socket_ = handshake.dfs_mode;
     peer_meta_       = PeerMeta {
-              .version      = handshake.version,
-              .node_version = handshake.node_version,
-              .dag_version  = handshake.dag_version,
-              .dfs_version  = std::nullopt,
-              .capabilities = handshake.capabilities.value_or(std::set<std::string> {}),
-              .dfs_mode     = handshake.dfs_mode,
+        .version         = handshake.version,
+        .node_version    = handshake.node_version,
+        .dag_version     = handshake.dag_version,
+        .dfs_version     = std::nullopt,
+        .capabilities    = handshake.capabilities.value_or(std::set<std::string> { }),
+        .dfs_mode        = handshake.dfs_mode,
+        .authenticated   = !legacy,
+        .update_required = legacy || !handshake.capabilities.has_value()
+                           || !handshake.capabilities.value().contains(std::string(SHADOW_CONSENSUS_CAPABILITY)),
     };
 
-    if (handshake.socket_mode == SocketMode::Light) {
+    if (peer_meta_.update_required) {
+        peer_meta_.capabilities.clear();
+        eWarning("[Socket] Peer {} requires an update to {}: restricted data access; Shadow and rewards disabled",
+                 identifier_,
+                 extrachain_node_version);
+    }
+    if (handshake.socket_mode == SocketMode::Light || peer_meta_.update_required) {
         mode_ = SocketMode::Light;
     }
 
@@ -135,7 +177,7 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
     }
 
     const auto local_network = context_.local_network_id();
-    if (local_network.is_zero() && !remote_network.value().is_zero()) {
+    if (!legacy && local_network.is_zero() && !remote_network.value().is_zero()) {
         context_.adopt_network_id(remote_network.value());
     }
     if (!local_network.is_zero() && !remote_network.value().is_zero() && local_network != remote_network.value()) {
@@ -150,7 +192,7 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
         return false;
     }
 
-    if (handshake.identifier == context_.local_node_identifier()) {
+    if (identifier_ == context_.local_node_identifier()) {
         if (on_error) {
             on_error(shared_from_this(),
                      Network::SocketServiceError::IncompatibleIdentifier,
@@ -177,9 +219,6 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
     if (disconnected_.load(std::memory_order_acquire)) {
         return false;
     }
-    if (!is_constant() && handshake.is_constant) {
-        set_constant(true);
-    }
     if (context_.active_peer_count() >= context_.peer_limit()) {
         if (on_error) {
             on_error(shared_from_this(),
@@ -200,18 +239,19 @@ bool SocketService::check_first_message(const HandshakeMessage& handshake) {
                      identifier_,
                      direction_);
         }
-        if (on_share_connections) {
+        if (!peer_meta_.update_required && on_share_connections) {
             on_share_connections(shared_from_this(), handshake.connections);
         }
         return false;
     }
 
     activated_.store(true, std::memory_order_release);
-    context_.peer_authenticated(identifier_, handshake.your_ip);
+    if (!legacy)
+        context_.peer_authenticated(identifier_, handshake.your_ip);
     if (on_activated) {
         on_activated(shared_from_this());
     }
-    if (on_share_connections) {
+    if (!peer_meta_.update_required && on_share_connections) {
         on_share_connections(shared_from_this(), handshake.connections);
     }
     return true;
@@ -246,12 +286,34 @@ SocketService::Data SocketService::generate_first_message() {
                                                 std::string(TOKEN_MIGRATION_CAPABILITY),
                                                 std::string(DAG_REPAIR_CAPABILITY),
                                                 std::string(SHADOW_CONSENSUS_CAPABILITY),
+                                                std::string(SHADOW_LEGACY_DATA_CAPABILITY),
                                                 std::string(SHADOW_RELAY_CAPABILITY) },
     };
 
-    message.connections = context_.shareable_peers(ip_);
+    for (const auto& peer : context_.shareable_peers(ip_)) {
+        if (peer.ip.size() > 253 || peer.identifier.size() != 64) {
+            continue;
+        }
+        message.connections.insert(peer);
+        if (message.connections.size() == 8) {
+            break;
+        }
+    }
 
-    message.is_available  = context_.active_peer_count() < context_.peer_limit();
+    const auto actor = context_.local_system_actor();
+    if (!actor.has_value()) {
+        return { };
+    }
+    message.system_actor     = actor.value();
+    message.node_nonce       = context_.local_node_nonce();
+    message.session_key      = private_key_.public_key();
+    message.peer_session_key = public_key_.public_key();
+    message.is_available     = context_.active_peer_count() < context_.peer_limit();
+    const auto signature     = context_.sign_handshake(handshake_transcript(message));
+    if (!signature.has_value()) {
+        return { };
+    }
+    message.signature     = signature.value();
     const auto serialized = Json::serialize(message);
     return { serialized.begin(), serialized.end() };
 }

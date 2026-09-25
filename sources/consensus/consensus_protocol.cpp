@@ -108,9 +108,19 @@ namespace ExtraChain::Consensus {
             case IntentOperation::ContractUpgrade:
             case IntentOperation::TokenMigration:
             case IntentOperation::EpochChange:
+            case IntentOperation::StorageRegister:
+            case IntentOperation::StorageUnregister:
+            case IntentOperation::StorageProof:
+            case IntentOperation::Cancel:
                 return true;
             }
             return false;
+        }
+
+        bool valid_cancel(const TransactionIntentV2& intent, std::string_view metadata) {
+            return intent.operation != IntentOperation::Cancel
+                   || (intent.receiver == intent.sender && intent.token.is_zero() && intent.amount == "0"
+                       && metadata.empty());
         }
 
         bool positive_amount(std::string_view amount) {
@@ -133,6 +143,14 @@ namespace ExtraChain::Consensus {
                 return TransactionType::TokenMigration;
             case IntentOperation::EpochChange:
                 return TransactionType::EpochChange;
+            case IntentOperation::StorageRegister:
+                return TransactionType::StorageRegister;
+            case IntentOperation::StorageUnregister:
+                return TransactionType::StorageUnregister;
+            case IntentOperation::StorageProof:
+                return TransactionType::StorageProof;
+            case IntentOperation::Cancel:
+                return TransactionType::IntentCancel;
             }
             return std::nullopt;
         }
@@ -192,7 +210,8 @@ namespace ExtraChain::Consensus {
                                             activation.activation_height,
                                             activation.activation_dag_section,
                                             activation.validator_set_hash,
-                                            activation.require_intent_v2 });
+                                            activation.require_intent_v2,
+                                            activation.mining_policy });
         }
     } // namespace
 
@@ -225,7 +244,7 @@ namespace ExtraChain::Consensus {
                                                                    const Actor<KeyPrivate>& sender) {
         if (intent.protocol_version != ProtocolVersion || intent.network_id.is_zero() || sender.empty()
             || intent.sender != sender.id() || intent.receiver.is_zero() || !valid_amount(intent.amount)
-            || !valid_operation(intent.operation)
+            || !valid_operation(intent.operation) || !valid_cancel(intent, metadata)
             || (intent.operation == IntentOperation::Transfer && !positive_amount(intent.amount))
             || intent.account_nonce == 0 || intent.account_nonce > MaximumStoredHeight
             || intent.valid_after_height > MaximumStoredHeight || intent.expires_after_height > MaximumStoredHeight
@@ -246,7 +265,7 @@ namespace ExtraChain::Consensus {
         const auto  actor_id = actor_id_for(sender_public_key);
         return intent.protocol_version == ProtocolVersion && !intent.network_id.is_zero() && actor_id.has_value()
                && actor_id.value() == intent.sender && !intent.receiver.is_zero() && valid_amount(intent.amount)
-               && valid_operation(intent.operation)
+               && valid_operation(intent.operation) && valid_cancel(intent, envelope.metadata)
                && (intent.operation != IntentOperation::Transfer || positive_amount(intent.amount))
                && intent.account_nonce != 0 && intent.expires_after_height > intent.valid_after_height
                && intent.account_nonce <= MaximumStoredHeight && intent.valid_after_height <= MaximumStoredHeight
@@ -370,6 +389,54 @@ namespace ExtraChain::Consensus {
         return hash;
     }
 
+    std::expected<std::uint64_t, ConsensusError> IntentPool::next_nonce(const ActorId& sender,
+                                                                        std::uint64_t  committed_nonce,
+                                                                        std::uint64_t  certified_nonce) const {
+        std::set<std::uint64_t> used;
+        for (const auto& [_, entry] : entries_)
+            if (entry.envelope.intent.sender == sender)
+                used.insert(entry.envelope.intent.account_nonce);
+        for (std::uint64_t offset = 1; offset <= limits_.maximum_nonce_gap; ++offset) {
+            if (offset > UINT64_MAX - committed_nonce)
+                return std::unexpected(ConsensusError::InvalidNonce);
+            const auto nonce = committed_nonce + offset;
+            if (nonce > certified_nonce && !used.contains(nonce))
+                return nonce;
+        }
+        return std::unexpected(ConsensusError::PoolFull);
+    }
+
+    void IntentPool::discard_committed(const std::map<ActorId, std::uint64_t>& nonces) {
+        std::vector<std::string> obsolete;
+        for (const auto& [hash, entry] : entries_) {
+            const auto found = nonces.find(entry.envelope.intent.sender);
+            if (found != nonces.end() && entry.envelope.intent.account_nonce <= found->second)
+                obsolete.push_back(hash);
+        }
+        erase(obsolete);
+    }
+
+    std::vector<std::string> IntentPool::expired_uncommitted(
+        std::uint64_t                           height,
+        const std::map<ActorId, std::uint64_t>& nonces) const {
+        std::vector<std::string> result;
+        for (const auto& [hash, entry] : entries_) {
+            const auto& intent = entry.envelope.intent;
+            const auto  found  = nonces.find(intent.sender);
+            if (intent.expires_after_height < height
+                && (found == nonces.end() || intent.account_nonce > found->second))
+                result.push_back(hash);
+        }
+        return result;
+    }
+
+    bool IntentPool::has_pending_after(const ActorId& sender, std::uint64_t nonce) const {
+        return std::ranges::any_of(entries_, [&](const auto& entry) {
+            const auto& intent = entry.second.envelope.intent;
+            return intent.sender == sender && intent.account_nonce > nonce;
+        });
+    }
+
     std::vector<IntentEnvelope> IntentPool::ready(const std::map<ActorId, std::uint64_t>& committed_nonces,
                                                   std::uint64_t                           current_height,
                                                   std::size_t                             maximum_count,
@@ -407,6 +474,11 @@ namespace ExtraChain::Consensus {
         }
 
         std::vector<IntentEnvelope> result;
+        const auto                  can_bundle = [](IntentOperation operation) {
+            return operation == IntentOperation::Transfer || operation == IntentOperation::StorageRegister
+                   || operation == IntentOperation::StorageUnregister || operation == IntentOperation::StorageProof
+                   || operation == IntentOperation::Cancel;
+        };
         std::size_t                 selected_bytes           = 0;
         bool                        contract_change_selected = false;
         bool                        epoch_change_selected    = false;
@@ -431,11 +503,10 @@ namespace ExtraChain::Consensus {
                 contract_change_selected = true;
             }
             epoch_change_selected = epoch_change_selected || intent.operation == IntentOperation::EpochChange;
-            if (intent.operation == IntentOperation::Transfer
-                && candidate.nonce < std::numeric_limits<std::uint64_t>::max()) {
+            if (can_bundle(intent.operation) && candidate.nonce < std::numeric_limits<std::uint64_t>::max()) {
                 const auto& queue = by_sender.at(candidate.sender);
                 const auto  next  = queue.find(candidate.nonce + 1);
-                if (next != queue.end() && next->second->envelope.intent.operation == IntentOperation::Transfer) {
+                if (next != queue.end() && can_bundle(next->second->envelope.intent.operation)) {
                     candidates.push(Candidate { .hash   = hash_intent(next->second->envelope.intent),
                                                 .sender = candidate.sender,
                                                 .nonce  = candidate.nonce + 1,
@@ -517,8 +588,135 @@ namespace ExtraChain::Consensus {
         return proof;
     }
 
+    std::expected<MerkleTreeResult, ConsensusError> build_merkle_tree(std::uint64_t                     leaves,
+                                                                      const MerkleValueReader&          reader,
+                                                                      const std::vector<std::uint64_t>& targets,
+                                                                      const MerkleNodeSink&             sink) {
+        if (leaves == 0 || leaves > (std::uint64_t(1) << 32) || !reader || targets.size() > 16
+            || std::set<std::uint64_t>(targets.begin(), targets.end()).size() != targets.size()
+            || std::ranges::any_of(targets, [leaves](auto index) {
+                   return index >= leaves;
+               }))
+            return std::unexpected(ConsensusError::InvalidProof);
+        struct TreeNode {
+            std::string   hash;
+            std::uint64_t begin;
+            std::uint64_t count;
+            std::uint32_t height;
+        };
+        MerkleTreeResult result;
+        for (auto target : targets)
+            result.proofs.push_back(MerkleProof { .leaf_index = target, .leaf_count = leaves });
+        std::array<std::optional<TreeNode>, 33> frontier;
+        bool                                    stored = true;
+        const auto                              emit   = [&](const TreeNode& node) {
+            if (sink && node.count == (std::uint64_t(1) << node.height))
+                stored = stored && sink(node.begin, node.height, node.hash);
+        };
+        const auto join = [&](const TreeNode& left, const TreeNode& right, bool duplicate) {
+            for (auto& proof : result.proofs) {
+                if (proof.leaf_index >= left.begin && proof.leaf_index - left.begin < left.count)
+                    proof.siblings.push_back(right.hash);
+                else if (!duplicate && proof.leaf_index >= right.begin
+                         && proof.leaf_index - right.begin < right.count)
+                    proof.siblings.push_back(left.hash);
+            }
+            TreeNode parent { merkle_parent(left.hash, right.hash),
+                              left.begin,
+                              duplicate ? left.count : left.count + right.count,
+                              left.height + 1 };
+            emit(parent);
+            return parent;
+        };
+        for (std::uint64_t index = 0; index < leaves; ++index) {
+            const auto value = reader(index);
+            if (!value.has_value())
+                return std::unexpected(value.error());
+            if (value.value().size() > 1024 * 1024)
+                return std::unexpected(ConsensusError::DataTooLarge);
+            TreeNode current { merkle_leaf(value.value()), index, 1, 0 };
+            emit(current);
+            for (auto& proof : result.proofs)
+                if (proof.leaf_index == index)
+                    proof.leaf_hash = current.hash;
+            while (frontier[current.height].has_value()) {
+                const auto height = current.height;
+                current           = join(frontier[height].value(), current, false);
+                frontier[height].reset();
+            }
+            if (!stored)
+                return std::unexpected(ConsensusError::StorageFailure);
+            frontier[current.height] = std::move(current);
+        }
+        std::optional<TreeNode> root;
+        for (std::uint32_t height = 0; height < frontier.size(); ++height) {
+            if (!frontier[height].has_value())
+                continue;
+            if (!root.has_value())
+                root = std::move(frontier[height].value());
+            else {
+                while (root.value().height < height)
+                    root = join(root.value(), root.value(), true);
+                root = join(frontier[height].value(), root.value(), false);
+            }
+        }
+        if (!stored || !root.has_value())
+            return std::unexpected(ConsensusError::StorageFailure);
+        result.root = root.value().hash;
+        return result;
+    }
+
+    std::expected<MerkleProof, ConsensusError> make_indexed_merkle_proof(std::uint64_t           leaves,
+                                                                         std::uint64_t           index,
+                                                                         const MerkleNodeReader& reader) {
+        if (leaves == 0 || leaves > (std::uint64_t(1) << 32) || index >= leaves || !reader)
+            return std::unexpected(ConsensusError::InvalidProof);
+        const auto subtree = [&](auto&&        self,
+                                 std::uint64_t begin,
+                                 std::uint32_t height) -> std::expected<std::string, ConsensusError> {
+            if (begin + (std::uint64_t(1) << height) <= leaves) {
+                const auto hash = reader(begin, height);
+                if (!hash.has_value())
+                    return std::unexpected(hash.error());
+                if (hash.value().size() != 64 || !std::ranges::all_of(hash.value(), [](char value) {
+                        return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f');
+                    }))
+                    return std::unexpected(ConsensusError::InvalidProof);
+                return hash;
+            }
+            const auto left = self(self, begin, height - 1);
+            if (!left.has_value())
+                return std::unexpected(left.error());
+            const auto right_begin = begin + (std::uint64_t(1) << (height - 1));
+            const auto right       = right_begin < leaves ? self(self, right_begin, height - 1) : left;
+            if (!right.has_value())
+                return std::unexpected(right.error());
+            return merkle_parent(left.value(), right.value());
+        };
+        auto leaf = subtree(subtree, index, 0);
+        if (!leaf.has_value())
+            return std::unexpected(leaf.error());
+        MerkleProof   result { .leaf_index = index, .leaf_count = leaves, .leaf_hash = leaf.value() };
+        auto          current  = leaf.value();
+        auto          position = index;
+        std::uint32_t height   = 0;
+        for (auto width = leaves; width > 1; width = width / 2 + width % 2, position /= 2, ++height) {
+            const auto sibling_position = position ^ 1;
+            const auto sibling = sibling_position < width ? subtree(subtree, sibling_position << height, height)
+                                                          : std::expected<std::string, ConsensusError>(current);
+            if (!sibling.has_value())
+                return std::unexpected(sibling.error());
+            result.siblings.push_back(sibling.value());
+            current = position % 2 == 0 ? merkle_parent(current, sibling.value())
+                                        : merkle_parent(sibling.value(), current);
+        }
+        return result;
+    }
+
     bool verify_merkle_proof(std::string_view value, const MerkleProof& proof, std::string_view expected_root) {
-        if (proof.leaf_count == 0 || proof.leaf_index >= proof.leaf_count
+        if (proof.leaf_count == 0 || proof.leaf_index >= proof.leaf_count || proof.siblings.size() > 64
+            || expected_root.size() != 64 || proof.leaf_hash.size() != 64
+            || std::ranges::any_of(proof.siblings, [](const auto& hash) { return hash.size() != 64; })
             || proof.leaf_hash != merkle_leaf(value)) {
             return false;
         }
@@ -530,10 +728,12 @@ namespace ExtraChain::Consensus {
             if (sibling_index >= proof.siblings.size()) {
                 return false;
             }
+            if (position % 2 == 0 && position + 1 == width && proof.siblings[sibling_index] != hash)
+                return false;
             hash = position % 2 == 0 ? merkle_parent(hash, proof.siblings[sibling_index])
                                      : merkle_parent(proof.siblings[sibling_index], hash);
             position /= 2;
-            width = (width + 1) / 2;
+            width = width / 2 + width % 2;
             ++sibling_index;
         }
         return sibling_index == proof.siblings.size() && hash == expected_root;
@@ -862,6 +1062,10 @@ namespace ExtraChain::Consensus {
                && activation.activation_height > current_height && activation.activation_dag_section != 0
                && activation.activation_dag_section % ShadowSectionInterval == 0
                && !activation.validator_set_hash.empty() && activation.require_intent_v2
+               && (!activation.mining_policy.has_value()
+                   || (activation.mining_policy.value().first_epoch
+                           >= activation.activation_dag_section / ShadowSectionInterval
+                       && mining_policy_total(activation.mining_policy.value()).has_value()))
                && activation.authorization.action_hash == unsigned_activation_hash(activation)
                && verify_authorization(policy, activation.authorization, minimum_sequence);
     }

@@ -180,11 +180,9 @@ struct ChainIndex::Impl {
     BlobIdCache token_cache;
 
     ~Impl() {
-        if (write_batch_open && !exec("COMMIT")) {
-            exec("ROLLBACK");
+        if (db && flush_write_batch() && derived_index_ready) {
+            exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('clean_shutdown', '1')");
         }
-        write_batch_open     = false;
-        write_batch_sections = 0;
 
         auto finalize = [](sqlite3_stmt *&s) {
             if (s)
@@ -219,6 +217,7 @@ struct ChainIndex::Impl {
         char *err = nullptr;
         int   rc  = sqlite3_exec(db, sql, nullptr, nullptr, &err);
         if (rc != SQLITE_OK) {
+            derived_index_ready = false;
             std::string msg = err ? err : "?";
             sqlite3_free(err);
             eWarning("[ChainIndex] SQL error: {} | sql: {}", msg, sql);
@@ -239,6 +238,7 @@ struct ChainIndex::Impl {
     }
 
     void rollback_write_batch() {
+        derived_index_ready = false;
         if (write_batch_open)
             exec("ROLLBACK");
         write_batch_open     = false;
@@ -267,6 +267,13 @@ struct ChainIndex::Impl {
         if (write_batch_sections < LIVE_WRITE_BATCH_SIZE && age < LIVE_WRITE_BATCH_AGE)
             return true;
         return flush_write_batch();
+    }
+
+    bool invalidate_derived_index() {
+        derived_index_ready = false;
+        return flush_write_batch()
+               && exec(
+                   "INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', 'rebuilding')");
     }
 
     sqlite3_stmt *prepare(const char *sql) {
@@ -334,16 +341,8 @@ struct ChainIndex::Impl {
             }
         }
 
-        sqlite3_stmt *row_count = nullptr;
-        sqlite3_stmt *version   = nullptr;
-        sqlite3_int64 rows      = 0;
+        sqlite3_stmt *version = nullptr;
         std::string   stored_version;
-        if (sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM tx_index", -1, &row_count, nullptr) == SQLITE_OK
-            && sqlite3_step(row_count) == SQLITE_ROW) {
-            rows = sqlite3_column_int64(row_count, 0);
-        }
-        if (row_count != nullptr)
-            sqlite3_finalize(row_count);
         if (sqlite3_prepare_v2(db,
                                "SELECT value FROM index_meta WHERE key = 'derived_index_version'",
                                -1,
@@ -357,12 +356,26 @@ struct ChainIndex::Impl {
         }
         if (version != nullptr)
             sqlite3_finalize(version);
-        derived_index_ready = stored_version == DERIVED_INDEX_VERSION;
-        if (rows == 0 && !derived_index_ready) {
-            derived_index_ready = exec(
-                "INSERT OR REPLACE INTO index_meta(key, value)"
-                " VALUES ('derived_index_version', '2')");
+        sqlite3_stmt *clean          = nullptr;
+        bool          clean_shutdown = false;
+        if (sqlite3_prepare_v2(db,
+                               "SELECT value FROM index_meta WHERE key = 'clean_shutdown'",
+                               -1,
+                               &clean,
+                               nullptr)
+                == SQLITE_OK
+            && sqlite3_step(clean) == SQLITE_ROW) {
+            const auto *value = reinterpret_cast<const char *>(sqlite3_column_text(clean, 0));
+            clean_shutdown    = value != nullptr && std::string_view(value) == "1";
         }
+        if (clean != nullptr)
+            sqlite3_finalize(clean);
+        derived_index_ready = stored_version == DERIVED_INDEX_VERSION && clean_shutdown;
+
+        // Canonical sections and this derived database have separate commits.
+        // A process exit between them requires replay, even when the index schema is current.
+        if (!exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('clean_shutdown', '0')"))
+            return false;
 
         // Prepared statements
         stmt_insert_tx = prepare(
@@ -618,6 +631,7 @@ ChainIndex::ChainIndex(ExtraChain::Core::ExtraChainNode *node)
     : impl_(std::make_unique<Impl>()) {
     impl_->node = node;
     if (!impl_->open()) {
+        impl_->derived_index_ready = false;
         eCritical("[ChainIndex] Failed to initialize index database");
     }
 }
@@ -710,6 +724,13 @@ bool ChainIndex::derived_index_ready() const {
     return impl_->derived_index_ready;
 }
 
+bool ChainIndex::invalidate_derived_index() {
+    if (!impl_->db)
+        return false;
+    std::lock_guard<std::mutex> lock(impl_->write_mutex);
+    return impl_->invalidate_derived_index();
+}
+
 std::vector<ChainIndexEntry> ChainIndex::find_for_actor(const std::string &actor,
                                                         const std::string &token,
                                                         std::uint64_t      before_timestamp,
@@ -795,7 +816,7 @@ std::uint64_t ChainIndex::count_for_actor_by_type_since(const std::string &actor
     return result;
 }
 
-void ChainIndex::rebuild_from_disk() {
+void ChainIndex::rebuild_from_disk(std::stop_token stop) {
     if (!impl_->db || !impl_->node)
         return;
 
@@ -807,24 +828,24 @@ void ChainIndex::rebuild_from_disk() {
 
     std::lock_guard<std::mutex> lock(impl_->write_mutex);
 
-    impl_->flush_write_batch();
+    if (!impl_->invalidate_derived_index() || stop.stop_requested())
+        return;
 
     impl_->exec("PRAGMA journal_mode = MEMORY");
     impl_->exec("PRAGMA synchronous = OFF");
     struct Restore {
         Impl *i;
         ~Restore() {
+            i->actor_cache.map.clear();
+            i->token_cache.map.clear();
             i->exec("PRAGMA synchronous = NORMAL");
             i->exec("PRAGMA journal_mode = WAL");
         }
     } restore_on_exit { impl_.get() };
 
-    impl_->derived_index_ready = false;
-    impl_->exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', 'rebuilding')");
-    impl_->exec("DELETE FROM tx_index");
-    impl_->exec("DELETE FROM contract_tx_index");
-    impl_->exec("DELETE FROM actors");
-    impl_->exec("DELETE FROM tokens");
+    if (!impl_->exec("DELETE FROM tx_index") || !impl_->exec("DELETE FROM contract_tx_index")
+        || !impl_->exec("DELETE FROM actors") || !impl_->exec("DELETE FROM tokens"))
+        return;
     impl_->actor_cache.map.clear();
     impl_->token_cache.map.clear();
 
@@ -835,12 +856,23 @@ void ChainIndex::rebuild_from_disk() {
     const SectionId last  = dag->current_section();
     std::uint64_t   count = 0;
 
+    std::map<SectionId, Section> sections;
+    SectionId                    read_through = first - 1;
     for (SectionId i = first; i <= last; i = i + 1) {
-        auto section = dag->read_section(i);
-        if (!section.has_value())
+        if (stop.stop_requested()) {
+            impl_->exec("ROLLBACK");
+            return;
+        }
+        if (i > read_through) {
+            sections.clear();
+            read_through = std::min(last, i + Pack::SECTIONS_PER_FRAME - 1);
+            sections     = dag->read_section_batch(i, read_through);
+        }
+        const auto section = sections.find(i);
+        if (section == sections.end())
             continue;
-        for (const auto &tx : section->transactions) {
-            if (!impl_->insert_tx(tx, section->id)) {
+        for (const auto &tx : section->second.transactions) {
+            if (stop.stop_requested() || !impl_->insert_tx(tx, section->second.id)) {
                 impl_->exec("ROLLBACK");
                 return;
             }
@@ -858,6 +890,8 @@ void ChainIndex::rebuild_from_disk() {
         impl_->exec("ROLLBACK");
         return;
     }
+    if (stop.stop_requested())
+        return;
     impl_->exec("ANALYZE");
     impl_->derived_index_ready =
         impl_->exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', '2')");
@@ -872,11 +906,11 @@ void ChainIndex::clear() {
     if (!impl_->db)
         return;
     std::lock_guard<std::mutex> lock(impl_->write_mutex);
-    impl_->flush_write_batch();
-    impl_->exec("DELETE FROM tx_index");
-    impl_->exec("DELETE FROM contract_tx_index");
-    impl_->exec("DELETE FROM actors");
-    impl_->exec("DELETE FROM tokens");
+    if (!impl_->flush_write_batch())
+        return;
+    if (!impl_->exec("DELETE FROM tx_index") || !impl_->exec("DELETE FROM contract_tx_index")
+        || !impl_->exec("DELETE FROM actors") || !impl_->exec("DELETE FROM tokens"))
+        return;
     impl_->derived_index_ready =
         impl_->exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', '2')");
     impl_->actor_cache.map.clear();
