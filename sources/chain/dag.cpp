@@ -5521,30 +5521,6 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
             continue;
         }
 
-        // Gather all section files in this range. Missing file == empty section
-        // (sync skips sections with no transactions). With HOT_PACK_LAG already
-        // guarding the moment, every id in this range has been "passed by" sync
-        // — so absence is an empty section, not pending data.
-        std::map<SectionId, std::string> sections = hot_section_store_
-                                                        ? hot_section_store_->read_range(pack_first, pack_last)
-                                                        : std::map<SectionId, std::string> { };
-        const std::string empty_serialized = Json::serialize(Section { .id = SectionId(0) });
-        for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
-            if (sections.contains(s))
-                continue;
-            auto p   = this->file_path(s);
-            auto fsp = FsPath::create(p);
-            if (fsp.has_value() && fsp->exists()) {
-                auto content = Utils::read_file_content(fsp.value());
-                if (content.has_value()) {
-                    sections.emplace(s, std::string(content->begin(), content->end()));
-                    continue;
-                }
-            }
-            // Missing or unreadable -> empty placeholder section.
-            sections.emplace(s, empty_serialized);
-        }
-
         Pack::PackId pid;
         {
             auto candidate_int = pack_idx.to_int();
@@ -5554,12 +5530,68 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
             }
             pid = static_cast<Pack::PackId>(*candidate_int);
         }
+        const auto first_int = pack_first.to_int();
+        const auto last_int  = pack_last.to_int();
+        if (!first_int.has_value() || !last_int.has_value() || *first_int < 0 || *last_int < *first_int) {
+            eCritical("[Dag] Invalid pack range: {}..{}", pack_first, pack_last);
+            return;
+        }
+        const auto pack_count = static_cast<std::size_t>(*last_int - *first_int) + 1;
 
-        const auto read_candidate = [&](const SectionId &section_id) -> std::optional<Section> {
-            const auto found = sections.find(section_id);
-            if (found == sections.end())
+        // Read the range in bounded windows instead of holding the whole pack at once:
+        // SECTIONS_PER_PACK JSON payloads are tens of megabytes, and every such peak
+        // stayed resident in the allocator after packing. Missing file == empty section
+        // (sync skips sections with no transactions). With HOT_PACK_LAG already
+        // guarding the moment, every id in this range has been "passed by" sync
+        // — so absence is an empty section, not pending data.
+        constexpr std::size_t            PackReadWindow   = 256;
+        const std::string                empty_serialized = Json::serialize(Section { .id = SectionId(0) });
+        std::map<SectionId, std::string> window;
+        std::optional<std::size_t>       window_start;
+        const auto payload_at = [&](std::size_t offset) -> std::string {
+            const std::size_t start = offset - offset % PackReadWindow;
+            if (window_start != start) {
+                const SectionId from(static_cast<int>(*first_int + start));
+                const SectionId to(static_cast<int>(*first_int + std::min(pack_count - 1, start + PackReadWindow - 1)));
+                window       = hot_section_store_ ? hot_section_store_->read_range(from, to)
+                                                  : std::map<SectionId, std::string> { };
+                window_start = start;
+            }
+            const SectionId section_id(static_cast<int>(*first_int + offset));
+            if (const auto found = window.find(section_id); found != window.end())
+                return found->second;
+            auto fsp = FsPath::create(this->file_path(section_id));
+            if (fsp.has_value() && fsp->exists()) {
+                auto content = Utils::read_file_content(fsp.value());
+                if (content.has_value())
+                    return std::string(content->begin(), content->end());
+            }
+            // Missing or unreadable -> empty placeholder section.
+            return empty_serialized;
+        };
+
+        // Validation and writing read the sources separately. Remember what each
+        // section looked like when it was validated, so a hot row replaced in between
+        // (a repair) defers the pack instead of sealing content nobody checked.
+        std::vector<std::optional<std::size_t>> validated(pack_count);
+        const auto offset_of = [&](const SectionId &section_id) -> std::optional<std::size_t> {
+            if (section_id < pack_first || section_id > pack_last)
                 return std::nullopt;
-            auto section = Json::deserialize<Section>(found->second);
+            const auto value = section_id.to_int();
+            if (!value.has_value())
+                return std::nullopt;
+            return static_cast<std::size_t>(*value - *first_int);
+        };
+        const auto read_candidate = [&](const SectionId &section_id) -> std::optional<Section> {
+            const auto offset = offset_of(section_id);
+            if (!offset.has_value())
+                return std::nullopt;
+            const auto payload = payload_at(*offset);
+            const auto digest  = std::hash<std::string_view> {}(payload);
+            if (validated[*offset].has_value() && validated[*offset] != digest)
+                return std::nullopt;
+            validated[*offset] = digest;
+            auto section       = Json::deserialize<Section>(payload);
             if (!section.has_value())
                 return std::nullopt;
             section.value().id = section_id;
@@ -5576,16 +5608,27 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
             }
         }
 
-        auto res =
-            pack_registry_->create_pack(pid,
-                                        pack_first,
-                                        pack_last,
-                                        [&sections](const SectionId &section_id) -> std::optional<std::string> {
-                                            const auto found = sections.find(section_id);
-                                            if (found == sections.end())
-                                                return std::nullopt;
-                                            return std::move(found->second);
-                                        });
+        bool       changed = false;
+        const auto res     = pack_registry_->create_pack(
+            pid,
+            pack_first,
+            pack_last,
+            [&](const SectionId &section_id) -> std::optional<std::string> {
+                const auto offset = offset_of(section_id);
+                if (!offset.has_value())
+                    return std::nullopt;
+                auto payload = payload_at(*offset);
+                if (validated[*offset].has_value()
+                    && validated[*offset] != std::hash<std::string_view> {}(payload)) {
+                    changed = true;
+                    return std::nullopt;
+                }
+                return payload;
+            });
+        if (changed) {
+            eWarning("[Dag] Defer pack {}: a section changed while it was being packed", pid);
+            return;
+        }
         if (!res.has_value()) {
             eWarning("[Dag] Failed to pack sections {}..{} (error {})",
                      pack_first,
