@@ -32,6 +32,22 @@
     #include <malloc.h>
 #endif
 
+#if defined(__linux__) && !defined(__ANDROID__) && defined(__GLIBC__)
+    #include <cstdlib>
+
+namespace {
+    // glibc gives threads their own heap arenas, up to eight per core, and keeps the
+    // partially used ones. A full node runs about twenty threads that allocate and free
+    // short-lived consensus data. On the Ubuntu stand the median node heap after a
+    // 30-minute combined run was 176 MiB with the default and 127 MiB with two arenas.
+    // An explicit MALLOC_ARENA_MAX from the operator still takes precedence.
+    void limit_allocator_arenas() {
+        if (std::getenv("MALLOC_ARENA_MAX") == nullptr)
+            mallopt(M_ARENA_MAX, 2);
+    }
+} // namespace
+#endif
+
 #include <msgpack.hpp>
 #include <sodium/core.h>
 
@@ -250,6 +266,11 @@ namespace ExtraChain::Core {
             runtime_profile_ = is_client_application_ ? RuntimeProfile::DesktopLight : RuntimeProfile::FullNode;
 #endif
         }
+#if defined(__linux__) && !defined(__ANDROID__) && defined(__GLIBC__)
+        // Before the runtime starts its threads; an embedding application keeps its own policy.
+        if (runtime_profile_ == RuntimeProfile::FullNode)
+            limit_allocator_arenas();
+#endif
         const auto limits = runtime_limits();
         runtime_          = std::make_unique<NetworkRuntime>(RuntimeConfig {
                      .io_threads      = limits.io_workers,
@@ -2476,7 +2497,8 @@ namespace ExtraChain::Core {
     }
 
     void ExtraChainNode::timer_info_print() {
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        // Q_OS_LINUX is a Qt macro, so the Qt-free node build never compiled this call.
+#if defined(__linux__) && !defined(__ANDROID__) && defined(__GLIBC__)
         malloc_trim(0);
 #endif
 
