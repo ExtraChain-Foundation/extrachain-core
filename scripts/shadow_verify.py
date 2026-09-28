@@ -19,6 +19,14 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+try:
+    from compression import zstd
+except ImportError:
+    zstd = None
+
+# The hot store keeps large sections as zstd frames; section JSON never starts with this.
+ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
+
 
 def finalized_rows(data_dir, section):
     """Whole finalized batches at the section, and archived ones (hash only): a node keeps
@@ -107,6 +115,10 @@ def section_hashes(data_dir):
 
     hashes = {}
     for section, payload in dst.execute("SELECT section, payload FROM sections"):
+        if isinstance(payload, bytes) and payload.startswith(ZSTD_MAGIC):
+            if zstd is None:
+                raise SystemExit('FAIL: compressed hot sections need Python 3.14 (compression.zstd)')
+            payload = zstd.decompress(payload)
         try:
             body = json.loads(payload)["transactions"]
             hashes[section] = hashlib.sha256(

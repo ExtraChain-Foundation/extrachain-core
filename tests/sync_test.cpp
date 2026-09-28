@@ -485,6 +485,51 @@ public:
             TEST_REQUIRE(!reopened.contains(SectionId(11)));
             TEST_REQUIRE(!reopened.bounds().has_value());
             TEST_REQUIRE(!reopened.committed_range().has_value());
+
+            // Large payloads are framed on disk and read back unchanged; a payload that
+            // starts with the frame magic itself still round-trips.
+            std::string large = "{\"transactions\":[";
+            while (large.size() < 256 * 1024)
+                large += "{\"data\":\"a2V5LXZhbHVlLXBheWxvYWQ=\"},";
+            large += "{}]}";
+            const std::string magic("\x28\xb5\x2f\xfd tiny", 9);
+            TEST_REQUIRE(reopened.commit_batch({ { SectionId(30), large }, { SectionId(31), magic } }, std::nullopt));
+            TEST_REQUIRE(reopened.put(SectionId(32), "small"));
+            TEST_REQUIRE(reopened.contains(SectionId(30)));
+            TEST_REQUIRE_EQ(reopened.get(SectionId(30)), std::optional<std::string>(large));
+            TEST_REQUIRE_EQ(reopened.get(SectionId(31)), std::optional<std::string>(magic));
+            const auto framed = reopened.read_range(SectionId(30), SectionId(32));
+            TEST_REQUIRE_EQ(framed.size(), static_cast<std::size_t>(3));
+            TEST_REQUIRE_EQ(framed.at(SectionId(30)), large);
+            TEST_REQUIRE_EQ(framed.at(SectionId(31)), magic);
+            TEST_REQUIRE_EQ(framed.at(SectionId(32)), std::string("small"));
+        }
+
+        {
+            sqlite3 *raw = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_open(path.string().c_str(), &raw), SQLITE_OK);
+            std::unique_ptr<sqlite3, decltype(&sqlite3_close)> database(raw, sqlite3_close);
+            sqlite3_stmt *statement = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_prepare_v2(database.get(),
+                                               "SELECT section,length(payload),hex(substr(payload,1,4)) "
+                                               "FROM sections ORDER BY section",
+                                               -1,
+                                               &statement,
+                                               nullptr),
+                            SQLITE_OK);
+            std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> query(statement, sqlite3_finalize);
+            const auto row = [&](int section, bool framed) {
+                TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_ROW);
+                TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 0), section);
+                const auto prefix =
+                    std::string(reinterpret_cast<const char *>(sqlite3_column_text(query.get(), 2)));
+                TEST_REQUIRE_EQ(prefix == "28B52FFD", framed);
+                return sqlite3_column_int(query.get(), 1);
+            };
+            TEST_REQUIRE(row(30, true) < 16 * 1024);
+            TEST_REQUIRE(row(31, true) > 0);
+            TEST_REQUIRE_EQ(row(32, false), 5);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_DONE);
         }
 
         std::filesystem::remove_all(dir);

@@ -128,6 +128,15 @@ class ShutdownCheckpointTest(unittest.TestCase):
         self.mutate('consensus/safety.sqlite', f"UPDATE consensus_finality_proofs SET finalized_hash = '{'b' * 64}'")
         self.assertEqual(self.verify(), 1)
 
+    def test_compressed_hot_sections_are_read(self):
+        from shadow_verify import zstd
+        if zstd is None:
+            self.skipTest('compression.zstd needs Python 3.14')
+        with closing(sqlite3.connect(Path(self.homes[-1][1]) / 'dag/hot/HotSections.db')) as database, database:
+            database.execute('UPDATE sections SET payload = ? WHERE section = 190',
+                             (zstd.compress(b'{"transactions": []}'),))
+        self.assertEqual(self.verify(), 0)
+
     def test_stopped_batch_must_not_change(self):
         self.mutate('consensus/safety.sqlite', "UPDATE consensus_batches SET payload = 'other'")
         self.assertEqual(self.verify(), 1)
