@@ -125,6 +125,11 @@ namespace ExtraChain::Consensus {
         static std::uint64_t current_round(ConsensusService& service) {
             return service.consensus_->engine().safety_state().current_round;
         }
+        static void resend_missed(ConsensusService&                     service,
+                                  std::uint64_t                         height,
+                                  std::chrono::steady_clock::time_point now) {
+            service.resend_missed_timeout_certificate(height, now);
+        }
         static auto next_nonce(ConsensusService& service, const ActorId& sender) {
             return service.next_local_nonce(sender);
         }
@@ -938,11 +943,24 @@ int main() {
         const auto sent    = socket->timeout_certificates.load();
         service.receive_timeout_vote(lagging, peer);
         TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 1);
+        // A validator that goes quiet after that vote gets the certificate again from the timer,
+        // once per round timeout (round 1: 8 s + 1.25 s), and never while it may still vote.
+        const auto voted = std::chrono::steady_clock::now();
+        ConsensusStateTestFixture::resend_missed(service, tip.height + 1, voted + std::chrono::seconds(5));
+        TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 1);
+        ConsensusStateTestFixture::resend_missed(service, tip.height + 1, voted + std::chrono::seconds(10));
+        TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 2);
+        ConsensusStateTestFixture::resend_missed(service, tip.height + 1, voted + std::chrono::seconds(15));
+        TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 2);
+        ConsensusStateTestFixture::resend_missed(service, tip.height + 1, voted + std::chrono::seconds(20));
+        TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 3);
         TimeoutVote current = lagging;
         current.round       = 1;
         current.signature   = sign_payload(keys[0], timeout_vote_signing_payload(current)).value();
         service.receive_timeout_vote(current, peer);
-        TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 1);
+        TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 3);
+        ConsensusStateTestFixture::resend_missed(service, tip.height + 1, voted + std::chrono::seconds(60));
+        TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 3);
     }
     TimeoutVote future              = stale;
     future.height                   = tip.height + 2;

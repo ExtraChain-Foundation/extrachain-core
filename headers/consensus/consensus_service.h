@@ -176,6 +176,9 @@ namespace ExtraChain::Consensus {
         void vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier);
         void timeout_elapsed();
         void reset_timeout();
+        // Sends the timeout certificate of this height to validators whose last timeout vote is
+        // for an earlier round and older than a whole round timeout (see observed_timeouts_).
+        void resend_missed_timeout_certificate(std::uint64_t height, std::chrono::steady_clock::time_point now);
         void halt_voting();
         void send_to_peer(const auto&        payload,
                           MessageType        message_type,
@@ -278,6 +281,16 @@ namespace ExtraChain::Consensus {
         std::optional<Proposal>                                       latest_proposal_;
         std::optional<QuorumCertificate>                              latest_certificate_;
         std::optional<TimeoutCertificate>                             latest_timeout_certificate_;
+        /// Latest timeout vote seen from each validator. A validator that missed a timeout
+        /// certificate and whose pacemaker then went quiet sends nothing to answer, so the
+        /// certificate is resent to it from the timer instead (tracker #97).
+        struct ObservedTimeout {
+            std::uint64_t                                        height = 0;
+            std::uint64_t                                        round  = 0;
+            std::chrono::steady_clock::time_point                seen;
+            std::optional<std::chrono::steady_clock::time_point> resent;
+        };
+        std::map<std::string, ObservedTimeout>                        observed_timeouts_;
         std::map<std::uint64_t, ShadowCheckpoint>                     pending_checkpoints_;
         std::map<std::uint64_t, SectionBatchData>                     pending_batches_;
         std::map<std::string, Proposal>                               pending_proposals_;

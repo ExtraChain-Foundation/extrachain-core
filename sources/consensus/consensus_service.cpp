@@ -36,6 +36,19 @@ namespace ExtraChain::Consensus {
         // batch whole duplicated the chain there (5 GB per node per hour with mining proofs).
         constexpr std::uint64_t RetainedStoredBatches = 64;
 
+        // Upper bound of the pacemaker delay in a round, without the per-node jitter.
+        std::uint64_t round_timeout_ms(const ShadowConfiguration& configuration, std::uint64_t round) {
+            const auto multiplier = std::uint64_t(1) << std::min<std::uint64_t>(round, 10);
+            return configuration.proposal_timeout_ms > configuration.maximum_timeout_ms / multiplier
+                       ? configuration.maximum_timeout_ms
+                       : configuration.proposal_timeout_ms * multiplier;
+        }
+
+        // reset_timeout adds up to 250 ms of jitter; one more second covers delivery. A validator
+        // that has not voted for this long is past its own timeout, so a certificate resent after
+        // it can no longer postpone that validator's next timeout vote.
+        constexpr std::uint64_t QuietValidatorMarginMs = 1'250;
+
         template <typename Map>
         std::vector<std::pair<std::string, std::string>> state_entries(const Map& values) {
             return { values.begin(), values.end() };
@@ -673,6 +686,12 @@ namespace ExtraChain::Consensus {
         std::lock_guard lock(mutex_);
         if (!consensus_ || !authenticator_ || !(authenticated_sender(peer_identifier) == vote.validator_id)) {
             return;
+        }
+        if (auto& observed = observed_timeouts_[vote.validator_id];
+            std::tie(vote.height, vote.round) >= std::tie(observed.height, observed.round)) {
+            observed = ObservedTimeout { .height = vote.height,
+                                         .round  = vote.round,
+                                         .seen   = std::chrono::steady_clock::now() };
         }
         // A validator still timing out a round of this height that we already left missed the
         // timeout certificate that moved us on, and nothing else sends it again. Validators
@@ -2409,8 +2428,32 @@ namespace ExtraChain::Consensus {
             send_to_validators(accepted.value().certificate.value(), MessageType::ConsensusTimeoutCertificate);
         }
         send_to_validators(vote.value(), MessageType::ConsensusTimeoutVote);
+        resend_missed_timeout_certificate(height, std::chrono::steady_clock::now());
         queue_next_checkpoint();
         reset_timeout();
+    }
+
+    void ConsensusService::resend_missed_timeout_certificate(std::uint64_t                         height,
+                                                             std::chrono::steady_clock::time_point now) {
+        const auto& state = consensus_->engine().safety_state();
+        if (!state.highest_timeout_certificate.has_value()
+            || state.highest_timeout_certificate.value().height != height)
+            return;
+        const auto quiet = std::chrono::milliseconds(
+            round_timeout_ms(consensus_->configuration(), state.current_round) + QuietValidatorMarginMs);
+        for (const auto& validator : consensus_->engine().validators().active()) {
+            const auto observed = observed_timeouts_.find(validator.validator_id);
+            if (validator.node_identifier == node_.node_identifier() || observed == observed_timeouts_.end()
+                || observed->second.height != height || observed->second.round >= state.current_round
+                || now - observed->second.resent.value_or(observed->second.seen) < quiet) {
+                continue;
+            }
+            observed->second.resent = now;
+            send_to_peer(state.highest_timeout_certificate.value(),
+                         MessageType::ConsensusTimeoutCertificate,
+                         validator.node_identifier,
+                         MessageStatus::NoStatus);
+        }
     }
 
     void ConsensusService::reset_timeout() {
@@ -2418,11 +2461,7 @@ namespace ExtraChain::Consensus {
             return;
         }
         const auto& configuration = consensus_->configuration();
-        const auto  round         = consensus_->engine().safety_state().current_round;
-        const auto  multiplier    = std::uint64_t(1) << std::min<std::uint64_t>(round, 10);
-        const auto  base   = configuration.proposal_timeout_ms > configuration.maximum_timeout_ms / multiplier
-                                 ? configuration.maximum_timeout_ms
-                                 : configuration.proposal_timeout_ms * multiplier;
+        const auto  base   = round_timeout_ms(configuration, consensus_->engine().safety_state().current_round);
         const auto  jitter = std::hash<std::string> {}(node_.node_identifier()) % 251;
         timeout_task_->schedule_after(
             std::chrono::milliseconds(std::min(configuration.maximum_timeout_ms, base + jitter)));
