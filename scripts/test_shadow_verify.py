@@ -112,6 +112,22 @@ class ShutdownCheckpointTest(unittest.TestCase):
         self.mutate('consensus/safety.sqlite', 'DELETE FROM consensus_finality_proofs')
         self.assertEqual(self.verify(), 1)
 
+    def archive(self, hash):
+        self.mutate('consensus/safety.sqlite',
+                    'CREATE TABLE consensus_batch_manifests (hash TEXT PRIMARY KEY, height INTEGER, payload TEXT)')
+        self.mutate('consensus/safety.sqlite', f"INSERT INTO consensus_batch_manifests VALUES ('{hash}', 1, 'm')")
+        self.mutate('consensus/safety.sqlite', 'DELETE FROM consensus_batches')
+
+    def test_stopped_node_may_archive_the_batch(self):
+        self.archive('a' * 64)
+        self.assertEqual(self.verify(), 0)
+        self.assertEqual(self.verify(checkpoint_only=True), 0)
+
+    def test_archived_batch_must_keep_its_hash(self):
+        self.archive('b' * 64)
+        self.mutate('consensus/safety.sqlite', f"UPDATE consensus_finality_proofs SET finalized_hash = '{'b' * 64}'")
+        self.assertEqual(self.verify(), 1)
+
     def test_stopped_batch_must_not_change(self):
         self.mutate('consensus/safety.sqlite', "UPDATE consensus_batches SET payload = 'other'")
         self.assertEqual(self.verify(), 1)

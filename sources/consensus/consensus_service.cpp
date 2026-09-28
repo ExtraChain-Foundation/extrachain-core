@@ -31,6 +31,11 @@
 
 namespace ExtraChain::Consensus {
     namespace {
+        // Finalized batches kept whole in safety.sqlite below the applied checkpoint. Older
+        // ones keep only their manifest and are rebuilt from the DAG on request; keeping every
+        // batch whole duplicated the chain there (5 GB per node per hour with mining proofs).
+        constexpr std::uint64_t RetainedStoredBatches = 64;
+
         template <typename Map>
         std::vector<std::pair<std::string, std::string>> state_entries(const Map& values) {
             return { values.begin(), values.end() };
@@ -877,8 +882,7 @@ namespace ExtraChain::Consensus {
         }
         std::uint64_t total_bytes = 0;
         for (const auto& proof : proofs.value()) {
-            const auto header_hash = hash_header(proof.finalized_proposal.header);
-            const auto batch       = consensus_->engine().batch_for(header_hash);
+            const auto batch = finalized_batch(proof.finalized_proposal);
             if (!batch.has_value()
                 || batch.value().manifest.payload_bytes > consensus_->configuration().maximum_batch_bytes
                 || batch.value().manifest.payload_bytes > MaximumShadowSyncBytes
@@ -900,6 +904,30 @@ namespace ExtraChain::Consensus {
                                     SendMode::Focused,
                                     MessageStatus::Response);
         }
+    }
+
+    std::optional<SectionBatchData> ConsensusService::finalized_batch(const Proposal& proposal) const {
+        const auto header_hash = hash_header(proposal.header);
+        auto       batch       = consensus_->engine().batch_for(header_hash);
+        if (batch.has_value() || node_.dag()->mode() != DagMode::Full)
+            return batch;
+        // Archived after installation: the DAG holds the sections, the kept manifest holds the
+        // previous section root the DAG cannot reproduce (a leader takes it from the parent
+        // proposal, the DAG from its control chain). Both roots and the signed batch root must
+        // agree before the rebuild is served.
+        auto manifest = consensus_->engine().archived_manifest_for(header_hash);
+        if (!manifest.has_value() || hash_batch_manifest(manifest.value()) != proposal.header.batch_root)
+            return std::nullopt;
+        auto rebuilt = node_.dag()->build_shadow_batch(SectionId(manifest.value().first_section),
+                                                       SectionId(manifest.value().last_section),
+                                                       header_hash);
+        if (!rebuilt.has_value() || rebuilt.value().manifest.transaction_hashes != manifest.value().transaction_hashes
+            || rebuilt.value().manifest.transaction_root != manifest.value().transaction_root
+            || rebuilt.value().manifest.data_root != manifest.value().data_root
+            || rebuilt.value().manifest.payload_bytes != manifest.value().payload_bytes)
+            return std::nullopt;
+        rebuilt.value().manifest = std::move(manifest.value());
+        return std::move(rebuilt.value());
     }
 
     void ConsensusService::receive_sync_response(const ShadowSyncResponse& response,
@@ -1454,6 +1482,14 @@ namespace ExtraChain::Consensus {
         const auto epoch_activated = activate_pending_epoch();
         if (!epoch_activated.has_value()) {
             return std::unexpected(epoch_activated.error());
+        }
+        // Only a full DAG can rebuild what is pruned here; a light node keeps its batches.
+        if (node_.dag()->mode() == DagMode::Full && proposal.header.height > RetainedStoredBatches) {
+            const auto pruned =
+                consensus_->engine().prune_stored_batches(proposal.header.height - RetainedStoredBatches);
+            if (!pruned.has_value())
+                eWarning("[Shadow] Cannot prune stored batches below height {}",
+                         proposal.header.height - RetainedStoredBatches);
         }
         const auto finalized_checkpoint = FinalizedCheckpoint {
             .height            = proposal.header.height,

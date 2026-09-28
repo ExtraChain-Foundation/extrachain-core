@@ -20,17 +20,31 @@ from collections import defaultdict
 from pathlib import Path
 
 
-def finalized_checkpoint(data_dir, section):
-    # Finalized batches survive hot-section packing and bind the full checkpoint contents.
+def finalized_rows(data_dir, section):
+    """Whole finalized batches at the section, and archived ones (hash only): a node keeps
+    only the latest batches whole and archives older ones to their manifests."""
     database = Path(data_dir).resolve() / 'consensus/safety.sqlite'
     with closing(sqlite3.connect(f'{database.as_uri()}?mode=ro', uri=True, timeout=1)) as connection:
         rows = connection.execute(
             'SELECT f.finalized_hash, b.payload FROM consensus_finality_proofs f '
             'JOIN consensus_batches b ON b.hash = f.finalized_hash WHERE f.last_section = ?',
             (section,)).fetchall()
+        archived = []
+        if connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                              "AND name = 'consensus_batch_manifests'").fetchone():
+            archived = [hash for hash, in connection.execute(
+                'SELECT f.finalized_hash FROM consensus_finality_proofs f '
+                'JOIN consensus_batch_manifests m ON m.hash = f.finalized_hash WHERE f.last_section = ?',
+                (section,))]
+    return rows, archived
+
+
+def finalized_checkpoint(data_dir, section):
+    # Finalized batches survive hot-section packing and bind the full checkpoint contents.
+    rows, _ = finalized_rows(data_dir, section)
     if len(rows) != 1:
         raise ValueError(f'Expected one durable finalized batch at section {section} in {data_dir}')
-    return hashlib.sha256(json.dumps(rows[0]).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(rows[0]).encode()).hexdigest(), rows[0][0]
 
 
 def capture_checkpoint(homes, mining):
@@ -41,10 +55,11 @@ def capture_checkpoint(homes, mining):
     section = mining[0]['section']
     if section <= 0:
         raise ValueError('A shutdown checkpoint must follow finalized work')
-    batches = {name: finalized_checkpoint(path, section) for name, path in homes}
+    captured = {name: finalized_checkpoint(path, section) for name, path in homes}
+    batches = {name: digest for name, (digest, _) in captured.items()}
     if len(set(batches.values())) != 1:
         raise ValueError(f'Finalized batches disagree at section {section}')
-    return dict(section=section, batches=batches)
+    return dict(section=section, batches=batches, hash=next(iter(captured.values()))[1])
 
 
 def verify_checkpoint(checkpoint, homes, tips):
@@ -54,7 +69,13 @@ def verify_checkpoint(checkpoint, homes, tips):
             or len(set(batches.values())) != 1):
         raise ValueError('Invalid shutdown checkpoint or changed node membership')
     for name, path in homes:
-        if tips[name] < section or finalized_checkpoint(path, section) != batches[name]:
+        rows, archived = finalized_rows(path, section)
+        if len(rows) == 1:
+            retained = hashlib.sha256(json.dumps(rows[0]).encode()).hexdigest() == batches[name]
+        else:
+            # Archived since the capture: the signed header hash still binds the batch.
+            retained = not rows and archived == [checkpoint.get('hash')]
+        if tips[name] < section or not retained:
             raise ValueError(f'{name} did not retain the agreed checkpoint at section {section}')
 
 

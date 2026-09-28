@@ -113,6 +113,12 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::InvalidRoot);
             return service.persist_mining_state(proof, std::move(state.value()));
         }
+        static ConsensusEngine& engine_of(ConsensusService& service) {
+            return service.consensus_->engine();
+        }
+        static auto finalized_batch(ConsensusService& service, const Proposal& proposal) {
+            return service.finalized_batch(proposal);
+        }
         static auto next_nonce(ConsensusService& service, const ActorId& sender) {
             return service.next_local_nonce(sender);
         }
@@ -157,7 +163,7 @@ namespace ExtraChain::Consensus {
                                           .epoch      = engine.validators().document().epoch };
             response.proofs = engine.finality_proofs_after(0, MaximumShadowSyncProofs).value();
             for (const auto& proof : response.proofs)
-                response.batches.push_back(engine.batch_for(hash_header(proof.finalized_proposal.header)).value());
+                response.batches.push_back(service.finalized_batch(proof.finalized_proposal).value());
             return response;
         }
         static void connect(ConsensusService& service, const std::string& peer) {
@@ -758,6 +764,23 @@ int main() {
                                                           hash_header(last_applied.finalized_proposal.header) });
     TEST_REQUIRE_EQ(mining_state_root(ConsensusStateTestFixture::parent(service, parent).value()), expected_root);
     ConsensusStateTestFixture::require_stale_vote_ignored(service, batches.at(1).header_hash);
+    {
+        // A pruned finalized batch is still served to a lagging peer, rebuilt from the DAG.
+        auto&      archive = ConsensusStateTestFixture::engine_of(service);
+        const auto proofs  = archive.finality_proofs_after(0, 2);
+        TEST_REQUIRE(proofs.has_value() && proofs.value().size() == 2);
+        const auto& oldest = proofs.value().front().finalized_proposal;
+        const auto  header = hash_header(oldest.header);
+        const auto  stored = archive.batch_for(header);
+        TEST_REQUIRE(stored.has_value());
+        TEST_REQUIRE(archive.prune_stored_batches(oldest.header.height + 1).has_value());
+        TEST_REQUIRE(!archive.batch_for(header).has_value());
+        const auto rebuilt = ConsensusStateTestFixture::finalized_batch(service, oldest);
+        TEST_REQUIRE(rebuilt.has_value());
+        TEST_REQUIRE_EQ(hash_batch_manifest(rebuilt.value().manifest), oldest.header.batch_root);
+        TEST_REQUIRE(MessagePack::serialize(rebuilt.value()) == MessagePack::serialize(stored.value()));
+        TEST_REQUIRE(archive.batch_for(hash_header(proofs.value().back().finalized_proposal.header)).has_value());
+    }
     // A repeated registration is signed and structurally valid, but must not poison the leader's queue.
     const auto repeated          = request(IntentOperation::StorageRegister, dataset, 3, 261, 14);
     const auto repeated_envelope = intent_from_transaction(repeated).value();

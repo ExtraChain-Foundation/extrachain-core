@@ -242,6 +242,8 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError>                       initialize_mining_state() const;
         std::expected<MiningState, ConsensusError>                mining_state_for(const QuorumCertificate& parent,
                                                                                    std::size_t              depth = 0) const;
+        // The finalized proposal's batch: stored, or rebuilt from the installed DAG after pruning.
+        std::optional<SectionBatchData>            finalized_batch(const Proposal& proposal) const;
         std::expected<MiningState, ConsensusError> project_mining_state(const SectionBatchData&  batch,
                                                                         const QuorumCertificate& parent) const;
         // Stores the state already projected for this proof and checked against its
