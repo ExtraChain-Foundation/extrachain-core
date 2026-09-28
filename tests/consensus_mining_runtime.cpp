@@ -119,6 +119,12 @@ namespace ExtraChain::Consensus {
         static auto finalized_batch(ConsensusService& service, const Proposal& proposal) {
             return service.finalized_batch(proposal);
         }
+        static bool apply_timeout(ConsensusService& service, const TimeoutCertificate& certificate) {
+            return service.apply_timeout_certificate(certificate);
+        }
+        static std::uint64_t current_round(ConsensusService& service) {
+            return service.consensus_->engine().safety_state().current_round;
+        }
         static auto next_nonce(ConsensusService& service, const ActorId& sender) {
             return service.next_local_nonce(sender);
         }
@@ -223,7 +229,7 @@ public:
     }
     void flush() override {
     }
-    std::atomic<unsigned>      certificates { 0 }, syncs { 0 };
+    std::atomic<unsigned>      certificates { 0 }, syncs { 0 }, timeout_certificates { 0 };
     std::atomic<std::uint64_t> certified_height { 0 }, sync_height { 0 };
     void                       send_message(std::span<const std::uint8_t> bytes, Priority) override {
         TEST_REQUIRE(bytes.size() >= crypto_sign_BYTES);
@@ -236,6 +242,8 @@ public:
             certified_height.store(value.value().height);
             ++certificates;
         }
+        if (body.value().message_type == MessageType::ConsensusTimeoutCertificate)
+            ++timeout_certificates;
         if (body.value().message_type == MessageType::ConsensusSyncRequest) {
             const auto value = MessagePack::deserialize<ShadowSyncRequest>(body.value().data);
             TEST_REQUIRE(value.has_value());
@@ -891,6 +899,51 @@ int main() {
     service.receive_timeout_vote(stale, peer);
     TEST_REQUIRE_EQ(socket->certificates.load(), 1U);
     TEST_REQUIRE_EQ(socket->certified_height.load(), tip.height);
+    {
+        // A validator that missed the timeout certificate of a round we left gets it back.
+        // The certificate comes from other validators, as on the stand: this node holds none
+        // of its votes, so the lagging vote cannot complete a quorum and re-form it here.
+        TimeoutCertificate received { .network_id          = network.id(),
+                                      .epoch               = 1,
+                                      .height              = tip.height + 1,
+                                      .round               = 0,
+                                      .highest_certificate = tip,
+                                      .signer_bitmap = std::vector<std::uint8_t>((view.active().size() + 7) / 8, 0) };
+        for (std::size_t index = 0; index < view.active().size() && received.signatures.size() < view.quorum();
+             ++index) {
+            const auto signer = view.active()[index].validator_id;
+            if (signer == peer_id)
+                continue;
+            const auto key = std::ranges::find_if(keys, [&](const auto& candidate) {
+                return validator_id_for(candidate.public_key()) == signer;
+            });
+            TimeoutVote vote { .network_id               = network.id(),
+                               .epoch                    = 1,
+                               .height                   = tip.height + 1,
+                               .round                    = 0,
+                               .highest_certificate_hash = hash_certificate(tip),
+                               .validator_id             = signer };
+            received.signer_bitmap[index / 8] |= static_cast<std::uint8_t>(1U << (index % 8));
+            received.signatures.push_back(sign_payload(*key, timeout_vote_signing_payload(vote)).value());
+        }
+        TEST_REQUIRE(ConsensusStateTestFixture::apply_timeout(service, received));
+        TEST_REQUIRE_EQ(ConsensusStateTestFixture::current_round(service), 1U);
+        TimeoutVote lagging { .network_id               = network.id(),
+                              .epoch                    = 1,
+                              .height                   = tip.height + 1,
+                              .round                    = 0,
+                              .highest_certificate_hash = hash_certificate(tip),
+                              .validator_id             = peer_id };
+        lagging.signature  = sign_payload(keys[0], timeout_vote_signing_payload(lagging)).value();
+        const auto sent    = socket->timeout_certificates.load();
+        service.receive_timeout_vote(lagging, peer);
+        TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 1);
+        TimeoutVote current = lagging;
+        current.round       = 1;
+        current.signature   = sign_payload(keys[0], timeout_vote_signing_payload(current)).value();
+        service.receive_timeout_vote(current, peer);
+        TEST_REQUIRE_EQ(socket->timeout_certificates.load(), sent + 1);
+    }
     TimeoutVote future              = stale;
     future.height                   = tip.height + 2;
     future.highest_certificate_hash = std::string(64, 'f');

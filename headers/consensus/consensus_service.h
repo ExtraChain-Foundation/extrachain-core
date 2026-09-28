@@ -255,6 +255,10 @@ namespace ExtraChain::Consensus {
         mutable std::optional<LightClientVerifier> mining_verifier_;
         mutable std::optional<MiningSnapshot>      finalized_mining_;
         mutable std::map<std::string, MiningState> staged_mining_;
+        // The pacemaker used to leave no trace when it stopped producing timeout votes;
+        // report each distinct failure once instead (see the round split in tracker #97).
+        std::optional<std::tuple<std::uint64_t, std::uint64_t, ConsensusError>> last_timeout_failure_;
+        bool                                                                     reported_stopped_pacemaker_ = false;
 
         Core::ExtraChainNode&                                         node_;
         std::optional<LightClientVerifier>                            light_verifier_;

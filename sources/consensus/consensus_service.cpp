@@ -674,6 +674,21 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !authenticator_ || !(authenticated_sender(peer_identifier) == vote.validator_id)) {
             return;
         }
+        // A validator still timing out a round of this height that we already left missed the
+        // timeout certificate that moved us on, and nothing else sends it again. Validators
+        // split across two rounds of one height can then each hold less than a quorum of
+        // timeout votes and stop for good (Ubuntu stand, 6-hour run: rounds 0 and 1 of one
+        // height, 4 and 3 validators, after a partition and a restarted validator).
+        if (const auto& current = consensus_->engine().safety_state();
+            current.highest_certificate.has_value() && current.highest_timeout_certificate.has_value()
+            && vote.height == current.highest_certificate.value().height + 1
+            && vote.height == current.highest_timeout_certificate.value().height
+            && vote.round < current.current_round) {
+            send_to_peer(current.highest_timeout_certificate.value(),
+                         MessageType::ConsensusTimeoutCertificate,
+                         std::string(peer_identifier),
+                         MessageStatus::NoStatus);
+        }
         const auto accepted = consensus_->receive_timeout_vote(vote, peer_identifier);
         if (!accepted.has_value() && accepted.error() != ConsensusError::InvalidParent)
             return;
@@ -2361,6 +2376,11 @@ namespace ExtraChain::Consensus {
         }
         if (!consensus_ || !voting_enabled_ || !consensus_->engine().identity().has_value()
             || !consensus_->engine().safety_state().highest_certificate.has_value()) {
+            if (consensus_ && consensus_->engine().identity().has_value() && !voting_enabled_ && !voting_paused_
+                && !reported_stopped_pacemaker_) {
+                reported_stopped_pacemaker_ = true;
+                eWarning("[Shadow] Pacemaker stopped: voting is disabled for this validator");
+            }
             return;
         }
         refresh_peer_authentication();
@@ -2368,9 +2388,21 @@ namespace ExtraChain::Consensus {
         const auto round  = consensus_->engine().safety_state().current_round;
         const auto vote   = consensus_->make_timeout_vote(height, round);
         if (!vote.has_value()) {
+            const auto failure = std::tuple { height, round, vote.error() };
+            if (last_timeout_failure_ != failure) {
+                last_timeout_failure_ = failure;
+                const auto& state     = consensus_->engine().safety_state();
+                eWarning("[Shadow] Cannot create a timeout vote at height {} round {}: {} (last timeout h{} r{})",
+                         height,
+                         round,
+                         std::to_underlying(vote.error()),
+                         state.last_timeout_height,
+                         state.last_timeout_round);
+            }
             reset_timeout();
             return;
         }
+        last_timeout_failure_.reset();
         const auto accepted = consensus_->engine().accept_timeout_vote(vote.value());
         if (accepted.has_value() && accepted.value().certificate.has_value()
             && apply_timeout_certificate(accepted.value().certificate.value())) {
@@ -3186,6 +3218,8 @@ namespace ExtraChain::Consensus {
         const auto activated = consensus_->activate_scheduled_epoch();
         if (!activated.has_value()) {
             halt_voting();
+            eCritical("[Shadow] Scheduled epoch activation failed with error {}; voting halted",
+                      std::to_underlying(activated.error()));
             return std::unexpected(activated.error());
         }
         if (!activated.value()) {
