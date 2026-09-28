@@ -30,6 +30,7 @@
 
 #if defined(__linux__) && !defined(__ANDROID__)
     #include <malloc.h>
+    #include <unistd.h>
 #endif
 
 #if defined(__linux__) && !defined(__ANDROID__) && defined(__GLIBC__)
@@ -2525,7 +2526,9 @@ namespace ExtraChain::Core {
 #endif
 
 #ifndef IS_APP_CLIENT
-    #ifdef Q_OS_LINUX
+    // Like malloc_trim above: Q_OS_LINUX never reached the Qt-free node build, so these
+    // periodic RSS and container-size lines were missing exactly where they are needed.
+    #if defined(__linux__) && !defined(__ANDROID__)
         {
             std::ifstream statm("/proc/self/statm");
             if (statm.is_open()) {
