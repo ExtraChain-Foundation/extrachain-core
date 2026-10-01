@@ -20,9 +20,11 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <stop_token>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -657,6 +659,10 @@ public:
     void network_status_sync_response(const DagLastInfo &last_info, const Responder &responder);
 
     void network_request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder);
+    int  file_sync_batch() const;
+    void fit_file_sync_batch(std::size_t sections, std::size_t bytes);
+    bool oversized_file_range(const SectionId &from, const SectionId &to);
+    void remember_oversized_file_range(const SectionId &from, const SectionId &to);
     void network_file_sections_response(const std::string &compressed, const Responder &responder);
 
     // Pack-level sync (peers with dag_version >= 100 only).
@@ -913,6 +919,14 @@ private:
     std::atomic_uint64_t                           history_revision_    = 0;
     std::mutex                                     file_sync_response_mutex_;
     ExtraChain::Core::WorkBudget file_sync_budget_ { { 384 * 1024 * 1024, 3, 320 * 1024 * 1024, 1 } };
+    // Serving file sections: a range whose response the requester would reject for its size
+    // is refused for a while instead of being read again (see network_request_file_sections).
+    std::optional<std::size_t>                                                       file_sync_response_budget_;
+    std::mutex                                                                       oversized_file_ranges_mutex_;
+    std::map<std::pair<SectionId, SectionId>, std::chrono::steady_clock::time_point> oversized_file_ranges_;
+    // Requesting file sections: sections asked for at once, fitted to the size of the last
+    // response; 0 means SYNC_SECTIONS_BATCH.
+    std::atomic<int> file_sync_batch_ { 0 };
     std::optional<std::pair<SectionId, SectionId>> hot_gap_request_;
     std::recursive_mutex                           sync_last_info_mutex_;
 

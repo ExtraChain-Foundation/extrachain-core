@@ -49,6 +49,13 @@ static constexpr auto SYNC_LAST_INFO_COLLECTION_DELAY = std::chrono::millisecond
 static constexpr std::size_t   PACK_SYNC_CHUNK                  = 256 * 1024;
 static constexpr std::size_t   FILE_SYNC_MAX_COMPRESSED_BYTES   = 64 * 1024 * 1024;
 static constexpr std::uint32_t FILE_SYNC_MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024;
+// A file section response is sized for FILE_SYNC_TARGET_BYTES, and one that would pass the
+// requester's limit is never built (the margin covers the message envelope).
+static constexpr std::size_t FILE_SYNC_TARGET_BYTES      = 32 * 1024 * 1024;
+static constexpr std::size_t FILE_SYNC_RESPONSE_MARGIN   = 1024 * 1024;
+static constexpr int         FILE_SYNC_MINIMUM_BATCH     = 20;
+static constexpr std::size_t OVERSIZED_FILE_RANGES_LIMIT = 64;
+static constexpr auto        OVERSIZED_FILE_RANGE_TTL    = std::chrono::minutes(10);
 static constexpr std::uint64_t PACK_SYNC_MAX_ID =
     (std::numeric_limits<std::uint64_t>::max() - (Pack::SECTIONS_PER_PACK - 1)) / Pack::SECTIONS_PER_PACK;
 // The hot section database and pack registry recover exact bounds after a
@@ -1551,6 +1558,9 @@ void Dag::timer_tick() {
     if (status_ == DagStatus::Sync && sync_status_ == DagSyncStatus::Sections
         && !sync_source_identifier_.empty()) {
         timed_out_sync_sources_.insert(sync_source_identifier_);
+        // The usual reason is a response too large to build or to accept: ask the next peer
+        // for a quarter of the range.
+        file_sync_batch_.store(std::max(FILE_SYNC_MINIMUM_BATCH, file_sync_batch() / 4));
         eWarning("[Dag] Sync source {} timed out; trying another peer", sync_source_identifier_.substr(0, 8));
         sync_source_identifier_.clear();
     }
@@ -3709,7 +3719,18 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
     bool peer_legacy = !meta.has_value() || meta->is_legacy_dag();
 
     node->post_storage([this, from, to, responder, peer_legacy]() {
+        // The requester rejects a response above FILE_SYNC_MAX_UNCOMPRESSED_BYTES whole and
+        // asks the next peer for the same range. Mining proofs made 2100 sections 400+ MB, so
+        // each validator a lagging peer turned to built such a response and threw it away
+        // (about 2 GB of heap each, one after another, on the Ubuntu stand). Stop as soon as
+        // the response cannot pass, and refuse the same range for a while without reading it.
+        if (oversized_file_range(from, to)) {
+            return;
+        }
+        const auto budget = file_sync_response_budget_.value_or(FILE_SYNC_MAX_UNCOMPRESSED_BYTES
+                                                                - FILE_SYNC_RESPONSE_MARGIN);
         std::vector<SectionFileData> sections;
+        std::size_t                  section_bytes = 0;
 
         for (SectionId i = from; i <= to; i++) {
             // read_section falls back to packs, so cold (packed) history is served
@@ -3721,18 +3742,36 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
             }
 
             WireFormat::Scope disk_scope(peer_legacy ? WireFormat::Mode::Legacy : WireFormat::Mode::Canonical);
-            sections.push_back(
-                SectionFileData { .section_id = i, .file_bytes = Json::serialize(section.value()) });
+            auto              file_bytes = Json::serialize(section.value());
+            section_bytes += file_bytes.size();
+            if (section_bytes > budget) {
+                remember_oversized_file_range(from, to);
+                eWarning("[Dag] File sections {}..{} exceed {} bytes; refusing until a smaller range is asked",
+                         from,
+                         to,
+                         budget);
+                return;
+            }
+            sections.push_back(SectionFileData { .section_id = i, .file_bytes = std::move(file_bytes) });
         }
-
-        auto file_sync = FileSectionsSync { .to = to, .sections = sections, .last_section = current_section_ };
 
         // The message envelope (section ids in SectionFileData/FileSectionsSync)
         // travels in the wire format, symmetric with the request and response
         // decode, independent of the peer's on-disk file_bytes format above.
         WireFormat::Scope wire_scope(peer_legacy ? WireFormat::Mode::Legacy : WireFormat::Mode::Canonical);
-        const auto        serialized = MessagePack::serialize(file_sync);
-        const auto        compressed = LegacyCompression::compress(serialized);
+        // Packed into a buffer of the final size and compressed from it, and nothing but the
+        // compressed bytes outlives this: MessagePack::serialize grew its buffer by doubling and
+        // copied it once more into a string, so a response used to take four times its size.
+        const auto compressed = [&] {
+            msgpack::sbuffer serialized(section_bytes + sections.size() * 32 + 64);
+            {
+                const auto file_sync = FileSectionsSync { .to           = to,
+                                                          .sections     = std::move(sections),
+                                                          .last_section = current_section_ };
+                msgpack::pack(serialized, file_sync);
+            }
+            return LegacyCompression::compress(std::string_view(serialized.data(), serialized.size()));
+        }();
         if (!compressed.has_value()) {
             eWarning("[Dag] Failed to compress file section response");
             return;
@@ -3742,6 +3781,40 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
                                 SendMode::Focused,
                                 MessageStatus::Response);
     });
+}
+
+bool Dag::oversized_file_range(const SectionId &from, const SectionId &to) {
+    std::lock_guard lock(oversized_file_ranges_mutex_);
+    const auto      now = std::chrono::steady_clock::now();
+    std::erase_if(oversized_file_ranges_, [now](const auto &entry) {
+        return now - entry.second >= OVERSIZED_FILE_RANGE_TTL;
+    });
+    return oversized_file_ranges_.contains({ from, to });
+}
+
+void Dag::remember_oversized_file_range(const SectionId &from, const SectionId &to) {
+    std::lock_guard lock(oversized_file_ranges_mutex_);
+    if (oversized_file_ranges_.size() >= OVERSIZED_FILE_RANGES_LIMIT) {
+        oversized_file_ranges_.erase(std::ranges::min_element(oversized_file_ranges_, {}, [](const auto &entry) {
+            return entry.second;
+        }));
+    }
+    oversized_file_ranges_.insert_or_assign({ from, to }, std::chrono::steady_clock::now());
+}
+
+int Dag::file_sync_batch() const {
+    const auto batch = file_sync_batch_.load();
+    return batch > 0 ? batch : SYNC_SECTIONS_BATCH;
+}
+
+void Dag::fit_file_sync_batch(std::size_t sections, std::size_t bytes) {
+    // Judge the next range by the one just received: empty sections grow it back to the full
+    // batch, sections of mining proofs shrink it to a few dozen, so a response stays near
+    // FILE_SYNC_TARGET_BYTES on both ends instead of reaching the requester's limit.
+    const auto per_section = std::max<std::size_t>(1, bytes / std::max<std::size_t>(1, sections));
+    file_sync_batch_.store(static_cast<int>(std::clamp<std::size_t>(FILE_SYNC_TARGET_BYTES / per_section,
+                                                                    FILE_SYNC_MINIMUM_BATCH,
+                                                                    SYNC_SECTIONS_BATCH)));
 }
 
 void Dag::network_file_sections_response(const std::string &compressed, const Responder &responder) {
@@ -3786,7 +3859,12 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
     if (!reservation) {
         return;
     }
-    node->post_storage([this, compressed, responder, peer_legacy, reservation = std::move(reservation)]() {
+    node->post_storage([this,
+                        compressed,
+                        responder,
+                        peer_legacy,
+                        declared_bytes = static_cast<std::size_t>(declared_size.value()),
+                        reservation    = std::move(reservation)]() {
         if (reservation->stopped()) {
             return;
         }
@@ -4141,8 +4219,9 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         sync_progress_event_.publish(file_sync->to);
         timer_start_event_.publish(15002);
+        fit_file_sync_batch(file_sync->sections.size(), declared_bytes);
         this->request_file_sections(file_sync->to + 1,
-                                    std::min(sync_last_index_, file_sync->to + SYNC_SECTIONS_BATCH),
+                                    std::min(sync_last_index_, file_sync->to + file_sync_batch()),
                                     responder);
     });
 }
@@ -4664,7 +4743,7 @@ void Dag::handle_sync_request() {
     if (mode_ == DagMode::Full) {
         if (sync_index == SectionId(0) && current_section_ >= SectionId(0)) {
             request_file_sections(SectionId(0),
-                                  std::min(sync_last_index_, SectionId(SYNC_SECTIONS_BATCH)),
+                                  std::min(sync_last_index_, SectionId(file_sync_batch())),
                                   responder);
         } else {
             // Pack-capable peer: fetch cold history wholesale, then file-sync only the
@@ -4675,7 +4754,7 @@ void Dag::handle_sync_request() {
             if (!hot_gap_from.has_value() && meta.has_value() && meta->supports_pack_sync()) {
                 start_pack_sync(responder);
             } else {
-                const auto request_to = std::min(sync_last_index_, sync_index + SYNC_SECTIONS_BATCH);
+                const auto request_to = std::min(sync_last_index_, sync_index + file_sync_batch());
                 if (hot_gap_from.has_value()) {
                     std::lock_guard response_lock(file_sync_response_mutex_);
                     hot_gap_request_ = std::pair { sync_index, request_to };
@@ -5005,7 +5084,7 @@ void Dag::issue_next_pack_request(const Responder &responder) {
         // Cold history is in place; now pull the hot tail per-section.
         if (mode_ == DagMode::Full && tail_from <= sync_last_index_) {
             request_file_sections(tail_from,
-                                  std::min(sync_last_index_, tail_from + SYNC_SECTIONS_BATCH),
+                                  std::min(sync_last_index_, tail_from + file_sync_batch()),
                                   responder);
             return;
         }

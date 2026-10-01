@@ -27,6 +27,25 @@ public:
         return true;
     }
 
+    static void limit_file_sync_response(Dag& dag, std::optional<std::size_t> bytes) {
+        dag.file_sync_response_budget_ = bytes;
+    }
+
+    static int file_sync_batch(Dag& dag) {
+        return dag.file_sync_batch();
+    }
+
+    static void fit_file_sync_batch(Dag& dag, std::size_t sections, std::size_t bytes) {
+        dag.fit_file_sync_batch(sections, bytes);
+    }
+
+    static void time_out_section_sync(Dag& dag, const std::string& source) {
+        dag.set_status(DagStatus::Sync);
+        dag.sync_status_            = DagSyncStatus::Sections;
+        dag.sync_source_identifier_ = source;
+        dag.timer_tick();
+    }
+
     static bool pack_history_dirty(Dag& dag) {
         std::lock_guard lock(dag.pack_sync_mutex_);
         return dag.pack_history_dirty_;

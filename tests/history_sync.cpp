@@ -41,6 +41,11 @@ namespace {
                 return;
             const auto body = MessagePack::deserialize<MessageBody>(
                 std::string_view(reinterpret_cast<const char *>(bytes.data()), bytes.size() - crypto_sign_BYTES));
+            if (body.has_value() && body.value().message_type == MessageType::DagFileSections
+                && body.value().status == MessageStatus::Response) {
+                ++file_responses_;
+                return;
+            }
             if (body.has_value() && body.value().message_type == MessageType::DagFileSections) {
                 const auto range = MessagePack::deserialize<SectionRange>(body.value().data);
                 TEST_REQUIRE(range.has_value());
@@ -63,11 +68,15 @@ namespace {
             std::lock_guard lock(mutex_);
             return range_;
         }
+        unsigned file_responses() const {
+            return file_responses_.load();
+        }
 
     private:
         std::mutex  mutex_;
         std::string last_request_;
         std::pair<SectionId, SectionId> range_;
+        std::atomic<unsigned>           file_responses_ { 0 };
     };
 } // namespace
 
@@ -189,6 +198,38 @@ int main() {
     const auto stored = dag.read_section(SectionId(21));
     TEST_REQUIRE(stored.has_value() && stored.value().transactions.contains(valid));
     TEST_REQUIRE(dag.read_section(SectionId(1)).value().transactions.contains(initial));
+    {
+        // A response the requester would reject for its size is not built, and the same range
+        // is refused afterwards without reading it; a range that fits is still served.
+        const auto served = [&](const SectionId& from, const SectionId& to) {
+            const auto before = peer->file_responses();
+            dag.network_request_file_sections(from, to, peer_response);
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            while (peer->file_responses() == before && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            return peer->file_responses() > before;
+        };
+        const auto one_section = Json::serialize(dag.read_section(SectionId(21)).value()).size();
+        DagAdmissionTestFixture::limit_file_sync_response(dag, one_section + 1);
+        TEST_REQUIRE(!served(SectionId(1), SectionId(21)));
+        DagAdmissionTestFixture::limit_file_sync_response(dag, std::nullopt);
+        TEST_REQUIRE(!served(SectionId(1), SectionId(21)));
+        TEST_REQUIRE(served(SectionId(21), SectionId(21)));
+        TEST_REQUIRE(served(SectionId(1), SectionId(20)));
+
+        // The requester asks for about 32 MiB at once, within [20, 2100] sections, and for a
+        // quarter of the range after a section sync timed out.
+        TEST_REQUIRE_EQ(DagAdmissionTestFixture::file_sync_batch(dag), 2100);
+        DagAdmissionTestFixture::fit_file_sync_batch(dag, 100, 64 * 1024 * 1024);
+        TEST_REQUIRE_EQ(DagAdmissionTestFixture::file_sync_batch(dag), 50);
+        DagAdmissionTestFixture::fit_file_sync_batch(dag, 2100, 2100 * 1024);
+        TEST_REQUIRE_EQ(DagAdmissionTestFixture::file_sync_batch(dag), 2100);
+        DagAdmissionTestFixture::fit_file_sync_batch(dag, 10, 1024 * 1024 * 1024);
+        TEST_REQUIRE_EQ(DagAdmissionTestFixture::file_sync_batch(dag), 20);
+        DagAdmissionTestFixture::fit_file_sync_batch(dag, 2100, 2100 * 1024);
+        DagAdmissionTestFixture::time_out_section_sync(dag, peer->identifier());
+        TEST_REQUIRE_EQ(DagAdmissionTestFixture::file_sync_batch(dag), 525);
+    }
     dag.stop();
     dag.set_status(DagStatus::Ready);
     dag.set_current_section(SectionId(120));
