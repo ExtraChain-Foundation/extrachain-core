@@ -21,6 +21,8 @@
 
 #include <extrachain_global.h>
 #include <expected>
+#include <atomic>
+#include <mutex>
 #include <vector>
 #include "chain/actor.h"
 #include "chain/actor_id.h"
@@ -97,7 +99,7 @@ public:
 
     std::expected<std::vector<Chat::Chat>, ChatError>    read_chats();
     // Last chat list produced by read_chats() (empty before the first read).
-    const std::vector<Chat::Chat>& chats() const { return chats_; }
+    std::vector<Chat::Chat>                              chats() const;
     std::expected<std::vector<Chat::Message>, ChatError> read_chat_messages(const ActorId     &owner_id,
                                                                             const std::string &file_id,
                                                                             bool               quick = false);
@@ -172,12 +174,14 @@ private:
     ActorId                               current_chat_actor_id();
     std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor();
 
+    void                    cache_chat(const Chat::Chat &chat);
+    mutable std::mutex      cache_mutex_;
     std::vector<Chat::Chat> chats_;
     // Chat owner-actors already sent a targeted dirs-sync this session (see read_chats):
     // without it, chat vectors have no dir_row after a from-scratch import.
     std::set<ActorId>       dirs_refreshed_actors_;
-    ChatMode                mode_       = ChatMode::Enabled;
-    bool                    activated_  = false;
+    std::atomic<ChatMode>   mode_      = ChatMode::Enabled;
+    std::atomic_bool        activated_ = false;
     Dfs::DirRow             my_chats_row_;
     ChatProfile             profile_ { this };
     ChatFolders             folders_ { this };

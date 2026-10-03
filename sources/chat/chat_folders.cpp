@@ -355,8 +355,9 @@ std::vector<std::string> ChatFolders::chats_in_folder(const std::string& folder_
     }
 
     std::vector<std::string> result;
-    result.reserve(owner_->chats_.size());
-    for (const auto& chat : owner_->chats_) {
+    const auto               chats = owner_->chats();
+    result.reserve(chats.size());
+    for (const auto& chat : chats) {
         const std::string chatKey = chat.owner_id.to_string() + ":" + chat.file_id;
         if (excluded.contains(chatKey)) {
             continue;

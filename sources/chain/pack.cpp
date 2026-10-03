@@ -427,6 +427,22 @@ std::expected<void, Error> write(const std::filesystem::path            &path,
         return std::unexpected(Error::NonConsecutiveSections);
     }
 
+    return write(path, pack_id, first, last, [&sections](const SectionId &id) -> std::optional<std::string> {
+        const auto it = sections.find(id);
+        if (it == sections.end())
+            return std::nullopt;
+        return it->second;
+    });
+}
+
+std::expected<void, Error> write(const std::filesystem::path &path,
+                                 PackId                       pack_id,
+                                 const SectionId             &first,
+                                 const SectionId             &last,
+                                 const SectionSource         &read_section) {
+    if (!read_section || first < SectionId(0) || last < first || last - first >= SectionId(SECTIONS_PER_PACK))
+        return std::unexpected(Error::InvalidFormat);
+
     std::uint64_t first_int, last_int;
     try {
         first_int = section_to_u64(first);
@@ -435,44 +451,62 @@ std::expected<void, Error> write(const std::filesystem::path            &path,
         return std::unexpected(Error::InvalidFormat);
     }
 
-    std::string dict = build_dict(sections);
+    std::map<SectionId, std::string> sample;
+    std::size_t                      sample_bytes  = 0;
+    const auto                       section_count = last_int - first_int + 1;
+    for (std::uint64_t offset = 0; offset < std::min<std::uint64_t>(section_count, SECTIONS_PER_FRAME); ++offset) {
+        const SectionId section_id(first_int + offset);
+        auto            payload = read_section(section_id);
+        if (!payload.has_value())
+            return std::unexpected(Error::ReadFailed);
+        if (sample_bytes > MAX_FRAME_DECOMPRESSED_BYTES - 4
+            || payload.value().size() > MAX_FRAME_DECOMPRESSED_BYTES - 4 - sample_bytes)
+            return std::unexpected(Error::InvalidFormat);
+        sample_bytes += payload.value().size() + 4;
+        sample.emplace(section_id, std::move(payload.value()));
+    }
+    std::string dict = build_dict(sample);
     if (dict.size() > MAX_PACK_DICTIONARY_BYTES)
         return std::unexpected(Error::InvalidFormat);
     Compression::Context ctx(dict, COMPRESSION_LEVEL);
 
     std::vector<FrameEntry> frame_index;
     std::string             data_blob;
-    std::size_t             total_raw_size = 0;
 
-    auto it = sections.begin();
-    while (it != sections.end()) {
+    std::uint64_t next = 0;
+    while (next < section_count) {
         std::string raw_frame;
         FrameEntry  fe {};
-        fe.first_section = section_to_u64(it->first);
+        fe.first_section = first_int + next;
         fe.offset        = data_blob.size();
 
         std::uint32_t count = 0;
-        while (it != sections.end() && count < SECTIONS_PER_FRAME) {
-            const std::string &payload = it->second;
-            std::uint32_t      len     = static_cast<std::uint32_t>(payload.size());
+        while (next < section_count && count < SECTIONS_PER_FRAME) {
+            const SectionId section_id(first_int + next);
+            const auto      sampled = sample.find(section_id);
+            auto payload = sampled != sample.end() ? std::optional<std::string>(std::move(sampled->second))
+                                                   : read_section(section_id);
+            if (!payload.has_value())
+                return std::unexpected(Error::ReadFailed);
+            if (raw_frame.size() > MAX_FRAME_DECOMPRESSED_BYTES - 4
+                || payload.value().size() > MAX_FRAME_DECOMPRESSED_BYTES - 4 - raw_frame.size())
+                return std::unexpected(Error::InvalidFormat);
+            std::uint32_t len = static_cast<std::uint32_t>(payload.value().size());
             raw_frame.append(reinterpret_cast<const char *>(&len), 4);
-            raw_frame.append(payload);
+            raw_frame.append(payload.value());
             ++count;
-            ++it;
+            ++next;
         }
-        if (raw_frame.size() > MAX_FRAME_DECOMPRESSED_BYTES
-            || raw_frame.size() > MAX_PACK_DECOMPRESSED_BYTES - total_raw_size) {
-            return std::unexpected(Error::InvalidFormat);
-        }
-        total_raw_size += raw_frame.size();
         fe.count = count;
 
         auto compressed = ctx.compress_frame(raw_frame);
         if (!compressed.has_value()) {
             return std::unexpected(Error::CompressionFailed);
         }
-        fe.size = static_cast<std::uint32_t>(compressed->size());
-        data_blob.append(*compressed);
+        if (compressed.value().size() > MAX_PACK_FILE_BYTES - data_blob.size())
+            return std::unexpected(Error::InvalidFormat);
+        fe.size = static_cast<std::uint32_t>(compressed.value().size());
+        data_blob.append(compressed.value());
 
         frame_index.push_back(fe);
     }
@@ -498,6 +532,8 @@ std::expected<void, Error> write(const std::filesystem::path            &path,
     hdr.frame_index_size   = frame_index.size() * sizeof(FrameEntry);
     cursor += hdr.frame_index_size;
 
+    if (cursor > MAX_PACK_FILE_BYTES - FOOTER_SIZE)
+        return std::unexpected(Error::InvalidFormat);
     std::string out;
     out.reserve(cursor + FOOTER_SIZE);
     out.append(reinterpret_cast<const char *>(&hdr), sizeof(Header));

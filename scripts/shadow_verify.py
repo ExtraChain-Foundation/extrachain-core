@@ -9,12 +9,82 @@ that rebuilt it and one that is still carrying nullopt after a sync.
 
 usage: shadow_verify.py <work-dir>
 """
+import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
 import sqlite3
 import sys
 from collections import defaultdict
+from pathlib import Path
+
+try:
+    from compression import zstd
+except ImportError:
+    zstd = None
+
+# The hot store keeps large sections as zstd frames; section JSON never starts with this.
+ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
+
+
+def finalized_rows(data_dir, section):
+    """Whole finalized batches at the section, and archived ones (hash only): a node keeps
+    only the latest batches whole and archives older ones to their manifests."""
+    database = Path(data_dir).resolve() / 'consensus/safety.sqlite'
+    with closing(sqlite3.connect(f'{database.as_uri()}?mode=ro', uri=True, timeout=1)) as connection:
+        rows = connection.execute(
+            'SELECT f.finalized_hash, b.payload FROM consensus_finality_proofs f '
+            'JOIN consensus_batches b ON b.hash = f.finalized_hash WHERE f.last_section = ?',
+            (section,)).fetchall()
+        archived = []
+        if connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                              "AND name = 'consensus_batch_manifests'").fetchone():
+            archived = [hash for hash, in connection.execute(
+                'SELECT f.finalized_hash FROM consensus_finality_proofs f '
+                'JOIN consensus_batch_manifests m ON m.hash = f.finalized_hash WHERE f.last_section = ?',
+                (section,))]
+    return rows, archived
+
+
+def finalized_checkpoint(data_dir, section):
+    # Finalized batches survive hot-section packing and bind the full checkpoint contents.
+    rows, _ = finalized_rows(data_dir, section)
+    if len(rows) != 1:
+        raise ValueError(f'Expected one durable finalized batch at section {section} in {data_dir}')
+    return hashlib.sha256(json.dumps(rows[0]).encode()).hexdigest(), rows[0][0]
+
+
+def capture_checkpoint(homes, mining):
+    states = {(item['section'], item['reserved_units'], item['minted_units']) for item in mining}
+    if (len(states) != 1 or len(homes) != len(mining)
+            or {item['node'] for item in mining} != set(range(len(homes)))):
+        return None
+    section = mining[0]['section']
+    if section <= 0:
+        raise ValueError('A shutdown checkpoint must follow finalized work')
+    captured = {name: finalized_checkpoint(path, section) for name, path in homes}
+    batches = {name: digest for name, (digest, _) in captured.items()}
+    if len(set(batches.values())) != 1:
+        raise ValueError(f'Finalized batches disagree at section {section}')
+    return dict(section=section, batches=batches, hash=next(iter(captured.values()))[1])
+
+
+def verify_checkpoint(checkpoint, homes, tips):
+    section, batches = checkpoint.get('section'), checkpoint.get('batches')
+    if (type(section) is not int or section <= 0 or not isinstance(batches, dict)
+            or set(batches) != {name for name, _ in homes}
+            or len(set(batches.values())) != 1):
+        raise ValueError('Invalid shutdown checkpoint or changed node membership')
+    for name, path in homes:
+        rows, archived = finalized_rows(path, section)
+        if len(rows) == 1:
+            retained = hashlib.sha256(json.dumps(rows[0]).encode()).hexdigest() == batches[name]
+        else:
+            # Archived since the capture: the signed header hash still binds the batch.
+            retained = not rows and archived == [checkpoint.get('hash')]
+        if tips[name] < section or not retained:
+            raise ValueError(f'{name} did not retain the agreed checkpoint at section {section}')
 
 
 def node_dirs(work):
@@ -45,6 +115,10 @@ def section_hashes(data_dir):
 
     hashes = {}
     for section, payload in dst.execute("SELECT section, payload FROM sections"):
+        if isinstance(payload, bytes) and payload.startswith(ZSTD_MAGIC):
+            if zstd is None:
+                raise SystemExit('FAIL: compressed hot sections need Python 3.14 (compression.zstd)')
+            payload = zstd.decompress(payload)
         try:
             body = json.loads(payload)["transactions"]
             hashes[section] = hashlib.sha256(
@@ -83,14 +157,31 @@ def intent_receipts(data_dir):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(__doc__)
-        return 2
-    work = sys.argv[1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('work')
+    parser.add_argument('--checkpoint', type=Path,
+                        help='Durable checkpoint agreed by all live nodes before shutdown')
+    parser.add_argument('--checkpoint-only', action='store_true',
+                        help='Check the recorded live checkpoint before stopping the nodes')
+    args = parser.parse_args()
+    work = args.work
     homes = node_dirs(work)
     if len(homes) < 2:
         print(f"FAIL: need at least two node homes under {work}")
         return 1
+
+    if args.checkpoint_only:
+        if args.checkpoint is None:
+            parser.error('--checkpoint-only requires --checkpoint')
+        try:
+            tips = {name: int(json.loads((Path(path) / 'dag/range').read_text())['last'])
+                    for name, path in homes}
+            verify_checkpoint(json.loads(args.checkpoint.read_text()), homes, tips)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, sqlite3.Error) as error:
+            print(f'FAIL: live checkpoint: {error}')
+            return 1
+        print('PASS: all nodes retain the recorded live checkpoint')
+        return 0
 
     print(f"=== cross-node content verification: {work} ===\n")
     per_node = {}
@@ -135,6 +226,9 @@ def main():
 
     print("\n--- verdict ---")
     ok = True
+    if not common:
+        ok = False
+        print('MISSING: no common hot sections to compare')
     if diverged:
         ok = False
         print(f"DIVERGED: {len(diverged)} sections differ in transactions")
@@ -170,7 +264,17 @@ def main():
     print(f"height spread: {spread} sections"
           + (f" ≈ {checkpoints_behind} checkpoint(s) of {span}" if span else "")
           + f" (tips {min(tips.values())}..{max(tips.values())})")
-    if checkpoints_behind > 3:
+    if args.checkpoint is not None:
+        # Live equality replaces shutdown timing as the progress check; content and
+        # coverage checks still apply to all common sections, including later sections.
+        try:
+            checkpoint = json.loads(args.checkpoint.read_text())
+            verify_checkpoint(checkpoint, homes, tips)
+            print(f"shutdown checkpoint: OK — section {checkpoint['section']} retained on every node")
+        except (OSError, ValueError, TypeError, AttributeError, sqlite3.Error) as error:
+            ok = False
+            print(f'  ! shutdown checkpoint: {error}')
+    elif checkpoints_behind > 3:
         ok = False
         print("  ! more than 3 checkpoints apart — nodes are not tracking the same tip")
 

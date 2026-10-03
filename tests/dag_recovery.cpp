@@ -112,21 +112,36 @@ int main(int argc, char *argv[]) {
     node->dag()->set_mode(DagMode::Full);
     node->account_controller()->create_profile("dag-recovery-profile", ActorType::User, actor);
 
-    const auto make_reward = [&actor](const SectionId &section, std::uint64_t timestamp) {
+    Actor<KeyPrivate> bank;
+    bank.create(ActorType::User);
+    TEST_REQUIRE(node->actor_index()->save_actor(bank.to_public()).has_value());
+    node->actor_index()->set_network_id(actor.id());
+    Transaction allocation;
+    allocation.set_type(TransactionType::Balance);
+    allocation.set_sender(actor.id());
+    allocation.set_receiver(bank.id());
+    allocation.set_token(actor.id());
+    allocation.set_section(SectionId(1));
+    allocation.set_timestamp(0);
+    allocation.set_amount(BigNumberFloat(1000));
+    TEST_REQUIRE(allocation.sign(actor));
+    TEST_REQUIRE(node->dag()->save_transaction(allocation));
+
+    const auto make_funding = [&actor, &bank](const SectionId &section, std::uint64_t timestamp) {
         Transaction reward;
-        reward.set_sender(actor.id());
+        reward.set_sender(bank.id());
         reward.set_receiver(actor.id());
         reward.set_token(actor.id());
-        reward.set_type(TransactionType::Reward);
+        reward.set_type(TransactionType::Regular);
         reward.set_amount(BigNumberFloat("0.01"));
         reward.set_section(section);
         reward.set_timestamp(timestamp);
-        TEST_REQUIRE(reward.sign(actor));
+        TEST_REQUIRE(reward.sign(bank));
         return reward;
     };
 
-    TEST_REQUIRE(node->dag()->save_transaction(make_reward(SectionId(1), 1)));
-    TEST_REQUIRE(node->dag()->save_transaction(make_reward(SectionId(45), 2)));
+    TEST_REQUIRE(node->dag()->save_transaction(make_funding(SectionId(1), 1)));
+    TEST_REQUIRE(node->dag()->save_transaction(make_funding(SectionId(45), 2)));
     TEST_REQUIRE(node->dag()->cache().write_cached_balances({}, SectionId(40)));
     TEST_REQUIRE(node->dag()->generate_hash_from_section(SectionId(0), Force::Active, Force::None).has_value());
     const auto initial_control_20 = node->dag()->read_control(SectionId(20));
@@ -170,8 +185,9 @@ int main(int argc, char *argv[]) {
         node->dag()->build_shadow_intent_batch(SectionId(61),
                                                SectionId(80),
                                                2,
-                                               std::vector<ExtraChain::Consensus::IntentEnvelope> {},
-                                               {},
+                                               std::vector<ExtraChain::Consensus::IntentEnvelope> { },
+                                               16ULL * 1024ULL * 1024ULL,
+                                               { },
                                                speculative_parent,
                                                "speculative-parent-root");
     TEST_REQUIRE(speculative_empty_batch.has_value());
@@ -179,13 +195,98 @@ int main(int argc, char *argv[]) {
     TEST_REQUIRE_EQ(speculative_empty_batch.value().manifest.previous_section_root, "speculative-parent-root");
     TEST_REQUIRE(node->dag()->shadow_batch_section_root(speculative_empty_batch.value()).has_value());
 
+    {
+        using namespace ExtraChain::Consensus;
+        std::vector<IntentEnvelope> requests;
+        IntentPool                  pool;
+        const std::string           metadata(8192, 'x');
+        std::size_t                 envelope_bytes = 0;
+        for (std::uint64_t nonce = 1; nonce <= 16; ++nonce) {
+            const auto intent = make_intent(TransactionIntentV2 { .network_id    = actor.id(),
+                                                                  .sender        = actor.id(),
+                                                                  .receiver      = receiver.id(),
+                                                                  .amount        = "0.0001",
+                                                                  .operation     = IntentOperation::Transfer,
+                                                                  .account_nonce = nonce,
+                                                                  .expires_after_height = 1000 },
+                                            metadata,
+                                            actor);
+            TEST_REQUIRE(intent.has_value());
+            IntentEnvelope envelope { intent.value(), metadata };
+            TEST_REQUIRE(pool.submit(envelope, Utils::to_base64(actor.key().public_key()), 0, 2).has_value());
+            envelope_bytes += MessagePack::serialize(envelope).size();
+            requests.push_back(std::move(envelope));
+        }
+        const auto payload_limit = 2 * envelope_bytes;
+        TEST_REQUIRE_EQ(pool.ready({ }, 2, 16, payload_limit / 2).size(), requests.size());
+        const auto bounded = node->dag()->build_shadow_intent_batch(SectionId(61),
+                                                                    SectionId(80),
+                                                                    2,
+                                                                    requests,
+                                                                    payload_limit,
+                                                                    { },
+                                                                    speculative_parent,
+                                                                    "speculative-parent-root");
+        TEST_REQUIRE(bounded.has_value());
+        TEST_REQUIRE(bounded.value().manifest.payload_bytes <= payload_limit);
+        TEST_REQUIRE(!bounded.value().manifest.transaction_hashes.empty());
+        TEST_REQUIRE(bounded.value().manifest.transaction_hashes.size() < requests.size());
+        TEST_REQUIRE_EQ(pool.ready({ }, 2, 16, payload_limit / 2).size(), requests.size());
+        std::size_t             actual_bytes = 0;
+        std::set<std::uint64_t> selected_nonces;
+        for (const auto &[section_id, bytes] : bounded.value().sections) {
+            actual_bytes += bytes.size();
+            const auto section = Json::deserialize<Section>(bytes);
+            TEST_REQUIRE(section.has_value());
+            for (const auto &transaction : section.value().transactions) {
+                const auto envelope = intent_from_transaction(transaction);
+                TEST_REQUIRE(envelope.has_value());
+                selected_nonces.insert(envelope.value().intent.account_nonce);
+            }
+        }
+        TEST_REQUIRE_EQ(actual_bytes, bounded.value().manifest.payload_bytes);
+        TEST_REQUIRE_EQ(selected_nonces.size(), bounded.value().manifest.transaction_hashes.size());
+        TEST_REQUIRE_EQ(*selected_nonces.begin(), std::uint64_t(1));
+        TEST_REQUIRE_EQ(*selected_nonces.rbegin(), selected_nonces.size());
+        const std::vector<IntentEnvelope> first_request { requests.front() };
+        const auto                        one = node->dag()->build_shadow_intent_batch(SectionId(61),
+                                                                                       SectionId(80),
+                                                                                       2,
+                                                                                       first_request,
+                                                                                       payload_limit,
+                                                                                       { },
+                                                                                       speculative_parent,
+                                                                                       "speculative-parent-root");
+        TEST_REQUIRE(one.has_value());
+        const auto exact = node->dag()->build_shadow_intent_batch(SectionId(61),
+                                                                  SectionId(80),
+                                                                  2,
+                                                                  first_request,
+                                                                  one.value().manifest.payload_bytes,
+                                                                  { },
+                                                                  speculative_parent,
+                                                                  "speculative-parent-root");
+        TEST_REQUIRE(exact.has_value());
+        TEST_REQUIRE_EQ(exact.value().sections, one.value().sections);
+        const auto too_small = node->dag()->build_shadow_intent_batch(SectionId(61),
+                                                                      SectionId(80),
+                                                                      2,
+                                                                      first_request,
+                                                                      one.value().manifest.payload_bytes - 1,
+                                                                      { },
+                                                                      speculative_parent,
+                                                                      "speculative-parent-root");
+        TEST_REQUIRE(!too_small.has_value());
+        TEST_REQUIRE_EQ(too_small.error(), ConsensusError::DataTooLarge);
+    }
+
     auto corrupted_shadow_batch = shadow_batch.value();
     corrupted_shadow_batch.sections.front().second.push_back('x');
     TEST_REQUIRE(!node->dag()
                       ->validate_shadow_batch(shadow_proposal, corrupted_shadow_batch, 16ULL * 1024ULL * 1024ULL)
                       .has_value());
-    const auto historical_reward = make_reward(SectionId(5), 3);
-    TEST_REQUIRE(node->dag()->save_transaction(historical_reward));
+    const auto historical_funding = make_funding(SectionId(5), 3);
+    TEST_REQUIRE(node->dag()->save_transaction(historical_funding));
     const auto changed_control_20 = node->dag()->read_control(SectionId(20));
     const auto changed_control_40 = node->dag()->read_control(SectionId(40));
     TEST_REQUIRE(changed_control_20.has_value());
@@ -195,7 +296,7 @@ int main(int argc, char *argv[]) {
     TEST_REQUIRE(control_20_after != control_20_before);
     TEST_REQUIRE(control_40_after != control_40_before);
 
-    TEST_REQUIRE(node->dag()->save_transaction(historical_reward));
+    TEST_REQUIRE(node->dag()->save_transaction(historical_funding));
     const auto unchanged_control_20 = node->dag()->read_control(SectionId(20));
     const auto unchanged_control_40 = node->dag()->read_control(SectionId(40));
     TEST_REQUIRE(unchanged_control_20.has_value());
@@ -218,9 +319,9 @@ int main(int argc, char *argv[]) {
     TEST_REQUIRE_EQ(ExtraChain::Consensus::hash_batch_manifest(rebuilt_shadow_batch.value().manifest),
                     shadow_proposal.header.batch_root);
     TEST_REQUIRE_EQ(rebuilt_shadow_batch.value().sections, shadow_batch.value().sections);
-    auto staged_funding = make_reward(SectionId(21), 4);
+    auto staged_funding = make_funding(SectionId(21), 4);
     staged_funding.set_amount(BigNumberFloat("1"));
-    TEST_REQUIRE(staged_funding.sign(actor));
+    TEST_REQUIRE(staged_funding.sign(bank));
     TEST_REQUIRE(node->dag()->save_transaction(staged_funding));
 
     const auto &accounts         = node->account_controller()->accounts();
@@ -289,6 +390,17 @@ int main(int argc, char *argv[]) {
         TEST_REQUIRE_EQ(node->dag()->validate_shadow_batch(proposal, batch, 16ULL * 1024ULL * 1024ULL).has_value(),
                         expected_valid);
     };
+    {
+        auto burn = staged_transfer;
+        burn.set_type(TransactionType::Burn);
+        burn.set_receiver(ActorId { });
+        burn.set_amount(BigNumberFloat("2"));
+        TEST_REQUIRE(burn.sign(actor));
+        check_transaction_proof(burn, false);
+        burn.set_amount(BigNumberFloat("0.6"));
+        TEST_REQUIRE(burn.sign(actor));
+        check_transaction_proof(burn, true);
+    }
     {
         auto       wire           = boost::json::parse(Json::serialize(staged_transfer)).as_object();
         const auto legacy_hash    = staged_transfer.calculate_hash_hex();
@@ -478,13 +590,14 @@ int main(int argc, char *argv[]) {
     TEST_REQUIRE_EQ(node->dag()->cache().read_cached_balance(actor.id(), actor.id()), BigNumberFloat("321"));
 
     node->dag()->set_status(DagStatus::Ready);
-    const auto future_reward = make_reward(node->dag()->current_section() + SectionId(CACHE_LAG_SECTIONS + 1), 4);
+    const auto future_funding =
+        make_funding(node->dag()->current_section() + SectionId(CACHE_LAG_SECTIONS + 1), 4);
     CapturingSender future_sender;
     Responder       future_responder(&future_sender);
     future_responder.add_identifier("future-transaction-peer");
     bool future_completed = false;
     bool future_forwarded = true;
-    TEST_REQUIRE(node->dag()->submit_network_transaction(future_reward,
+    TEST_REQUIRE(node->dag()->submit_network_transaction(future_funding,
                                                          future_responder,
                                                          [&](std::expected<void, TransactionProveError> result,
                                                              bool should_forward) {
@@ -500,11 +613,11 @@ int main(int argc, char *argv[]) {
     CapturingSender duplicate_future_sender;
     Responder       duplicate_future_responder(&duplicate_future_sender);
     duplicate_future_responder.add_identifier("duplicate-future-transaction-peer");
-    TEST_REQUIRE(node->dag()->submit_network_transaction(future_reward, duplicate_future_responder, {}));
+    TEST_REQUIRE(node->dag()->submit_network_transaction(future_funding, duplicate_future_responder, { }));
     node->dag()->flush_admission();
     TEST_REQUIRE_EQ(node->dag()->cached_txs_size(), std::size_t(1));
 
-    TEST_REQUIRE(node->dag()->save_transaction(future_reward));
+    TEST_REQUIRE(node->dag()->save_transaction(future_funding));
     node->dag()->process_cached_transactions();
     TEST_REQUIRE_EQ(node->dag()->cached_txs_size(), std::size_t(0));
     TEST_REQUIRE_EQ(future_sender.responses, std::size_t(1));
@@ -512,7 +625,7 @@ int main(int argc, char *argv[]) {
     TEST_REQUIRE_EQ(future_sender.message_type, MessageType::DagTransactionResult);
     const auto future_result = MessagePack::deserialize<TransactionResult>(future_sender.payload);
     TEST_REQUIRE(future_result.has_value());
-    TEST_REQUIRE_EQ(future_result->hash, future_reward.hash());
+    TEST_REQUIRE_EQ(future_result->hash, future_funding.hash());
     TEST_REQUIRE_EQ(future_result->result, TransactionProveError::NoError);
 
     CapturingSender sender;
@@ -523,6 +636,19 @@ int main(int argc, char *argv[]) {
                                                  responder);
     TEST_REQUIRE_EQ(sender.responses, std::size_t(1));
     TEST_REQUIRE_EQ(sender.message_type, MessageType::DagControlRangeResponse);
+
+    node->dag()->cache().reset_db();
+    const auto replay_section  = node->dag()->current_section() + SectionId(1);
+    const auto available       = node->dag()->calculate_actors_balance({ actor.id() }, replay_section - 1);
+    const auto full_spend      = make_transfer(replay_section, available.at({ actor.id(), actor.id() }), 1000);
+    auto       replay_batch    = make_single_transaction_batch(full_spend, "canonical-parent-root");
+    const auto replay_proposal = make_batch_proposal(replay_batch);
+    TEST_REQUIRE(
+        node->dag()->validate_shadow_batch(replay_proposal, replay_batch, 16ULL * 1024ULL * 1024ULL).has_value());
+    TEST_REQUIRE(node->dag()->save_transaction(full_spend));
+    node->dag()->cache().reset_db();
+    TEST_REQUIRE(
+        node->dag()->validate_shadow_batch(replay_proposal, replay_batch, 16ULL * 1024ULL * 1024ULL).has_value());
 
     TEST_REQUIRE(node->dag()->cache().write_cached_balances(replacement_snapshot, node->dag()->current_section()));
     node->dag()->update_range(true);

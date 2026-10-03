@@ -30,6 +30,11 @@ namespace ExtraChain::Consensus {
         constexpr std::string_view CreateBatchTable =
             "CREATE TABLE IF NOT EXISTS consensus_batches (hash TEXT PRIMARY KEY, height INTEGER NOT NULL, "
             "payload TEXT NOT NULL)";
+        constexpr std::string_view CreateBatchManifestTable =
+            "CREATE TABLE IF NOT EXISTS consensus_batch_manifests (hash TEXT PRIMARY KEY, height INTEGER NOT NULL, "
+            "payload TEXT NOT NULL)";
+        constexpr std::size_t      ArchivedBatchesPerCall        = 64;
+        constexpr std::size_t      ArchivedBatchesPerTransaction = 4;
         constexpr std::string_view CreateCertificateTable =
             "CREATE TABLE IF NOT EXISTS consensus_certificates (hash TEXT PRIMARY KEY, height INTEGER NOT NULL, "
             "payload TEXT NOT NULL)";
@@ -55,8 +60,8 @@ namespace ExtraChain::Consensus {
             "ON consensus_finality_proofs(first_section, last_section)";
 
         template <typename T>
-        std::expected<T, ConsensusError> decode(std::string_view encoded) {
-            const auto bytes = Utils::from_base64(std::string(encoded));
+        std::expected<T, ConsensusError> decode(const std::string& encoded) {
+            const auto bytes = Utils::from_base64(encoded);
             if (!bytes.has_value()) {
                 return std::unexpected(ConsensusError::StorageFailure);
             }
@@ -67,9 +72,19 @@ namespace ExtraChain::Consensus {
             return value.value();
         }
 
+        // Batches are up to 16 MB: encode from the packing buffer instead of a string copy of it.
         template <typename T>
         std::string encode(const T& value) {
-            return Utils::to_base64(MessagePack::serialize(value));
+            msgpack::sbuffer buffer;
+            msgpack::pack(buffer, value);
+            return Utils::to_base64(std::string_view(buffer.data(), buffer.size()));
+        }
+
+        // A row built from an initializer list copies every value once more; the payload is moved.
+        DbRow stored_row(const std::string& hash, std::uint64_t height, std::string payload) {
+            DbRow row { { "hash", hash }, { "height", std::to_string(height) } };
+            row.emplace("payload", std::move(payload));
+            return row;
         }
 
         template <typename T>
@@ -156,6 +171,7 @@ namespace ExtraChain::Consensus {
             || !database_->query(std::string(CreateTimeoutVoteTable))
             || !database_->query(std::string(CreateProposalTable))
             || !database_->query(std::string(CreateBatchTable))
+            || !database_->query(std::string(CreateBatchManifestTable))
             || !database_->query(std::string(CreateCertificateTable))
             || !database_->query(std::string(CreateTimeoutCertificateTable))
             || !database_->query(std::string(CreateFinalityProofTable))
@@ -326,10 +342,7 @@ namespace ExtraChain::Consensus {
                                                                    std::uint64_t           height) {
         std::lock_guard lock(mutex_);
         if (!database_ || !database_->is_open()
-            || !database_->replace("consensus_batches",
-                                   { { "hash", batch.header_hash },
-                                     { "height", std::to_string(height) },
-                                     { "payload", encode(batch) } })) {
+            || !database_->replace("consensus_batches", stored_row(batch.header_hash, height, encode(batch)))) {
             return std::unexpected(ConsensusError::StorageFailure);
         }
         return {};
@@ -349,9 +362,9 @@ namespace ExtraChain::Consensus {
                                                           { "payload", encode(proposal) } });
         const bool batch_stored    = proposal_stored
                                   && database_->replace("consensus_batches",
-                                                        { { "hash", batch.header_hash },
-                                                          { "height", std::to_string(proposal.header.height) },
-                                                          { "payload", encode(batch) } });
+                                                        stored_row(batch.header_hash,
+                                                                   proposal.header.height,
+                                                                   encode(batch)));
         if (!batch_stored || !database_->query("COMMIT")) {
             database_->query("ROLLBACK");
             return std::unexpected(ConsensusError::StorageFailure);
@@ -397,9 +410,9 @@ namespace ExtraChain::Consensus {
                                                           { "payload", encode(proposal) } });
         const bool batch_stored    = proposal_stored
                                   && database_->replace("consensus_batches",
-                                                        { { "hash", batch.header_hash },
-                                                          { "height", std::to_string(proposal.header.height) },
-                                                          { "payload", encode(batch) } });
+                                                        stored_row(batch.header_hash,
+                                                                   proposal.header.height,
+                                                                   encode(batch)));
         const bool vote_stored =
             batch_stored
             && database_->insert("safety_votes", { { "vote_key", key }, { "payload", encode(vote) } });
@@ -537,6 +550,75 @@ namespace ExtraChain::Consensus {
             return std::unexpected(value.error());
         }
         return std::optional<SectionBatchData>(value.value());
+    }
+
+    std::expected<void, ConsensusError> SafetyStore::archive_batches_below(std::uint64_t height) {
+        std::lock_guard lock(mutex_);
+        if (!database_ || !database_->is_open()) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        for (std::size_t archived = 0; archived < ArchivedBatchesPerCall;) {
+            // Small transactions: a node upgraded with a long history drains it over several
+            // checkpoints instead of holding this store while it decodes gigabytes at once.
+            const auto rows = database_->select(
+                fmt::format("SELECT hash, height, payload FROM consensus_batches WHERE height < {} "
+                            "ORDER BY height LIMIT {}",
+                            height,
+                            ArchivedBatchesPerTransaction));
+            if (rows.empty()) {
+                return {};
+            }
+            if (!database_->query("BEGIN IMMEDIATE TRANSACTION")) {
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+            for (const auto& row : rows) {
+                const auto hash          = row.find("hash");
+                const auto stored_height = row.find("height");
+                const auto payload       = row.find("payload");
+                std::expected<SectionBatchData, ConsensusError> batch =
+                    std::unexpected(ConsensusError::StorageFailure);
+                if (payload != row.end())
+                    batch = decode<SectionBatchData>(payload->second);
+                if (hash == row.end() || stored_height == row.end() || !batch.has_value()
+                    || !database_->replace("consensus_batch_manifests",
+                                           { { "hash", hash->second },
+                                             { "height", stored_height->second },
+                                             { "payload", encode(batch.value().manifest) } })
+                    || !database_->delete_row("consensus_batches", { { "hash", hash->second } })) {
+                    database_->query("ROLLBACK");
+                    return std::unexpected(ConsensusError::StorageFailure);
+                }
+            }
+            if (!database_->query("COMMIT")) {
+                database_->query("ROLLBACK");
+                return std::unexpected(ConsensusError::StorageFailure);
+            }
+            archived += rows.size();
+        }
+        return {};
+    }
+
+    std::expected<std::optional<SectionBatchManifest>, ConsensusError> SafetyStore::load_batch_manifest(
+        std::string_view header_hash) {
+        std::lock_guard lock(mutex_);
+        if (!database_ || !database_->is_open()) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        const auto rows = database_->select("SELECT payload FROM consensus_batch_manifests WHERE hash = ?",
+                                            "consensus_batch_manifests",
+                                            { { "hash", std::string(header_hash) } });
+        if (rows.empty()) {
+            return std::optional<SectionBatchManifest> {};
+        }
+        const auto payload = rows.front().find("payload");
+        if (payload == rows.front().end()) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        const auto value = decode<SectionBatchManifest>(payload->second);
+        if (!value.has_value()) {
+            return std::unexpected(value.error());
+        }
+        return std::optional<SectionBatchManifest>(value.value());
     }
 
     std::expected<std::vector<QuorumCertificate>, ConsensusError> SafetyStore::load_certificates(

@@ -18,9 +18,25 @@
 #        EXC_SHADOW_HOLD_S       keep a passed committee alive this long (default 0)
 #        EXC_SHADOW_ALLOWED_DEAD this many committee nodes may die (chaos kills) and the
 #                                run still passes on the survivors (default 0)
+#        EXC_SHADOW_VECTOR_ROWS  every node also publishes an ExDFS vector with this many
+#                                rows; the run passes only if every row reaches every node
+#        EXC_SHADOW_VECTOR_CROSS every node also appends this many rows to every OTHER
+#                                node's vector (multi-writer); audited together
+#        EXC_SHADOW_VECTOR_PAYLOAD_BYTES pad each owner row to this many bytes (default 0)
+#        EXC_SHADOW_VECTOR_MIN_BYTES minimum total payload bytes per replicated vector
+#        EXC_SHADOW_LOAD_SECONDS publication window after DAG load (default 300)
+#        EXC_SHADOW_RECOVERY_SECONDS recovery window after publication (default 60, max 3600)
 #        EXC_SHADOW_DFS_BYTES    every node also publishes an ExDFS file of this size;
 #                                the run passes only if it reaches every node (default 0)
+#        EXC_SHADOW_DFS_MODE     "full" puts the committee's ExDFS into Full mode (pull
+#                                every Known payload); default is the core's Light
+#        EXC_SHADOW_REMOVE_AFTER_S every node also publishes a small file and removes it
+#                                this many seconds later; the run passes only if every
+#                                node ends with the row Removed and no payload on disk
 #        EXC_SHADOW_CAPTURE_AUDIT_CRASH save GDB dumps from offline verifiers (default 0)
+#        EXC_SHADOW_OLD_BIN      an older extrachain-node-run; together with
+#        EXC_SHADOW_OLD_INDEXES  ("3 5") those committee nodes run it instead of the
+#                                fresh build, for protocol compatibility runs
 
 set -u
 
@@ -32,13 +48,41 @@ SEED="${1:-/tmp/gen-shadow-seed}"
 BASE_PORT="${2:-17840}"
 SENDERS="${EXC_SHADOW_SENDERS:-4}"
 PER_SENDER="${EXC_SHADOW_PER_SENDER:-32}"
+WAVES="${EXC_SHADOW_WAVES:-1}"
+if ! [[ "$WAVES" =~ ^[1-9][0-9]{0,2}$ ]] || [ "$WAVES" -gt 256 ]; then
+    printf "Invalid EXC_SHADOW_WAVES: expected 1..256\n" >&2
+    exit 64
+fi
 RUN_SECONDS="${EXC_SHADOW_RUN_SECONDS:-240}"
+RECOVERY_SECONDS="${EXC_SHADOW_RECOVERY_SECONDS:-60}"
+if [ -n "${EXC_SHADOW_MINING_TEST+x}" ] && [ "$EXC_SHADOW_MINING_TEST" != 1 ]; then
+    printf 'Invalid EXC_SHADOW_MINING_TEST: expected 1 when set\n' >&2
+    exit 64
+fi
+if ! [[ "$RECOVERY_SECONDS" =~ ^[1-9][0-9]{0,3}$ ]] || [ "$RECOVERY_SECONDS" -gt 3600 ]; then
+    printf 'Invalid EXC_SHADOW_RECOVERY_SECONDS: expected 1..3600\n' >&2
+    exit 64
+fi
 # The harness must outlive the nodes' own window, otherwise their scheduled exit
 # races our deadline and a normal end-of-run looks like a crash.
 DEADLINE_S="${EXC_SHADOW_DEADLINE_S:-$((RUN_SECONDS + 120))}"
 NODE_COUNT="${EXC_SHADOW_NODE_COUNT:-7}"
 DFS_BYTES="${EXC_SHADOW_DFS_BYTES:-0}"
 export EXC_DFS_BYTES="$DFS_BYTES"
+VECTOR_ROWS="${EXC_SHADOW_VECTOR_ROWS:-0}"
+export EXC_DFS_VECTOR_ROWS="$VECTOR_ROWS"
+export EXC_DFS_VECTOR_PAYLOAD_BYTES="${EXC_SHADOW_VECTOR_PAYLOAD_BYTES:-0}"
+VECTOR_MIN_BYTES="${EXC_SHADOW_VECTOR_MIN_BYTES:-0}"
+HISTORY_ROWS="${EXC_SHADOW_HISTORY_ROWS:-0}"
+export EXC_DFS_HISTORY_ROWS="$HISTORY_ROWS"
+# Multi-writer: every node appends this many rows to every other node's vector.
+VECTOR_CROSS="${EXC_SHADOW_VECTOR_CROSS:-0}"
+export EXC_DFS_VECTOR_CROSS="$VECTOR_CROSS"
+REMOVE_AFTER="${EXC_SHADOW_REMOVE_AFTER_S:-0}"
+export EXC_DFS_REMOVE_AFTER_S="$REMOVE_AFTER"
+# "full" makes every committee node pull Known payloads (storage-node behaviour);
+# default keeps the ExDFS Light mode the core hard-codes.
+export EXC_DFS_MODE="${EXC_SHADOW_DFS_MODE:-light}"
 ALLOWED_DEAD="${EXC_SHADOW_ALLOWED_DEAD:-0}"
 # Nodes found dead when the watch loop ends (chaos kills); set once, before cleanup.
 DEAD_NODES=""
@@ -69,8 +113,117 @@ dfs_published() {
         # A file whose publisher died may never have reached anyone: not required.
         is_dead "$index" && continue
         sed -E "s/$(printf '\033')\[[0-9;]*m//g" "$WORK/node-$index.log" 2>/dev/null \
-            | sed -n "s/^\[node-run\] DFS stored owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\) size=\([0-9]*\).*/$index \1 \2 \3/p"
+            | sed -n "s/.*\[node-run\] DFS stored owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\) size=\([0-9]*\).*/$index \1 \2 \3/p"
     done
+}
+
+# Catalog state of one row, read through a SQLite backup snapshot.
+# Prints the numeric state (0 = Removed) or "none".
+dirs_state() {
+    python3 - "$1" "$2" "$3" <<'PYDIRS'
+import sqlite3, sys
+try:
+    source = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+    snapshot = sqlite3.connect(":memory:")
+    source.backup(snapshot)
+    source.close()
+    row = snapshot.execute("select state from ActorsFiles where owner_id = ? and file_id = ?",
+                           (sys.argv[2], sys.argv[3])).fetchone()
+    print(row[0] if row else "none")
+except Exception:
+    print("error")
+PYDIRS
+}
+
+# Status of one vector row (by the "id" primary field), through the backup API.
+# Prints the status value or "none".
+vector_row_status() {
+    python3 - "$1" "$2" <<'PYROW'
+import sqlite3, sys
+try:
+    source = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+    snapshot = sqlite3.connect(":memory:")
+    source.backup(snapshot)
+    source.close()
+    row = snapshot.execute("select status from Vector where id = ?", (sys.argv[2],)).fetchone()
+    print(row[0] if row else "none")
+except Exception:
+    print("error")
+PYROW
+}
+
+# One line per doomed file: "<publisher index> <owner> <file id>".
+dfs_doomed() {
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        is_dead "$index" && continue
+        sed -n "s/.*\[node-run\] DFS doomed owner=\([0-9a-f]*\) file_id=\([0-9a-f]*\).*/$index \1 \2/p" \
+            "$WORK/node-$index.log" 2>/dev/null
+    done
+}
+
+# Removal audit: every doomed file must be a tombstone (state Removed) with no
+# payload on every live node, and its owner must have logged the removal.
+remove_audit() {
+    local report="$1" complete=1 doomed total expected_publishers
+    doomed="$(dfs_doomed)"
+    total="$(printf '%s\n' "$doomed" | grep -c .)"
+    [ "$total" -gt 0 ] || { [ "$report" = 1 ] && echo "removed: no doomed files published"; return 1; }
+    expected_publishers=$((NODE_COUNT - $(wc -w <<<"$DEAD_NODES")))
+    [ "$total" -eq "$expected_publishers" ] || complete=0
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        if is_dead "$index"; then
+            [ "$report" = 1 ] && printf 'removed: node %s died during the run; not audited\n' "$index"
+            continue
+        fi
+        local gone=0 publisher owner file_id state payload
+        while read -r publisher owner file_id; do
+            [ -n "$file_id" ] || continue
+            state="$(dirs_state "${NODE_HOMES[$index]}/dfs/.dirs" "$owner" "$file_id")"
+            payload="${NODE_HOMES[$index]}/dfs/$owner/$file_id"
+            [ "$state" = "0" ] && [ ! -f "$payload" ] && gone=$((gone + 1))
+        done <<<"$doomed"
+        [ "$gone" -eq "$total" ] || complete=0
+        # Vector row 0 of every published vector must be a tombstone here as well.
+        local rows_gone=0 rows_total=0 vpublisher vowner vfile
+        while read -r vpublisher vowner vfile; do
+            [ -n "$vfile" ] || continue
+            rows_total=$((rows_total + 1))
+            [ "$(vector_row_status "${NODE_HOMES[$index]}/dfs/$vowner/$vfile" "${vowner}:soak_vector_${vpublisher}_0")" = "0" ] \
+                && rows_gone=$((rows_gone + 1))
+        done <<<"$(vectors_published)"
+        [ "$rows_gone" -eq "$rows_total" ] || complete=0
+        [ "$report" = 1 ] && printf 'removed: node %s has %s/%s file tombstones without payload, %s/%s vector row tombstones\n' \
+            "$index" "$gone" "$total" "$rows_gone" "$rows_total"
+    done
+    [ "$complete" -eq 1 ]
+}
+
+# One line per published vector: "<publisher index> <owner> <file id>".
+vectors_published() {
+    for index in $(seq 0 $((NODE_COUNT - 1))); do
+        is_dead "$index" && continue
+        sed -n "s/.*\\[node-run\\] DFS vector owner=\\([0-9a-f]*\\) file_id=\\([0-9a-f]*\\).*/$index \\1 \\2/p" \
+            "$WORK/node-$index.log" 2>/dev/null
+    done
+}
+
+history_audit() {
+    [ "$HISTORY_ROWS" -eq 0 ] && return 0
+    if [ "$1" = 1 ]; then
+        python3 "$SCRIPT_DIR/shadow_history_audit.py" "$WORK" "$NODE_COUNT" "$HISTORY_ROWS" "$DEAD_NODES"
+    else
+        python3 "$SCRIPT_DIR/shadow_history_audit.py" "$WORK" "$NODE_COUNT" "$HISTORY_ROWS" "$DEAD_NODES" >/dev/null
+    fi
+}
+
+vector_audit() {
+    local report="$1"
+    [ "$VECTOR_ROWS" -eq 0 ] && return 0
+    if [ "$report" = 1 ]; then
+        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" "$VECTOR_MIN_BYTES" "$SENDERS"
+    else
+        python3 "$SCRIPT_DIR/shadow_vector_audit.py" "$WORK" "$NODE_COUNT" "$VECTOR_ROWS" "$VECTOR_CROSS" "$DEAD_NODES" "$VECTOR_MIN_BYTES" "$SENDERS" >/dev/null
+    fi
 }
 
 # ExDFS replication audit: every file a committee node published has to sit on
@@ -98,6 +251,16 @@ dfs_audit() {
             [ -n "$file_id" ] || continue
             src="${NODE_HOMES[$publisher]}/dfs/$owner/$file_id"
             dst="${NODE_HOMES[$index]}/dfs/$owner/$file_id"
+            # The reference is a copy taken from the publisher while it still had the
+            # file: under payload-wipe chaos the publisher's own copy can be gone at
+            # audit time, and comparing against a missing file called every intact
+            # copy corrupt.
+            mkdir -p "$WORK/ref"
+            if [ ! -f "$WORK/ref/$file_id" ] && [ -f "$src" ] \
+               && [ "$(wc -c < "$src" | tr -d ' ')" = "$size" ]; then
+                cp "$src" "$WORK/ref/$file_id"
+            fi
+            [ -f "$WORK/ref/$file_id" ] && src="$WORK/ref/$file_id"
             [ -f "$dst" ] || continue
             if [ "$(wc -c < "$dst" | tr -d ' ')" = "$size" ] && [ "$(sha256_of "$dst")" = "$(sha256_of "$src")" ]; then
                 have=$((have + 1))
@@ -230,7 +393,7 @@ else
 log "=== bootstrap $NODE_COUNT nodes from $SEED ==="
 EXTRACHAIN_TEST_BUILD="$BUILD_DIR" \
 EXTRACHAIN_TEST_WORK="$SYNC_WORK" \
-EXTRACHAIN_TEST_DFS_BYTES=1048576 \
+EXTRACHAIN_TEST_DFS_BYTES="${EXTRACHAIN_TEST_DFS_BYTES:-1048576}" \
     bash "$CORE_TESTS/multi_console_sync.sh" "$SEED" "$((NODE_COUNT - 1))" "$BASE_PORT" >"$WORK/bootstrap.log" 2>&1 \
     || { tail -30 "$WORK/bootstrap.log" >&2; fail "DAG and ExDFS bootstrap failed"; }
 
@@ -279,8 +442,8 @@ fi
 # Spreading intents keeps every sender under maximum_sender_intents, and gives the
 # state machine several independent nonce sequences to interleave — which is the
 # condition the state_commitment defect is expected to need.
-TOTAL_INTENTS=$((SENDERS * PER_SENDER))
-log "=== committee: $SENDERS senders x $PER_SENDER intents = $TOTAL_INTENTS ==="
+TOTAL_INTENTS=$((SENDERS * PER_SENDER * WAVES))
+log "=== committee: $SENDERS senders x $PER_SENDER intents x $WAVES waves = $TOTAL_INTENTS ==="
 mkdir -p "$BARRIER"
 # In the seed only node 0's actor holds funds, so with several senders node 0
 # must first transfer to the other senders' actors; EXC_FUND_NODES drives the
@@ -301,8 +464,14 @@ for index in $(seq 0 $((NODE_COUNT - 1))); do
     port=$((BASE_PORT + 20 + index))
     (
         cd "$parent" || exit 73
+        # Mixed-version committee: EXC_SHADOW_OLD_INDEXES lists node indexes that run
+        # EXC_SHADOW_OLD_BIN instead of the fresh build (protocol compatibility runs).
+        node_bin="$NODE_RUN"
+        case " ${EXC_SHADOW_OLD_INDEXES:-} " in
+            *" $index "*) [ -n "${EXC_SHADOW_OLD_BIN:-}" ] && node_bin="$EXC_SHADOW_OLD_BIN" ;;
+        esac
         EXC_DEBUG_LOG=1 EXC_BIND_IP="127.0.0.$((index + 1))" EXC_FUND_NODES="$FUND_NODES" \
-            exec "$NODE_RUN" committee data "$role" "$index" "$port" "$((BASE_PORT + 20))" "$NODE_COUNT" \
+            exec "$node_bin" committee data "$role" "$index" "$port" "$((BASE_PORT + 20))" "$NODE_COUNT" \
                  "$intents" "$RUN_SECONDS" "$BARRIER" 1 1
     ) >"$WORK/node-$index.log" 2>&1 &
     PIDS+=("$!")
@@ -396,33 +565,72 @@ if [ -n "$DEAD_NODES" ]; then
     fi
 fi
 
+# Publication and cross-writes must finish before the recovery audit starts.
+if { [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; } \
+   && { [ "$VECTOR_ROWS" -gt 0 ] || [ "$DFS_BYTES" -gt 0 ] || [ "$HISTORY_ROWS" -gt 0 ]; }; then
+    load_deadline=$(( $(date +%s) + ${EXC_SHADOW_LOAD_SECONDS:-300} ))
+    [ "$load_deadline" -le "$deadline" ] || load_deadline="$deadline"
+    while :; do
+        loaded=1
+        for index in $(seq 0 $((NODE_COUNT - 1))); do
+            is_dead "$index" && continue
+            if ! kill -0 "$(node_pid "$index")" 2>/dev/null; then
+                verdict="unexpected-death"
+                break
+            fi
+            [ -f "$BARRIER/loaded-$index" ] || loaded=0
+        done
+        [ "$verdict" != "unexpected-death" ] || break
+        if [ "$loaded" -eq 1 ]; then
+            log "all surviving nodes finished load; checking replication"
+            break
+        fi
+        if [ "$(date +%s)" -ge "$load_deadline" ]; then
+            verdict="load-incomplete"
+            break
+        fi
+        sleep 1
+    done
+fi
+
 # A receipt proves that the submitting node applied the checkpoint. Other nodes
 # can still be importing the same certified height. Keep the committee alive
-# until every node reports the seed node's finalized count, so the audits test a
-# converged snapshot instead of a shutdown race.
+# until all nodes retain the agreed checkpoint. Without a recorded checkpoint,
+# require equal current finalized counts before the stopped-data audits.
 if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
-    convergence_deadline=$(( $(date +%s) + 60 ))
+    convergence_deadline=$(( $(date +%s) + RECOVERY_SECONDS ))
     if [ "${EXC_SHADOW_EXTERNAL_CONTROL:-0}" = "1" ]; then
         # Fault recovery uses the remaining portion of its total 300-second budget.
         convergence_deadline="$deadline"
     fi
+    [ "$convergence_deadline" -le "$deadline" ] || convergence_deadline="$deadline"
     while :; do
-        # Every surviving node has to report one finalized count; the first
-        # survivor (the seed, unless it died) is the reference.
-        reference=""
         converged=1
-        for index in $(seq 0 $((NODE_COUNT - 1))); do
-            is_dead "$index" && continue
-            node_finalized="$(finalized_height "$index")"
-            [ -n "$node_finalized" ] || { converged=0; continue; }
-            [ -n "$reference" ] || reference="$node_finalized"
-            [ "$node_finalized" = "$reference" ] || converged=0
-        done
-        [ -n "$reference" ] || converged=0
+        if [ -n "${EXC_SHADOW_CHECKPOINT:-}" ]; then
+            EXC_VERIFY_SKIP="$DEAD_NODES" python3 "$SHADOW_VERIFY" "$WORK" \
+                --checkpoint "$EXC_SHADOW_CHECKPOINT" --checkpoint-only \
+                > "$WORK/live-checkpoint.log" 2>&1 || converged=0
+        else
+            # Without a recorded common checkpoint, current finalized counts must agree.
+            reference=""
+            for index in $(seq 0 $((NODE_COUNT - 1))); do
+                is_dead "$index" && continue
+                node_finalized="$(finalized_height "$index")"
+                [ -n "$node_finalized" ] || { converged=0; continue; }
+                [ -n "$reference" ] || reference="$node_finalized"
+                [ "$node_finalized" = "$reference" ] || converged=0
+            done
+            [ -n "$reference" ] || converged=0
+        fi
+        if [ "${EXC_SHADOW_MINING_TEST:-0}" = 1 ]; then
+            for index in $(seq 0 $((NODE_COUNT - 1))); do
+                is_dead "$index" && continue
+                grep -q 'native payout section=' "$WORK/node-$index.log" || converged=0
+            done
+        fi
         if [ "$converged" -eq 1 ]; then
-            # Heights agree; the ExDFS mesh has to be complete as well before the
-            # audits read a snapshot.
-            if dfs_audit 0; then
+            # The consensus checkpoint does not prove that ExDFS replication is complete.
+            if dfs_audit 0 && vector_audit 0 && history_audit 0; then
                 if [ "$verdict" != "pass" ] || [ -z "${EXC_SHADOW_RECEIPTS_PYTHON:-}" ]; then
                     break
                 fi
@@ -445,6 +653,8 @@ fi
 # finalizes in seconds, so without this there is nothing left to join.
 if [ "$verdict" = "pass" ] && [ "${EXC_SHADOW_HOLD_S:-0}" -gt 0 ]; then
     log "holding the committee for ${EXC_SHADOW_HOLD_S}s"
+    # Lets a chaos agent leave a quiet tail before the final audits.
+    echo $(( $(date +%s) + EXC_SHADOW_HOLD_S )) > "$BARRIER/hold-until"
     sleep "$EXC_SHADOW_HOLD_S"
 fi
 
@@ -477,6 +687,7 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
     # a perfectly good run. What must agree is the CONTENT at a shared section: group
     # the snapshots by section and require one hash per section.
     declare -A SNAPSHOT_HASH=() SNAPSHOT_OWNER=()
+    declare -A MINING_HASH=()
     for index in $(seq 0 $((NODE_COUNT - 1))); do
         role="joiner"; [ "$index" -eq 0 ] && role="seed"
         offline_verify "$WORK/audit-$index.core" "$DAG_AUDIT" "${NODE_HOMES[$index]}" "$role" >"$WORK/audit-$index.log" 2>&1 \
@@ -494,11 +705,25 @@ if [ "$verdict" = "pass" ] || [ "$verdict" = "pass-negative" ]; then
         fi
         SNAPSHOT_HASH[$section]="$hash"
         SNAPSHOT_OWNER[$section]="$index"
+        if [ "${EXC_SHADOW_MINING_TEST:-0}" = 1 ]; then
+            mining="$(sed -n 's/^mining: section=\([^ ]*\).*root=\([^ ]*\).*/\1:\2/p' "$WORK/audit-$index.log")"
+            [ -n "$mining" ] || fail "node $index did not report a mining snapshot"
+            section="${mining%%:*}"
+            hash="${mining#*:}"
+            if [ -n "${MINING_HASH[$section]:-}" ] && [ "${MINING_HASH[$section]}" != "$hash" ]; then
+                fail "nodes disagree on mining state at section $section"
+            fi
+            MINING_HASH[$section]="$hash"
+        fi
     done
     if [ "${#SNAPSHOT_HASH[@]}" -gt 1 ]; then
         log "note: nodes stopped at ${#SNAPSHOT_HASH[@]} different snapshot sections (shutdown skew, not a mismatch)"
     fi
-    EXC_VERIFY_SKIP="$DEAD_NODES" offline_verify "$WORK/cross-node.core" python3 "$SHADOW_VERIFY" "$WORK" >"$WORK/cross-node.log" 2>&1 \
+    checkpoint_args=()
+    if [ -n "${EXC_SHADOW_CHECKPOINT:-}" ]; then
+        checkpoint_args=(--checkpoint "$EXC_SHADOW_CHECKPOINT")
+    fi
+    EXC_VERIFY_SKIP="$DEAD_NODES" offline_verify "$WORK/cross-node.core" python3 "$SHADOW_VERIFY" "$WORK" "${checkpoint_args[@]}" >"$WORK/cross-node.log" 2>&1 \
         || { tail -80 "$WORK/cross-node.log" >&2; fail "cross-node content verification failed"; }
 fi
 
@@ -516,8 +741,15 @@ fi
 case "$verdict" in
     pass)
         summary
+        history_audit 1 || fail "ExDFS history is incomplete after shutdown"
         if [ "$DFS_BYTES" -gt 0 ]; then
             dfs_audit 1 || fail "ExDFS content is incomplete after shutdown"
+        fi
+        if [ "$VECTOR_ROWS" -gt 0 ]; then
+            vector_audit 1 || fail "ExDFS vectors are incomplete after shutdown"
+        fi
+        if [ "$REMOVE_AFTER" -gt 0 ]; then
+            remove_audit 1 || fail "ExDFS removal did not reach every node"
         fi
         if [ -n "$DEAD_NODES" ]; then
             log "PASS (survivors): $done_nodes/$SENDERS senders finalized $PER_SENDER intents each; node(s) $DEAD_NODES died"
@@ -543,8 +775,16 @@ case "$verdict" in
         # within their window. Say which one it was, they need different fixes.
         fail "nodes finished their ${RUN_SECONDS}s window with $done_nodes/$SENDERS senders finalized" ;;
     deadline) fail "harness deadline reached with $done_nodes/$SENDERS senders finalized" ;;
-    convergence) fail "committee did not converge on one finalized height before the recovery deadline" ;;
+    load-incomplete) fail "load phases did not finish before the deadline" ;;
+    convergence)
+        if [ -n "${EXC_SHADOW_CHECKPOINT:-}" ]; then
+            fail "committee did not retain the recorded checkpoint before the recovery deadline"
+        fi
+        fail "committee did not converge on one finalized height before the recovery deadline"
+        ;;
     dfs-incomplete)
         dfs_audit 1 >&2
+        vector_audit 1 >&2
+        history_audit 1 >&2
         fail "ExDFS content did not reach every node before the recovery deadline" ;;
 esac

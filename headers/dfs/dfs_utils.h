@@ -261,11 +261,13 @@ namespace Dfs {
         std::optional<std::string> prev_file_id;
 
         std::string hash;
+        std::string   template_hash;
+        std::uint64_t metadata_revision = 0;
 
         std::optional<std::string> folder;
         std::string                name;
 
-        std::size_t   size;
+        std::size_t   size          = 0;
         std::uint64_t created       = 0;
         std::uint64_t last_modified = 0;
 
@@ -312,7 +314,9 @@ namespace Dfs {
             return folder;
         }
 
-        std::string calculate_hash(const ActorId& owner_id);
+        std::string calculate_hash(const ActorId& owner_id) const;
+        // Local migration only. Network admission never accepts this signature format.
+        std::string calculate_legacy_hash(const ActorId& owner_id) const;
     };
 
     BOOST_DESCRIBE_STRUCT(DirRow,
@@ -322,6 +326,8 @@ namespace Dfs {
                            file_id,
                            prev_file_id,
                            hash,
+                           template_hash,
+                           metadata_revision,
                            folder,
                            name,
                            size,
@@ -389,6 +395,35 @@ namespace Dfs {
             bool        thothed = false;
         };
         BOOST_DESCRIBE_STRUCT(VectorRowAdd, (), (owner_id, file_id, row, thothed))
+
+        // Catalog reconciliation by content (#75). One digest per owner over that owner's
+        // rows sorted by file_id, each contributing (file_id, sign, hash). The signature
+        // is what the owner published; the hash column is the same for a File and the
+        // current content hash for a Vector/Dictionary, so a node missing vector rows
+        // differs and gets the row re-offered. The local-only state column stays out.
+        struct CatalogDigest {
+            ActorId       owner_id;
+            std::uint64_t rows = 0;
+            std::string   digest;
+        };
+        BOOST_DESCRIBE_STRUCT(CatalogDigest, (), (owner_id, rows, digest))
+
+        struct CatalogDigestRequest {
+            std::vector<CatalogDigest> owners;
+            // A Selective requester narrows the reply to these owners; empty means all.
+            std::vector<ActorId> allowed;
+            bool                 complete = true;
+        };
+        BOOST_DESCRIBE_STRUCT(CatalogDigestRequest, (), (owners, allowed, complete))
+
+        struct CatalogDigestReply {
+            // Each difference starts a separate bounded row request.
+            std::vector<CatalogDigest> mismatched;
+            // Owners the requester listed that the responder has no rows for at all.
+            std::vector<ActorId> unknown;
+            bool                 full_catalog = false;
+        };
+        BOOST_DESCRIBE_STRUCT(CatalogDigestReply, (), (mismatched, unknown, full_catalog))
 
         struct VectorRowRemove {
             ActorId     owner_id;
@@ -529,9 +564,11 @@ namespace Dfs {
                                                         + "("
                                                         "owner_id      TEXT              NOT NULL,"
                                                         "file_id       TEXT              NOT NULL,"
-                                                        "prev_file_id  TEXT                UNIQUE,"
+                                                        "prev_file_id  TEXT                     ,"
                                                         "actor_id      TEXT              NOT NULL,"
                                                         "hash          TEXT              NOT NULL,"
+                                                        "template_hash TEXT NOT NULL DEFAULT '',"
+                                                        "metadata_revision INTEGER NOT NULL DEFAULT 0,"
                                                         "folder        TEXT                     ,"
                                                         "name          TEXT              NOT NULL,"
                                                         "size          INTEGER           NOT NULL,"
@@ -657,12 +694,6 @@ namespace Dfs {
                                        const std::string                  file_id,
                                        Dfs::FileState                     state);
 
-                void update_file_after_stored_remove(const std::shared_ptr<DbConnector> db,
-                                                     const ActorId&                     owner_id,
-                                                     const std::string&                 file_id,
-                                                     const Signature&                   sign,
-                                                     std::uint64_t                      last_modified);
-
                 // TODO: expected
                 std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId&     actor_id,
                                                                                        const std::string& file_id);
@@ -670,13 +701,10 @@ namespace Dfs {
                     const std::shared_ptr<DbConnector> db,
                     const ActorId&                     actor_id,
                     const std::string&                 template_name);
-                bool                                      add_dir_row(const std::shared_ptr<DbConnector> db,
-                                                                      const ActorId&                     owner_id,
-                                                                      DirRow&                            dir_row,
-                                                                      const Actor<KeyPrivate>&           signer);
-                std::pair<bool, std::vector<Dfs::DirRow>> add_dir_rows(const std::shared_ptr<DbConnector> db,
-                                                                       const ActorId&                     actor_id,
-                                                                       const std::vector<Dfs::DirRow>& dir_rows);
+                bool add_dir_row(const std::shared_ptr<DbConnector> db,
+                                 const ActorId&                     owner_id,
+                                 DirRow&                            dir_row,
+                                 const Actor<KeyPrivate>&           signer);
 
                 std::pair<std::string, uint64_t> calculate_collection_hash_size(
                     const ActorId&     owner_id,

@@ -8,6 +8,7 @@
     "boost-beast",
     "boost-chrono",
     "boost-describe",
+    "boost-icl",
     "boost-interprocess",
     "boost-json",
     "boost-mp11",

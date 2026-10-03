@@ -54,6 +54,12 @@ namespace ExtraChain::Consensus {
             const SafetyState&        state);
         std::expected<std::vector<Proposal>, ConsensusError> load_proposals(std::uint64_t minimum_height);
         std::expected<std::optional<SectionBatchData>, ConsensusError> load_batch(std::string_view header_hash);
+        // Replaces stored batches below the height by their manifests, a bounded number per
+        // call. The sections stay in the DAG; the manifest keeps what the DAG cannot give back
+        // (previous_section_root), so the batch can be rebuilt exactly.
+        std::expected<void, ConsensusError> archive_batches_below(std::uint64_t height);
+        std::expected<std::optional<SectionBatchManifest>, ConsensusError> load_batch_manifest(
+            std::string_view header_hash);
         std::expected<std::vector<QuorumCertificate>, ConsensusError>  load_certificates(
              std::uint64_t minimum_height);
         std::expected<std::vector<TimeoutCertificate>, ConsensusError> load_timeout_certificates(

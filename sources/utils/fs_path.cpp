@@ -197,7 +197,9 @@ std::expected<bool, FsError> FsPath::is_file_locked() const {
         CloseHandle(file_handle);
         return false;
 #else
-        struct flock lock = { .l_type = F_WRLCK, .l_whence = SEEK_SET, .l_start = 0, .l_len = 0 };
+        struct flock lock { };
+        lock.l_type   = F_WRLCK;
+        lock.l_whence = SEEK_SET;
 
         int fd = open(m_path.c_str(), O_RDWR);
         if (fd == -1)

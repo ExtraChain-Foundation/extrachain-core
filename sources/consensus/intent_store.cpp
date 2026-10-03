@@ -439,8 +439,9 @@ namespace ExtraChain::Consensus {
             }
             if (receipt.status != IntentStatus::Finalized || receipt.intent_hash != hash
                 || envelope.intent.account_nonce != committed_nonces[envelope.intent.sender] + 1
-                || pending.size() != 1 || !pending.front().contains("payload")
-                || pending.front().at("payload") != encode(envelope)
+                || pending.size() > 1
+                || (!pending.empty()
+                    && (!pending.front().contains("payload") || pending.front().at("payload") != encode(envelope)))
                 || !database_->replace("consensus_intent_receipts",
                                        { { "hash", hash }, { "payload", encode(receipt) } })
                 || !database_->replace("consensus_intent_nonces",
@@ -449,6 +450,28 @@ namespace ExtraChain::Consensus {
                 || !database_->delete_row("consensus_intents", { { "hash", hash } })) {
                 database_->query("ROLLBACK");
                 return std::unexpected(ConsensusError::StorageFailure);
+            }
+            // A locally queued cancellation or replacement can lose to a different certified request.
+            const auto competitors =
+                database_->select("SELECT hash, nonce FROM consensus_intents WHERE sender = ?",
+                                  "consensus_intents",
+                                  { { "sender", envelope.intent.sender.to_string() } });
+            for (const auto& candidate : competitors) {
+                if (!candidate.contains("hash") || !candidate.contains("nonce")) {
+                    database_->query("ROLLBACK");
+                    return std::unexpected(ConsensusError::StorageFailure);
+                }
+                if (candidate.at("nonce") != std::to_string(envelope.intent.account_nonce))
+                    continue;
+                const IntentReceipt rejected { .intent_hash = candidate.at("hash"),
+                                               .status      = IntentStatus::Rejected,
+                                               .error       = ConsensusError::InvalidNonce };
+                if (!database_->replace("consensus_intent_receipts",
+                                        { { "hash", rejected.intent_hash }, { "payload", encode(rejected) } })
+                    || !database_->delete_row("consensus_intents", { { "hash", rejected.intent_hash } })) {
+                    database_->query("ROLLBACK");
+                    return std::unexpected(ConsensusError::StorageFailure);
+                }
             }
             committed_nonces[envelope.intent.sender] = envelope.intent.account_nonce;
         }

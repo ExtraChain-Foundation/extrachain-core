@@ -131,6 +131,15 @@ DbColumn& DbColumn::default_value(std::string_view value) {
     return *this;
 }
 
+DbColumn& DbColumn::default_literal(std::string_view value) {
+    if (value.find('\0') != std::string_view::npos) {
+        m_validation_error = SqlCreateError::SqlInjectionRisk;
+    } else {
+        m_default_value = "DEFAULT " + SqlValidator::escape_string(value);
+    }
+    return *this;
+}
+
 DbColumn& DbColumn::check(std::string_view condition) {
     if (auto validation = SqlValidator::validate_value(condition); !validation) {
         m_validation_error = validation.error();

@@ -25,11 +25,35 @@
 #include "network/network_service.h"
 #include "utils/db_connector.h"
 #include "utils/msgpack_limits.h"
+#include "consensus/mining_transaction.h"
 
 #include <msgpack.hpp>
 
 namespace {
     using ContractDelta = std::pair<ActorId, BigNumberFloat>;
+
+    bool invalid_spending_balance(const Transaction& transaction, const Balances& balances) {
+        if (transaction.type() == TransactionType::Reward
+            || transaction.type() == TransactionType::MiningSettlement
+            || is_contract_transaction(transaction.type())) {
+            return false;
+        }
+        auto token = transaction.token();
+        if (transaction.type() == TransactionType::Conversion) {
+            if (!transaction.meta().has_value()) {
+                return true;
+            }
+            const auto source = TokenId::create(transaction.meta().value());
+            if (!source.has_value() || source.value() == token) {
+                return true;
+            }
+            token = source.value();
+        } else if (transaction.section() <= SectionId(1)) {
+            return false;
+        }
+        const auto balance = balances.find({ transaction.sender(), token });
+        return balance != balances.end() && balance->second < 0;
+    }
 
     std::vector<ContractDelta> fungible_contract_deltas(const Transaction& transaction) {
         if (!is_contract_transaction(transaction.type()) || !transaction.meta().has_value()) {
@@ -423,7 +447,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
 
     const auto affects_actors = [&actor_ids](const Transaction& tx) {
         // Contract effects can change accounts outside the transaction endpoints.
-        if (is_contract_transaction(tx.type())) {
+        if (is_contract_transaction(tx.type()) || tx.type() == TransactionType::MiningSettlement) {
             return true;
         }
         for (const auto& actor_id : actor_ids) {
@@ -771,7 +795,8 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         start_section = first_saved_section;
     }
 
-    auto hot_sections = dag->read_hot_sections(start_section, genesis_section);
+    std::map<SectionId, Section> sections;
+    SectionId                    read_through = start_section - 1;
 
     if (!cache_db_->query("BEGIN IMMEDIATE TRANSACTION")) {
         return { false, start_section };
@@ -793,9 +818,14 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
-        auto hot = hot_sections.find(i);
-        auto section =
-            hot != hot_sections.end() ? std::optional<Section>(std::move(hot->second)) : read_section_callback(i);
+        if (i > read_through) {
+            sections.clear();
+            read_through = std::min(genesis_section, i + Pack::SECTIONS_PER_FRAME - 1);
+            sections     = dag->read_section_batch(i, read_through);
+        }
+        auto stored  = sections.find(i);
+        auto section = stored != sections.end() ? std::optional<Section>(std::move(stored->second))
+                                                : read_section_callback(i);
         if (!section.has_value()) {
             continue;
         }
@@ -807,9 +837,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         for (const auto& tx : section->transactions) {
             process_transaction(tx, balances);
 
-            if (tx.section() > SectionId(1) && tx.type() != TransactionType::Reward
-                && tx.type() != TransactionType::Conversion && !is_contract_transaction(tx.type())
-                && balances[{ tx.sender(), tx.token() }] < 0) {
+            if (invalid_spending_balance(tx, balances)) {
                 static_cast<void>(cache_db_->query("ROLLBACK"));
                 eCritical("[DagCache] State transition {} creates a negative balance at section {}",
                           tx.hash(),
@@ -823,6 +851,9 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
             if (dag->mode() == DagMode::Full) {
                 // write_index(tx.sender(), tx.receiver(), tx.section(), tx.timestamp());
             }
+            // Sections installed by sync never pass save_transaction; the cache pass reads
+            // every one of them, so the contract catalog follows it here.
+            index_contract_transaction(tx);
         }
     }
 
@@ -833,7 +864,10 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         }
     }
 
-    if (!write_cache_section(genesis_section) || !cache_db_->query("COMMIT")) {
+    // A pass from the first saved section has indexed the whole history.
+    if (!write_cache_section(genesis_section)
+        || (cached_section_ == BigNumber(-1) && !mark_contract_catalog_follows_cache())
+        || !cache_db_->query("COMMIT")) {
         static_cast<void>(cache_db_->query("ROLLBACK"));
         return { false, start_section };
     }
@@ -854,22 +888,23 @@ std::optional<StateTransitionViolation> DagCache::validate_state_to(const Sectio
         return std::nullopt;
     }
 
-    auto hot_sections = dag->read_hot_sections(from, current_section);
+    std::map<SectionId, Section> sections;
+    SectionId                    read_through = from - 1;
     for (auto section_id = from; section_id <= current_section; ++section_id) {
-        const auto hot = hot_sections.find(section_id);
-        auto       section =
-            hot != hot_sections.end() ? std::optional<Section>(hot->second) : dag->read_section(section_id);
+        if (section_id > read_through) {
+            sections.clear();
+            read_through = std::min(current_section, section_id + Pack::SECTIONS_PER_FRAME - 1);
+            sections     = dag->read_section_batch(section_id, read_through);
+        }
+        const auto stored  = sections.find(section_id);
+        auto       section = stored != sections.end() ? std::optional<Section>(std::move(stored->second))
+                                                      : dag->read_section(section_id);
         if (!section.has_value()) {
             continue;
         }
         for (const auto& transaction : section->transactions) {
             process_transaction(transaction, balances);
-            if (transaction.section() <= SectionId(1) || transaction.type() == TransactionType::Reward
-                || transaction.type() == TransactionType::Conversion
-                || is_contract_transaction(transaction.type())) {
-                continue;
-            }
-            if (balances[{ transaction.sender(), transaction.token() }] < 0) {
+            if (invalid_spending_balance(transaction, balances)) {
                 return StateTransitionViolation {
                     .section          = transaction.section(),
                     .transaction_hash = transaction.hash(),
@@ -907,8 +942,25 @@ void DagCache::apply_transaction(const Transaction& tx, Balances& balances, bool
     if (tx.type() == TransactionType::Unknown) {
         return;
     }
+    if (tx.type() == TransactionType::IntentCancel)
+        return;
+    if (tx.type() == TransactionType::MiningSettlement) {
+        const auto deltas = ExtraChain::Consensus::mining_settlement_deltas(tx);
+        if (deltas.has_value())
+            for (const auto& [provider, amount] : deltas.value())
+                credit({ provider, TokenId { } }, amount);
+        return;
+    }
     if (is_contract_transaction(tx.type())) {
         apply_contract_deltas(tx, balances, reverse);
+        return;
+    }
+
+    // A trusted section-one balance is an initial allocation, not a transfer
+    // from the network owner's spendable account.
+    if (tx.type() == TransactionType::Balance) {
+        if (!tx.receiver().is_zero())
+            credit(std::make_pair(tx.receiver(), tx.token()), tx.amount());
         return;
     }
 
@@ -1004,7 +1056,7 @@ bool DagCache::init_db() {
     return true;
 }
 
-void DagCache::reset_db() {
+bool DagCache::reset_db() {
     invalidate_live_balances();
     std::unique_lock<std::recursive_mutex> lock(mutex_);
     std::unique_lock<std::mutex>           catalog_lock(contract_catalog_mutex_);
@@ -1016,10 +1068,11 @@ void DagCache::reset_db() {
             static_cast<void>(cache_db_->query("ROLLBACK"));
         }
         eCritical("[DagCache] Failed to reset derived cache state");
-        return;
+        return false;
     }
     contract_catalog_scanned_ = false;
     cached_section_           = SectionId(-1);
+    return true;
 }
 
 bool DagCache::ensure_balance_cache_schema() {
@@ -1064,7 +1117,20 @@ bool DagCache::ensure_contract_catalog_schema() {
             return false;
         }
     }
-    return cache_db_->query(Config::DataStorage::ContractCatalogCreate);
+    const bool dropped = !cache_db_->table_exists("contract_catalog");
+    return cache_db_->query(Config::DataStorage::ContractCatalogCreate)
+           && cache_db_->query("CREATE TABLE IF NOT EXISTS contract_catalog_meta "
+                               "(id INTEGER PRIMARY KEY CHECK (id = 1), follows_cache INTEGER NOT NULL)")
+           && (!dropped || cache_db_->query("DELETE FROM contract_catalog_meta"));
+}
+
+bool DagCache::contract_catalog_follows_cache() {
+    return !cache_db_->select("SELECT follows_cache FROM contract_catalog_meta WHERE id = 1 AND follows_cache = 1")
+                .empty();
+}
+
+bool DagCache::mark_contract_catalog_follows_cache() {
+    return cache_db_->replace("contract_catalog_meta", { { "id", "1" }, { "follows_cache", "1" } });
 }
 
 void DagCache::index_contract_transaction(const Transaction& transaction) {
@@ -1166,9 +1232,14 @@ ExtraChain::Contracts::ContractCatalogPage DagCache::list_contracts(
     }
 
     {
+        // Scanning the whole history used to happen on every start of a node whose catalog
+        // was empty, which is every node of a network without contracts: on the Ubuntu stand
+        // it read 640 MB of sections inside login and held a restarted validator silent for
+        // two minutes, growing with the chain. Now it runs once, for a catalog that predates
+        // indexing in the cache pass.
         std::unique_lock<std::mutex> lock(contract_catalog_mutex_);
         if (!contract_catalog_scanned_) {
-            if (cache_db_->count("contract_catalog") == 0) {
+            if (!contract_catalog_follows_cache()) {
                 rebuild_contract_catalog();
             }
             contract_catalog_scanned_ = true;
@@ -1233,5 +1304,5 @@ bool DagCache::rebuild_contract_catalog() {
             index_contract_transaction(transaction);
         }
     }
-    return true;
+    return mark_contract_catalog_follows_cache();
 }

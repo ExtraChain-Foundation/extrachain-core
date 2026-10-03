@@ -143,6 +143,89 @@ int main() {
     check("future sequential nonce enters the pool",
           pool.submit(second_envelope, sender_public_key, 0, 10).has_value());
 
+    check("local protocol work chooses a nonce after queued transfers",
+          pool.next_nonce(sender.id(), 0).value() == 3 && pool.next_nonce(other_sender.id(), 0).value() == 1);
+    auto gap_pool = pool;
+    gap_pool.erase({ first_hash.value() });
+    check("local protocol work fills an unused nonce before a future request",
+          gap_pool.next_nonce(sender.id(), 0).value() == 1);
+    IntentPool bounded_window({ .maximum_sender_intents = 2, .maximum_nonce_gap = 2 });
+    check("last available nonce enters the admission window",
+          bounded_window.submit(second_envelope, sender_public_key, 0, 10).has_value());
+    const auto exhausted = bounded_window.next_nonce(sender.id(), 0, 1);
+    check("certified work cannot extend the unfinalized admission window",
+          !exhausted.has_value() && exhausted.error() == ConsensusError::PoolFull);
+    const auto reopened = bounded_window.next_nonce(sender.id(), 1, 1);
+    check("finality opens one new nonce slot", reopened.has_value() && reopened.value() == 3);
+    auto third              = first;
+    third.account_nonce     = reopened.value();
+    const auto signed_third = make_intent(third, "memo-three", sender).value();
+    check("reopened nonce passes the same admission bound",
+          bounded_window.submit({ signed_third, "memo-three" }, sender_public_key, 1, 10).has_value());
+    check("local protocol nonce allocation checks overflow",
+          !pool.next_nonce(sender.id(), UINT64_MAX).has_value());
+    {
+        auto cancel                  = first;
+        cancel.operation             = IntentOperation::Cancel;
+        cancel.receiver              = sender.id();
+        cancel.amount                = "0";
+        cancel.expires_after_height  = 50;
+        const auto     signed_cancel = make_intent(cancel, "", sender).value();
+        IntentEnvelope envelope { signed_cancel, "" };
+        check("canonical cancellation verifies", verify_intent(envelope, sender_public_key));
+        auto pending                        = second_envelope;
+        pending.intent.expires_after_height = 50;
+        pending.intent                      = make_intent(pending.intent, pending.metadata, sender).value();
+        IntentPool expired_pool;
+        check("short-lived operation and later transfer enter the pool",
+              expired_pool.submit(first_envelope, sender_public_key, 0, 10).has_value()
+                  && expired_pool.submit(pending, sender_public_key, 0, 10).has_value());
+        check("expired certified operation remains reserved",
+              expired_pool.expired_uncommitted(31, { { sender.id(), 1 } }).empty());
+        const auto expired = expired_pool.expired_uncommitted(31, { });
+        check("only the expired uncertified operation leaves the pool", expired.size() == 1);
+        expired_pool.erase(expired);
+        check("expiration blocks later transfer until the nonce is filled",
+              expired_pool.ready({ }, 31, 10, 1024 * 1024).empty()
+                  && expired_pool.has_pending_after(sender.id(), 1));
+        check("signed cancellation releases the later transfer",
+              expired_pool.submit(envelope, sender_public_key, 0, 31).has_value()
+                  && expired_pool.ready({ }, 31, 10, 1024 * 1024).size() == 2);
+        const auto tx = materialize_intent(envelope, 620, 31, { }).value();
+        check("cancellation preserves signed zero-asset authorization",
+              tx.type() == TransactionType::IntentCancel && tx.amount() == 0 && tx.verify(sender.to_public()));
+        for (int mutation = 0; mutation < 4; ++mutation) {
+            auto invalid = envelope;
+            if (mutation == 0)
+                invalid.intent.receiver = receiver.id();
+            if (mutation == 1)
+                invalid.intent.token = network.id();
+            if (mutation == 2)
+                invalid.intent.amount = "1";
+            if (mutation == 3)
+                invalid.metadata = "payload";
+            check("noncanonical cancellation cannot be constructed",
+                  !make_intent(invalid.intent, invalid.metadata, sender).has_value());
+            invalid.intent.metadata_hash = intent_metadata_hash(invalid.metadata);
+            invalid.intent.signature = sign_payload(sender.key(), intent_signing_payload(invalid.intent)).value();
+            check("valid signature does not authorize malformed cancellation",
+                  !verify_intent(invalid, sender_public_key));
+        }
+    }
+    auto proof_pool = pool;
+    for (std::uint64_t nonce = 3; nonce <= 9; ++nonce) {
+        auto proof              = first;
+        proof.account_nonce     = nonce;
+        proof.operation         = IntentOperation::StorageProof;
+        proof.amount            = "0";
+        const auto signed_proof = make_intent(proof, "proof", sender);
+        check("queued dataset proof is admitted",
+              signed_proof.has_value()
+                  && proof_pool.submit({ signed_proof.value(), "proof" }, sender_public_key, 0, 10).has_value());
+    }
+    check("transfers and seven dataset proofs share one bounded batch",
+          proof_pool.ready({ }, 10, 64, 1024 * 1024).size() == 9);
+
     auto delayed                 = first;
     delayed.sender               = other_sender.id();
     delayed.valid_after_height   = 20;
@@ -421,6 +504,53 @@ int main() {
         check("rejected intent cannot be resubmitted after restart",
               !terminal_replay.has_value() && terminal_replay.error() == ConsensusError::DuplicateIntent);
     }
+    {
+        IntentStore historical(store_root / "historical.sqlite");
+        check("historical receipt store opens", historical.open().has_value());
+        check("a locally expired request is recorded",
+              historical.put(first_envelope).has_value()
+                  && historical.expire({ hash_intent(first_envelope.intent) }).has_value());
+        auto alternative      = first;
+        alternative.operation = IntentOperation::Cancel;
+        alternative.receiver  = sender.id();
+        alternative.amount    = "0";
+        const IntentEnvelope cancel { make_intent(alternative, "", sender).value(), "" };
+        check("a local cancellation can reserve the expired nonce", historical.put(cancel).has_value());
+        const IntentReceipt receipt { .intent_hash      = hash_intent(first_envelope.intent),
+                                      .status           = IntentStatus::Finalized,
+                                      .consensus_height = 14,
+                                      .dag_section      = 280 };
+        check("canonical finality replaces local expiry and a competing cancellation",
+              historical
+                  .commit_finalized({ { first_envelope, receipt } }, AppliedCheckpoint { 14, "certified-14" })
+                  .has_value());
+        check("the canonical receipt is durable",
+              MessagePack::serialize(historical.receipt(receipt.intent_hash).value().value())
+                  == MessagePack::serialize(receipt));
+        const auto cancelled = historical.receipt(hash_intent(cancel.intent)).value().value();
+        check("the losing local cancellation is rejected",
+              cancelled.status == IntentStatus::Rejected && cancelled.error == ConsensusError::InvalidNonce
+                  && historical.load_pending().value().empty());
+        auto unseen_receipt             = receipt;
+        unseen_receipt.intent_hash      = hash_intent(second_envelope.intent);
+        unseen_receipt.consensus_height = 15;
+        unseen_receipt.dag_section      = 300;
+        check("canonical finality accepts an intent absent from the local pool",
+              historical
+                  .commit_finalized({ { second_envelope, unseen_receipt } },
+                                    AppliedCheckpoint { 15, "certified-15" })
+                  .has_value());
+        check("historical canonical replay is idempotent",
+              historical
+                  .commit_finalized({ { second_envelope, unseen_receipt } },
+                                    AppliedCheckpoint { 15, "certified-15" })
+                  .has_value());
+        IntentPool losers;
+        check("local competing pool entry is accepted",
+              losers.submit(cancel, sender_public_key, 0, 10).has_value());
+        losers.discard_committed({ { sender.id(), 1 } });
+        check("canonical nonce advancement removes a losing local pool entry", losers.size() == 0);
+    }
     std::filesystem::remove_all(store_root);
 
     const std::vector<std::string> leaves { "tx-a", "tx-b", "tx-c", "tx-d", "tx-e" };
@@ -498,6 +628,33 @@ int main() {
     activation.authorization = activation_authorization.value();
     check("future aligned Shadow activation verifies",
           verify_activation_manifest(activation, governance_policy.value(), 1'500, 9));
+    auto mining_activation          = activation;
+    mining_activation.mining_policy = MiningEmissionPolicy { 201, { { 10, 7 }, { 10, 3 } } };
+    check("adding an unsigned mining policy invalidates activation",
+          !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
+    const auto sign_mining_activation = [&] {
+        mining_activation.authorization =
+            authorize_action(governance_policy.value(),
+                             9,
+                             activation_action_hash(mining_activation),
+                             { governance_keys[0], governance_keys[1], governance_keys[2] })
+                .value();
+    };
+    sign_mining_activation();
+    check("signed mining policy verifies",
+          verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
+    mining_activation.mining_policy.value().segments.front().units_per_epoch += 1;
+    check("a changed emission rate invalidates activation",
+          !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
+    mining_activation.mining_policy.value().first_epoch = 199;
+    sign_mining_activation();
+    check("even signed mining cannot start before activation",
+          !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
+    mining_activation.mining_policy.value().first_epoch                      = 201;
+    mining_activation.mining_policy.value().segments.front().units_per_epoch = MaximumMiningEmissionUnits;
+    sign_mining_activation();
+    check("even signed mining cannot exceed the total cap",
+          !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
     const auto weak_governance_policy = make_multisig_policy(network.id(), 2, public_keys(governance_keys));
     check("activation rejects a policy weaker than three of five",
           !verify_activation_manifest(activation, weak_governance_policy.value(), 1'500, 9));

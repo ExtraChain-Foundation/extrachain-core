@@ -32,6 +32,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <sqlite3.h>
 
 #include "chain/actor.h"
 #include "chain/dag.h" // Section
@@ -384,6 +385,58 @@ public:
         TEST_REQUIRE(!std::filesystem::exists(path));
     }
 
+    void packWriterSupportsLargeHistory() {
+        const auto path    = std::filesystem::temp_directory_path() / "exc_large_history.pack";
+        const auto payload = [](const SectionId &id) {
+            return id.to_string() + std::string(28 * 1024, 'x');
+        };
+        std::size_t reads = 0;
+        TEST_REQUIRE(Pack::write(path,
+                                 0,
+                                 SectionId(0),
+                                 SectionId(9999),
+                                 [&](const SectionId &id) -> std::optional<std::string> {
+                                     TEST_REQUIRE_EQ(id, SectionId(reads));
+                                     ++reads;
+                                     return payload(id);
+                                 })
+                         .has_value());
+        TEST_REQUIRE_EQ(reads, Pack::SECTIONS_PER_PACK);
+        const auto reader = Pack::Reader::open(path);
+        TEST_REQUIRE(reader.has_value());
+        for (std::size_t first = 0; first < Pack::SECTIONS_PER_PACK; first += Pack::SECTIONS_PER_FRAME) {
+            const auto last = std::min(first + Pack::SECTIONS_PER_FRAME, Pack::SECTIONS_PER_PACK) - 1;
+            const auto rows = reader.value().read_range(SectionId(first), SectionId(last));
+            TEST_REQUIRE_EQ(rows.size(), last - first + 1);
+            for (const auto &[id, bytes] : rows)
+                TEST_REQUIRE_EQ(bytes, payload(id));
+        }
+        TEST_REQUIRE(reader.value().read_range(SectionId(0), SectionId(9999)).empty());
+        TEST_REQUIRE_EQ(reader.value().read(SectionId(9999)),
+                        std::optional<std::string>(payload(SectionId(9999))));
+        const auto missing = Pack::write(path,
+                                         0,
+                                         SectionId(0),
+                                         SectionId(40),
+                                         [&](const SectionId &id) -> std::optional<std::string> {
+                                             if (id == SectionId(35))
+                                                 return std::nullopt;
+                                             return payload(id);
+                                         });
+        TEST_REQUIRE(!missing.has_value());
+        TEST_REQUIRE_EQ(missing.error(), Pack::Error::ReadFailed);
+        const auto unchanged = Pack::Reader::open(path);
+        TEST_REQUIRE(unchanged.has_value());
+        TEST_REQUIRE_EQ(unchanged.value().count(), Pack::SECTIONS_PER_PACK);
+        const auto oversized =
+            Pack::write(path, 0, SectionId(0), SectionId(0), [](const SectionId &) -> std::optional<std::string> {
+                return std::string(64 * 1024 * 1024, 'x');
+            });
+        TEST_REQUIRE(!oversized.has_value());
+        TEST_REQUIRE_EQ(oversized.error(), Pack::Error::InvalidFormat);
+        std::filesystem::remove(path);
+    }
+
     void hotSectionStorePersistsAndPrunesRevisions() {
         const auto dir  = std::filesystem::temp_directory_path() / "exc_hot_section_store";
         const auto path = dir / "HotSections.db";
@@ -432,8 +485,128 @@ public:
             TEST_REQUIRE(!reopened.contains(SectionId(11)));
             TEST_REQUIRE(!reopened.bounds().has_value());
             TEST_REQUIRE(!reopened.committed_range().has_value());
+
+            // Large payloads are framed on disk and read back unchanged; a payload that
+            // starts with the frame magic itself still round-trips.
+            std::string large = "{\"transactions\":[";
+            while (large.size() < 256 * 1024)
+                large += "{\"data\":\"a2V5LXZhbHVlLXBheWxvYWQ=\"},";
+            large += "{}]}";
+            const std::string magic("\x28\xb5\x2f\xfd tiny", 9);
+            TEST_REQUIRE(reopened.commit_batch({ { SectionId(30), large }, { SectionId(31), magic } }, std::nullopt));
+            TEST_REQUIRE(reopened.put(SectionId(32), "small"));
+            TEST_REQUIRE(reopened.contains(SectionId(30)));
+            TEST_REQUIRE_EQ(reopened.get(SectionId(30)), std::optional<std::string>(large));
+            TEST_REQUIRE_EQ(reopened.get(SectionId(31)), std::optional<std::string>(magic));
+            const auto framed = reopened.read_range(SectionId(30), SectionId(32));
+            TEST_REQUIRE_EQ(framed.size(), static_cast<std::size_t>(3));
+            TEST_REQUIRE_EQ(framed.at(SectionId(30)), large);
+            TEST_REQUIRE_EQ(framed.at(SectionId(31)), magic);
+            TEST_REQUIRE_EQ(framed.at(SectionId(32)), std::string("small"));
         }
 
+        {
+            sqlite3 *raw = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_open(path.string().c_str(), &raw), SQLITE_OK);
+            std::unique_ptr<sqlite3, decltype(&sqlite3_close)> database(raw, sqlite3_close);
+            sqlite3_stmt *statement = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_prepare_v2(database.get(),
+                                               "SELECT section,length(payload),hex(substr(payload,1,4)) "
+                                               "FROM sections ORDER BY section",
+                                               -1,
+                                               &statement,
+                                               nullptr),
+                            SQLITE_OK);
+            std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> query(statement, sqlite3_finalize);
+            const auto row = [&](int section, bool framed) {
+                TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_ROW);
+                TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 0), section);
+                const auto prefix =
+                    std::string(reinterpret_cast<const char *>(sqlite3_column_text(query.get(), 2)));
+                TEST_REQUIRE_EQ(prefix == "28B52FFD", framed);
+                return sqlite3_column_int(query.get(), 1);
+            };
+            TEST_REQUIRE(row(30, true) < 16 * 1024);
+            TEST_REQUIRE(row(31, true) > 0);
+            TEST_REQUIRE_EQ(row(32, false), 5);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_DONE);
+        }
+
+        std::filesystem::remove_all(dir);
+    }
+
+    void hotSectionStoreMigratesLargeRows() {
+        const auto dir  = std::filesystem::temp_directory_path() / "exc_hot_section_rowid";
+        const auto path = dir / "HotSections.db";
+        std::filesystem::remove_all(dir);
+        std::filesystem::create_directory(dir);
+        const auto open_database = [&]() {
+            sqlite3 *raw = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_open(path.string().c_str(), &raw), SQLITE_OK);
+            return std::unique_ptr<sqlite3, decltype(&sqlite3_close)>(raw, sqlite3_close);
+        };
+        {
+            auto database = open_database();
+            TEST_REQUIRE_EQ(
+                sqlite3_exec(
+                    database.get(),
+                    "CREATE TABLE sections(section INTEGER PRIMARY KEY,payload BLOB NOT NULL) WITHOUT ROWID;"
+                    "INSERT INTO sections VALUES(10,zeroblob(1048576)),(11,X'00ff00');"
+                    "CREATE TABLE chain_meta(key TEXT PRIMARY KEY,value INTEGER NOT NULL) WITHOUT ROWID;"
+                    "INSERT INTO chain_meta VALUES('committed_first',10),('committed_last',11);"
+                    "CREATE TABLE sections_rowid(sentinel INTEGER);INSERT INTO sections_rowid VALUES(42);",
+                    nullptr,
+                    nullptr,
+                    nullptr),
+                SQLITE_OK);
+        }
+        {
+            HotSectionStore blocked(path);
+            TEST_REQUIRE(!blocked.is_open());
+        }
+        {
+            auto          database = open_database();
+            sqlite3_stmt *raw      = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_prepare_v2(database.get(),
+                                               "SELECT count(*),sum(length(payload)) FROM sections",
+                                               -1,
+                                               &raw,
+                                               nullptr),
+                            SQLITE_OK);
+            std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> query(raw, sqlite3_finalize);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_ROW);
+            TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 0), 2);
+            TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 1), 1048579);
+            query.reset();
+            TEST_REQUIRE_EQ(sqlite3_exec(database.get(), "DROP TABLE sections_rowid", nullptr, nullptr, nullptr),
+                            SQLITE_OK);
+        }
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            HotSectionStore store(path);
+            TEST_REQUIRE(store.is_open());
+            TEST_REQUIRE_EQ(store.get(SectionId(10)), std::optional<std::string>(std::string(1048576, '\0')));
+            TEST_REQUIRE_EQ(store.get(SectionId(11)), std::optional<std::string>(std::string("\0\xff\0", 3)));
+            const std::optional<std::pair<SectionId, SectionId>> expected =
+                std::pair { SectionId(10), SectionId(11) };
+            TEST_REQUIRE_EQ(store.committed_range(), expected);
+            TEST_REQUIRE(!store.get(SectionId(12)).has_value());
+        }
+        {
+            auto          database = open_database();
+            sqlite3_stmt *raw      = nullptr;
+            TEST_REQUIRE_EQ(sqlite3_prepare_v2(database.get(),
+                                               "SELECT rowid FROM sections ORDER BY section",
+                                               -1,
+                                               &raw,
+                                               nullptr),
+                            SQLITE_OK);
+            std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> query(raw, sqlite3_finalize);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_ROW);
+            TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 0), 10);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_ROW);
+            TEST_REQUIRE_EQ(sqlite3_column_int(query.get(), 0), 11);
+            TEST_REQUIRE_EQ(sqlite3_step(query.get()), SQLITE_DONE);
+        }
         std::filesystem::remove_all(dir);
     }
 
@@ -857,8 +1030,14 @@ int main() {
     runner.run("oversized pack section range", [&] {
         tests.packWriterRejectsOversizedSectionRange();
     });
+    runner.run("large packed history", [&] {
+        tests.packWriterSupportsLargeHistory();
+    });
     runner.run("hot section store revisions", [&] {
         tests.hotSectionStorePersistsAndPrunesRevisions();
+    });
+    runner.run("hot section large-row migration", [&] {
+        tests.hotSectionStoreMigratesLargeRows();
     });
     runner.run("wire format round trip", [&] {
         tests.wireFormatRoundTrip();

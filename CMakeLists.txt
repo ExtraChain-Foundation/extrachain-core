@@ -56,7 +56,7 @@ endif()
 
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED COMPONENTS system thread json)
+find_package(Boost CONFIG REQUIRED COMPONENTS system thread json icl)
 find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
@@ -182,8 +182,14 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/version_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_collection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/catalog_metadata.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/catalog_sync.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_vector.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/vector_index.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/vector_snapshot.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/vector_sync.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/vector_descriptor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/actor_id.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/actor_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/transaction.cpp
@@ -200,6 +206,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/chain_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/control_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/file_cipher.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/box_session.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_public.cpp
@@ -217,6 +224,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/responder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/traffic_meter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/peer_identity.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/wire_format.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
@@ -232,6 +240,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/legacy_compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/version.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/work_budget.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/deadline_task.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/periodic_task.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/runtime/runtime.cpp
@@ -245,9 +254,20 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/relay_transport.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_engine.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_protocol.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/storage_proof.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/storage_index.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_epoch.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_policy.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_state.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_settlement.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_request.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_transaction.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/mining_replay.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/intent_store.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/light_client.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/balance_snapshot.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_service_mining.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_types.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/peer_authenticator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/safety_store.cpp
@@ -392,6 +412,7 @@ target_link_libraries(
   Boost::mp11
   Boost::describe
   Boost::json
+  Boost::icl
   bip3x
   extrachain-wamr
   $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>

@@ -25,7 +25,7 @@
 
 namespace ExtraChain::Consensus {
 
-    inline constexpr std::uint16_t ProtocolVersion         = 4;
+    inline constexpr std::uint16_t ProtocolVersion         = 5;
     inline constexpr std::uint64_t ShadowSectionInterval   = 20;
     inline constexpr std::uint64_t MaximumShadowBatchBytes = 64ULL * 1024ULL * 1024ULL;
     inline constexpr std::uint64_t MaximumShadowSyncBytes  = 32ULL * 1024ULL * 1024ULL;
@@ -200,6 +200,7 @@ namespace ExtraChain::Consensus {
         std::string   account_state_root;
         std::string   contract_state_root;
         std::string   token_registry_root;
+        std::string   mining_state_root;
         std::string   validator_set_hash;
 
         MSGPACK_DEFINE(protocol_version,
@@ -211,6 +212,7 @@ namespace ExtraChain::Consensus {
                        account_state_root,
                        contract_state_root,
                        token_registry_root,
+                       mining_state_root,
                        validator_set_hash)
     };
 

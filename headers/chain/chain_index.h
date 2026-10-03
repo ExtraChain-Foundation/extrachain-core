@@ -24,6 +24,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <stop_token>
 #include <vector>
 
 #include "extrachain_global.h"
@@ -110,11 +111,14 @@ public:
     // An older database stays on the safe DAG fallback until a full rebuild.
     bool derived_index_ready() const;
 
+    // Persist pending reconstruction before a separate recovery marker is removed.
+    bool invalidate_derived_index();
+
     // Rebuild index from pack registry + hot sections. Blocking; safe to call
     // on startup if we suspect the index is stale (missing file, row-count
     // mismatch, etc.). Uses bulk-load pragmas (sync=off, journal=memory) and
     // restores safe settings afterwards.
-    void rebuild_from_disk();
+    void rebuild_from_disk(std::stop_token stop = { });
 
     // Drop all rows. Used by wipe flows.
     void clear();

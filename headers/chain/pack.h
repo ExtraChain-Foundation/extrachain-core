@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -91,7 +92,7 @@ private:
 };
 
 /**
- * One-shot writer. Takes all sections for the pack, builds dict from their content,
+ * One-shot writer. Builds a dictionary from the first frame,
  * compresses in mini-frames, writes an immutable .pack file.
  *
  * sections must contain at least one entry and keys must be consecutive integers.
@@ -100,5 +101,13 @@ EXTRACHAIN_EXPORT std::expected<void, Error>
 write(const std::filesystem::path                      &path,
       PackId                                            pack_id,
       const std::map<SectionId, std::string>           &sections);
+
+using SectionSource = std::function<std::optional<std::string>(const SectionId &)>;
+
+EXTRACHAIN_EXPORT std::expected<void, Error> write(const std::filesystem::path &path,
+                                                   PackId                       pack_id,
+                                                   const SectionId             &first,
+                                                   const SectionId             &last,
+                                                   const SectionSource         &read_section);
 
 } // namespace Pack

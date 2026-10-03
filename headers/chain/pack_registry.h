@@ -70,6 +70,10 @@ namespace Pack {
 
         // Create a new pack file in the managed directory.
         std::expected<void, Error> create_pack(PackId pack_id, const std::map<SectionId, std::string> &sections);
+        std::expected<void, Error> create_pack(PackId               pack_id,
+                                               const SectionId     &first,
+                                               const SectionId     &last,
+                                               const SectionSource &read_section);
 
         // Ordered list of known pack ids
         std::vector<PackId> known_packs() const;
@@ -120,6 +124,8 @@ namespace Pack {
                                                  const Validator &validator = {});
 
     private:
+        std::expected<void, Error> register_pack(PackId pack_id);
+
         struct PackMeta {
             PackId    id;
             SectionId first;

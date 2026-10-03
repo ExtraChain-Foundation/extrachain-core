@@ -255,8 +255,21 @@ namespace Pack {
         if (!res.has_value())
             return res;
 
-        // Update metadata
-        auto r = Reader::open(path);
+        return register_pack(pack_id);
+    }
+
+    std::expected<void, Error> Registry::create_pack(PackId               pack_id,
+                                                     const SectionId     &first,
+                                                     const SectionId     &last,
+                                                     const SectionSource &read_section) {
+        const auto result = Pack::write(pack_path(pack_id), pack_id, first, last, read_section);
+        if (!result.has_value())
+            return result;
+        return register_pack(pack_id);
+    }
+
+    std::expected<void, Error> Registry::register_pack(PackId pack_id) {
+        auto r = Reader::open(pack_path(pack_id));
         if (!r.has_value())
             return std::unexpected(r.error());
 
