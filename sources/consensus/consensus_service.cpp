@@ -812,8 +812,8 @@ namespace ExtraChain::Consensus {
         // nothing, but each copy still pays a full deserialize-and-validate pass
         // under the mutex — hundreds of milliseconds for a batch this size, and a
         // lagging node receives them by the dozen exactly when it can least afford
-        // the delay.
-        if (consensus_->engine().batch_for(batch.header_hash).has_value()) {
+        // the delay. Asking batch_for here copied the staged batch (up to 16 MB) per copy.
+        if (consensus_->engine().has_batch(batch.header_hash)) {
             eDebug("[Shadow] Dropped a duplicate copy of batch {}", batch.header_hash.substr(0, 12));
             const auto pending = pending_proposals_.find(batch.header_hash);
             if (pending != pending_proposals_.end()) {

@@ -89,6 +89,8 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] bool                    is_local_leader(std::uint64_t height, std::uint64_t round) const;
         [[nodiscard]] std::optional<Proposal> proposal_for(std::string_view header_hash) const;
         [[nodiscard]] std::optional<SectionBatchData> batch_for(std::string_view header_hash) const;
+        // Whether batch_for would return the batch, without copying it out of memory.
+        [[nodiscard]] bool has_batch(std::string_view header_hash) const;
         std::expected<void, ConsensusError>           prune_stored_batches(std::uint64_t below_height);
         [[nodiscard]] std::optional<SectionBatchManifest> archived_manifest_for(std::string_view header_hash) const;
         [[nodiscard]] ConsensusMetricsSnapshot        metrics() const noexcept;

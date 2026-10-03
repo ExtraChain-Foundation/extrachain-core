@@ -1023,6 +1023,16 @@ namespace ExtraChain::Consensus {
         return stored.has_value() ? stored.value() : std::nullopt;
     }
 
+    bool ConsensusEngine::has_batch(std::string_view header_hash) const {
+        std::lock_guard lock(mutex_);
+        if (batches_.contains(std::string(header_hash))) {
+            return true;
+        }
+        // A stored row still has to decode, as in batch_for: a duplicate copy repairs a broken one.
+        const auto stored = store_->load_batch(header_hash);
+        return stored.has_value() && stored.value().has_value();
+    }
+
     std::expected<void, ConsensusError> ConsensusEngine::prune_stored_batches(std::uint64_t below_height) {
         std::lock_guard lock(mutex_);
         return store_->archive_batches_below(below_height);

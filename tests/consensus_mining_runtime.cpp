@@ -786,8 +786,11 @@ int main() {
         const auto  header = hash_header(oldest.header);
         const auto  stored = archive.batch_for(header);
         TEST_REQUIRE(stored.has_value());
+        TEST_REQUIRE(archive.has_batch(header));
+        TEST_REQUIRE(!archive.has_batch(std::string(64, '0')));
         TEST_REQUIRE(archive.prune_stored_batches(oldest.header.height + 1).has_value());
         TEST_REQUIRE(!archive.batch_for(header).has_value());
+        TEST_REQUIRE(!archive.has_batch(header));
         const auto rebuilt = ConsensusStateTestFixture::finalized_batch(service, oldest);
         TEST_REQUIRE(rebuilt.has_value());
         TEST_REQUIRE_EQ(hash_batch_manifest(rebuilt.value().manifest), oldest.header.batch_root);
