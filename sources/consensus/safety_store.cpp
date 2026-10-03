@@ -60,8 +60,8 @@ namespace ExtraChain::Consensus {
             "ON consensus_finality_proofs(first_section, last_section)";
 
         template <typename T>
-        std::expected<T, ConsensusError> decode(std::string_view encoded) {
-            const auto bytes = Utils::from_base64(std::string(encoded));
+        std::expected<T, ConsensusError> decode(const std::string& encoded) {
+            const auto bytes = Utils::from_base64(encoded);
             if (!bytes.has_value()) {
                 return std::unexpected(ConsensusError::StorageFailure);
             }
@@ -72,9 +72,19 @@ namespace ExtraChain::Consensus {
             return value.value();
         }
 
+        // Batches are up to 16 MB: encode from the packing buffer instead of a string copy of it.
         template <typename T>
         std::string encode(const T& value) {
-            return Utils::to_base64(MessagePack::serialize(value));
+            msgpack::sbuffer buffer;
+            msgpack::pack(buffer, value);
+            return Utils::to_base64(std::string_view(buffer.data(), buffer.size()));
+        }
+
+        // A row built from an initializer list copies every value once more; the payload is moved.
+        DbRow stored_row(const std::string& hash, std::uint64_t height, std::string payload) {
+            DbRow row { { "hash", hash }, { "height", std::to_string(height) } };
+            row.emplace("payload", std::move(payload));
+            return row;
         }
 
         template <typename T>
@@ -332,10 +342,7 @@ namespace ExtraChain::Consensus {
                                                                    std::uint64_t           height) {
         std::lock_guard lock(mutex_);
         if (!database_ || !database_->is_open()
-            || !database_->replace("consensus_batches",
-                                   { { "hash", batch.header_hash },
-                                     { "height", std::to_string(height) },
-                                     { "payload", encode(batch) } })) {
+            || !database_->replace("consensus_batches", stored_row(batch.header_hash, height, encode(batch)))) {
             return std::unexpected(ConsensusError::StorageFailure);
         }
         return {};
@@ -355,9 +362,9 @@ namespace ExtraChain::Consensus {
                                                           { "payload", encode(proposal) } });
         const bool batch_stored    = proposal_stored
                                   && database_->replace("consensus_batches",
-                                                        { { "hash", batch.header_hash },
-                                                          { "height", std::to_string(proposal.header.height) },
-                                                          { "payload", encode(batch) } });
+                                                        stored_row(batch.header_hash,
+                                                                   proposal.header.height,
+                                                                   encode(batch)));
         if (!batch_stored || !database_->query("COMMIT")) {
             database_->query("ROLLBACK");
             return std::unexpected(ConsensusError::StorageFailure);
@@ -403,9 +410,9 @@ namespace ExtraChain::Consensus {
                                                           { "payload", encode(proposal) } });
         const bool batch_stored    = proposal_stored
                                   && database_->replace("consensus_batches",
-                                                        { { "hash", batch.header_hash },
-                                                          { "height", std::to_string(proposal.header.height) },
-                                                          { "payload", encode(batch) } });
+                                                        stored_row(batch.header_hash,
+                                                                   proposal.header.height,
+                                                                   encode(batch)));
         const bool vote_stored =
             batch_stored
             && database_->insert("safety_votes", { { "vote_key", key }, { "payload", encode(vote) } });
