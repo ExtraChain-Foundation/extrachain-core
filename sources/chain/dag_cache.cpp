@@ -851,6 +851,9 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
             if (dag->mode() == DagMode::Full) {
                 // write_index(tx.sender(), tx.receiver(), tx.section(), tx.timestamp());
             }
+            // Sections installed by sync never pass save_transaction; the cache pass reads
+            // every one of them, so the contract catalog follows it here.
+            index_contract_transaction(tx);
         }
     }
 
@@ -861,7 +864,10 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         }
     }
 
-    if (!write_cache_section(genesis_section) || !cache_db_->query("COMMIT")) {
+    // A pass from the first saved section has indexed the whole history.
+    if (!write_cache_section(genesis_section)
+        || (cached_section_ == BigNumber(-1) && !mark_contract_catalog_follows_cache())
+        || !cache_db_->query("COMMIT")) {
         static_cast<void>(cache_db_->query("ROLLBACK"));
         return { false, start_section };
     }
@@ -1111,7 +1117,20 @@ bool DagCache::ensure_contract_catalog_schema() {
             return false;
         }
     }
-    return cache_db_->query(Config::DataStorage::ContractCatalogCreate);
+    const bool dropped = !cache_db_->table_exists("contract_catalog");
+    return cache_db_->query(Config::DataStorage::ContractCatalogCreate)
+           && cache_db_->query("CREATE TABLE IF NOT EXISTS contract_catalog_meta "
+                               "(id INTEGER PRIMARY KEY CHECK (id = 1), follows_cache INTEGER NOT NULL)")
+           && (!dropped || cache_db_->query("DELETE FROM contract_catalog_meta"));
+}
+
+bool DagCache::contract_catalog_follows_cache() {
+    return !cache_db_->select("SELECT follows_cache FROM contract_catalog_meta WHERE id = 1 AND follows_cache = 1")
+                .empty();
+}
+
+bool DagCache::mark_contract_catalog_follows_cache() {
+    return cache_db_->replace("contract_catalog_meta", { { "id", "1" }, { "follows_cache", "1" } });
 }
 
 void DagCache::index_contract_transaction(const Transaction& transaction) {
@@ -1213,9 +1232,14 @@ ExtraChain::Contracts::ContractCatalogPage DagCache::list_contracts(
     }
 
     {
+        // Scanning the whole history used to happen on every start of a node whose catalog
+        // was empty, which is every node of a network without contracts: on the Ubuntu stand
+        // it read 640 MB of sections inside login and held a restarted validator silent for
+        // two minutes, growing with the chain. Now it runs once, for a catalog that predates
+        // indexing in the cache pass.
         std::unique_lock<std::mutex> lock(contract_catalog_mutex_);
         if (!contract_catalog_scanned_) {
-            if (cache_db_->count("contract_catalog") == 0) {
+            if (!contract_catalog_follows_cache()) {
                 rebuild_contract_catalog();
             }
             contract_catalog_scanned_ = true;
@@ -1280,5 +1304,5 @@ bool DagCache::rebuild_contract_catalog() {
             index_contract_transaction(transaction);
         }
     }
-    return true;
+    return mark_contract_catalog_follows_cache();
 }

@@ -46,6 +46,16 @@ public:
         dag.timer_tick();
     }
 
+    // Writes a section the way sync installs it: no admission, no indexing.
+    static bool store_raw_section(Dag& dag, const Section& section) {
+        return dag.hot_section_store_->put(section.id, Json::serialize(section));
+    }
+
+    // A live chain starts at its genesis section; a restart resets the cache of one that does not.
+    static void start_chain_at_genesis(Dag& dag) {
+        dag.first_saved_section_ = SectionId(0);
+    }
+
     static bool pack_history_dirty(Dag& dag) {
         std::lock_guard lock(dag.pack_sync_mutex_);
         return dag.pack_history_dirty_;

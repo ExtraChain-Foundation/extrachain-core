@@ -253,5 +253,9 @@ private:
     bool clear_balance_snapshot();
     bool ensure_contract_catalog_schema();
     bool rebuild_contract_catalog();
+    // The catalog is indexed by every cache pass, so once it has covered the history it only
+    // has to follow the cache; an empty catalog no longer means an unscanned one.
+    bool contract_catalog_follows_cache();
+    bool mark_contract_catalog_follows_cache();
     friend Dag;
 };
