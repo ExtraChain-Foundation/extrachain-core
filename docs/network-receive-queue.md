@@ -1,0 +1,102 @@
+# Bounded Network Receive Queue
+
+Task 210 moves network reputation SQL off the node's Qt event loop. It does not
+batch writes, change SQLite pragmas/schema, cache reputation, change admission
+rules, or move the message switch to a worker thread.
+
+## Ordering And Ownership
+
+`NetworkManager::message_received` checks shutdown and the 64-byte signature
+boundary before enqueueing an owned copy of the frame, IP and peer identifier.
+Only admitted frames reach duplicate accounting and deserialization. The queue
+dispatches one item at a time on its QObject owner thread; one dedicated worker
+executes deferred SQL stages. The owner thread remains available while SQL waits.
+
+For a non-Custom message, the order is: read current reputation on the worker,
+set the responder's read-before-increment value on the owner, log/count traffic,
+increment broadcast reputation on the worker, then run the original message
+switch on the owner. Focused messages have no increment. Missing-value fallback
+and the network-actor multiplier are unchanged. Custom messages do not read or
+write reputation, but cannot overtake a previously admitted message.
+
+The pending receive owns the decoded body, signature, identifier and responder.
+The next packet cannot begin until all stages and callbacks of the current one
+have returned. A completion delivered by a nested Qt event loop is retained and
+reposted after the outer handler/continuation returns. This also preserves the
+borrowed input packet's lifetime during reentrant `stop()`.
+
+Periodic reputation expiry is a FIFO maintenance item on the same worker. There
+is at most one pending/active maintenance item. It has one reserved slot so a
+full packet queue cannot prevent an expiry request; it cannot overtake accepted
+packets. Timer ticks while that item is pending are coalesced.
+
+## Capacity And Failure
+
+Default capacity is 1024 packets and 64 MiB of retained raw frame/IP/identifier
+bytes, including the active packet. One coalesced maintenance item is additional.
+Admission and capacity accounting are mutex-protected. These limits do not bound
+Qt/socket buffers, decoded objects, allocator overhead or total process RSS.
+
+Overflow rejects the new packet before changing duplicate state and closes its
+nonempty peer identifier through the existing owner-thread connection remover.
+It does not evict earlier accepted packets. This is global backpressure, not a
+per-peer fairness or rate-limiting mechanism. Native load qualification must
+check queue rejection and connection churn, not only memory use.
+
+Thrown worker/handler exceptions suppress that packet's remaining dispatch and
+report a generic error without payloads or credentials. Later packets may proceed.
+An exception from the error reporter cannot strand the queue. The existing
+Luminance API returns no write status: a nonthrowing failed SQLite query retains
+its previous semantics and is not converted into a successful-commit guarantee.
+
+## Shutdown Contract
+
+Enqueue may be called concurrently only while the queue's lifetime is externally
+guaranteed. `defer`, `stop` and destruction belong to the QObject owner thread;
+deferred operations must not call back into the queue or wait on that thread.
+Initialization/reset/destruction of the storage must not overlap worker access.
+
+`ExtraChainNode` joins the receive worker at the start of its destructor and its
+thread-finished cleanup, before cleanup callbacks or any manager teardown.
+LuminanceManager is not a QObject. It is now explicitly owned by unique_ptr,
+replacing an unowned allocation; its database closes after the early join and
+before QObject deletes the network-manager child. A QPointer guards the network
+manager when deferred cleanup has already deleted it. This corrects ownership;
+it is not evidence that the previously leaked storage caused a use-after-free.
+`NetworkManager` also destroys the queue first in its own destructor. Stop rejects
+new intake, joins the already accepted SQL stage (including a queued increment),
+discards not-yet-dispatched packets and suppresses queued continuations. It does
+not promise to process the backlog or to turn an accepted read into a new write
+after shutdown. The existing node-enabled checks suppress stages/dispatch that
+have not started. No new dependence on the shared Boost pool is introduced.
+
+Stop can wait for the underlying synchronous SQL operation; it is not a bounded
+shutdown deadline. No journal mode, fsync policy or power-loss guarantee changes.
+Lifecycle-only direct storage callers must retain their existing lifetime rules.
+
+## Tests And Qualification
+
+With `EXTRACHAIN_BUILD_DB_TESTS=ON`, build/run `extrachain-receive-tests` as well as
+`extrachain-db-tests`. Queue tests use real Qt events and a dedicated worker;
+reputation order/shutdown tests use the real LuminanceManager and temporary SQLite.
+They cover owned input, FIFO, active/metadata capacity, owner-loop progress,
+read/commit/dispatch order, maintenance, shutdown, exceptions, self-deletion,
+concurrent intake and immediate idle shutdown. Two nested-event-loop tests failed
+before the reentrancy fix and pass after it; reentrant stop is also covered.
+The parent-ownership regression uses a real Qt child queue and owned real SQLite
+storage, then verifies commit visibility after the storage is destroyed.
+`network_receive_shutdown.py` compiles the actual node shutdown bodies with
+dependency-order observers: destructor and thread-finished cleanup failed before
+the early join, while uninitialized-node destruction already passed. This checks
+wiring, not a complete running-node teardown or proof of a historical crash.
+
+`network_receive_frame.py` and `network_custom_reputation.py` compile extracted
+production fragments with controlled queue/DB/decoding observers. They check
+admission-before-cache, shutdown boundaries, unchanged Custom behavior and
+non-Custom responder semantics. They are not full-node or socket integration tests.
+
+These focused tests do not qualify complete application shutdown, platform
+packaging, the 100-client workload or a latency improvement. In particular,
+ActorIndex writes in the message switch still run on the owner thread. Task 210
+requires independent runtime qualification; full-workload results are kept in
+the owner-authorized local report, not inferred from the queue tests.

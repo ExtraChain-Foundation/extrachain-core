@@ -24,6 +24,7 @@
 #include "managers/extrachain_node.h"
 #include "managers/luminance_manager.h"
 #include "network/upnpconnection.h"
+#include "network/network_receive_queue.h"
 #include "network/upnpconnector.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
@@ -122,6 +123,9 @@ NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
     : QObject(node)
     , node(node)
     , ws_port(port) {
+    receive_queue_ = std::make_unique<NetworkReceiveQueue>(this,
+        [this](const NetworkReceivedMessage &incoming) { prepare_received(incoming); },
+        [](std::exception_ptr) { eWarning("[NetworkManager] Receive stage failed"); });
     if (!first_nodes_.empty()) {
         first_node_ = first_nodes_.front();
     }
@@ -459,6 +463,8 @@ bool NetworkManager::check_port_sync(const QString    &ip,
 }
 
 NetworkManager::~NetworkManager() {
+    // Finish the accepted SQL stage before any receive callback loses its owner
+    receive_queue_.reset();
     eLog("[NetworkManager] Finish him with {} connections", connections_->size());
 
     std::set<SocketService *> copied;
@@ -471,6 +477,10 @@ NetworkManager::~NetworkManager() {
         connection->flush();
         emit connection->close();
     }
+}
+
+void NetworkManager::stop_receive() {
+    receive_queue_->stop();
 }
 
 void NetworkManager::check_connections_status() {
@@ -1057,6 +1067,19 @@ bool NetworkManager::check_message_count(const std::string &msg) {
     return flag_result;
 }
 
+struct NetworkManager::PendingReceive {
+    PendingReceive(const MessageBody &body, const std::string &identifier, const std::string &signature)
+        : package(body, identifier, signature) {
+    }
+
+    NetworkPackageStorage package;
+    Responder responder;
+    std::size_t received_bytes = 0;
+    bool is_luminance = false;
+    bool is_node = false;
+    int luminance = -1;
+};
+
 void NetworkManager::message_received(const std::string &message,
                                       const std::string &ip,
                                       const std::string &identifier) {
@@ -1069,6 +1092,35 @@ void NetworkManager::message_received(const std::string &message,
         eWarning("[NetworkManager] Signed message has no body or a truncated signature");
         return;
     }
+
+    if (!receive_queue_->enqueue(message, ip, identifier)) {
+        eWarning("[NetworkManager] Receive queue capacity exceeded; rejecting packet");
+        if (!identifier.empty()) {
+            QMetaObject::invokeMethod(this, [this, identifier] {
+                remove_connection(QString::fromStdString(identifier));
+            }, Qt::AutoConnection);
+        }
+    }
+}
+
+void NetworkManager::queue_luminance_cleanup() {
+    if (node_enabled.load()) {
+        receive_queue_->enqueue_maintenance();
+    }
+}
+
+void NetworkManager::prepare_received(const NetworkReceivedMessage &incoming) {
+    if (!node_enabled.load()) {
+        return;
+    }
+    if (incoming.maintenance) {
+        auto *storage = node->luminance_manager();
+        receive_queue_->defer([storage] { storage->remove_old(); }, [] {});
+        return;
+    }
+    const auto &message = incoming.message;
+    const auto &ip = incoming.ip;
+    const auto &identifier = incoming.identifier;
 
     if (!check_message_count(message)) {
         eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
@@ -1119,10 +1171,8 @@ void NetworkManager::message_received(const std::string &message,
       }
       */
 
-    SendMode      send_type  = message_body.send_type;
     MessageType   type       = message_body.message_type;
     MessageStatus status     = message_body.status;
-    std::string   serialized = message_body.data;
     std::string   mess_id    = message_body.message_id;
     std::string   message_id(mess_id.begin(), mess_id.end());
     bool          is_luminance = node_id.actor_id == node->network_id();
@@ -1172,47 +1222,84 @@ void NetworkManager::message_received(const std::string &message,
         }
     }
 
-    const NetworkPackageStorage package_data(message_body, identifier, std::string(sign));
-    bool                        is_node = ip == first_node_;
+    auto pending = std::make_shared<PendingReceive>(message_body, identifier, std::string(sign));
+    pending->responder = Responder(this);
+    pending->responder.set_message_id(message_id);
+    pending->responder.add_identifier(identifier);
+    pending->responder.set_message_type(type);
+    pending->responder.set_node_id(node_id);
+    pending->responder.set_ip(ip);
+    pending->received_bytes = message.size();
+    pending->is_luminance = is_luminance;
+    pending->is_node = ip == first_node_;
 
-    Responder responder(this);
-    responder.set_message_id(message_id);
-    responder.add_identifier(identifier);
-    responder.set_message_type(type);
-    responder.set_node_id(node_id);
-    responder.set_ip(ip);
+    if (type == MessageType::Custom) {
+        resume_received(pending);
+        return;
+    }
+    auto *storage = node->luminance_manager();
+    receive_queue_->defer([storage, pending] {
+        pending->luminance = storage->read_luminance(pending->responder.node_id());
+    }, [this, pending] { resume_received(pending); });
+}
 
-    // Custom dispatch never passes the responder or consumes its reputation
+void NetworkManager::resume_received(const std::shared_ptr<PendingReceive> &pending) {
+    if (!node_enabled.load()) {
+        return;
+    }
+    const auto &body = pending->package.msg_body;
+    const auto type = body.message_type;
     if (type != MessageType::Custom) {
-        int luminance = node->luminance_manager()->read_luminance(node_id);
-        responder.set_luminance(luminance == -1 ? 1 : luminance);
-
-        if (is_luminance) {
-            responder.set_luminance(responder.luminance() * 10);
+        pending->responder.set_luminance(pending->luminance == -1 ? 1 : pending->luminance);
+        if (pending->is_luminance) {
+            pending->responder.set_luminance(pending->responder.luminance() * 10);
         }
     }
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
+        const auto &serialized = body.data;
         msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
         msgpack::object        deserialized = oh.get();
         eLog("[Network Message] Received: type {}, status {}, id {}, body: {}",
              type,
-             status,
-             mess_id,
+             body.status,
+             body.message_id,
              (std::stringstream() << deserialized).str());
     }
 #endif
 
-    calculate_traffic_->add_bytes_received(ip, message.size());
+    calculate_traffic_->add_bytes_received(pending->responder.ip(), pending->received_bytes);
 
     // QElapsedTimer timer;
     // timer.start();
 
     // TODO: not global
-    if (send_type == SendMode::Broadcast && type != MessageType::Custom) {
-        node->luminance_manager()->increment(node_id);
+    if (body.send_type == SendMode::Broadcast && type != MessageType::Custom) {
+        auto *storage = node->luminance_manager();
+        receive_queue_->defer([storage, pending] {
+            storage->increment(pending->responder.node_id());
+        }, [this, pending] {
+            if (node_enabled.load()) {
+                dispatch_received(*pending);
+            }
+        });
+        return;
     }
+    dispatch_received(*pending);
+}
+
+void NetworkManager::dispatch_received(const PendingReceive &pending) {
+    const auto &package_data = pending.package;
+    const auto &message_body = package_data.msg_body;
+    const auto &identifier = package_data.prev_identifier;
+    const auto &responder = pending.responder;
+    const auto type = message_body.message_type;
+    const auto status = message_body.status;
+    const auto &serialized = message_body.data;
+    const auto &message_id = message_body.message_id;
+    const bool is_luminance = pending.is_luminance;
+    const bool is_node = pending.is_node;
 
     // try {
     switch (type) {

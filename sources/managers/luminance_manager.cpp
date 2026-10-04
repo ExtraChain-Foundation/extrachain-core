@@ -45,7 +45,7 @@ bool LuminanceManager::init_db() {
     QDir().mkdir(QString::fromStdString(Luminance::FOLDER));
 
     std::string db_path = Luminance::DATABASE;
-    // Reputation lookups run in the network event loop; unrelated database work
+    // The receive worker owns network reputation operations; unrelated databases
     // must not hold them behind the legacy shared connector mutex.
     luminance_db_ =
         std::make_unique<DbConnector>(db_path, DbConnectorType::Regular, DbConnectorLockScope::Connection);

@@ -29,6 +29,7 @@ class QThread;
 #include <QCoreApplication>
 #include <QMap>
 #include <QObject>
+#include <QPointer>
 #include <QTimer>
 
 #include "chain/actor_index.h"
@@ -119,8 +120,8 @@ private:
     DfsController*     dfs_                = nullptr;
     ActorIndex*        actor_index_        = nullptr;
     Dag*               dag_                = nullptr;
-    LuminanceManager*  luminance_manager_  = nullptr;
-    NetworkManager*    network_manager_    = nullptr;
+    std::unique_ptr<LuminanceManager> luminance_manager_;
+    QPointer<NetworkManager> network_manager_;
     AccountController* account_controller_ = nullptr;
     DataMiningManager* dmm_                = nullptr;
     TokenManager*      token_manager_      = nullptr;
