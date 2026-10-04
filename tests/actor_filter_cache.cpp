@@ -119,6 +119,24 @@ private slots:
         QCOMPARE(synchronizer.create_sync_request(), expected);
         QVERIFY(copy.create_sync_request() != expected);
     }
+
+    void fullDifferenceOwnsItsGloballyOrderedValues() {
+        const auto actors = sample(35000);
+        const auto emptyRequest = legacyRequest({});
+        const auto expected = legacyDifference(actors, emptyRequest);
+        std::vector<ActorId> difference;
+        {
+            ActorSynchronizer synchronizer;
+            synchronizer.set_actors(actors);
+            for (int i = 0; i < 3; ++i) {
+                difference = synchronizer.process_sync_request(emptyRequest);
+                QCOMPARE(difference, expected);
+            }
+            synchronizer.set_actors({ ActorId("5678") });
+            QCOMPARE(difference, expected);
+        }
+        QCOMPARE(difference, expected);
+    }
 };
 
 QTEST_GUILESS_MAIN(ActorFilterCacheTest)

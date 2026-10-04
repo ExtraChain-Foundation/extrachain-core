@@ -21,9 +21,18 @@ class ActorCacheWorkTests(unittest.TestCase):
 #include <string>
 #include <utility>
 inline unsigned actor_string_reads = 0;
+inline unsigned actor_copies = 0, actor_moves = 0, actor_assignments = 0;
 struct ActorId {
     std::string value;
     explicit ActorId(std::string text) : value(std::move(text)) {}
+    ActorId(const ActorId& other) : value(other.value) { ++actor_copies; }
+    ActorId(ActorId&& other) noexcept : value(std::move(other.value)) { ++actor_moves; }
+    ActorId& operator=(const ActorId& other) {
+        value = other.value; ++actor_assignments; return *this;
+    }
+    ActorId& operator=(ActorId&& other) noexcept {
+        value = std::move(other.value); ++actor_assignments; return *this;
+    }
     const std::string& to_string() const { ++actor_string_reads; return value; }
     bool operator<(const ActorId& other) const { return value < other.value; }
 };
@@ -43,6 +52,17 @@ int main() {
     for (int i = 0; i < 100; ++i) {
         require(synchronizer.create_sync_request() == first);
         require(synchronizer.process_sync_request(first).empty());
+    }
+    require(actor_string_reads == 0);
+    ActorSynchronizer empty;
+    const auto empty_request = empty.create_sync_request();
+    for (int i = 0; i < 100; ++i) {
+        actor_copies = actor_moves = actor_assignments = 0;
+        const auto missing = synchronizer.process_sync_request(empty_request);
+        require(missing.size() == actors.size());
+        require(std::is_sorted(missing.begin(), missing.end()));
+        require(actor_copies == actors.size());
+        require(actor_moves == 0 && actor_assignments == 0);
     }
     require(actor_string_reads == 0);
     const ActorId added("35000");
