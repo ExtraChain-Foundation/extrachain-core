@@ -191,6 +191,8 @@ public:
 
     void start_mining();
     void stop_mining();
+    // Node thread only; the mode switch itself may run elsewhere
+    void set_reward_timer_active(bool active);
 
     std::expected<void, LoadError> login(const std::string& login, const std::string& password);
     std::expected<void, LoadError> login(const std::string& hash);
