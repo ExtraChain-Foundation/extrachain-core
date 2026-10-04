@@ -26,6 +26,7 @@
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/dispatch.hpp>
+#include <utility>
 
 class ThreadPoolBoost {
 public:
@@ -40,7 +41,7 @@ public:
 
     template <BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
     auto post(NullaryToken&& nullary_token) {
-        return boost::asio::post(*m_thread_pool, nullary_token);
+        return boost::asio::post(*m_thread_pool, std::forward<NullaryToken>(nullary_token));
         // auto safe_wrapper = [token = std::forward<NullaryToken>(nullary_token)]() mutable {
         //     try {
         //         token();
@@ -56,7 +57,7 @@ public:
 
     template <BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
     auto dispatch(NullaryToken&& nullary_token) {
-        return boost::asio::dispatch(*m_thread_pool, nullary_token);
+        return boost::asio::dispatch(*m_thread_pool, std::forward<NullaryToken>(nullary_token));
     }
 
     void join();

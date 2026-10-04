@@ -17,6 +17,11 @@ copies each selected ID exactly once into the returned owning vector. Sorting
 ActorId values themselves invoked validating assignments repeatedly on the
 owner thread. No references escape the call, and the resulting snapshot moves
 into the actor-response worker without another vector copy.
+ThreadPoolBoost preserves the submitted task's value category: rvalue closures
+move into Asio, while lvalue submissions still copy. Both post and dispatch
+accept move-only closures; dispatch on the pool thread remains inline. The
+standalone network_thread_pool_work.py fixture uses the actual wrapper and
+installed Boost headers to exercise these contracts with a 35000-element payload.
 
 Build `extrachain-actor-filter-tests` with `EXTRACHAIN_BUILD_DB_TESTS=ON` and run
 CTest `extrachain-actor-filter-cache`. It compares hashes and response ordering
