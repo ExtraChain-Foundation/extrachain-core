@@ -55,6 +55,7 @@ private:
     };
 
     void schedule();
+    void drain();
     void dispatch();
     void complete(std::function<void()> continuation, std::exception_ptr error);
     void finish_turn();
@@ -72,6 +73,7 @@ private:
     std::size_t bytes_ = 0;
     bool maintenance_pending_ = false;
     bool wake_pending_ = false;
+    bool draining_ = false;
     bool invoking_ = false;
     bool deferred_ = false;
     bool active_failed_ = false;

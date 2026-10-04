@@ -3,6 +3,7 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QThread>
+#include <chrono>
 #include <stdexcept>
 #include <utility>
 
@@ -56,11 +57,46 @@ bool NetworkReceiveQueue::enqueue_maintenance() {
 
 void NetworkReceiveQueue::schedule() {
     std::lock_guard lock(queue_mutex_);
-    if (stopped_ || wake_pending_ || active_ || queue_.empty()) {
+    if (stopped_ || wake_pending_ || draining_ || active_ || queue_.empty()) {
         return;
     }
     wake_pending_ = true;
-    QMetaObject::invokeMethod(this, [this] { dispatch(); }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, [this] { drain(); }, Qt::QueuedConnection);
+}
+
+void NetworkReceiveQueue::drain() {
+    Q_ASSERT(QThread::currentThread() == thread());
+    {
+        std::lock_guard lock(queue_mutex_);
+        wake_pending_ = false;
+        if (stopped_ || draining_ || active_) {
+            return;
+        }
+        draining_ = true;
+    }
+    QPointer<NetworkReceiveQueue> guard(this);
+    const auto started = std::chrono::steady_clock::now();
+    for (int count = 0; count < 64; ++count) {
+        {
+            std::lock_guard lock(queue_mutex_);
+            if (stopped_ || active_ || queue_.empty()) {
+                break;
+            }
+        }
+        dispatch();
+        if (!guard) {
+            return;
+        }
+        // Yield between packets; a handler or deferred SQL stage is never interrupted.
+        if (std::chrono::steady_clock::now() - started >= std::chrono::milliseconds(2)) {
+            break;
+        }
+    }
+    {
+        std::lock_guard lock(queue_mutex_);
+        draining_ = false;
+    }
+    schedule();
 }
 
 void NetworkReceiveQueue::dispatch() {
