@@ -42,6 +42,8 @@ class SocketService;
 class WebSocketService;
 class UPNPConnection;
 class UPnPConnector;
+class NetworkReceiveQueue;
+struct NetworkReceivedMessage;
 
 class CalculateTraffic {
 private:
@@ -255,6 +257,7 @@ private:
     QMap<std::string, std::pair<int, qint64>> msg_hash_list_ = {};
 
     ExtraChainNode*                       node;
+    std::unique_ptr<NetworkReceiveQueue> receive_queue_;
     std::shared_ptr<QNetworkAddressEntry> local_;
     QWebSocketServer*                     ws_server_ = nullptr;
 
@@ -305,6 +308,10 @@ public:
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
+    struct PendingReceive;
+    void prepare_received(const NetworkReceivedMessage& incoming);
+    void resume_received(const std::shared_ptr<PendingReceive>& pending);
+    void dispatch_received(const PendingReceive& pending);
 
     void send_message_connections(const std::string& serialized_message,
                                   const MessageBody& non_serialized_message,
@@ -404,6 +411,8 @@ public:
     int  active_connections_count();
 
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
+    void queue_luminance_cleanup();
+    void stop_receive();
 
     QString found_current_identifier(QString ip, quint16 port);
 

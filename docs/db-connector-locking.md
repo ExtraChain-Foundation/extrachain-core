@@ -12,9 +12,9 @@ The application must not select SQLite's single-thread startup mode; see the
 [SQLite threading contract](https://www.sqlite.org/threadsafe.html).
 
 Production opt-ins are `LuminanceManager` and the DFS metadata connector created
-by `DirsSpace::database()` for `DirsManager`. Network message dispatch reads both
-reputation and DFS metadata synchronously, so unrelated database operations can
-stall VPN control messages. `DirsManager` creates the metadata connection once;
+by `DirsSpace::database()` for `DirsManager`. Reputation operations now run on
+the [bounded receive worker](network-receive-queue.md); synchronous DFS metadata
+callers can still stall network dispatch. `DirsManager` creates the metadata connection once;
 DFS consumers share that same connector through `get_db_instance()`. Do not open
 another independent metadata connection while that owner is alive. Collection
 databases keep their existing shared scope because independent connectors may
@@ -76,11 +76,12 @@ production connection. Hooks are removed and temporary working directories
 restored on exit. The full target passes 20 scenarios on Linux and MSVC
 (22 Qt results including initialization/cleanup).
 
-These are characterization tests of the synchronous implementation, not an
-asynchronous writer, crash/power-loss test or complete node-lifecycle test.
-Task 210 still needs explicit intake/backpressure, dispatch ordering and worker
-shutdown guarantees. Reputation influences admission; optimistic unpublished
-increments or a stale cache are not replacements for the current read semantics.
+These characterize the unchanged synchronous storage API, not a crash/power-loss
+test or complete node-lifecycle test. Queue ownership, ordering and shutdown are
+covered separately by `extrachain-receive-tests` and the receive-worker contract.
+Task 210 still requires deployment/runtime qualification. Reputation influences
+admission; optimistic unpublished increments or a stale cache are not replacements
+for the current read semantics.
 
 The actual DFS factory is additionally tested against an unrelated blocked SQL
 operation, plus concurrent consumers of its one shared connector. The first

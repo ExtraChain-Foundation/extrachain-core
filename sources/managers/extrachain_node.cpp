@@ -116,7 +116,7 @@ void ExtraChainNode::process() {
     prepare_folders();
     actor_index_        = new ActorIndex(this);
     account_controller_ = new AccountController(this);
-    luminance_manager_  = new LuminanceManager(this);
+    luminance_manager_  = std::make_unique<LuminanceManager>(this);
     network_manager_    = new NetworkManager(this, ws_port);
     dag_                = new Dag(this);
     dfs_                = new DfsController(this);
@@ -154,6 +154,10 @@ void ExtraChainNode::process() {
 
 ExtraChainNode::~ExtraChainNode() {
     node_enabled.store(false);
+    // Join SQL before cleanup callbacks and owned database teardown
+    if (network_manager_) {
+        network_manager_->stop_receive();
+    }
     eLog("ExtraChainNode::~ExtraChainNode");
     if (cleanup_callback_) {
         cleanup_callback_();
@@ -162,6 +166,10 @@ ExtraChainNode::~ExtraChainNode() {
 }
 
 void ExtraChainNode::cleanUp() {
+    node_enabled.store(false);
+    if (network_manager_) {
+        network_manager_->stop_receive();
+    }
     delete dag_;
     network_manager_->deleteLater();
     dfs_->deleteLater();
@@ -780,7 +788,7 @@ NetworkManager* ExtraChainNode::network() const {
 }
 
 LuminanceManager* ExtraChainNode::luminance_manager() const {
-    return luminance_manager_;
+    return luminance_manager_.get();
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(Transaction tx) {
@@ -1164,7 +1172,7 @@ void ExtraChainNode::set_reward_timer_active(bool active) {
 }
 
 void ExtraChainNode::timer_luminance_autoremove() {
-    luminance_manager_->remove_old();
+    network_manager_->queue_luminance_cleanup();
 }
 
 void ExtraChainNode::timer_info_print() {

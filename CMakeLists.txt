@@ -83,6 +83,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_receive_queue.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/message_body.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
@@ -143,6 +144,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/janus_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_receive_queue.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
@@ -237,4 +239,9 @@ if(EXTRACHAIN_BUILD_DB_TESTS)
     target_link_libraries(extrachain-db-tests PRIVATE extrachain Qt6::Test)
     add_test(NAME extrachain-db-concurrency COMMAND extrachain-db-tests)
     set_tests_properties(extrachain-db-concurrency PROPERTIES TIMEOUT 30)
+    add_executable(extrachain-receive-tests "${CMAKE_CURRENT_LIST_DIR}/tests/network_receive_queue.cpp")
+    set_target_properties(extrachain-receive-tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_link_libraries(extrachain-receive-tests PRIVATE extrachain Qt6::Test)
+    add_test(NAME extrachain-receive-queue COMMAND extrachain-receive-tests)
+    set_tests_properties(extrachain-receive-queue PROPERTIES TIMEOUT 45)
 endif()

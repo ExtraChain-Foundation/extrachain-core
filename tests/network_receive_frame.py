@@ -17,6 +17,7 @@ class ReceiveFrameTests(unittest.TestCase):
         source = (source_root / 'sources/network/network_manager.cpp').read_text(encoding='utf-8')
         start = source.index('void NetworkManager::message_received(')
         prefix = source[start:source.index('    auto message_body_expected =', start)]
+        pipelined = 'void NetworkManager::prepare_received(' in prefix
         cls.temporary = tempfile.TemporaryDirectory(prefix='receive-frame-regression-')
         cls.addClassCleanup(cls.temporary.cleanup)
         folder = Path(cls.temporary.name)
@@ -24,20 +25,56 @@ class ReceiveFrameTests(unittest.TestCase):
         cls.binary = folder / ('fixture.exe' if os.name == 'nt' else 'fixture')
         cpp.write_text(r'''
 #include <atomic>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 std::atomic_bool node_enabled{true};
 int warnings = 0;
 template<class... T> void eWarning(const char*, T&&...) { ++warnings; }
 template<class... T> void eLog(const char*, T&&...) {}
 void require(bool ok) { if (!ok) { throw std::runtime_error("receive prefix regression"); } }
+namespace Qt { enum ConnectionType { AutoConnection }; }
+struct QString { static std::string fromStdString(const std::string& text) { return text; } };
+struct QMetaObject {
+    template<class O, class F> static void invokeMethod(O*, F action, Qt::ConnectionType) { action(); }
+};
+struct NetworkReceivedMessage { std::string message, ip, identifier; bool maintenance = false; };
+struct QueueObserver {
+    bool full = false;
+    std::vector<NetworkReceivedMessage> pending;
+    std::function<void(const NetworkReceivedMessage&)> dispatch;
+    bool enqueue(const std::string& message, const std::string& ip, const std::string& identifier) {
+        if (full) { return false; }
+        pending.push_back({message, ip, identifier, false});
+        return true;
+    }
+    void enqueue_maintenance() {}
+    template<class W, class C> void defer(W work, C continuation) { work(); continuation(); }
+    void drain() { auto items = std::move(pending); pending.clear(); for (const auto& item : items) { dispatch(item); } }
+};
+struct NodeObserver {
+    void remove_old() {}
+    NodeObserver* luminance_manager() { return this; }
+};
 struct NetworkManager {
     bool accept = true;
     int cached = 0, parsed = 0;
     std::string body, signature;
+    QueueObserver queue;
+    QueueObserver* receive_queue_ = &queue;
+    NodeObserver storage;
+    NodeObserver* node = &storage;
+    int closed = 0;
+    NetworkManager() {
+''' + ('        queue.dispatch = [this](const auto& incoming) { prepare_received(incoming); };\n' if pipelined else '') + r'''
+    }
+    void remove_connection(const std::string&) { ++closed; }
     bool check_message_count(const std::string&) { ++cached; return accept; }
     void message_received(const std::string&, const std::string&, const std::string&);
+    void queue_luminance_cleanup();
+    void prepare_received(const NetworkReceivedMessage&);
 };
 ''' + prefix + r'''
     ++parsed;
@@ -53,6 +90,7 @@ int main(int argc, char** argv) {
         for (size_t i = 0; i < signature.size(); ++i) { signature[i] = char(i * 3); }
         const auto deliver = [&](const std::string& frame) {
             manager.message_received(frame, "synthetic-peer", "synthetic-connection");
+            manager.queue.drain();
         };
         if (mode == "short") {
             for (size_t size = 0; size <= 64; ++size) { deliver(std::string(size, 'x')); }
@@ -80,6 +118,18 @@ int main(int argc, char** argv) {
             deliver("body" + signature);
             require(manager.cached == 1 && manager.parsed == 1);
             require(manager.body == "body" && manager.signature == signature);
+        } else if (mode == "overflow") {
+            manager.queue.full = true;
+            deliver("body" + signature);
+            require(manager.cached == 0 && manager.parsed == 0 && manager.closed == 1);
+            manager.queue.full = false;
+            deliver("body" + signature);
+            require(manager.cached == 1 && manager.parsed == 1);
+        } else if (mode == "shutdown-queued") {
+            manager.message_received("body" + signature, "synthetic-peer", "synthetic-connection");
+            node_enabled = false;
+            manager.queue.drain();
+            require(manager.cached == 0 && manager.parsed == 0);
         } else { return 3; }
         return 0;
     } catch (...) { return 2; }
@@ -94,7 +144,7 @@ int main(int argc, char** argv) {
             raise AssertionError(result.stdout + result.stderr)
 
     def test_receive_boundaries(self):
-        for mode in ('short', 'minimum', 'binary', 'duplicate', 'disabled', 'subsequent'):
+        for mode in ('short', 'minimum', 'binary', 'duplicate', 'disabled', 'subsequent', 'overflow', 'shutdown-queued'):
             with self.subTest(mode=mode):
                 result = subprocess.run([str(self.binary), mode], capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 0, mode + ': ' + result.stderr)
