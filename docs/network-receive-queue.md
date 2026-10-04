@@ -1,7 +1,7 @@
 # Bounded Network Receive Queue
 
 Task 210 moves network reputation SQL off the node's Qt event loop. It does not
-batch writes, change SQLite pragmas/schema, cache reputation, change admission
+batch writes, change SQLite pragmas/schema, change admission
 rules, or move the message switch to a worker thread.
 
 ## Ordering And Ownership
@@ -12,12 +12,26 @@ Only admitted frames reach duplicate accounting and deserialization. The queue
 dispatches one item at a time on its QObject owner thread; one dedicated worker
 executes deferred SQL stages. The owner thread remains available while SQL waits.
 
-For a non-Custom message, the order is: read current reputation on the worker,
+For a non-Custom message, the order is: obtain current reputation (a cache hit on
+the owner, otherwise a read on the worker),
 set the responder's read-before-increment value on the owner, log/count traffic,
 increment broadcast reputation on the worker, then run the original message
 switch on the owner. Focused messages have no increment. Missing-value fallback
 and the network-actor multiplier are unchanged. Custom messages do not read or
 write reputation, but cannot overtake a previously admitted message.
+
+The read-through cache retains at most 1024 successful, parsed reputation reads
+with keys of at most 256 bytes. At capacity it flushes before inserting another
+entry; it is not an LRU. Missing/error/invalid rows are not cached. Owner lookups
+use `try_lock` and fall back to the worker on contention; no cache mutex is held
+across SQL. Per-node mutations invalidate before and after SQL, including an
+exception or nonthrowing write failure. A generation check prevents an older
+in-flight read from refilling the cache across invalidation. Expiry invalidates
+all entries before/after its query; reset/reinitialization also discard cache
+state. Writes are never reflected optimistically. Runtime database mutations
+must go through LuminanceManager; out-of-process database edits are not cache
+coherent. This does not change the existing lifecycle requirement against
+reset/destruction overlapping worker access.
 
 The pending receive owns the decoded body, signature, identifier and responder.
 The next packet cannot begin until all stages and callbacks of the current one
@@ -79,6 +93,9 @@ Lifecycle-only direct storage callers must retain their existing lifetime rules.
 With `EXTRACHAIN_BUILD_DB_TESTS=ON`, build/run `extrachain-receive-tests` as well as
 `extrachain-db-tests`. Queue tests use real Qt events and a dedicated worker;
 reputation order/shutdown tests use the real LuminanceManager and temporary SQLite.
+Cache regressions cover missing rows, successful/failed writes, expiry, reset,
+bounded entries/keys and isolation between peers. Extracted production setup
+tests cover cache-hit responder values, deferred broadcast increments and shutdown.
 They cover owned input, FIFO, active/metadata capacity, owner-loop progress,
 read/commit/dispatch order, maintenance, shutdown, exceptions, self-deletion,
 concurrent intake and immediate idle shutdown. Two nested-event-loop tests failed

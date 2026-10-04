@@ -110,6 +110,143 @@ private slots:
         QTRY_COMPARE(completed, 1);
     }
 
+    void reputationCacheInvalidatesWritesAndDoesNotCacheMissingRows() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto peer = identity();
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), -1);
+        QVERIFY(!storage.cached_luminance(peer));
+        storage.write_luminance(peer, 7);
+        QCOMPARE(storage.read_luminance(peer), 7);
+        QCOMPARE(storage.cached_luminance(peer), std::optional<int>(7));
+        storage.increment(peer);
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), 8);
+        storage.decrement(peer);
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), 7);
+        storage.write_luminance(peer, -10);
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), 0);
+        storage.reset_db();
+        QVERIFY(!storage.cached_luminance(peer));
+        QVERIFY(storage.init_db());
+        QCOMPARE(storage.read_luminance(peer), 0);
+    }
+
+    void reputationCacheInvalidatesFailedWriteAndExpiry() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto peer = identity();
+        storage.write_luminance(peer, 7);
+        QCOMPARE(storage.read_luminance(peer), 7);
+        DbConnector control(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
+        QVERIFY(control.open());
+        QVERIFY(control.query("CREATE TRIGGER reject_update BEFORE UPDATE ON luminance "
+                              "BEGIN SELECT RAISE(FAIL, 'synthetic rejected write'); END"));
+        storage.increment(peer);
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), 7);
+        QVERIFY(control.query("DROP TRIGGER reject_update"));
+        QVERIFY(control.query("UPDATE luminance SET timestamp = 0"));
+        storage.remove_old();
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), -1);
+    }
+
+    void reputationCacheIsBoundedAndPreservesOtherPeers() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto first = identity();
+        const auto second = identity();
+        storage.write_luminance(first, 1);
+        storage.write_luminance(second, 2);
+        QCOMPARE(storage.read_luminance(first), 1);
+        QCOMPARE(storage.read_luminance(second), 2);
+        storage.increment(second);
+        QCOMPARE(storage.cached_luminance(first), std::optional<int>(1));
+        QVERIFY(!storage.cached_luminance(second));
+        DbConnector control(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
+        QVERIFY(control.open());
+        QVERIFY(control.query("BEGIN TRANSACTION"));
+        for (int i = 0; i < 1100; ++i) {
+            const auto key = fmt::format("{}_synthetic-{}", first.actor_id, i);
+            QVERIFY(control.query(fmt::format("INSERT INTO luminance VALUES ('{}', 3, 0)", key)));
+        }
+        const auto longPeer = NodeId { first.actor_id, std::string(257, 'x') };
+        QVERIFY(control.query(fmt::format("INSERT INTO luminance VALUES ('{}_{}', 4, 0)",
+                                          longPeer.actor_id, longPeer.node_identifier)));
+        QVERIFY(control.query("COMMIT"));
+        for (int i = 0; i < 1100; ++i) {
+            QCOMPARE(storage.read_luminance({ first.actor_id, fmt::format("synthetic-{}", i) }), 3);
+        }
+        QVERIFY(!storage.cached_luminance(first));
+        QCOMPARE(storage.read_luminance(first), 1);
+        QCOMPARE(storage.read_luminance(longPeer), 4);
+        QVERIFY(!storage.cached_luminance(longPeer));
+    }
+
+    void ownerCacheLookupsStayCoherentWithWorkerWrites() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto peer = identity();
+        storage.write_luminance(peer, 0);
+        QCOMPARE(storage.read_luminance(peer), 0);
+        std::atomic<int> committed = 0;
+        std::atomic<bool> done = false, failed = false;
+        Gate start;
+        std::thread worker([&] {
+            try {
+                start.wait();
+                for (int value = 1; value <= 100; ++value) {
+                    storage.write_luminance(peer, value);
+                    if (storage.read_luminance(peer) != value) {
+                        failed = true;
+                    }
+                    committed = value;
+                }
+            } catch (...) {
+                failed = true;
+            }
+            done = true;
+        });
+        const auto join = qScopeGuard([&] { worker.join(); });
+        int ticks = 0;
+        bool stale = false;
+        QTimer timer;
+        connect(&timer, &QTimer::timeout, [&] {
+            ++ticks;
+            start.release();
+            const auto before = committed.load();
+            if (const auto value = storage.cached_luminance(peer)) {
+                stale |= *value < before;
+            }
+        });
+        timer.start(1);
+        QTRY_VERIFY_WITH_TIMEOUT(done.load(), 10000);
+        QVERIFY(!failed.load());
+        QVERIFY(!stale);
+        QVERIFY(ticks > 0);
+        QCOMPARE(storage.cached_luminance(peer), std::optional<int>(100));
+    }
+
     void realReputationReadCommitDispatchOrder() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

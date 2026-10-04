@@ -20,6 +20,7 @@
 #include "managers/luminance_manager.h"
 
 #include <QDir>
+#include <QScopeGuard>
 
 #include "chain/actor_id.h"
 #include "utils/db_connector.h"
@@ -41,6 +42,7 @@ bool LuminanceManager::init_db() {
     }
 
     // bool is_exists = QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).exists();
+    invalidate_cache();
 
     QDir().mkdir(QString::fromStdString(Luminance::FOLDER));
 
@@ -69,6 +71,7 @@ bool LuminanceManager::init_db() {
 }
 
 void LuminanceManager::reset_db() {
+    invalidate_cache();
     db_initialized_ = false;
 
     if (db_initialized_) {
@@ -80,11 +83,16 @@ void LuminanceManager::reset_db() {
 }
 
 int LuminanceManager::read_luminance(const NodeId &node_id) {
-    // TODO: memory cache result
-    // eTemp("[LuminanceManager] Read {}", node_id);
-
     auto node_id_str = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
     int  luminance   = -1;
+    std::uint64_t generation;
+    {
+        std::lock_guard lock(cache_mutex_);
+        if (const auto found = cache_.find(node_id_str); found != cache_.end()) {
+            return found->second;
+        }
+        generation = cache_generation_;
+    }
 
     auto rows = luminance_db_->select(
         fmt::format("SELECT * FROM {} WHERE node_id = '{}'", Config::DataStorage::LUMINANCE_TABLE, node_id_str));
@@ -99,7 +107,37 @@ int LuminanceManager::read_luminance(const NodeId &node_id) {
         return luminance;
     }
 
+    if (node_id_str.size() <= CacheKeyBytes) {
+        std::lock_guard lock(cache_mutex_);
+        if (generation == cache_generation_) {
+            if (cache_.size() >= CacheEntries) {
+                cache_.clear();
+            }
+            cache_.insert_or_assign(node_id_str, luminance);
+        }
+    }
     return luminance;
+}
+
+std::optional<int> LuminanceManager::cached_luminance(const NodeId &node_id) const {
+    const auto key = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
+    std::unique_lock lock(cache_mutex_, std::try_to_lock);
+    if (lock.owns_lock()) {
+        if (const auto found = cache_.find(key); found != cache_.end()) {
+            return found->second;
+        }
+    }
+    return std::nullopt;
+}
+
+void LuminanceManager::invalidate_cache(const std::string *key) {
+    std::lock_guard lock(cache_mutex_);
+    ++cache_generation_;
+    if (key) {
+        cache_.erase(*key);
+    } else {
+        cache_.clear();
+    }
 }
 
 void LuminanceManager::increment(const NodeId &node_id) {
@@ -115,6 +153,8 @@ void LuminanceManager::write_luminance(const NodeId &node_id, int luminance) {
 }
 
 void LuminanceManager::remove_old() {
+    invalidate_cache();
+    const auto invalidate = qScopeGuard([this] { invalidate_cache(); });
     // eTemp("[LuminanceManager] Remove old");
     auto now       = Utils::current_date_ms();
     auto threshold = now - Luminance::AUTOREMOVE_MS;
@@ -124,6 +164,9 @@ void LuminanceManager::remove_old() {
 void LuminanceManager::update_luminance(const NodeId &node_id, Operation op, int value) {
     // eTemp("[LuminanceManager] update_luminance: {}, {}, {}", node_id, op, value);
     auto        node_id_str = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
+    // Never predict a committed value: the existing SQL API can fail without throwing.
+    invalidate_cache(&node_id_str);
+    const auto invalidate = qScopeGuard([&] { invalidate_cache(&node_id_str); });
     auto        now         = Utils::current_date_ms();
     std::string update_expr;
     int         initial_value;

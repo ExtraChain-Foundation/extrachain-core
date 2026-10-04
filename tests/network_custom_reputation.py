@@ -89,6 +89,8 @@ void require(bool ok) { if (!ok) { throw std::runtime_error("dispatch contract")
 struct ReputationObserver {
     int value = 7, reads = 0, writes = 0;
     bool unavailable = false;
+    std::optional<int> cached;
+    std::optional<int> cached_luminance(const NodeId&) { return cached; }
     std::vector<std::string> order;
     int read_luminance(const NodeId&) {
         ++reads;
@@ -209,6 +211,31 @@ int main(int argc, char** argv) {
                     require(manager.emitted == 0 && manager.forwarded == 0);
                 }
             }
+        } else if (mode == "cached-focused" || mode == "cached-broadcast" || mode == "cached-shutdown") {
+            for (int value : {-1, 0, 1, 7}) {
+                for (bool root : {false, true}) {
+                    Node node;
+                    node.reputation.value = value;
+                    node.reputation.cached = value;
+                    const bool broadcast = mode == "cached-broadcast";
+                    node.reputation.unavailable = !broadcast;
+                    node_enabled = mode != "cached-shutdown";
+                    NetworkManager manager(&node);
+                    manager.dispatch(MessageType::ShareConnections,
+                                     broadcast ? SendMode::Broadcast : SendMode::Focused, root, true);
+                    require(node.reputation.reads == 0 && node.reputation.writes == 0);
+                    if (broadcast) { require(!manager.non_custom); }
+                    manager.queue.drain();
+                    require(manager.queue.errors == 0);
+                    require(node.reputation.writes == (broadcast ? 1 : 0));
+                    if (node_enabled) {
+                        require(manager.non_custom.has_value());
+                        require(manager.non_custom->luminance() == (value == -1 ? 1 : value) * (root ? 10 : 1));
+                    } else {
+                        require(!manager.non_custom);
+                    }
+                }
+            }
         } else if (mode == "interleaved") {
             Node node;
             NetworkManager manager(&node);
@@ -267,7 +294,8 @@ int main(int argc, char** argv) {
     def test_custom_and_non_custom_dispatch(self):
         for mode in ('custom-local', 'custom-forward', 'custom-invalid', 'non-custom-focused',
                      'non-custom-broadcast', 'interleaved', 'deferred', 'shutdown-after-read',
-                     'shutdown-after-write', 'read-failure'):
+                     'shutdown-after-write', 'read-failure', 'cached-focused', 'cached-broadcast',
+                     'cached-shutdown'):
             with self.subTest(mode=mode):
                 result = subprocess.run([str(self.binary), mode], capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 0, mode + ': ' + result.stderr)
