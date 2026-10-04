@@ -20,6 +20,12 @@
 #pragma once
 
 #include <boost/describe/class.hpp>
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <unordered_map>
 
 class ExtraChainNode;
 class DbConnector;
@@ -34,6 +40,7 @@ public:
     void reset_db();
 
     int read_luminance(const NodeId &node_id);
+    std::optional<int> cached_luminance(const NodeId &node_id) const;
 
     void increment(const NodeId &node_id);
     void decrement(const NodeId &node_id);
@@ -48,10 +55,16 @@ private:
     };
 
     void update_luminance(const NodeId &node_id, Operation op, int value = 0);
+    void invalidate_cache(const std::string *key = nullptr);
 
 private:
     std::unique_ptr<DbConnector> luminance_db_;
     bool                         db_initialized_ = false; // Whether db is initialized
+    static constexpr std::size_t CacheEntries = 1024;
+    static constexpr std::size_t CacheKeyBytes = 256;
+    mutable std::mutex cache_mutex_;
+    std::unordered_map<std::string, int> cache_;
+    std::uint64_t cache_generation_ = 0;
 
     ExtraChainNode *node;
 };

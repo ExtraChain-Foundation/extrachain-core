@@ -1238,6 +1238,11 @@ void NetworkManager::prepare_received(const NetworkReceivedMessage &incoming) {
         return;
     }
     auto *storage = node->luminance_manager();
+    if (const auto cached = storage->cached_luminance(pending->responder.node_id())) {
+        pending->luminance = *cached;
+        resume_received(pending);
+        return;
+    }
     receive_queue_->defer([storage, pending] {
         pending->luminance = storage->read_luminance(pending->responder.node_id());
     }, [this, pending] { resume_received(pending); });
