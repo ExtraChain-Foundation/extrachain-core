@@ -262,10 +262,9 @@ Dag::Dag(ExtraChain::Core::ExtraChainNode *node)
 
     eLog("[Dag] Started. Mode: {}", mode_);
 
-    // After previous runs the hot/ folder may contain full pack ranges that
-    // never got packed (sync was killed mid-flight, or earlier versions
-    // didn't pack out-of-order completions). Sweep them on startup.
-    try_pack_hot();
+    // Full pack ranges left unpacked by an earlier run (sync killed mid-flight, or
+    // earlier versions that did not pack out-of-order completions) are swept by
+    // start(), on the storage pool: packing here ran on the starting thread.
 
     if (node->runtime_profile() == RuntimeProfile::FullNode) {
         admission_state_ = create_admission_state(this);
@@ -351,6 +350,11 @@ void Dag::start() {
 #ifndef IS_APP_CLIENT
     this->set_status(DagStatus::Ready);
 #endif
+    // A node restarted after a pack range filled up used to seal 10,000 sections here,
+    // synchronously, before it could log or connect (half a minute with mining proofs on
+    // the Ubuntu stand, and growing with section size). Once started, this goes to the
+    // storage pool like every later pack.
+    try_pack_hot();
 
 #ifndef IS_APP_CLIENT
     // Heartbeat that does not depend on the Qt event loop.
