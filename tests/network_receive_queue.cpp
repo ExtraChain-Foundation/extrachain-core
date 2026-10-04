@@ -60,6 +60,65 @@ NodeId identity() {
 class NetworkReceiveQueueTest : public QObject {
     Q_OBJECT
 private slots:
+    void readyPacketsShareWakeupsAndYieldToOtherEvents() {
+        MetaCallCounter calls;
+        std::vector<std::string> seen;
+        NetworkReceiveQueue queue(nullptr, [&](const auto &packet) { seen.push_back(packet.message); });
+        queue.installEventFilter(&calls);
+        constexpr int count = 256;
+        for (int i = 0; i < count; ++i) {
+            QVERIFY(queue.enqueue(std::to_string(i), {}, {}));
+        }
+        QObject witness;
+        std::size_t atWitness = 0;
+        QMetaObject::invokeMethod(&witness, [&] { atWitness = seen.size(); }, Qt::QueuedConnection);
+        QVERIFY(seen.empty());
+        QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+        QVERIFY(atWitness > 0 && atWitness <= 64);
+        QVERIFY(calls.count < count);
+        for (int i = 0; i < count; ++i) {
+            QCOMPARE(seen.at(i), std::to_string(i));
+        }
+    }
+
+    void reentrantProducerCannotKeepOneWakeupRunningForever() {
+        MetaCallCounter calls;
+        int seen = 0;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            if (++seen < 200) {
+                QVERIFY(queue->enqueue("next", {}, {}));
+            }
+        });
+        queue->installEventFilter(&calls);
+        QVERIFY(queue->enqueue("first", {}, {}));
+        QObject witness;
+        int atWitness = 0;
+        QMetaObject::invokeMethod(&witness, [&] { atWitness = seen; }, Qt::QueuedConnection);
+        QTRY_COMPARE(seen, 200);
+        QVERIFY(atWitness > 0 && atWitness <= 64);
+        QVERIFY(calls.count < 200);
+        QCOMPARE(queue->pending_count(), std::size_t(0));
+    }
+
+    void slowReadyPacketYieldsBeforeDispatchingAnother() {
+        int seen = 0;
+        NetworkReceiveQueue queue(nullptr, [&](const auto &) {
+            ++seen;
+            if (seen == 1) {
+                std::this_thread::sleep_for(5ms);
+            }
+        });
+        QVERIFY(queue.enqueue("slow", {}, {}));
+        QVERIFY(queue.enqueue("next", {}, {}));
+        QObject witness;
+        int atWitness = 0;
+        QMetaObject::invokeMethod(&witness, [&] { atWitness = seen; }, Qt::QueuedConnection);
+        QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+        QCOMPARE(atWitness, 1);
+        QCOMPARE(seen, 2);
+    }
+
     void copiesPacketsAndDispatchesFifo() {
         std::vector<std::string> seen;
         NetworkReceiveQueue queue(nullptr, [&](const auto &packet) { seen.push_back(packet.message); });

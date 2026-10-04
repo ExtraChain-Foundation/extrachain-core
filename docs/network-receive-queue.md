@@ -12,6 +12,13 @@ Only admitted frames reach duplicate accounting and deserialization. The queue
 dispatches one item at a time on its QObject owner thread; one dedicated worker
 executes deferred SQL stages. The owner thread remains available while SQL waits.
 
+Ready packets share one queued owner wakeup, up to 64 packets or 2 ms between
+packet boundaries. A deferred stage stops that drain; the next packet still waits
+for every continuation of its predecessor. Reentrant producers cannot extend one
+wakeup indefinitely. Slow handlers are not interrupted, so this is a scheduling
+quantum rather than a hard bound on handler latency. Capacity, FIFO and SQL
+durability remain unchanged; the batching does not qualify full-load performance.
+
 For a message that needs reputation, the order is: obtain current reputation (a cache hit on
 the owner, otherwise a read on the worker),
 set the responder's read-before-increment value on the owner, log/count traffic,
