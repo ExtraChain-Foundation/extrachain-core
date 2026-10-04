@@ -218,7 +218,7 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
     }
 
     auto r = responder;
-    ThreadPoolBoost::instance()->post([this, responder = r, actor_ids] {
+    ThreadPoolBoost::instance()->post([this, responder = r, actor_ids = std::move(actor_ids)] {
         std::vector<Actor<KeyPublic>> actors;
         auto                          min_size = actor_ids.size() > 100 ? 100 : actor_ids.size();
         actors.reserve(min_size);

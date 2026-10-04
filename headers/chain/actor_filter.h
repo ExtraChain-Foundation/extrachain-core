@@ -196,8 +196,7 @@ private:
      * while ensuring that no duplicates are included in the result.
      */
     std::vector<ActorId> get_actors_from_buckets(const std::vector<uint8_t>& bucket_indices) const {
-        std::vector<ActorId> result;
-
+        std::vector<const ActorId*> selected;
         std::bitset<BUCKET_COUNT> added_buckets;
         for (uint8_t index : bucket_indices) {
             if (added_buckets.test(index)) {
@@ -205,10 +204,19 @@ private:
             }
             added_buckets.set(index);
             const auto& actors = actors_by_bucket_[index];
-            result.insert(result.end(), actors.begin(), actors.end());
+            for (const auto& actor : actors) {
+                selected.push_back(&actor);
+            }
         }
-        // Preserve the original global ActorId ordering on the wire.
-        std::sort(result.begin(), result.end());
+        // Sort references: moving ActorId values revalidates and reallocates their strings.
+        std::sort(selected.begin(), selected.end(), [](const ActorId* left, const ActorId* right) {
+            return *left < *right;
+        });
+        std::vector<ActorId> result;
+        result.reserve(selected.size());
+        for (const auto* actor : selected) {
+            result.push_back(*actor);
+        }
         return result;
     }
 
