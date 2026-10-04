@@ -57,6 +57,15 @@ It does not evict earlier accepted packets. This is global backpressure, not a
 per-peer fairness or rate-limiting mechanism. Native load qualification must
 check queue rejection and connection churn, not only memory use.
 
+Connection activation requests DFS size only from the activated peer, using
+`newSocketActivatedWithParams` and a Focused Request. Previously every activation
+polled all neighbours again: N new peers on top of B existing peers generated
+N*B + N*(N+1)/2 requests at that node, before replies or reconnects. The scoped
+overload rejects an empty peer identifier instead of falling back to fan-out.
+The original one-argument API still supports an explicit all-neighbour query.
+This reduces activation traffic without dropping replies, changing the wire
+format, increasing queue capacity or changing FIFO admission.
+
 Thrown worker/handler exceptions suppress that packet's remaining dispatch and
 report a generic error without payloads or credentials. Later packets may proceed.
 An exception from the error reporter cannot strand the queue. The existing
@@ -96,6 +105,9 @@ reputation order/shutdown tests use the real LuminanceManager and temporary SQLi
 Cache regressions cover missing rows, successful/failed writes, expiry, reset,
 bounded entries/keys and isolation between peers. Extracted production setup
 tests cover cache-hit responder values, deferred broadcast increments and shutdown.
+`network_dfs_size_fanout.py` compiles the actual activation callback and senders
+with a routing observer: one/100 peers, reconnect, empty target, explicit global
+query and QObject-context wiring. This is not a full socket transport test.
 They cover owned input, FIFO, active/metadata capacity, owner-loop progress,
 read/commit/dispatch order, maintenance, shutdown, exceptions, self-deletion,
 concurrent intake and immediate idle shutdown. Two nested-event-loop tests failed

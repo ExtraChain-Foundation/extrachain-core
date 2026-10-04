@@ -554,6 +554,7 @@ private:
 
 public:
     void  sendSizeRequestMsg(const ActorId &actorId) const;
+    void  sendSizeRequestMsg(const ActorId &actorId, const std::string &identifier) const;
     void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder); // TODO: const
     float percentVerified(std::vector<DfsP::VerifyFileMessage> &fileList);
 
