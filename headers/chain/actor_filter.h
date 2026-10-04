@@ -22,6 +22,12 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <algorithm>
+#include <array>
+#include <bitset>
+#include <cstdint>
+#include <set>
+#include <utility>
 
 #include "chain/actor_id.h"
 
@@ -35,10 +41,9 @@
  */
 class ActorSynchronizer {
 private:
-    std::set<ActorId> local_actors_;
-
     /// Number of buckets (256 = 1 byte for bucket index)
     static constexpr size_t BUCKET_COUNT = 256;
+    std::array<std::set<ActorId>, BUCKET_COUNT> actors_by_bucket_;
 
     /**
      * @brief Computes hash for an actor string using FNV-1a 64-bit algorithm
@@ -115,6 +120,9 @@ private:
         }
     };
 
+    mutable BucketHashes cached_hashes_;
+    mutable std::bitset<BUCKET_COUNT> dirty_buckets_ = ~std::bitset<BUCKET_COUNT> {};
+
     /**
      * @brief Creates hash values for all buckets based on current local actors
      * @return BucketHashes structure containing hash values for all buckets
@@ -123,26 +131,19 @@ private:
      * and computes a hash value for each bucket's contents.
      */
     BucketHashes create_bucket_hashes() const {
-        // Distribute actors into buckets
-        std::unordered_map<uint8_t, std::vector<std::string>> buckets;
-
-        for (const auto& actor : local_actors_) {
-            std::string actor_str    = actor.to_string();
-            uint8_t     bucket_index = get_bucket_index(actor_str);
-            buckets[bucket_index].push_back(actor_str);
-        }
-
-        // Compute hash for each bucket
-        BucketHashes result;
-
         for (size_t i = 0; i < BUCKET_COUNT; i++) {
-            auto it = buckets.find(static_cast<uint8_t>(i));
-            if (it != buckets.end()) {
-                result.hashes[i] = compute_bucket_hash(it->second);
+            if (!dirty_buckets_.test(i)) {
+                continue;
             }
+            std::vector<std::string> actors;
+            actors.reserve(actors_by_bucket_[i].size());
+            for (const auto& actor : actors_by_bucket_[i]) {
+                actors.push_back(actor.to_string());
+            }
+            cached_hashes_.hashes[i] = compute_bucket_hash(actors);
+            dirty_buckets_.reset(i);
         }
-
-        return result;
+        return cached_hashes_;
     }
 
     /**
@@ -197,29 +198,17 @@ private:
     std::vector<ActorId> get_actors_from_buckets(const std::vector<uint8_t>& bucket_indices) const {
         std::vector<ActorId> result;
 
-        // Create a set of indices for fast checking
-        std::unordered_set<uint8_t> indices(bucket_indices.begin(), bucket_indices.end());
-
-        // Set for tracking already added actors (remove duplicates)
-        std::unordered_set<std::string> added_actors;
-
-        // Check each actor
-        for (const auto& actor : local_actors_) {
-            std::string actor_str = actor.to_string();
-
-            // Skip if actor was already added
-            if (added_actors.find(actor_str) != added_actors.end()) {
+        std::bitset<BUCKET_COUNT> added_buckets;
+        for (uint8_t index : bucket_indices) {
+            if (added_buckets.test(index)) {
                 continue;
             }
-
-            uint8_t bucket_index = get_bucket_index(actor_str);
-
-            if (indices.find(bucket_index) != indices.end()) {
-                result.push_back(actor);
-                added_actors.insert(actor_str);
-            }
+            added_buckets.set(index);
+            const auto& actors = actors_by_bucket_[index];
+            result.insert(result.end(), actors.begin(), actors.end());
         }
-
+        // Preserve the original global ActorId ordering on the wire.
+        std::sort(result.begin(), result.end());
         return result;
     }
 
@@ -235,7 +224,9 @@ public:
      * @param actors Vector of ActorId objects to set as local actors
      */
     void set_actors(const std::vector<ActorId>& actors) {
-        local_actors_ = std::set<ActorId>(actors.begin(), actors.end());
+        ActorSynchronizer replacement;
+        replacement.apply_received_ids(actors);
+        *this = std::move(replacement);
     }
 
     /**
@@ -285,7 +276,10 @@ public:
      */
     void apply_received_ids(const std::vector<ActorId>& received_ids) {
         for (const auto& actor : received_ids) {
-            local_actors_.insert(actor);
+            const auto bucket = get_bucket_index(actor.to_string());
+            if (actors_by_bucket_[bucket].insert(actor).second) {
+                dirty_buckets_.set(bucket);
+            }
         }
     }
 };
