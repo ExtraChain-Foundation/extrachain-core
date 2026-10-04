@@ -12,13 +12,22 @@ Only admitted frames reach duplicate accounting and deserialization. The queue
 dispatches one item at a time on its QObject owner thread; one dedicated worker
 executes deferred SQL stages. The owner thread remains available while SQL waits.
 
-For a non-Custom message, the order is: obtain current reputation (a cache hit on
+For a message that needs reputation, the order is: obtain current reputation (a cache hit on
 the owner, otherwise a read on the worker),
 set the responder's read-before-increment value on the owner, log/count traffic,
 increment broadcast reputation on the worker, then run the original message
 switch on the owner. Focused messages have no increment. Missing-value fallback
 and the network-actor multiplier are unchanged. Custom messages do not read or
 write reputation, but cannot overtake a previously admitted message.
+
+Actor/Actors/ActorsHash/NewActor and RequestDfsSize/ResponseDfsSize also skip the
+unused reputation read. Their reviewed handlers do not consume that value, and
+reply routing does not serialize it. Non-Custom broadcasts still perform exactly
+one deferred increment before dispatch, including these types; failures and
+shutdown retain the same suppression rules. This explicit allowlist does not
+include DAG messages or unknown types: their read-before-increment responder
+values, fallback and multiplier remain unchanged. No authorization check is
+removed, and no accepted frame overtakes another.
 
 The read-through cache retains at most 1024 successful, parsed reputation reads
 with keys of at most 256 bytes. At capacity it flushes before inserting another
@@ -123,6 +132,10 @@ wiring, not a complete running-node teardown or proof of a historical crash.
 production fragments with controlled queue/DB/decoding observers. They check
 admission-before-cache, shutdown boundaries, unchanged Custom behavior and
 non-Custom responder semantics. They are not full-node or socket integration tests.
+The setup observer also covers the read-free allowlist for all three statuses,
+focused/broadcast modes, write failure and shutdown; unlisted messages keep the
+read/increment/dispatch sequence. These tests do not replace review of a handler
+when its use of responder reputation changes.
 
 These focused tests do not qualify complete application shutdown, platform
 packaging, the 100-client workload or a latency improvement. In particular,

@@ -55,9 +55,10 @@ class CustomReputationTests(unittest.TestCase):
 #include <unordered_set>
 #include <vector>
 #define emit
-enum class MessageType { Custom, ShareConnections };
+enum class MessageType { Custom, ShareConnections, NewActor, Actor, Actors, ActorsHash,
+                         RequestDfsSize, ResponseDfsSize };
 enum class SendMode { Broadcast, Focused };
-enum class MessageStatus { NoStatus };
+enum class MessageStatus { NoStatus, Request, Response };
 struct NodeId { int actor_id; std::string node_identifier; };
 struct CustomMessage { std::string body; };
 struct MessageBody {
@@ -148,18 +149,18 @@ public:
         require(package.msg_body.message_id == "synthetic-id" && package.prev_identifier == "synthetic-connection");
         ++forwarded;
     }
-    void dispatch(MessageType, SendMode, bool, bool);
+    void dispatch(MessageType, SendMode, bool, bool, MessageStatus = MessageStatus::NoStatus);
     void resume_received(const std::shared_ptr<PendingReceive>&);
     void dispatch_received(const PendingReceive&);
 };
 ''' + pending + r'''
-void NetworkManager::dispatch(MessageType type, SendMode send_type, bool is_luminance, bool valid) {
+void NetworkManager::dispatch(MessageType type, SendMode send_type, bool is_luminance, bool valid, MessageStatus status) {
     const std::string message_id = "synthetic-id", identifier = "synthetic-connection", ip = "synthetic-peer";
     const NodeId node_id{11, "synthetic-node"};
     const std::string serialized = valid ? "payload" : "invalid";
     const std::string sign(64, 's');
     const std::string message = serialized + sign;
-    const MessageBody message_body{type, send_type, MessageStatus::NoStatus, serialized, message_id};
+    const MessageBody message_body{type, send_type, status, serialized, message_id};
     const NetworkPackageStorage package_data{message_body, identifier, sign};
 ''' + implementation + custom + r'''
     default: non_custom = responder; break;
@@ -185,6 +186,35 @@ int main(int argc, char** argv) {
                         require(manager.emitted == (mode == "custom-local" ? 1 : 0));
                         require(manager.forwarded == (mode == "custom-forward" ? 1 : 0));
                         require(warnings == (mode == "custom-invalid" ? 1 : 0));
+                    }
+                }
+            }
+        } else if (mode == "unused-focused" || mode == "unused-broadcast"
+                   || mode == "unused-write-failure" || mode == "unused-shutdown") {
+            for (auto type : {MessageType::NewActor, MessageType::Actor, MessageType::Actors,
+                              MessageType::ActorsHash, MessageType::RequestDfsSize, MessageType::ResponseDfsSize}) {
+                for (auto status : {MessageStatus::NoStatus, MessageStatus::Request, MessageStatus::Response}) {
+                    for (bool root : {false, true}) {
+                        Node node;
+                        const bool focused = mode == "unused-focused";
+                        const bool failure = mode == "unused-write-failure";
+                        const bool shutdown = mode == "unused-shutdown";
+                        node_enabled = !shutdown;
+                        node.reputation.unavailable = focused || failure;
+                        NetworkManager manager(&node);
+                        manager.dispatch(type, focused ? SendMode::Focused : SendMode::Broadcast, root, true, status);
+                        if (!focused) { require(!manager.non_custom); }
+                        require(node.reputation.reads == 0 && node.reputation.writes == 0);
+                        manager.queue.drain();
+                        require(node.reputation.reads == 0);
+                        require(node.reputation.writes == (!focused && !shutdown ? 1 : 0));
+                        require(manager.queue.errors == (failure ? 1 : 0));
+                        require(manager.non_custom.has_value() == (!failure && !shutdown));
+                        require(manager.emitted == 0 && manager.forwarded == 0);
+                        if (manager.non_custom) {
+                            require(manager.non_custom->message_id() == "synthetic-id");
+                            require(manager.non_custom->identifiers() == std::unordered_set<std::string>{"synthetic-connection"});
+                        }
                     }
                 }
             }
@@ -295,7 +325,8 @@ int main(int argc, char** argv) {
         for mode in ('custom-local', 'custom-forward', 'custom-invalid', 'non-custom-focused',
                      'non-custom-broadcast', 'interleaved', 'deferred', 'shutdown-after-read',
                      'shutdown-after-write', 'read-failure', 'cached-focused', 'cached-broadcast',
-                     'cached-shutdown'):
+                     'cached-shutdown', 'unused-focused', 'unused-broadcast',
+                     'unused-write-failure', 'unused-shutdown'):
             with self.subTest(mode=mode):
                 result = subprocess.run([str(self.binary), mode], capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 0, mode + ': ' + result.stderr)
