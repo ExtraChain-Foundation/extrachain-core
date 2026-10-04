@@ -1233,7 +1233,11 @@ void NetworkManager::prepare_received(const NetworkReceivedMessage &incoming) {
     pending->is_luminance = is_luminance;
     pending->is_node = ip == first_node_;
 
-    if (type == MessageType::Custom) {
+    // These handlers do not consume reputation; broadcast accounting still runs below.
+    const bool unused_luminance = type == MessageType::Custom || type == MessageType::NewActor
+        || type == MessageType::Actor || type == MessageType::Actors || type == MessageType::ActorsHash
+        || type == MessageType::RequestDfsSize || type == MessageType::ResponseDfsSize;
+    if (unused_luminance) {
         resume_received(pending);
         return;
     }
