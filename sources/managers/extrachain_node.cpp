@@ -1352,9 +1352,10 @@ void ExtraChainNode::connect_signals() {
                 dfs_->sync(identifier);
             });
 
-    connect(network_manager_, &NetworkManager::newSocketActivated, [this]() {
-        dfs_->sendSizeRequestMsg(account_controller_->system_actor().id());
-    });
+    connect(network_manager_, &NetworkManager::newSocketActivatedWithParams, this,
+            [this](const std::string &, const std::string &identifier) {
+                dfs_->sendSizeRequestMsg(account_controller_->system_actor().id(), identifier);
+            });
 
     connect(actor_index_, &ActorIndex::firstSyncEnded, [this]() {
         dag_->start_check();

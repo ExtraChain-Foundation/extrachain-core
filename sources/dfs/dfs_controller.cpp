@@ -2601,6 +2601,16 @@ void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
     node->network()->send_message(msg, MessageType::RequestDfsSize, SendMode::Neighbours, MessageStatus::Request);
 }
 
+void DfsController::sendSizeRequestMsg(const ActorId &actorId, const std::string &identifier) const {
+    Responder responder(node->network());
+    if (!responder.add_identifier(identifier)) {
+        return;
+    }
+    DfsP::RequestDfsSize msg { .actorId = actorId };
+    node->network()->send_message(msg, MessageType::RequestDfsSize, SendMode::Focused,
+                                 MessageStatus::Request, responder);
+}
+
 void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg, const Responder &responder) {
     const auto            dfsSize = m_sizeTaken; // calculate_size().local;
     DfsP::ResponseDfsSize response { .actorId = msg.actorId, .size = dfsSize };
