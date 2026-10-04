@@ -101,6 +101,9 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] bool        verify_timeout_vote(const TimeoutVote& vote) const;
         [[nodiscard]] bool        safe_to_vote(const Proposal& proposal) const;
         [[nodiscard]] static bool newer(const QuorumCertificate& left, const QuorumCertificate& right) noexcept;
+        // Whether a timeout vote for the same slot may move from one known highest certificate
+        // to another: only to a strictly newer one.
+        [[nodiscard]] bool supersedes(const std::string& certificate_hash, const std::string& previous_hash) const;
         [[nodiscard]] std::optional<FinalizedCheckpoint> finalization_for(
             const QuorumCertificate& certificate) const;
         [[nodiscard]] std::optional<FinalityProof> finality_proof_for(const QuorumCertificate& certificate) const;

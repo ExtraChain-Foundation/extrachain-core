@@ -319,7 +319,13 @@ namespace ExtraChain::Consensus {
         auto next_state                = safety_state_;
         next_state.last_timeout_height = height;
         next_state.last_timeout_round  = round;
-        const auto persisted           = store_->persist_timeout_vote(vote, next_state);
+        // A validator that timed out this round and then learned a newer certificate of the
+        // same height re-sends its timeout with that certificate. Refusing it as a conflict
+        // left validators on two certificates of one height, whose timeout votes never formed
+        // a quorum (Ubuntu stand: 5 votes for 535/0 and 2 for 535/1, stalled for good).
+        const auto persisted = store_->persist_timeout_vote(vote, next_state, [&](const std::string& stored_hash) {
+            return supersedes(vote.highest_certificate_hash, stored_hash);
+        });
         if (!persisted.has_value()) {
             return std::unexpected(persisted.error());
         }
@@ -566,8 +572,17 @@ namespace ExtraChain::Consensus {
         const auto        prior = observed_timeout_slots_.find(slot);
         if (prior != observed_timeout_slots_.end()
             && prior->second.highest_certificate_hash != vote.highest_certificate_hash) {
-            result.equivocation = std::pair { prior->second, vote };
-            return result;
+            // A timeout re-sent with a newer certificate of the same height replaces the
+            // earlier one; an older or unknown certificate is still two votes in one slot.
+            if (!supersedes(vote.highest_certificate_hash, prior->second.highest_certificate_hash)) {
+                result.equivocation = std::pair { prior->second, vote };
+                return result;
+            }
+            const auto group =
+                timeout_votes_.find(timeout_round(prior->second) + ':' + prior->second.highest_certificate_hash);
+            if (group != timeout_votes_.end()) {
+                group->second.erase(vote.validator_id);
+            }
         }
         observed_timeout_slots_.insert_or_assign(slot, vote);
 
@@ -1177,6 +1192,13 @@ namespace ExtraChain::Consensus {
 
     bool ConsensusEngine::newer(const QuorumCertificate& left, const QuorumCertificate& right) noexcept {
         return std::tie(left.height, left.round) > std::tie(right.height, right.round);
+    }
+
+    bool ConsensusEngine::supersedes(const std::string& certificate_hash, const std::string& previous_hash) const {
+        const auto certificate = certificates_.find(certificate_hash);
+        const auto previous    = certificates_.find(previous_hash);
+        return certificate != certificates_.end() && previous != certificates_.end()
+               && newer(certificate->second, previous->second);
     }
 
     std::optional<FinalizedCheckpoint> ConsensusEngine::finalization_for(

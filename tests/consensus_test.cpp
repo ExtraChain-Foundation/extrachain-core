@@ -723,6 +723,109 @@ int main() {
 
     restarted.reset();
     engines.clear();
+
+    {
+        // Two certificates of one height: validators that saw only the round-0 certificate time
+        // out height 2 with it; once they learn the round-1 certificate their timeout must move
+        // to it, or the timeout votes of the height split between the two and never reach a quorum.
+        std::vector<std::unique_ptr<ConsensusEngine>> split;
+        for (std::size_t index = 0; index < fixture.keys.size(); ++index) {
+            split.push_back(std::make_unique<ConsensusEngine>(
+                fixture.view,
+                ValidatorIdentity { .validator_id = validator_id_for(fixture.keys[index].public_key()),
+                                    .key          = fixture.keys[index] },
+                std::make_unique<SafetyStore>(root / ("split-" + std::to_string(index) + ".sqlite"))));
+            check("split validator initializes", split.back()->initialize().has_value());
+        }
+        const auto certify = [&](std::uint64_t round, const std::vector<std::size_t>& voters) {
+            const auto leader = identity_index(fixture, fixture.view.leader(1, round).validator_id);
+            auto       proposal =
+                split[leader]->make_proposal(batch_manifest(1),
+                                             state_commitment(*split[leader], 1, "split-root-" + std::to_string(round)),
+                                             round);
+            check("split leader proposes", proposal.has_value());
+            std::optional<QuorumCertificate> certificate;
+            for (const auto index : voters) {
+                if (index != leader)
+                    check("split validator observes", split[index]->observe_proposal(proposal.value()).has_value());
+                check("split validator stores data",
+                      split[index]
+                          ->stage_batch(batch_data(1, hash_header(proposal.value().header)))
+                          .has_value());
+                const auto vote = split[index]->accept_proposal(proposal.value());
+                check("split validator votes", vote.has_value());
+                const auto accepted = split[leader]->accept_vote(vote.value());
+                if (accepted.has_value() && accepted.value().certificate.has_value())
+                    certificate = accepted.value().certificate;
+            }
+            check("split round is certified", certificate.has_value());
+            return std::pair { proposal.value(), certificate.value() };
+        };
+        // A sees the round-0 certificate; the other three time round 0 out and certify round 1.
+        const auto round1_leader = identity_index(fixture, fixture.view.leader(1, 1).validator_id);
+        const auto a             = round1_leader == 0 ? std::size_t(1) : std::size_t(0);
+        std::vector<std::size_t> others;
+        for (std::size_t index = 0; index < split.size(); ++index)
+            if (index != a)
+                others.push_back(index);
+        const auto [proposal0, certificate0] = certify(0, { 0, 1, 2, 3 });
+        check("A takes the round-0 certificate", split[a]->accept_certificate(certificate0).has_value());
+        std::optional<TimeoutCertificate> round0_timeout;
+        for (const auto index : others) {
+            const auto vote = split[index]->make_timeout_vote(1, 0);
+            check("partitioned validator times out round 0", vote.has_value());
+            const auto accepted = split[others.front()]->accept_timeout_vote(vote.value());
+            if (accepted.has_value() && accepted.value().certificate.has_value())
+                round0_timeout = accepted.value().certificate;
+        }
+        check("round 0 times out without A", round0_timeout.has_value());
+        for (const auto index : others)
+            check("round 1 opens", split[index]->accept_timeout_certificate(round0_timeout.value()).has_value());
+        const auto [proposal1, certificate1] = certify(1, others);
+        check("two certificates share one height",
+              certificate0.height == certificate1.height && certificate1.round == 1);
+
+        const auto receiver = others.back();
+        check("receiver knows both certificates",
+              split[receiver]->observe_proposal(proposal0).has_value()
+                  && split[receiver]->accept_certificate(certificate0).has_value()
+                  && split[receiver]->accept_certificate(certificate1).has_value());
+        const auto first = split[a]->make_timeout_vote(2, 0);
+        check("A times out height 2 with the round-0 certificate",
+              first.has_value() && first.value().highest_certificate_hash == hash_certificate(certificate0));
+        check("receiver counts A's first timeout", split[receiver]->accept_timeout_vote(first.value()).has_value());
+
+        check("A learns the round-1 certificate",
+              split[a]->observe_proposal(proposal1).has_value()
+                  && split[a]->accept_certificate(certificate1).has_value());
+        const auto second = split[a]->make_timeout_vote(2, 0);
+        check("A re-sends its timeout with the newer certificate",
+              second.has_value() && second.value().highest_certificate_hash == hash_certificate(certificate1));
+        const auto moved = split[receiver]->accept_timeout_vote(second.value());
+        check("the newer timeout replaces the older one without equivocation",
+              moved.has_value() && !moved.value().equivocation.has_value());
+        const auto back = split[receiver]->accept_timeout_vote(first.value());
+        check("going back to the older certificate is still equivocation",
+              back.has_value() && back.value().equivocation.has_value());
+
+        for (const auto index : others)
+            if (index != receiver)
+                check("validator takes the round-1 certificate", split[index]->accept_certificate(certificate1).has_value());
+        std::optional<TimeoutCertificate> height2_timeout;
+        for (const auto index : others) {
+            if (index == receiver)
+                continue;
+            const auto vote = split[index]->make_timeout_vote(2, 0);
+            check("validator times out height 2 with the newer certificate", vote.has_value());
+            const auto accepted = split[receiver]->accept_timeout_vote(vote.value());
+            if (accepted.has_value() && accepted.value().certificate.has_value())
+                height2_timeout = accepted.value().certificate;
+        }
+        check("the moved vote counts toward one timeout quorum",
+              height2_timeout.has_value()
+                  && height2_timeout.value().highest_certificate.round == certificate1.round);
+        split.clear();
+    }
     std::filesystem::remove_all(root);
     std::printf("CONSENSUS: %d pass, %d fail\n", passed, failed);
     return failed == 0 ? 0 : 1;

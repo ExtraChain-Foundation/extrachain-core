@@ -284,8 +284,10 @@ namespace ExtraChain::Consensus {
         return {};
     }
 
-    std::expected<bool, ConsensusError> SafetyStore::persist_timeout_vote(const TimeoutVote& vote,
-                                                                          const SafetyState& state) {
+    std::expected<bool, ConsensusError> SafetyStore::persist_timeout_vote(
+        const TimeoutVote&                                vote,
+        const SafetyState&                                state,
+        const std::function<bool(const std::string&)>& supersedes) {
         std::lock_guard lock(mutex_);
         if (!database_ || !database_->is_open()) {
             return std::unexpected(ConsensusError::StorageUnavailable);
@@ -304,18 +306,21 @@ namespace ExtraChain::Consensus {
             if (!stored.has_value()) {
                 return std::unexpected(stored.error());
             }
-            if (stored.value().highest_certificate_hash != vote.highest_certificate_hash
-                || stored.value().signature != vote.signature) {
+            if (stored.value().highest_certificate_hash == vote.highest_certificate_hash
+                && stored.value().signature == vote.signature) {
+                return false;
+            }
+            if (stored.value().highest_certificate_hash == vote.highest_certificate_hash || !supersedes
+                || !supersedes(stored.value().highest_certificate_hash)) {
                 return std::unexpected(ConsensusError::ConflictingVote);
             }
-            return false;
         }
 
         if (!database_->query("BEGIN IMMEDIATE TRANSACTION")) {
             return std::unexpected(ConsensusError::StorageFailure);
         }
         const bool inserted =
-            database_->insert("safety_timeout_votes", { { "vote_key", key }, { "payload", encode(vote) } });
+            database_->replace("safety_timeout_votes", { { "vote_key", key }, { "payload", encode(vote) } });
         const auto stored =
             inserted ? persist_state_unlocked(state)
                      : std::expected<void, ConsensusError>(std::unexpected(ConsensusError::StorageFailure));

@@ -12,6 +12,7 @@
 
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -34,8 +35,12 @@ namespace ExtraChain::Consensus {
         std::expected<void, ConsensusError>                       open();
         std::expected<std::optional<SafetyState>, ConsensusError> load_state();
         std::expected<bool, ConsensusError> persist_vote(const Vote& vote, const SafetyState& state);
-        std::expected<bool, ConsensusError> persist_timeout_vote(const TimeoutVote& vote,
-                                                                 const SafetyState& state);
+        // A stored vote for the same slot is replaced only when `supersedes` accepts its
+        // highest certificate as older than the new vote's; otherwise it is a conflict.
+        std::expected<bool, ConsensusError> persist_timeout_vote(
+            const TimeoutVote&                                vote,
+            const SafetyState&                                state,
+            const std::function<bool(const std::string&)>& supersedes = {});
         std::expected<void, ConsensusError> persist_state(const SafetyState& state);
         std::expected<void, ConsensusError> persist_proposal(const Proposal& proposal);
         std::expected<void, ConsensusError> persist_batch(const SectionBatchData& batch, std::uint64_t height);
