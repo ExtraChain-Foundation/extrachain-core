@@ -318,7 +318,7 @@ struct Reader::Impl {
         auto out = ctx->decompress_frame(frame_data);
         if (!out.has_value()) return std::nullopt;
         if (out->size() > MAX_FRAME_DECOMPRESSED_BYTES) return std::nullopt;
-        return *out;
+        return std::move(out.value());
     }
 };
 
@@ -363,6 +363,28 @@ std::optional<std::string> Reader::read(const SectionId &id) const {
     if (!frame.has_value()) return std::nullopt;
     const auto &fe = impl_->frame_index[frame_idx];
     return extract_section(*frame, raw, fe.first_section, fe.count);
+}
+
+std::optional<std::size_t> Reader::frame_for(const SectionId &id) const {
+    const std::uint64_t raw = section_to_u64(id);
+    if (raw < impl_->header.first_section || raw > impl_->header.last_section)
+        return std::nullopt;
+    const auto index = impl_->find_frame(raw);
+    if (index < 0)
+        return std::nullopt;
+    return static_cast<std::size_t>(index);
+}
+
+std::optional<std::string> Reader::frame(std::size_t index) const {
+    return impl_->decompress_frame(index);
+}
+
+std::optional<std::string> Reader::section_from_frame(const SectionId &id, std::size_t index,
+                                                      const std::string &frame) const {
+    if (index >= impl_->frame_index.size())
+        return std::nullopt;
+    const auto &fe = impl_->frame_index[index];
+    return extract_section(frame, section_to_u64(id), fe.first_section, fe.count);
 }
 
 std::vector<std::pair<SectionId, std::string>>

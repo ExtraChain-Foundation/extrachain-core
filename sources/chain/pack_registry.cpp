@@ -118,6 +118,7 @@ namespace Pack {
                     valid.push_back(m.id);
             }
             std::sort(valid.begin(), valid.end());
+            frame_cache_ = { };
             for (auto it = readers_.begin(); it != readers_.end();) {
                 if (!std::binary_search(valid.begin(), valid.end(), it->first)) {
                     lru_.erase(it->second.lru_position);
@@ -183,6 +184,8 @@ namespace Pack {
             PackId victim = lru_.back();
             lru_.pop_back();
             readers_.erase(victim);
+            if (frame_cache_.pack == victim)
+                frame_cache_ = { };
         }
     }
 
@@ -202,7 +205,22 @@ namespace Pack {
         Reader         *reader = acquire_reader_locked(pid);
         if (!reader)
             return std::nullopt;
-        return reader->read(id);
+        const auto index = reader->frame_for(id);
+        if (!index.has_value())
+            return std::nullopt;
+        if (!frame_cache_.valid || frame_cache_.pack != pid || frame_cache_.index != index.value()) {
+            auto frame = reader->frame(index.value());
+            if (!frame.has_value())
+                return std::nullopt;
+            // A frame of proof-heavy sections is not worth holding on to between reads.
+            constexpr std::size_t MaximumCachedFrameBytes = 16 * 1024 * 1024;
+            if (frame->size() > MaximumCachedFrameBytes) {
+                frame_cache_ = { };
+                return reader->section_from_frame(id, index.value(), frame.value());
+            }
+            frame_cache_ = { .pack = pid, .index = index.value(), .data = std::move(frame.value()), .valid = true };
+        }
+        return reader->section_from_frame(id, index.value(), frame_cache_.data);
     }
 
     std::vector<std::pair<SectionId, std::string>> Registry::read_sections(const SectionId &from,
@@ -395,6 +413,8 @@ namespace Pack {
                 lru_.erase(reader->second.lru_position);
                 readers_.erase(reader);
             }
+            if (frame_cache_.pack == id)
+                frame_cache_ = { };
         }
 
         std::error_code ec;

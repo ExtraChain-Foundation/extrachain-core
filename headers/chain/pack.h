@@ -76,6 +76,11 @@ public:
     static std::expected<Reader, Error> open(const std::filesystem::path &path);
 
     std::optional<std::string> read(const SectionId &id) const;
+    // Frame-level access for a caller that keeps the last decompressed frame: reading a
+    // section decompresses its whole frame of SECTIONS_PER_FRAME sections.
+    std::optional<std::size_t> frame_for(const SectionId &id) const;
+    std::optional<std::string> frame(std::size_t index) const;
+    std::optional<std::string> section_from_frame(const SectionId &id, std::size_t index, const std::string &frame) const;
     std::vector<std::pair<SectionId, std::string>>
     read_range(const SectionId &from, const SectionId &to) const;
 

@@ -147,6 +147,17 @@ namespace Pack {
         mutable std::mutex            incoming_mutex_;
         std::map<PackId, ReaderEntry> readers_;
         std::list<PackId>             lru_;
+        // The last decompressed frame. Sequential section reads (audit, serving file
+        // sections, rebuilding batches) used to decompress the same frame once per section,
+        // and with large blocks in mmap every one of those buffers cost fresh pages
+        // (offline audit of a 70,600-section node: 511 s -> 1342 s). Guarded by cache_mutex_.
+        struct CachedFrame {
+            PackId      pack  = 0;
+            std::size_t index = 0;
+            std::string data;
+            bool        valid = false;
+        };
+        CachedFrame frame_cache_;
 
         // Returns iterator into meta_ or meta_.end() (requires shared lock).
         std::vector<PackMeta>::const_iterator find_meta_for(std::uint64_t section) const;
