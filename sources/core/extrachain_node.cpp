@@ -2563,6 +2563,15 @@ namespace ExtraChain::Core {
                     queue_total,
                     bytes_to_write_total / 1024,
                     dfs_->load_manager_downloads_size());
+        #if defined(__GLIBC__)
+                // Live objects against what the allocator keeps: a growing in_use is data the
+                // node holds, a growing free part is fragmentation that malloc_trim cannot return.
+                const auto heap = mallinfo2();
+                eLog("[Mem] heap: in_use {} MB | free {} MB | mmapped {} MB",
+                     heap.uordblks / (1024 * 1024),
+                     heap.fordblks / (1024 * 1024),
+                     heap.hblkhd / (1024 * 1024));
+        #endif
             }
         }
     #endif
