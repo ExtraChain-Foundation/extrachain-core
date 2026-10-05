@@ -78,6 +78,7 @@ namespace {
 #include "network/peer_identity.h"
 #include "network/network_runtime.h"
 #include "network/wire_format.h"
+#include "network/websocket_service.h"
 #include "runtime/deadline_task.h"
 #include "runtime/periodic_task.h"
 #include "chat/chat_manager.h"
@@ -2545,18 +2546,21 @@ namespace ExtraChain::Core {
                 long rss_mb               = pages * sysconf(_SC_PAGESIZE) / (1024 * 1024);
                 long queue_total          = 0;
                 long bytes_to_write_total = 0;
+                std::size_t read_buffers  = 0;
                 {
                     auto conns = *network_service_->connections();
                     for (const auto& s : *conns) {
                         queue_total += s->queue_size();
                         bytes_to_write_total += s->pending_bytes();
+                        if (const auto websocket = std::dynamic_pointer_cast<WebSocketService>(s))
+                            read_buffers += websocket->read_buffer_bytes();
                     }
                 }
 
                 eLog(
                     "[Mem] RSS: {} MB | msg_hash: {} messages: {} forwarded: {} "
                     "snd_tx: {} fail_tx: {} last_tx: {} cached_tx: {} "
-                    "conn: {}/{} queue: {} pending_kb: {} dfs_dl: {}",
+                    "conn: {}/{} queue: {} pending_kb: {} read_buf_kb: {} dfs_dl: {}",
                     rss_mb,
                     network_service_->msg_hash_list_size(),
                     network_service_->messages_size(),
@@ -2569,6 +2573,7 @@ namespace ExtraChain::Core {
                     network_service_->connections_size(),
                     queue_total,
                     bytes_to_write_total / 1024,
+                    read_buffers / 1024,
                     dfs_->load_manager_downloads_size());
         #if defined(__GLIBC__)
                 // Live objects against what the allocator keeps: a growing in_use is data the

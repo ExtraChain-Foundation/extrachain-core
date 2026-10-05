@@ -64,6 +64,8 @@ public:
     static constexpr std::size_t MaxBulkPendingBytes    = 80 * 1024 * 1024;
     static constexpr std::size_t MaxPendingMessages     = 1024;
     static constexpr std::size_t MaxBulkPendingMessages = 896;
+    // A connection keeps at most this much of its read buffer between messages.
+    static constexpr std::size_t RetainedReadBufferBytes = 1024 * 1024;
 
     ~WebSocketService() override;
 
@@ -79,6 +81,7 @@ public:
     void close_connection() override;
     [[nodiscard]] bool         wait_closed(std::chrono::milliseconds timeout) override;
     [[nodiscard]] std::int64_t pending_bytes() const noexcept override;
+    [[nodiscard]] std::size_t  read_buffer_bytes() const noexcept;
 
 private:
     explicit WebSocketService(ExtraChain::Core::NetworkRuntime& runtime, PeerContext& context);
@@ -107,6 +110,7 @@ private:
     std::atomic_bool                                  write_running_ { false };
     std::atomic<std::int64_t>                         socket_pending_bytes_ { 0 };
     std::atomic<std::int64_t>                         in_flight_bytes_ { 0 };
+    std::atomic<std::size_t>                          read_buffer_bytes_ { 0 };
     bool                                              signal_pending_ = false;
     std::mutex                                        close_mutex_;
     std::condition_variable                           close_condition_;

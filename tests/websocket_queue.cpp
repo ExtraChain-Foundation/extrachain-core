@@ -241,6 +241,62 @@ namespace {
         TEST_REQUIRE(accepted_closed && connected_closed);
     }
 
+    // Shadow sync and relay messages reach 32 MiB. The reader must not keep a buffer of that
+    // size for the rest of the connection's life.
+    void check_read_buffer_release() {
+        Context        alice, bob;
+        NetworkRuntime runtime({ .io_threads = 2, .storage_threads = 1, .compute_threads = 1 });
+        std::promise<WebSocketService::Service> accepted_promise, connected_promise;
+        auto                                    accepted_future  = accepted_promise.get_future();
+        auto                                    connected_future = connected_promise.get_future();
+        std::promise<void>                      delivered;
+        auto                                    delivered_future = delivered.get_future();
+        const std::string                       payload(8 * 1024 * 1024, 'r');
+        auto listen = runtime.listen({ .bind_address = "127.0.0.1", .port = 0 }, [&](auto socket) {
+            auto service = WebSocketService::from_accepted(runtime, std::move(socket), alice);
+            service->on_message =
+                [&](SocketService::Ptr, SocketService::ReceivedMessage& message, std::string, std::string) {
+                    if (message.data == payload)
+                        delivered.set_value();
+                    return true;
+                };
+            accepted_promise.set_value(service);
+            runtime.spawn(service->run(true));
+        });
+        TEST_REQUIRE(listen.has_value());
+        auto connect = [&]() -> asio::awaitable<void> {
+            auto result = co_await WebSocketService::connect(runtime, "127.0.0.1", listen.value(), bob);
+            TEST_REQUIRE(result.has_value());
+            auto service          = result.value();
+            service->on_activated = [&](SocketService::Ptr socket) {
+                socket->send_message(std::span(reinterpret_cast<const std::uint8_t*>(payload.data()),
+                                               payload.size()),
+                                     SocketService::Priority::High);
+            };
+            connected_promise.set_value(service);
+            co_await service->run(false);
+        };
+        runtime.spawn(connect());
+        TEST_REQUIRE(accepted_future.wait_for(5s) == std::future_status::ready);
+        TEST_REQUIRE(connected_future.wait_for(5s) == std::future_status::ready);
+        auto       accepted  = accepted_future.get();
+        auto       connected = connected_future.get();
+        const bool received  = delivered_future.wait_for(10s) == std::future_status::ready;
+        const auto deadline  = std::chrono::steady_clock::now() + 2s;
+        while (accepted->read_buffer_bytes() == 0 && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(1ms);
+        const auto retained = accepted->read_buffer_bytes();
+        accepted->close_connection();
+        connected->close_connection();
+        TEST_REQUIRE(accepted->wait_closed(5s));
+        TEST_REQUIRE(connected->wait_closed(5s));
+        runtime.stop();
+        std::printf("read buffer kept %zu bytes after an 8 MiB message\n", retained);
+        std::fflush(stdout);
+        TEST_REQUIRE(received);
+        TEST_REQUIRE(retained <= WebSocketService::RetainedReadBufferBytes);
+    }
+
     void check_ingress() {
         const auto original  = std::filesystem::current_path();
         const auto directory = std::filesystem::temp_directory_path()
@@ -325,6 +381,9 @@ int main() {
     });
     runner.run("close cancels a reader waiting for capacity", [] {
         check_read_backpressure(true);
+    });
+    runner.run("read buffer returns a large message's memory", [] {
+        check_read_buffer_release();
     });
     runner.run("bounded inbound dispatch while the consumer is stalled", [] {
         check_ingress();

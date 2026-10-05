@@ -327,6 +327,11 @@ asio::awaitable<void> WebSocketService::read_loop() {
             }
         }
         buffer.consume(buffer.size());
+        // The buffer keeps the capacity of the largest message it read, doubled. Shadow sync
+        // and relay messages reach 32 MiB, so each connection held up to 64 MiB for good.
+        if (buffer.capacity() > RetainedReadBufferBytes)
+            buffer.shrink_to_fit();
+        read_buffer_bytes_.store(buffer.capacity(), std::memory_order_relaxed);
     }
     close_connection();
 }
@@ -530,6 +535,10 @@ std::int64_t WebSocketService::pending_bytes() const noexcept {
     return queued_bytes_.load(std::memory_order_relaxed)
            + std::max(in_flight_bytes_.load(std::memory_order_relaxed),
                       socket_pending_bytes_.load(std::memory_order_relaxed));
+}
+
+std::size_t WebSocketService::read_buffer_bytes() const noexcept {
+    return read_buffer_bytes_.load(std::memory_order_relaxed);
 }
 
 void WebSocketService::close_connection() {
