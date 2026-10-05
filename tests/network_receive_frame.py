@@ -41,6 +41,8 @@ struct QMetaObject {
     template<class O, class F> static void invokeMethod(O*, F action, Qt::ConnectionType) { action(); }
 };
 struct NetworkReceivedMessage { std::string message, ip, identifier; bool maintenance = false; };
+// Timing is independently tested; this observer tests admission and ordering only.
+struct ReceiveStageTimer { explicit ReceiveStageTimer(const char*, int = -1) {} };
 struct QueueObserver {
     bool full = false;
     std::vector<NetworkReceivedMessage> pending;
@@ -51,6 +53,8 @@ struct QueueObserver {
         return true;
     }
     void enqueue_maintenance() {}
+    std::size_t pending_count() const { return pending.size(); }
+    std::size_t pending_bytes() const { return 0; }
     template<class W, class C> void defer(W work, C continuation) { work(); continuation(); }
     void drain() { auto items = std::move(pending); pending.clear(); for (const auto& item : items) { dispatch(item); } }
 };

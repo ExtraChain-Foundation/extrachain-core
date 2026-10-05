@@ -83,6 +83,8 @@ template<class T> std::optional<T> deserialize(const std::string& body) {
 }
 }
 int warnings = 0;
+// Timing is independently tested; this observer tests DB and responder semantics only.
+struct ReceiveStageTimer { explicit ReceiveStageTimer(const char*, int = -1) {} };
 std::atomic<bool> node_enabled{true};
 template<class... T> void eWarning(const char*, T&&...) { ++warnings; }
 void require(bool ok) { if (!ok) { throw std::runtime_error("dispatch contract"); } }
