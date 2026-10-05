@@ -7,6 +7,9 @@
 #include <stdexcept>
 #include <utility>
 
+using ReceiveClock = NetworkReceiveMetrics::Clock;
+using ReceiveStage = NetworkReceiveMetrics::Stage;
+
 NetworkReceiveQueue::NetworkReceiveQueue(QObject *parent, Handler handler, ErrorHandler error, Limits limits)
     : QObject(parent), limits_(limits), handler_(std::move(handler)), error_handler_(std::move(error)) {
     if (!handler_ || limits_.messages == 0 || limits_.bytes == 0) {
@@ -24,15 +27,19 @@ bool NetworkReceiveQueue::enqueue(const std::string &message, const std::string 
     {
         std::lock_guard lock(queue_mutex_);
         if (stopped_ || message_count_ >= limits_.messages || message.size() > limits_.bytes - bytes_) {
+            metrics_->increment(&NetworkReceiveMetrics::State::rejected);
             return false;
         }
         auto remaining = limits_.bytes - bytes_ - message.size();
         if (ip.size() > remaining || identifier.size() > remaining - ip.size()) {
+            metrics_->increment(&NetworkReceiveMetrics::State::rejected);
             return false;
         }
         queue_.push_back({ message, ip, identifier, false });
         bytes_ += queue_.back().bytes();
         ++message_count_;
+        metrics_->increment(&NetworkReceiveMetrics::State::accepted);
+        metrics_->pending(message_count_ + std::size_t(maintenance_pending_), bytes_);
     }
     schedule();
     return true;
@@ -50,6 +57,8 @@ bool NetworkReceiveQueue::enqueue_maintenance() {
         // Reserve one coalesced maintenance item even when packet capacity is full
         queue_.push_back({ {}, {}, {}, true });
         maintenance_pending_ = true;
+        metrics_->increment(&NetworkReceiveMetrics::State::accepted);
+        metrics_->pending(message_count_ + 1, bytes_);
     }
     schedule();
     return true;
@@ -109,8 +118,13 @@ void NetworkReceiveQueue::dispatch() {
         }
         active_ = std::move(queue_.front());
         queue_.pop_front();
+        active_started_ = ReceiveClock::now();
+        metrics_->timing(ReceiveStage::Pending, active_->enqueued, active_started_);
+        metrics_->increment(&NetworkReceiveMetrics::State::started);
     }
     QPointer<NetworkReceiveQueue> guard(this);
+    const auto metrics = metrics_;
+    const auto started = ReceiveClock::now();
     invoking_ = true;
     active_failed_ = false;
     try {
@@ -118,11 +132,13 @@ void NetworkReceiveQueue::dispatch() {
         handler(*active_);
     } catch (...) {
         if (!guard) {
+            metrics->timing(ReceiveStage::Owner, started);
             return;
         }
         active_failed_ = true;
         report(std::current_exception());
     }
+    metrics->timing(ReceiveStage::Owner, started);
     if (!guard) {
         return;
     }
@@ -158,31 +174,39 @@ void NetworkReceiveQueue::worker_loop() {
             work_.reset();
         }
         std::exception_ptr error;
+        const auto started = ReceiveClock::now();
+        metrics_->timing(ReceiveStage::WorkerWait, next.queued, started);
         try {
             next.operation();
         } catch (...) {
             error = std::current_exception();
         }
+        const auto ready = ReceiveClock::now();
+        metrics_->timing(ReceiveStage::WorkerRun, started, ready);
         if (!stopped_) {
             QMetaObject::invokeMethod(this,
-                [this, continuation = std::move(next.continuation), error]() mutable {
-                    complete(std::move(continuation), error);
+                [this, continuation = std::move(next.continuation), error, ready]() mutable {
+                    complete(std::move(continuation), error, ready);
                 }, Qt::QueuedConnection);
         }
     }
 }
 
-void NetworkReceiveQueue::complete(std::function<void()> continuation, std::exception_ptr error) {
+void NetworkReceiveQueue::complete(std::function<void()> continuation, std::exception_ptr error,
+                                   ReceiveClock::time_point ready) {
     Q_ASSERT(QThread::currentThread() == thread());
     if (stopped_) {
         return;
     }
     if (invoking_) {
         // A nested Qt event loop must not finish the packet still borrowed by its caller
-        completion_.emplace(Completion { std::move(continuation), error });
+        completion_.emplace(Completion { std::move(continuation), error, ready });
         return;
     }
     QPointer<NetworkReceiveQueue> guard(this);
+    const auto metrics = metrics_;
+    const auto started = ReceiveClock::now();
+    metrics->timing(ReceiveStage::Delivery, ready, started);
     deferred_ = false;
     invoking_ = true;
     try {
@@ -194,11 +218,13 @@ void NetworkReceiveQueue::complete(std::function<void()> continuation, std::exce
         }
     } catch (...) {
         if (!guard) {
+            metrics->timing(ReceiveStage::Owner, started);
             return;
         }
         active_failed_ = true;
         report(std::current_exception());
     }
+    metrics->timing(ReceiveStage::Owner, started);
     if (!guard) {
         return;
     }
@@ -211,7 +237,7 @@ void NetworkReceiveQueue::finish_turn() {
         auto completion = std::move(*completion_);
         completion_.reset();
         QMetaObject::invokeMethod(this, [this, completion = std::move(completion)]() mutable {
-            complete(std::move(completion.continuation), completion.error);
+            complete(std::move(completion.continuation), completion.error, completion.ready);
         }, Qt::QueuedConnection);
     } else if (!deferred_) {
         finish_active();
@@ -235,6 +261,8 @@ void NetworkReceiveQueue::finish_active() {
         if (!active_) {
             return;
         }
+        metrics_->timing(ReceiveStage::Active, active_started_);
+        metrics_->increment(&NetworkReceiveMetrics::State::completed);
         if (!stopped_) {
             if (active_->maintenance) {
                 maintenance_pending_ = false;
@@ -244,6 +272,7 @@ void NetworkReceiveQueue::finish_active() {
             }
         }
         active_.reset();
+        metrics_->pending(message_count_ + std::size_t(maintenance_pending_), bytes_);
     }
     schedule();
 }
@@ -269,6 +298,7 @@ void NetworkReceiveQueue::stop() {
     maintenance_pending_ = false;
     wake_pending_ = false;
     deferred_ = false;
+    metrics_->stop();
 }
 
 std::size_t NetworkReceiveQueue::pending_count() const {

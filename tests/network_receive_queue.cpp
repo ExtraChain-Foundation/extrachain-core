@@ -5,6 +5,7 @@
 #include "managers/luminance_manager.h"
 
 #include <QDir>
+#include <QJsonDocument>
 #include <QPointer>
 #include <QScopeGuard>
 #include <QTemporaryDir>
@@ -60,6 +61,101 @@ NodeId identity() {
 class NetworkReceiveQueueTest : public QObject {
     Q_OBJECT
 private slots:
+    void aggregateMetricsDoNotRetainPayloadsAndOutliveQueue() {
+        std::shared_ptr<const NetworkReceiveMetrics> metrics;
+        {
+            NetworkReceiveQueue queue(nullptr, [](const auto &) {}, {}, { 2, 256 });
+            metrics = queue.metrics();
+            QVERIFY(queue.enqueue("private-message-one", "private-ip", "private-peer"));
+            QVERIFY(queue.enqueue("private-message-two", "private-ip", "private-peer"));
+            QVERIFY(!queue.enqueue("overflow", {}, {}));
+            auto state = metrics->snapshot();
+            QCOMPARE(state["accepted"].toInt(), 2);
+            QCOMPARE(state["rejected"].toInt(), 1);
+            QCOMPARE(state["pending"].toInt(), 2);
+            QCOMPARE(state["peakPending"].toInt(), 2);
+            QVERIFY(!QJsonDocument(state).toJson().contains("private-"));
+            QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+            QVERIFY(queue.enqueue_maintenance());
+            QVERIFY(queue.enqueue_maintenance());
+            QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+            state = metrics->snapshot();
+            QCOMPARE(state["accepted"].toInt(), 3);
+            QCOMPARE(state["started"].toInt(), 3);
+            QCOMPARE(state["completed"].toInt(), 3);
+            QCOMPARE(state["pendingBytes"].toInt(), 0);
+            QVERIFY(state["peakBytes"].toInt() > 0);
+            QVERIFY(!state["stopped"].toBool());
+        }
+        const auto state = metrics->snapshot();
+        QVERIFY(state["stopped"].toBool());
+        QCOMPARE(state["pending"].toInt(), 0);
+        QCOMPARE(state["completed"].toInt(), 3);
+    }
+
+    void metricsSeparateWorkerExecutionAndOwnerDeliveryWait() {
+        Gate gate;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            queue->defer([&] { gate.wait(); }, [] {});
+        });
+        const auto release = qScopeGuard([&] { gate.release(); });
+        const auto metrics = queue->metrics();
+        auto timing = [&metrics](const char *name) {
+            const auto values = metrics->snapshot()["timings"].toArray();
+            for (const auto &value : values) {
+                const auto row = value.toObject();
+                if (row["stage"].toString() == name) {
+                    return row;
+                }
+            }
+            return QJsonObject {};
+        };
+        QVERIFY(queue->enqueue("one", {}, {}));
+        QVERIFY(queue->enqueue("two", {}, {}));
+        QTRY_VERIFY(gate.entered.load());
+        std::this_thread::sleep_for(15ms);
+        gate.release();
+        const auto deadline = std::chrono::steady_clock::now() + 5s;
+        while (timing("worker-run")["count"].toInt() == 0 && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(1ms);
+        }
+        QCOMPARE(timing("worker-run")["count"].toInt(), 1);
+        std::this_thread::sleep_for(15ms);
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        for (const auto *name : { "pending", "worker-wait", "worker-run", "delivery", "active" }) {
+            QCOMPARE(timing(name)["count"].toInt(), 2);
+        }
+        QCOMPARE(timing("owner")["count"].toInt(), 4);
+        for (const auto *name : { "pending", "worker-run", "delivery", "active" }) {
+            QVERIFY(timing(name)["maxUs"].toDouble() >= 10000);
+        }
+    }
+
+    void metricsCanBeReadConcurrentlyThroughQueueDestruction() {
+        auto queue = std::make_unique<NetworkReceiveQueue>(nullptr, [](const auto &) {});
+        const auto metrics = queue->metrics();
+        std::atomic<bool> valid = true;
+        std::jthread reader([&](std::stop_token stop) {
+            while (!stop.stop_requested()) {
+                const auto state = metrics->snapshot();
+                if (state["version"].toInt() != 1 || state["timings"].toArray().size() != 6) {
+                    valid = false;
+                }
+                std::this_thread::yield();
+            }
+        });
+        for (int i = 0; i < 100; ++i) {
+            QVERIFY(queue->enqueue("message", {}, {}));
+        }
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        queue.reset();
+        QVERIFY(metrics->snapshot()["stopped"].toBool());
+        reader.request_stop();
+        reader.join();
+        QVERIFY(valid.load());
+    }
+
     void readyPacketsShareWakeupsAndYieldToOtherEvents() {
         MetaCallCounter calls;
         std::vector<std::string> seen;
