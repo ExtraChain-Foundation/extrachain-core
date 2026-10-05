@@ -1910,9 +1910,25 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
+    // Reject a peer interval before it can start a disk-backed control search.
+    if (hash_interval.to <= SectionId(0) || hash_interval.to > current_section_) {
+        eLog("[Dag] Hash interval check: ignore #2");
+        return;
+    }
+
+    if (hash_interval.to + 100 < current_section_) {
+        eLog("[Dag] Hash interval check: ignore #3");
+        return;
+    }
+
     // eLog("Hash interval: {}", hash_interval);
     auto last_control = this->find_last_control(hash_interval.to - 1);
     if (!last_control.has_value()) {
+        // A light DAG cannot rebuild controls across a gap in retained sections.
+        if (mode_ == DagMode::Light) {
+            return;
+        }
+
         eWarning("[Dag] Hash interval check: no last control");
         // return;
         this->start_control(Force::Active);
@@ -1924,16 +1940,6 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     }
 
     // eLog("[Dag] Last control: {}", last_control);
-
-    if (hash_interval.to > current_section_) {
-        eLog("[Dag] Hash interval check: ignore #2");
-        return;
-    }
-
-    if (hash_interval.to + 100 < current_section_) {
-        eLog("[Dag] Hash interval check: ignore #3");
-        return;
-    }
 
     if (last_control->section_id != hash_interval.to) {
         eLog("[Dag] Hash interval check: ignore #4");
@@ -2708,8 +2714,9 @@ BigNumberFloat Dag::sum_all_rewards() {
 }
 
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
-    int j  = 0;
-    int jj = 0;
+    constexpr int max_sections_checked     = 1000;
+    int           sections_checked         = 0;
+    int           sections_without_control = 0;
     // eTemp("[Dag] find_last_control: search from {}, current section: {}",
     //       from < 0 ? current_section_ : from,
     //       current_section_);
@@ -2725,6 +2732,10 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
     }
 
     for (SectionId i = from < 0 /*|| from > current_section_*/ ? current_section_ : from; i >= SectionId(0); i--) {
+        if (++sections_checked > max_sections_checked) {
+            break;
+        }
+
         if (i < first_saved_section_) {
             eCritical("[Dag] Try to find section < current first");
             break;
@@ -2732,10 +2743,8 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
 
         auto section = this->read_section(i);
         if (!section.has_value()) {
-            if (i % CONTROL_INTERVAL_MOD == 0) {
-                eLog("[Dag] No section: {}", i);
-                j = 0;
-                // jj++;
+            if (!disable_break && ++sections_without_control > 37) {
+                break;
             }
             continue;
         }
@@ -2749,8 +2758,8 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
             return DagControl { .section_id = i, .control = section->control.value() };
         }
 
-        j += 1;
-        if (!disable_break && (j > 37 || jj > 10)) {
+        sections_without_control += 1;
+        if (!disable_break && sections_without_control > 37) {
             break;
         }
     }
