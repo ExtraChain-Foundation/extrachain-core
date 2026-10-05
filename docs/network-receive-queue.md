@@ -192,3 +192,20 @@ packaging, the 100-client workload or a latency improvement. In particular,
 ActorIndex writes in the message switch still run on the owner thread. Task 210
 requires independent runtime qualification; full-workload results are kept in
 the owner-authorized local report, not inferred from the queue tests.
+
+## WebSocket Send Scheduling
+
+The owner-loop WebSocket priority queues retain at most one queued dequeue wake
+per socket. Burst enqueues and repeated buffer-space notifications coalesce.
+The existing queued write precedes the next dequeue, so another dequeue cannot
+drain a whole burst before socket writes update the buffer occupancy. High,
+normal and low priorities, FIFO within each priority, the existing buffer limit,
+and one-message turns remain unchanged. Closing the socket clears queued work;
+deferred wakes observe the closed state and do not send stale messages.
+
+`extrachain-websocket-send-queue` uses the production WebSocket service with
+loopback sockets and a controlled queued wire-send observer. It checks burst
+coalescing, write/dequeue order, buffer notification coalescing, priority of new
+arrivals, blocked-transport idling and close with pending work. The observer
+replaces only the encrypted wire write; it is not a full handshake, encryption,
+transport throughput or 100-client qualification.
