@@ -139,6 +139,8 @@ public:
     }
 
 private:
+    friend class LoadManagerTestAccess;
+
     void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
     // "Vectors before files" gate state; a full scan of both pools, so callers cache it.
     bool downloads_empty() const;

@@ -2,6 +2,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <thread>
 
@@ -115,6 +116,32 @@ namespace {
     }
 } // namespace
 
+class LoadManagerTestAccess {
+public:
+    static bool cooling_down(LoadManager& manager, const Dfs::FileLink& link) {
+        auto locked = *manager.m_active_downloads_priority;
+        auto item   = locked->find(link);
+        return item != locked->end() && item->second.cooldown_until > std::chrono::system_clock::now();
+    }
+
+    static void expire_cooldown(LoadManager& manager, const Dfs::FileLink& link) {
+        auto locked = *manager.m_active_downloads_priority;
+        auto item   = locked->find(link);
+        TEST_REQUIRE(item != locked->end());
+        item->second.cooldown_until = std::chrono::system_clock::now() - 1s;
+    }
+
+    static bool forced(LoadManager& manager, const Dfs::FileLink& link) {
+        auto locked = *manager.m_active_downloads_priority;
+        auto item   = locked->find(link);
+        return item != locked->end() && item->second.forced;
+    }
+
+    static void kick(LoadManager& manager) {
+        manager.kick();
+    }
+};
+
 int main(int argc, char** argv) {
     TEST_REQUIRE(argc == 2);
     const auto original = std::filesystem::current_path();
@@ -188,6 +215,35 @@ int main(int argc, char** argv) {
         TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
         TEST_REQUIRE(!std::filesystem::exists(path.value().native()));
 
+    } else if (std::string_view(argv[1]) == "reprobe") {
+        // A storage write holds the file's write lock and then reads the download pool.
+        // The scheduler must not wait for that write lock while it holds the pool, which
+        // it did when a cooldown ended and it asked the network for the file again.
+        std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));
+        auto&                manager = node->dfs()->download_manager();
+        const Dfs::FileLink link { .owner_id = owner.id(), .file_id = row.file_id };
+        manager.add_to_queue(owner.id(), row, "");
+        TEST_REQUIRE(wait_for([&] {
+            return LoadManagerTestAccess::cooling_down(manager, link);
+        }));
+        {
+            auto write_lock = manager.lock_file(link);
+            LoadManagerTestAccess::expire_cooldown(manager, link);
+            LoadManagerTestAccess::kick(manager);
+            std::this_thread::sleep_for(300ms);
+            auto pool_read = std::async(std::launch::async, [&] {
+                return manager.is_downloading(link);
+            });
+            if (pool_read.wait_for(5s) != std::future_status::ready) {
+                std::printf("DFS scheduler deadlocked on the file write lock\n");
+                std::fflush(stdout);
+                std::_Exit(1);
+            }
+        }
+        // The probe itself still happens once the write lock is free.
+        TEST_REQUIRE(wait_for([&] {
+            return LoadManagerTestAccess::forced(manager, link);
+        }));
     } else {
         TEST_REQUIRE(std::string_view(argv[1]) == "backoff");
         std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));

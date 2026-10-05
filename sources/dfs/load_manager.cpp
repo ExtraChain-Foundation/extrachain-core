@@ -243,6 +243,11 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
         }
     }
 
+    // Files whose cooldown ended in this pass. They are probed again after the pass:
+    // request_file reaches add_to_queue, which takes the file write lock, and writers
+    // take that lock before the pool, so asking under the pool lock deadlocks.
+    std::vector<Dfs::FileLink> reprobe;
+
     auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) -> bool {
         if (!active_downloads->empty()) {
             auto                       active_downloads_locked = *active_downloads;
@@ -309,7 +314,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     // Re-probe the network for the content: a peer that only knew the
                     // row (state=Known) when we first asked may have become Ready since.
                     // request_file re-broadcasts DfsFileState (throttled to 30s/file).
-                    node->dfs()->request_file(file_link.owner_id, file_link.file_id);
+                    reprobe.push_back(file_link);
                 }
 
                 // Files stay paused while vectors are downloading. Forced files (explicit
@@ -527,6 +532,9 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
     if (process_func(m_active_downloads_priority))
         process_func(m_active_downloads);
+    for (const auto& file_link : reprobe) {
+        node->dfs()->request_file(file_link.owner_id, file_link.file_id);
+    }
 
     // Idle: nothing queued in either pool — stop the periodic tick so an idle
     // messenger does not wake the CPU every 5 seconds (battery on phones).
