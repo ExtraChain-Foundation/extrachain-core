@@ -56,6 +56,29 @@ public:
         dag.first_saved_section_ = SectionId(0);
     }
 
+    static void pack_hot(Dag& dag) {
+        dag.pack_hot_sections(SectionId(0), dag.first_saved_section_, dag.pack_hot_generation_.load());
+    }
+
+    static bool packing(Dag& dag) {
+        if (!dag.pack_mutex_.try_lock())
+            return true;
+        dag.pack_mutex_.unlock();
+        return false;
+    }
+
+    // What handle_sync_request does before it starts fetching sections.
+    static void enter_sync(Dag& dag) {
+        dag.pack_hot_generation_.fetch_add(1);
+        std::lock_guard lock(dag.pack_mutex_);
+        dag.status_ = DagStatus::Sync;
+    }
+
+    static void leave_sync(Dag& dag) {
+        std::lock_guard lock(dag.pack_mutex_);
+        dag.status_ = DagStatus::Ready;
+    }
+
     static bool pack_history_dirty(Dag& dag) {
         std::lock_guard lock(dag.pack_sync_mutex_);
         return dag.pack_history_dirty_;

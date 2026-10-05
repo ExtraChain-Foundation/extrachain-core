@@ -5665,7 +5665,16 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
                 return std::nullopt;
             return static_cast<std::size_t>(*value - *first_int);
         };
+        // A sync bumps the generation and then waits for pack_mutex_. Sealing one range
+        // took 100 s on a loaded host, and every network thread queued behind that sync,
+        // so the pack gives the lock back as soon as it notices and is sealed later.
+        struct YieldToSync { };
+        const auto superseded = [&] {
+            return generation != pack_hot_generation_.load();
+        };
         const auto read_candidate = [&](const SectionId &section_id) -> std::optional<Section> {
+            if (superseded())
+                throw YieldToSync { };
             const auto offset = offset_of(section_id);
             if (!offset.has_value())
                 return std::nullopt;
@@ -5680,23 +5689,34 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
             section.value().id = section_id;
             return std::move(section.value());
         };
-        if (!validate_pack_controls(pid, read_candidate)) {
-            eWarning("[Dag] Defer pack {} until its control intervals are complete", pid);
-            return;
-        }
-        for (auto section_id = pack_last - CONTROL_INTERVAL_DIFF + 1; section_id <= pack_last; section_id += 1) {
-            if (!read_candidate(section_id).has_value()) {
-                eWarning("[Dag] Defer pack {}: section {} cannot be parsed", pid, section_id);
+        try {
+            if (!validate_pack_controls(pid, read_candidate)) {
+                eWarning("[Dag] Defer pack {} until its control intervals are complete", pid);
                 return;
             }
+            for (auto section_id = pack_last - CONTROL_INTERVAL_DIFF + 1; section_id <= pack_last;
+                 section_id += 1) {
+                if (!read_candidate(section_id).has_value()) {
+                    eWarning("[Dag] Defer pack {}: section {} cannot be parsed", pid, section_id);
+                    return;
+                }
+            }
+        } catch (const YieldToSync &) {
+            eLog("[Dag] Pack {} yields to a sync and is sealed later", pid);
+            return;
         }
 
         bool       changed = false;
+        bool       yielded = false;
         const auto res     = pack_registry_->create_pack(
             pid,
             pack_first,
             pack_last,
             [&](const SectionId &section_id) -> std::optional<std::string> {
+                if (superseded()) {
+                    yielded = true;
+                    return std::nullopt;
+                }
                 const auto offset = offset_of(section_id);
                 if (!offset.has_value())
                     return std::nullopt;
@@ -5708,6 +5728,10 @@ void Dag::pack_hot_sections(const SectionId    &max_pack_idx,
                 }
                 return payload;
             });
+        if (yielded) {
+            eLog("[Dag] Pack {} yields to a sync and is sealed later", pid);
+            return;
+        }
         if (changed) {
             eWarning("[Dag] Defer pack {}: a section changed while it was being packed", pid);
             return;
