@@ -18,6 +18,7 @@
  */
 
 #include "network/websocket_service.h"
+#include <QPointer>
 
 WebSocketService::WebSocketService(QWebSocket     *ws,
                                    ExtraChainNode *node,
@@ -177,6 +178,7 @@ void WebSocketService::closeSocket() {
         normal_queue_.swap(empty2);
         low_queue_.swap(empty3);
         m_messageCache.swap(empty4);
+        dequeue_pending_ = false;
         locker.unlock();
     }
 
@@ -345,7 +347,7 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
     }
 
     if (!waiting_buffer_space_) {
-        emit needToTryDequeue();
+        scheduleDequeue();
     }
 }
 
@@ -361,7 +363,23 @@ bool WebSocketService::canSendMore() const {
     return m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
 }
 
+void WebSocketService::scheduleDequeue() {
+    {
+        QMutexLocker locker(&queue_mutex_);
+        if (closed_ || dequeue_pending_
+            || (high_queue_.empty() && normal_queue_.empty() && low_queue_.empty())) {
+            return;
+        }
+        dequeue_pending_ = true;
+    }
+    emit needToTryDequeue();
+}
+
 void WebSocketService::tryDequeueMessage() {
+    {
+        QMutexLocker locker(&queue_mutex_);
+        dequeue_pending_ = false;
+    }
     if (closed_) {
         return;
     }
@@ -389,10 +407,11 @@ void WebSocketService::tryDequeueMessage() {
     locker.unlock();
 
     if (!data.isEmpty()) {
+        QPointer<WebSocketService> guard(this);
         emit sendMessageInternal(data);
-
-        if (!high_queue_.empty() || !normal_queue_.empty() || !low_queue_.empty()) {
-            emit needToTryDequeue();
+        if (guard) {
+            // The queued write precedes the next coalesced dequeue wake
+            scheduleDequeue();
         }
     }
 }
@@ -466,7 +485,7 @@ void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
     connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
         if (waiting_buffer_space_) {
-            emit needToTryDequeue();
+            scheduleDequeue();
         }
     });
 }
