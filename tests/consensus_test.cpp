@@ -826,6 +826,107 @@ int main() {
                   && height2_timeout.value().highest_certificate.round == certificate1.round);
         split.clear();
     }
+
+    {
+        // The stand stalled at height 836: validators that had already timed out the next height in
+        // round 1 learned a newer certificate of the current height, their round fell back to 0,
+        // and they could neither time out round 0 again nor re-send round 1 with that certificate.
+        std::vector<std::unique_ptr<ConsensusEngine>> late;
+        for (std::size_t index = 0; index < fixture.keys.size(); ++index) {
+            late.push_back(std::make_unique<ConsensusEngine>(
+                fixture.view,
+                ValidatorIdentity { .validator_id = validator_id_for(fixture.keys[index].public_key()),
+                                    .key          = fixture.keys[index] },
+                std::make_unique<SafetyStore>(root / ("late-" + std::to_string(index) + ".sqlite"))));
+            check("late validator initializes", late.back()->initialize().has_value());
+        }
+        const auto certify = [&](std::uint64_t round, const std::vector<std::size_t>& voters) {
+            const auto leader   = identity_index(fixture, fixture.view.leader(1, round).validator_id);
+            auto       proposal = late[leader]->make_proposal(
+                batch_manifest(1), state_commitment(*late[leader], 1, "late-root-" + std::to_string(round)), round);
+            check("late leader proposes", proposal.has_value());
+            std::optional<QuorumCertificate> certificate;
+            for (const auto index : voters) {
+                if (index != leader)
+                    check("late validator observes", late[index]->observe_proposal(proposal.value()).has_value());
+                check("late validator stores data",
+                      late[index]->stage_batch(batch_data(1, hash_header(proposal.value().header))).has_value());
+                const auto vote = late[index]->accept_proposal(proposal.value());
+                check("late validator votes", vote.has_value());
+                const auto accepted = late[leader]->accept_vote(vote.value());
+                if (accepted.has_value() && accepted.value().certificate.has_value())
+                    certificate = accepted.value().certificate;
+            }
+            check("late round is certified", certificate.has_value());
+            return std::pair { proposal.value(), certificate.value() };
+        };
+        const auto timeout_quorum = [&](std::uint64_t height,
+                                        std::uint64_t round,
+                                        const std::vector<std::size_t>& voters) {
+            std::optional<TimeoutCertificate> certificate;
+            for (const auto index : voters) {
+                const auto vote = late[index]->make_timeout_vote(height, round);
+                check("late validator times out", vote.has_value());
+                const auto accepted = late[voters.front()]->accept_timeout_vote(vote.value());
+                if (accepted.has_value() && accepted.value().certificate.has_value())
+                    certificate = accepted.value().certificate;
+            }
+            check("late timeout reaches a quorum", certificate.has_value());
+            for (const auto index : voters)
+                check("late validator opens the next round",
+                      late[index]->accept_timeout_certificate(certificate.value()).has_value());
+            return certificate.value();
+        };
+        // Everyone votes round 0 of height 1; the round-1 leader's side times it out and
+        // certifies round 1 as well, but only that leader holds the round-1 certificate.
+        const auto round1_leader = identity_index(fixture, fixture.view.leader(1, 1).validator_id);
+        std::vector<std::size_t> rest;
+        for (std::size_t index = 0; index < late.size(); ++index)
+            if (index != round1_leader)
+                rest.push_back(index);
+        const auto [proposal0, certificate0] = certify(0, { 0, 1, 2, 3 });
+        const auto height1_timeout = timeout_quorum(1, 0, rest);
+        check("round-1 leader opens round 1",
+              late[round1_leader]->accept_timeout_certificate(height1_timeout).has_value());
+        const auto [proposal1, certificate1] = certify(1, { round1_leader, rest[0], rest[1] });
+        check("round-1 leader takes its certificate",
+              late[round1_leader]->accept_certificate(certificate1).has_value());
+        // The other three only see the round-0 certificate and time height 2 out twice with it.
+        for (const auto index : rest)
+            check("validator takes the round-0 certificate", late[index]->accept_certificate(certificate0).has_value());
+        const auto height2_round0 = timeout_quorum(2, 0, rest);
+        check("round-1 leader opens round 1 of height 2",
+              late[round1_leader]->accept_timeout_certificate(height2_round0).has_value());
+        for (const auto index : rest) {
+            const auto vote = late[index]->make_timeout_vote(2, 1);
+            check("validator times out height 2 round 1 with the round-0 certificate",
+                  vote.has_value() && vote.value().highest_certificate_hash == hash_certificate(certificate0));
+        }
+        // The round-1 certificate of height 1 reaches them now.
+        for (const auto index : rest) {
+            check("validator learns the round-1 certificate",
+                  late[index]->observe_proposal(proposal1).has_value()
+                      && late[index]->accept_certificate(certificate1).has_value());
+            check("the round already reached at height 2 is kept", late[index]->safety_state().current_round == 1);
+        }
+        std::optional<TimeoutCertificate> moved;
+        for (const auto index : { rest[0], rest[1], round1_leader }) {
+            const auto vote = late[index]->make_timeout_vote(2, 1);
+            check("round-1 timeout is re-sent with the newer certificate",
+                  vote.has_value() && vote.value().round == 1
+                      && vote.value().highest_certificate_hash == hash_certificate(certificate1));
+            if (!vote.has_value())
+                continue;
+            const auto accepted = late[rest[2]]->accept_timeout_vote(vote.value());
+            check("the re-sent timeout is not equivocation",
+                  accepted.has_value() && !accepted.value().equivocation.has_value());
+            if (accepted.has_value() && accepted.value().certificate.has_value())
+                moved = accepted.value().certificate;
+        }
+        check("height 2 round 1 times out on the newer certificate",
+              moved.has_value() && moved.value().highest_certificate.round == certificate1.round);
+        late.clear();
+    }
     std::filesystem::remove_all(root);
     std::printf("CONSENSUS: %d pass, %d fail\n", passed, failed);
     return failed == 0 ? 0 : 1;

@@ -679,8 +679,16 @@ namespace ExtraChain::Consensus {
         if (!next_state.highest_certificate.has_value()
             || newer(certificate, next_state.highest_certificate.value())) {
             next_state.highest_certificate = certificate;
-            next_state.current_round       = 0;
-            next_state.highest_timeout_certificate.reset();
+            // A newer certificate of the same height leaves the next height where it is. Going
+            // back to round 0 there stalled the stand at height 836: a validator that had timed
+            // out round 1 could neither time out round 0 again nor re-send round 1 with the newer
+            // certificate, so the round-1 timeout votes stayed split between two certificates.
+            const bool same_next_height = next_state.last_timeout_height == certificate.height + 1;
+            next_state.current_round    = same_next_height ? next_state.last_timeout_round : 0;
+            if (!same_next_height || !next_state.highest_timeout_certificate.has_value()
+                || next_state.highest_timeout_certificate.value().height != certificate.height + 1) {
+                next_state.highest_timeout_certificate.reset();
+            }
         }
         if (proposal != proposals_.end() && proposal->second.parent_certificate.phase != Phase::Genesis
             && (!next_state.locked_certificate.has_value()
