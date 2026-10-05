@@ -79,6 +79,14 @@ public:
         dag.status_ = DagStatus::Ready;
     }
 
+    static bool accept_received_pack(Dag& dag, Pack::PackId id, const Pack::Reader& reader) {
+        return dag.accept_received_pack(id, reader);
+    }
+
+    static std::optional<std::string> hot_payload(Dag& dag, const SectionId& section) {
+        return dag.hot_section_store_->get(section);
+    }
+
     static bool pack_history_dirty(Dag& dag) {
         std::lock_guard lock(dag.pack_sync_mutex_);
         return dag.pack_history_dirty_;

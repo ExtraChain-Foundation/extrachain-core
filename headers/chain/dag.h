@@ -1095,6 +1095,9 @@ private:
     bool validate_pack_controls(Pack::PackId                                                    id,
                                 const std::function<std::optional<Section>(const SectionId &)> &read) const;
     bool validate_received_pack(Pack::PackId id, const Pack::Reader &reader) const;
+    // Validates a received pack and records whether the history must be replayed.
+    bool accept_received_pack(Pack::PackId id, const Pack::Reader &reader);
+    bool received_pack_matches_history(const Pack::Reader &reader) const;
 
     std::optional<BigNumberFloat> frozen_token_allocation(const ActorId &actor, const TokenId &token);
 

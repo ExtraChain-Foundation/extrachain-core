@@ -5172,6 +5172,48 @@ bool Dag::mark_pack_history_dirty() {
     return true;
 }
 
+bool Dag::accept_received_pack(Pack::PackId id, const Pack::Reader &reader) {
+    if (!validate_received_pack(id, reader))
+        return false;
+    // A replay rebuilds the balance cache from genesis: 52 s for 60k sections on the stand,
+    // on a network thread, after every rejoin across a pack boundary. A node that already
+    // holds the same sections has nothing to replay.
+    if (received_pack_matches_history(reader)) {
+        eLog("[Dag] Pack {} matches the local history; no replay needed", id);
+        return true;
+    }
+    return mark_pack_history_dirty();
+}
+
+bool Dag::received_pack_matches_history(const Pack::Reader &reader) const {
+    WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+    const auto        first = reader.first_section();
+    const auto        last  = reader.last_section();
+    for (SectionId frame_first = first; frame_first <= last; frame_first += Pack::SECTIONS_PER_FRAME) {
+        const auto frame_last = std::min(last, frame_first + Pack::SECTIONS_PER_FRAME - 1);
+        const auto rows       = reader.read_range(frame_first, frame_last);
+        if (SectionId(rows.size()) != frame_last - frame_first + 1)
+            return false;
+        for (const auto &[section_id, payload] : rows) {
+            auto received = Json::deserialize<Section>(payload);
+            if (!received.has_value())
+                return false;
+            received.value().id = section_id;
+            auto local          = read_section(section_id);
+            if (!local.has_value()) {
+                // Sync does not store empty sections.
+                if (!received.value().transactions.empty() || received.value().control.has_value())
+                    return false;
+                continue;
+            }
+            local.value().id = section_id;
+            if (Json::serialize(local.value()) != Json::serialize(received.value()))
+                return false;
+        }
+    }
+    return true;
+}
+
 void Dag::clear_pack_history_dirty() {
     if (cache_.section() != SectionId(-1))
         return;
@@ -5258,7 +5300,7 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
                                       { },
                                       true,
                                       [this, id = data.pack_id](const Pack::Reader &reader) {
-                                          return validate_received_pack(id, reader) && mark_pack_history_dirty();
+                                          return accept_received_pack(id, reader);
                                       });
     if (!finalized.has_value()) {
         eWarning("[Dag] Pack {} finalization failed: error {}", data.pack_id, static_cast<int>(finalized.error()));
