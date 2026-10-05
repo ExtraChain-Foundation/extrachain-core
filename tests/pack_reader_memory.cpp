@@ -6,6 +6,7 @@
 #include <new>
 
 #include "chain/pack.h"
+#include "chain/pack_registry.h"
 #include "test_support.h"
 #include "utils/exc_utils.h"
 
@@ -117,6 +118,16 @@ int main() {
         file.write(&byte, 1);
     }
     TEST_REQUIRE(!Pack::Reader::open(path).has_value());
+
+    // A start lists packs by their headers without hashing them; the registry still hashes
+    // a pack before the first section it serves from it.
+    TEST_REQUIRE(Pack::Reader::open(path, false).has_value());
+    {
+        Pack::Registry registry(directory);
+        registry.rescan();
+        TEST_REQUIRE(registry.find_pack_for_section(SectionId(30000)).has_value());
+        TEST_REQUIRE(!registry.read_section(SectionId(30000)).has_value());
+    }
 
     std::filesystem::remove_all(directory);
 }

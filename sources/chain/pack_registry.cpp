@@ -84,7 +84,9 @@ namespace Pack {
             if (!pid.has_value())
                 continue;
 
-            auto r = Reader::open(entry.path());
+            // Headers only: hashing every pack read the whole history from disk on each
+            // start. A pack is hashed when it is first opened for reading.
+            auto r = Reader::open(entry.path(), false);
             if (!r.has_value()) {
                 eWarning("[PackRegistry] Skip broken pack {}: error {}",
                          entry.path().string(),
@@ -119,6 +121,7 @@ namespace Pack {
             }
             std::sort(valid.begin(), valid.end());
             frame_cache_ = { };
+            verified_.clear();
             for (auto it = readers_.begin(); it != readers_.end();) {
                 if (!std::binary_search(valid.begin(), valid.end(), it->first)) {
                     lru_.erase(it->second.lru_position);
@@ -167,7 +170,7 @@ namespace Pack {
             return it->second.reader.get();
         }
 
-        auto r = Reader::open(pack_path(id));
+        auto r = Reader::open(pack_path(id), !verified_.contains(id));
         if (!r.has_value()) {
             eWarning("[PackRegistry] Failed to open {}: error {}",
                      pack_path(id).string(),
@@ -175,6 +178,7 @@ namespace Pack {
             return nullptr;
         }
 
+        verified_.insert(id);
         lru_.push_front(id);
         auto [inserted_it, _] = readers_.emplace(id,
                                                  ReaderEntry {
@@ -434,6 +438,11 @@ namespace Pack {
         if (ec) {
             std::filesystem::remove(tmp, ec);
             return std::unexpected(Error::WriteFailed);
+        }
+        {
+            // The validation above hashed this exact file.
+            std::lock_guard cache_lock(cache_mutex_);
+            verified_.insert(id);
         }
 
         {

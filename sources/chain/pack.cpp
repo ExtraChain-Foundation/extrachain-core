@@ -194,7 +194,7 @@ struct Reader::Impl {
         return static_cast<bool>(file.read(static_cast<char *>(out), static_cast<std::streamsize>(size)));
     }
 
-    bool load(const std::filesystem::path &p) {
+    bool load(const std::filesystem::path &p, bool verify_checksum) {
         path = p;
 
         file.open(p, std::ios::binary);
@@ -260,7 +260,7 @@ struct Reader::Impl {
             return false;
 
         // The same BLAKE3 digest compute_checksum takes over the whole buffer, streamed.
-        {
+        if (verify_checksum) {
             blake3_hasher hasher;
             blake3_hasher_init(&hasher);
             std::vector<char> chunk(1024 * 1024);
@@ -359,10 +359,10 @@ Reader::~Reader()                                   = default;
 Reader::Reader(Reader &&) noexcept                  = default;
 Reader &Reader::operator=(Reader &&) noexcept       = default;
 
-std::expected<Reader, Error> Reader::open(const std::filesystem::path &path) {
+std::expected<Reader, Error> Reader::open(const std::filesystem::path &path, bool verify_checksum) {
     Reader r;
     r.impl_ = std::make_unique<Impl>();
-    if (!r.impl_->load(path)) {
+    if (!r.impl_->load(path, verify_checksum)) {
         return std::unexpected(Error::OpenFailed);
     }
     return r;

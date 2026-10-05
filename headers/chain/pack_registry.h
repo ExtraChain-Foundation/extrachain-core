@@ -26,6 +26,7 @@
 #include <functional>
 #include <list>
 #include <map>
+#include <set>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -150,6 +151,8 @@ namespace Pack {
         mutable std::mutex            cache_mutex_;
         mutable std::mutex            incoming_mutex_;
         std::map<PackId, ReaderEntry> readers_;
+        // Packs whose whole-file checksum this process has verified (guarded by cache_mutex_).
+        std::set<PackId> verified_;
         std::list<PackId>             lru_;
         // The last decompressed frame. Sequential section reads (audit, serving file
         // sections, rebuilding batches) used to decompress the same frame once per section,

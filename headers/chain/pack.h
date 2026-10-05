@@ -73,7 +73,9 @@ public:
     Reader(Reader &&other) noexcept;
     Reader &operator=(Reader &&other) noexcept;
 
-    static std::expected<Reader, Error> open(const std::filesystem::path &path);
+    // verify_checksum = false checks the header, frame index and footer only; the registry
+    // hashes a pack once per process instead of reading the whole file on every open.
+    static std::expected<Reader, Error> open(const std::filesystem::path &path, bool verify_checksum = true);
 
     std::optional<std::string> read(const SectionId &id) const;
     // Frame-level access for a caller that keeps the last decompressed frame: reading a
