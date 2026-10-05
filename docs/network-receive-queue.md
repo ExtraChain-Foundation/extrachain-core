@@ -73,6 +73,21 @@ It does not evict earlier accepted packets. This is global backpressure, not a
 per-peer fairness or rate-limiting mechanism. Native load qualification must
 check queue rejection and connection churn, not only memory use.
 
+Overflow diagnostics include pending item count, retained bytes and rejected raw
+frame size, never packet contents or peer identifiers. Count and bytes are
+separate observations immediately after rejection, not an atomic admission
+snapshot. Pending count includes the reserved maintenance item when present.
+Stages taking at least 100 ms report only a fixed stage name, numeric message
+type and elapsed monotonic time. Stages are preparation, owner-thread dispatch,
+and reputation read/increment/expiry on the worker. Unknown/pre-decode types use
+-1. Preparation can include a direct synchronous dispatch; overlapping timings
+must not be summed. Deferred queue wait and event-loop delivery delay are not
+included in worker execution time. Logging failures are suppressed, including
+during exception unwinding. This instrumentation does not change capacity,
+FIFO, durability, deadlines or the packet's exception-handling path.
+Elapsed wall time includes scheduling delays; it is not a CPU-time measurement
+or proof of the operation responsible for contention.
+
 Connection activation requests DFS size only from the activated peer, using
 `newSocketActivatedWithParams` and a Focused Request. Previously every activation
 polled all neighbours again: N new peers on top of B existing peers generated
@@ -128,6 +143,10 @@ They cover owned input, FIFO, active/metadata capacity, owner-loop progress,
 read/commit/dispatch order, maintenance, shutdown, exceptions, self-deletion,
 concurrent intake and immediate idle shutdown. Two nested-event-loop tests failed
 before the reentrancy fix and pass after it; reentrant stop is also covered.
+The compiled `network_receive_timing.py` fixture uses the actual timer class with
+a controlled monotonic clock and log observer. It covers the exact threshold,
+type updates, early return, unwinding and throwing log sinks. Admission and
+reputation fixtures stub timing, whose output does not alter their contracts.
 The parent-ownership regression uses a real Qt child queue and owned real SQLite
 storage, then verifies commit visibility after the storage is destroyed.
 `network_receive_shutdown.py` compiles the actual node shutdown bodies with

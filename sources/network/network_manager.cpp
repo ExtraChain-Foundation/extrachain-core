@@ -32,6 +32,7 @@
 #include "dfs/dirs_manager.h"
 #include "utils/thread_pool_boost.h"
 
+#include <chrono>
 #include <filesystem>
 #include <exception>
 #include <fstream>
@@ -39,6 +40,40 @@
 
 #include <QJsonObject>
 #include <QThread>
+
+namespace {
+using ReceiveClock = std::chrono::steady_clock;
+
+class ReceiveStageTimer {
+public:
+    explicit ReceiveStageTimer(const char *stage, int type = -1)
+        : stage_(stage), type_(type), started_(ReceiveClock::now()) {
+    }
+    ReceiveStageTimer(const ReceiveStageTimer &) = delete;
+    ReceiveStageTimer &operator=(const ReceiveStageTimer &) = delete;
+
+    void set_type(int type) { type_ = type; }
+
+    ~ReceiveStageTimer() noexcept {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            ReceiveClock::now() - started_).count();
+        if (elapsed < 100) {
+            return;
+        }
+        try {
+            eWarning("[NetworkManager] Slow receive stage: stage={} type={} elapsed_ms={}",
+                     stage_, type_, elapsed);
+        } catch (...) {
+            // Diagnostics must not change dispatch or worker failure handling
+        }
+    }
+
+private:
+    const char *stage_;
+    int type_;
+    ReceiveClock::time_point started_;
+};
+}
 
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
@@ -1094,7 +1129,9 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     if (!receive_queue_->enqueue(message, ip, identifier)) {
-        eWarning("[NetworkManager] Receive queue capacity exceeded; rejecting packet");
+        eWarning("[NetworkManager] Receive queue capacity exceeded; rejecting packet: "
+                 "pending_count={} pending_bytes={} incoming_bytes={}",
+                 receive_queue_->pending_count(), receive_queue_->pending_bytes(), message.size());
         if (!identifier.empty()) {
             QMetaObject::invokeMethod(this, [this, identifier] {
                 remove_connection(QString::fromStdString(identifier));
@@ -1110,12 +1147,16 @@ void NetworkManager::queue_luminance_cleanup() {
 }
 
 void NetworkManager::prepare_received(const NetworkReceivedMessage &incoming) {
+    ReceiveStageTimer timing("prepare");
     if (!node_enabled.load()) {
         return;
     }
     if (incoming.maintenance) {
         auto *storage = node->luminance_manager();
-        receive_queue_->defer([storage] { storage->remove_old(); }, [] {});
+        receive_queue_->defer([storage] {
+            const ReceiveStageTimer timing("reputation-expire");
+            storage->remove_old();
+        }, [] {});
         return;
     }
     const auto &message = incoming.message;
@@ -1172,6 +1213,7 @@ void NetworkManager::prepare_received(const NetworkReceivedMessage &incoming) {
       */
 
     MessageType   type       = message_body.message_type;
+    timing.set_type(static_cast<int>(type));
     MessageStatus status     = message_body.status;
     std::string   mess_id    = message_body.message_id;
     std::string   message_id(mess_id.begin(), mess_id.end());
@@ -1248,6 +1290,8 @@ void NetworkManager::prepare_received(const NetworkReceivedMessage &incoming) {
         return;
     }
     receive_queue_->defer([storage, pending] {
+        const ReceiveStageTimer timing("reputation-read",
+                                       static_cast<int>(pending->package.msg_body.message_type));
         pending->luminance = storage->read_luminance(pending->responder.node_id());
     }, [this, pending] { resume_received(pending); });
 }
@@ -1287,6 +1331,8 @@ void NetworkManager::resume_received(const std::shared_ptr<PendingReceive> &pend
     if (body.send_type == SendMode::Broadcast && type != MessageType::Custom) {
         auto *storage = node->luminance_manager();
         receive_queue_->defer([storage, pending] {
+            const ReceiveStageTimer timing("reputation-increment",
+                                           static_cast<int>(pending->package.msg_body.message_type));
             storage->increment(pending->responder.node_id());
         }, [this, pending] {
             if (node_enabled.load()) {
@@ -1304,6 +1350,7 @@ void NetworkManager::dispatch_received(const PendingReceive &pending) {
     const auto &identifier = package_data.prev_identifier;
     const auto &responder = pending.responder;
     const auto type = message_body.message_type;
+    const ReceiveStageTimer timing("dispatch", static_cast<int>(type));
     const auto status = message_body.status;
     const auto &serialized = message_body.data;
     const auto &message_id = message_body.message_id;
