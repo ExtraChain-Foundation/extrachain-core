@@ -129,6 +129,10 @@ CalculateTraffic *NetworkManager::calculate_traffic() const {
     return calculate_traffic_;
 }
 
+std::shared_ptr<const NetworkReceiveMetrics> NetworkManager::receive_metrics() const {
+    return receive_queue_ ? receive_queue_->metrics() : nullptr;
+}
+
 std::string NetworkManager::public_ip() const {
     return public_ip_;
 }

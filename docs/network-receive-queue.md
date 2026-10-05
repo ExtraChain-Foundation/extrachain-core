@@ -88,6 +88,30 @@ FIFO, durability, deadlines or the packet's exception-handling path.
 Elapsed wall time includes scheduling delays; it is not a CPU-time measurement
 or proof of the operation responsible for contention.
 
+An independently shared `NetworkReceiveMetrics` retains only bounded aggregate
+counters and six timing buckets, never packet, IP or peer data. `snapshot()` is
+safe to read concurrently and after queue destruction; shutdown marks it stopped
+and clears live pending counts. Acquire the shared handle while the manager is
+alive during setup; diagnostics consumers do not retain a QObject/queue pointer.
+Snapshots copy counters under a short mutex and construct JSON after unlocking.
+Individual updates are observations, not a transaction across a whole packet.
+
+The buckets measure enqueue-to-dispatch wait, deferred worker scheduling wait,
+worker execution, worker-completion-to-owner-continuation delay, owner callback
+execution, and the active item's complete lifetime. A continuation delayed by a
+nested event loop is counted once when it can actually run. Timing includes
+scheduling; active lifetime overlaps its stages, and nested event loops can also
+overlap owner/worker/delivery observations. Do not sum all buckets as exclusive
+CPU time. Count/total/max are cumulative, including operations below the slow-log
+threshold. Maintenance contributes one accepted/started/completed item when first
+queued, not one per coalesced tick. Completed means retired dispatch, not valid
+message processing or durable SQL success; rejected includes stopped intake.
+
+The server console exposes these counters through the separately token-gated
+`/diagnostics/receive-queue` provider. Ordinary status reads do not compute this
+snapshot. The endpoint does not change admission, ordering, quantum, capacity,
+durability or any VPN deadline, and instrumentation is not performance qualification.
+
 Connection activation requests DFS size only from the activated peer, using
 `newSocketActivatedWithParams` and a Focused Request. Previously every activation
 polled all neighbours again: N new peers on top of B existing peers generated

@@ -43,6 +43,7 @@ class WebSocketService;
 class UPNPConnection;
 class UPnPConnector;
 class NetworkReceiveQueue;
+class NetworkReceiveMetrics;
 struct NetworkReceivedMessage;
 
 class CalculateTraffic {
@@ -413,6 +414,7 @@ public:
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
     void queue_luminance_cleanup();
     void stop_receive();
+    std::shared_ptr<const NetworkReceiveMetrics> receive_metrics() const;
 
     QString found_current_identifier(QString ip, quint16 port);
 

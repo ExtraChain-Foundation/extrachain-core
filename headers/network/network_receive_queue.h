@@ -1,6 +1,7 @@
 #pragma once
 
 #include "extrachain_global.h"
+#include "network/network_receive_metrics.h"
 
 #include <QObject>
 #include <atomic>
@@ -10,6 +11,7 @@
 #include <exception>
 #include <functional>
 #include <mutex>
+#include <memory>
 #include <optional>
 #include <string>
 #include <thread>
@@ -19,6 +21,7 @@ struct NetworkReceivedMessage {
     std::string ip;
     std::string identifier;
     bool maintenance = false;
+    NetworkReceiveMetrics::Clock::time_point enqueued = NetworkReceiveMetrics::Clock::now();
 
     std::size_t bytes() const { return message.size() + ip.size() + identifier.size(); }
 };
@@ -43,21 +46,25 @@ public:
     void stop();
     std::size_t pending_count() const;
     std::size_t pending_bytes() const;
+    std::shared_ptr<const NetworkReceiveMetrics> metrics() const { return metrics_; }
 
 private:
     struct Work {
         std::function<void()> operation;
         std::function<void()> continuation;
+        NetworkReceiveMetrics::Clock::time_point queued = NetworkReceiveMetrics::Clock::now();
     };
     struct Completion {
         std::function<void()> continuation;
         std::exception_ptr error;
+        NetworkReceiveMetrics::Clock::time_point ready;
     };
 
     void schedule();
     void drain();
     void dispatch();
-    void complete(std::function<void()> continuation, std::exception_ptr error);
+    void complete(std::function<void()> continuation, std::exception_ptr error,
+                  NetworkReceiveMetrics::Clock::time_point ready);
     void finish_turn();
     void finish_active();
     void report(std::exception_ptr error);
@@ -69,6 +76,8 @@ private:
     mutable std::mutex queue_mutex_;
     std::deque<NetworkReceivedMessage> queue_;
     std::optional<NetworkReceivedMessage> active_;
+    NetworkReceiveMetrics::Clock::time_point active_started_;
+    const std::shared_ptr<NetworkReceiveMetrics> metrics_ = std::make_shared<NetworkReceiveMetrics>();
     std::size_t message_count_ = 0;
     std::size_t bytes_ = 0;
     bool maintenance_pending_ = false;
