@@ -56,6 +56,8 @@ struct QueryGate
 
 QueryGate *actorCommitGate = nullptr;
 QString actorDatabasePath;
+bool rejectActorCommit = false;
+int actorCommits = 0;
 
 int holdActorCommit(void *opaque)
 {
@@ -66,11 +68,20 @@ int holdActorCommit(void *opaque)
     return gate.condition.wait_for(lock, 10s, [&] { return gate.released; }) ? 0 : 1;
 }
 
+int observeActorCommit(void *)
+{
+    ++actorCommits;
+    if (rejectActorCommit) {
+        return 1;
+    }
+    return actorCommitGate ? holdActorCommit(actorCommitGate) : 0;
+}
+
 int installActorCommitGate(sqlite3 *database, char **, const sqlite3_api_routines *)
 {
     const auto filename = QString::fromUtf8(sqlite3_db_filename(database, "main"));
-    if (actorCommitGate && QDir::cleanPath(QDir::fromNativeSeparators(filename)) == actorDatabasePath) {
-        sqlite3_commit_hook(database, holdActorCommit, actorCommitGate);
+    if (QDir::cleanPath(QDir::fromNativeSeparators(filename)) == actorDatabasePath) {
+        sqlite3_commit_hook(database, observeActorCommit, nullptr);
     }
     return SQLITE_OK;
 }
@@ -463,6 +474,235 @@ private slots:
         QCOMPARE(reopened.records(), std::size_t(1));
         QVERIFY(reopened.read_all_actors_ids() == std::vector<ActorId>{actor.id()});
         QVERIFY2(progressed, "ActorIndex owner-thread save waited for unrelated SQL");
+    }
+
+    void actorFailedCommitLeavesNoPublishedFileOrCount()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("actors"));
+        ActorIndex index(nullptr);
+        const auto actor = syntheticActor();
+        QSignalSpy saved(&index, &ActorIndex::actorSaved);
+        QSignalSpy announced(&index, &ActorIndex::newActorSaved);
+        actorDatabasePath = QDir::cleanPath(QDir().absoluteFilePath("actors/actors"));
+        const auto entry = reinterpret_cast<void (*)()>(installActorCommitGate);
+        QCOMPARE(sqlite3_auto_extension(entry), SQLITE_OK);
+        const auto reset = qScopeGuard([&] {
+            sqlite3_cancel_auto_extension(entry);
+            rejectActorCommit = false;
+            actorDatabasePath.clear();
+        });
+        rejectActorCommit = true;
+        actorCommits = 0;
+        QVERIFY(!index.network_store_new_actor(actor).has_value());
+        QCOMPARE(actorCommits, 1);
+        QCOMPARE(index.records(), std::size_t(0));
+        QVERIFY(index.read_all_actors_ids().empty());
+        QVERIFY(index.read_by_id(actor.id()).isEmpty());
+        QCOMPARE(saved.count(), 0);
+        QCOMPARE(announced.count(), 0);
+        rejectActorCommit = false;
+        QVERIFY(index.network_store_new_actor(actor).has_value());
+        QCOMPARE(index.records(), std::size_t(1));
+        QCOMPARE(saved.count(), 1);
+        QCOMPARE(announced.count(), 1);
+        ActorIndex reopened(nullptr);
+        QCOMPARE(reopened.records(), std::size_t(1));
+        QVERIFY(reopened.read_by_id(actor.id()) == actor.toJson());
+    }
+
+    void actorBatchUsesOneCommitAndSignalsOnlyCommittedState()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("actors"));
+        ActorIndex index(nullptr);
+        std::vector<Actor<KeyPublic>> actors;
+        for (int i = 0; i < 100; ++i) {
+            actors.push_back(syntheticActor());
+        }
+        int savedSignals = 0;
+        bool committedAtSignal = true;
+        connect(&index, &ActorIndex::actorSaved, &index, [&](ActorId id) {
+            ++savedSignals;
+            committedAtSignal &= index.records() == 100 && index.read_all_actors_ids().size() == 100
+                && !index.read_by_id(id).isEmpty() && QThread::currentThread() == index.thread();
+        }, Qt::DirectConnection);
+        actorDatabasePath = QDir::cleanPath(QDir().absoluteFilePath("actors/actors"));
+        const auto entry = reinterpret_cast<void (*)()>(installActorCommitGate);
+        QCOMPARE(sqlite3_auto_extension(entry), SQLITE_OK);
+        const auto reset = qScopeGuard([&] {
+            sqlite3_cancel_auto_extension(entry);
+            actorDatabasePath.clear();
+        });
+        actorCommits = 0;
+        QVERIFY(index.save_actors(actors).has_value());
+        QCOMPARE(actorCommits, 1);
+        QCOMPARE(savedSignals, 100);
+        QVERIFY(committedAtSignal);
+        QVERIFY(index.save_actors(actors).has_value());
+        QCOMPARE(index.records(), std::size_t(100));
+        QCOMPARE(savedSignals, 100);
+        ActorIndex reopened(nullptr);
+        QCOMPARE(reopened.records(), std::size_t(100));
+        for (const auto &actor : actors) {
+            QVERIFY(reopened.read_by_id(actor.id()) == actor.toJson());
+        }
+    }
+
+    void actorBatchCommitFailurePreservesExistingActorsAndCanRetry()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("actors"));
+        ActorIndex index(nullptr);
+        const auto existing = syntheticActor();
+        QVERIFY(index.save_actor(existing).has_value());
+        const std::vector<Actor<KeyPublic>> actors { existing, syntheticActor(), syntheticActor() };
+        QSignalSpy saved(&index, &ActorIndex::actorSaved);
+        actorDatabasePath = QDir::cleanPath(QDir().absoluteFilePath("actors/actors"));
+        const auto entry = reinterpret_cast<void (*)()>(installActorCommitGate);
+        QCOMPARE(sqlite3_auto_extension(entry), SQLITE_OK);
+        const auto reset = qScopeGuard([&] {
+            sqlite3_cancel_auto_extension(entry);
+            rejectActorCommit = false;
+            actorDatabasePath.clear();
+        });
+        rejectActorCommit = true;
+        QVERIFY(!index.save_actors(actors).has_value());
+        QCOMPARE(index.records(), std::size_t(1));
+        QCOMPARE(index.read_all_actors_ids().size(), std::size_t(1));
+        QVERIFY(index.read_by_id(existing.id()) == existing.toJson());
+        QVERIFY(index.read_by_id(actors[1].id()).isEmpty());
+        QVERIFY(index.read_by_id(actors[2].id()).isEmpty());
+        QCOMPARE(saved.count(), 0);
+        rejectActorCommit = false;
+        QVERIFY(index.save_actors(actors).has_value());
+        QCOMPARE(index.records(), std::size_t(3));
+        QCOMPARE(saved.count(), 2);
+        ActorIndex reopened(nullptr);
+        QCOMPARE(reopened.records(), std::size_t(3));
+    }
+
+    void actorBatchInsertFailureRollsBackEarlierInserts()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("actors"));
+        ActorIndex index(nullptr);
+        const std::vector<Actor<KeyPublic>> actors { syntheticActor(), syntheticActor() };
+        DbConnector observer("actors/actors", DbConnectorType::Regular, DbConnectorLockScope::Connection);
+        QVERIFY(observer.open());
+        QVERIFY(observer.query("CREATE TRIGGER reject_actor BEFORE INSERT ON Actors WHEN NEW.id = '"
+            + actors[1].id().to_string() + "' BEGIN SELECT RAISE(ABORT, 'test rejection'); END"));
+        QSignalSpy saved(&index, &ActorIndex::actorSaved);
+        QVERIFY(!index.save_actors(actors).has_value());
+        QCOMPARE(index.records(), std::size_t(0));
+        QVERIFY(index.read_all_actors_ids().empty());
+        for (const auto &actor : actors) {
+            QVERIFY(index.read_by_id(actor.id()).isEmpty());
+        }
+        QCOMPARE(saved.count(), 0);
+        QVERIFY(observer.query("DROP TRIGGER reject_actor"));
+        QVERIFY(index.save_actors(actors).has_value());
+        QCOMPARE(index.records(), std::size_t(2));
+        QCOMPARE(saved.count(), 2);
+    }
+
+    void actorBatchBeginFailureDoesNotCreateFiles()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("actors"));
+        ActorIndex index(nullptr);
+        const std::vector<Actor<KeyPublic>> actors { syntheticActor(), syntheticActor() };
+        DbConnector busy("actors/actors", DbConnectorType::Regular, DbConnectorLockScope::Connection);
+        QVERIFY(busy.open());
+        QVERIFY(busy.query("BEGIN IMMEDIATE"));
+        QVERIFY(!index.save_actors(actors).has_value());
+        QCOMPARE(index.records(), std::size_t(0));
+        for (const auto &actor : actors) {
+            QVERIFY(index.read_by_id(actor.id()).isEmpty());
+        }
+        QVERIFY(busy.query("ROLLBACK"));
+        QVERIFY(index.save_actors(actors).has_value());
+        QCOMPARE(index.records(), std::size_t(2));
+    }
+
+    void actorFileFailureDoesNotPublishAnIndexRow()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("actors"));
+        ActorIndex index(nullptr);
+        const auto actor = syntheticActor();
+        QFile obstruction("actors/" + QString::fromStdString(actor.id().to_string()).right(2));
+        QVERIFY(obstruction.open(QIODevice::WriteOnly));
+        QCOMPARE(obstruction.write("test obstruction"), qint64(16));
+        obstruction.close();
+        QVERIFY(!index.save_actor(actor).has_value());
+        QCOMPARE(index.records(), std::size_t(0));
+        QVERIFY(index.read_all_actors_ids().empty());
+        QVERIFY(obstruction.remove());
+        QVERIFY(index.save_actor(actor).has_value());
+        QCOMPARE(index.records(), std::size_t(1));
+    }
+
+    void actorInitialSyncFailureKeepsPendingActors()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("actors"));
+        ActorIndex index(nullptr);
+        const std::vector<Actor<KeyPublic>> actors { syntheticActor(), syntheticActor() };
+        QSignalSpy ended(&index, &ActorIndex::firstSyncEnded);
+        QSignalSpy progress(&index, &ActorIndex::firstSyncProgress);
+        actorDatabasePath = QDir::cleanPath(QDir().absoluteFilePath("actors/actors"));
+        const auto entry = reinterpret_cast<void (*)()>(installActorCommitGate);
+        QCOMPARE(sqlite3_auto_extension(entry), SQLITE_OK);
+        const auto reset = qScopeGuard([&] {
+            sqlite3_cancel_auto_extension(entry);
+            rejectActorCommit = false;
+            actorDatabasePath.clear();
+        });
+        rejectActorCommit = true;
+        index.network_actors_response(actors);
+        QVERIFY(!index.is_prepare());
+        QCOMPARE(ended.count(), 0);
+        QCOMPARE(progress.count(), 0);
+        QCOMPARE(index.records(), std::size_t(0));
+        rejectActorCommit = false;
+        QVERIFY(index.save_actors().has_value());
+        QCOMPARE(index.records(), std::size_t(2));
+        QCOMPARE(progress.count(), 1);
+        QCOMPARE(progress.front().front().toInt(), 2);
+        for (const auto &actor : actors) {
+            QVERIFY(index.read_by_id(actor.id()) == actor.toJson());
+        }
+        QVERIFY(index.save_actors().has_value());
+        QCOMPARE(index.records(), std::size_t(2));
     }
 
     void actorIndexReadersWaitForActorCommit()

@@ -93,7 +93,8 @@ private:
      */
     std::expected<void, ActorSaveError> add(const ActorId &id, const QByteArray &data);
     void                                send_get_actor_message(const ActorId &actorId);
-    bool                                save_actor_index(const Actor<KeyPublic> &actor);
+    std::expected<std::vector<ActorId>, ActorSaveError>
+    save_actor_batch(const std::vector<const Actor<KeyPublic> *> &actors);
 
 public:
     ActorId network_id();
@@ -136,6 +137,7 @@ public:
     std::expected<void, ActorSaveError> network_store_new_actor(const Actor<KeyPublic> &actor);
     std::expected<void, ActorSaveError> save_actor(const Actor<KeyPublic> &actor);
     std::expected<void, ActorSaveError> save_actors();
+    std::expected<void, ActorSaveError> save_actors(const std::vector<Actor<KeyPublic>> &actors);
     std::vector<ActorId>                read_all_actors_ids();
     bool                                is_prepare();
 
