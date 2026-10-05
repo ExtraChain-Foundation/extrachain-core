@@ -4884,6 +4884,8 @@ void Dag::clear_dag() {
         if (ec)
             break;
     }
+    if (pack_registry_)
+        pack_registry_->close_readers();
     std::filesystem::remove_all(ChainConst::DAG_PACKS_FOLDER, ec);
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
     std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);

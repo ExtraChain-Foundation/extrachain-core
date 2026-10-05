@@ -130,6 +130,13 @@ namespace Pack {
         }
     }
 
+    void Registry::close_readers() {
+        std::lock_guard cache_lock(cache_mutex_);
+        frame_cache_ = { };
+        readers_.clear();
+        lru_.clear();
+    }
+
     std::vector<Registry::PackMeta>::const_iterator Registry::find_meta_for(std::uint64_t section) const {
         // meta_ sorted by first; find rightmost meta with first <= section
         auto it = std::upper_bound(meta_.begin(), meta_.end(), section, [](std::uint64_t s, const PackMeta &m) {
@@ -384,25 +391,30 @@ namespace Pack {
     std::expected<void, Error> Registry::finalize_incoming(PackId                       id,
                                                            const std::filesystem::path &tmp,
                                                            const Validator             &validator) {
-        // Validate by opening; reject corrupt payloads before swapping in.
-        auto check = Reader::open(tmp);
-        if (!check.has_value()) {
-            std::error_code ec;
-            std::filesystem::remove(tmp, ec);
-            return std::unexpected(check.error());
+        // Validate by opening; reject corrupt payloads before swapping in. The reader keeps
+        // its file open, so it is closed before the rename (Windows cannot rename it).
+        PackMeta meta;
+        {
+            auto check = Reader::open(tmp);
+            if (!check.has_value()) {
+                std::error_code ec;
+                std::filesystem::remove(tmp, ec);
+                return std::unexpected(check.error());
+            }
+            if (check->id() != id) {
+                check = std::unexpected(Error::InvalidFormat);
+                std::error_code ec;
+                std::filesystem::remove(tmp, ec);
+                return std::unexpected(Error::InvalidFormat);
+            }
+            if (validator && !validator(*check)) {
+                check = std::unexpected(Error::ValidationFailed);
+                std::error_code ec;
+                std::filesystem::remove(tmp, ec);
+                return std::unexpected(Error::ValidationFailed);
+            }
+            meta = PackMeta { .id = id, .first = check->first_section(), .last = check->last_section() };
         }
-        if (check->id() != id) {
-            std::error_code ec;
-            std::filesystem::remove(tmp, ec);
-            return std::unexpected(Error::InvalidFormat);
-        }
-        if (validator && !validator(*check)) {
-            std::error_code ec;
-            std::filesystem::remove(tmp, ec);
-            return std::unexpected(Error::ValidationFailed);
-        }
-
-        PackMeta meta { .id = id, .first = check->first_section(), .last = check->last_section() };
 
         // Drop any cached reader for this id before overwriting the file (mmap on
         // some platforms keeps a hold on the path).

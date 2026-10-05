@@ -59,6 +59,10 @@ namespace Pack {
         // Call once at startup (or after external changes).
         void rescan();
 
+        // Close every open reader. Readers keep their files open, and Windows cannot
+        // delete or replace an open file.
+        void close_readers();
+
         // Returns pack_id that contains given section, if any (requires rescan first).
         std::optional<PackId> find_pack_for_section(const SectionId &id) const;
 
