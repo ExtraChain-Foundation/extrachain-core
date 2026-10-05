@@ -844,6 +844,25 @@ std::vector<TokenManager::MigrationPlanRecord> TokenManager::migration_plans() c
             result = migration_plan_cache_;
         }
     }
+    // After a start, take the plans the cache pass indexed instead of reading the whole
+    // history: on the stand that kept a restarted validator busy for over a minute, and it
+    // grows with the chain.
+    if (first == SectionId(0)) {
+        if (const auto indexed = node->dag()->cache().indexed_token_migrations();
+            indexed.has_value() && indexed->second >= SectionId(0) && indexed->second <= current) {
+            for (const auto &row : indexed->first) {
+                const auto plan = Json::deserialize<LegacyTokenMigrationPlan>(row.plan);
+                if (plan.has_value()) {
+                    result.push_back(MigrationPlanRecord {
+                        .plan             = *plan,
+                        .section          = row.section,
+                        .transaction_hash = row.transaction_hash,
+                    });
+                }
+            }
+            first = indexed->second + SectionId(1);
+        }
+    }
 
     std::map<SectionId, Section> sections;
     SectionId                    read_through = first - 1;

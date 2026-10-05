@@ -87,6 +87,10 @@ public:
         return dag.hot_section_store_->get(section);
     }
 
+    static bool erase_hot_section(Dag& dag, const SectionId& section) {
+        return dag.hot_section_store_->erase_range(section, section);
+    }
+
     static bool pack_history_dirty(Dag& dag) {
         std::lock_guard lock(dag.pack_sync_mutex_);
         return dag.pack_history_dirty_;

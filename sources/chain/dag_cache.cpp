@@ -854,6 +854,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
             // Sections installed by sync never pass save_transaction; the cache pass reads
             // every one of them, so the contract catalog follows it here.
             index_contract_transaction(tx);
+            index_token_migration(tx);
         }
     }
 
@@ -866,7 +867,8 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
 
     // A pass from the first saved section has indexed the whole history.
     if (!write_cache_section(genesis_section)
-        || (cached_section_ == BigNumber(-1) && !mark_contract_catalog_follows_cache())
+        || (cached_section_ == BigNumber(-1)
+            && (!mark_contract_catalog_follows_cache() || !mark_token_migrations_follow_cache()))
         || !cache_db_->query("COMMIT")) {
         static_cast<void>(cache_db_->query("ROLLBACK"));
         return { false, start_section };
@@ -1009,7 +1011,8 @@ bool DagCache::init_db() {
     }
 
     if (cache_db_ && cache_db_->is_open()) {
-        db_initialized_ = ensure_balance_cache_schema() && ensure_contract_catalog_schema();
+        db_initialized_ =
+            ensure_balance_cache_schema() && ensure_contract_catalog_schema() && ensure_token_migration_schema();
         return db_initialized_;
     }
 
@@ -1028,7 +1031,7 @@ bool DagCache::init_db() {
 
     // Create table if it doesn't exist
     bool success = cache_db_->query(Config::DataStorage::DagCacheCreate) && ensure_balance_cache_schema()
-                   && ensure_contract_catalog_schema();
+                   && ensure_contract_catalog_schema() && ensure_token_migration_schema();
 
     if (!success) {
         eLog("[DagCache] Failed to create cache table");
@@ -1062,7 +1065,8 @@ bool DagCache::reset_db() {
     std::unique_lock<std::mutex>           catalog_lock(contract_catalog_mutex_);
     if (!init_db() || !cache_db_->query("BEGIN IMMEDIATE TRANSACTION")
         || !cache_db_->query("DELETE FROM balance_cache") || !cache_db_->query("DELETE FROM balance_cache_meta")
-        || !cache_db_->query("DELETE FROM contract_catalog") || !write_cache_section(SectionId(-1))
+        || !cache_db_->query("DELETE FROM contract_catalog") || !cache_db_->query("DELETE FROM token_migrations")
+        || !write_cache_section(SectionId(-1))
         || !cache_db_->query("COMMIT")) {
         if (cache_db_ != nullptr) {
             static_cast<void>(cache_db_->query("ROLLBACK"));
@@ -1131,6 +1135,102 @@ bool DagCache::contract_catalog_follows_cache() {
 
 bool DagCache::mark_contract_catalog_follows_cache() {
     return cache_db_->replace("contract_catalog_meta", { { "id", "1" }, { "follows_cache", "1" } });
+}
+
+bool DagCache::ensure_token_migration_schema() {
+    if (cache_db_ == nullptr) {
+        return false;
+    }
+    const bool created = !cache_db_->table_exists("token_migrations");
+    return cache_db_->query("CREATE TABLE IF NOT EXISTS token_migrations (transaction_hash TEXT PRIMARY KEY, "
+                            "section INTEGER NOT NULL, plan TEXT NOT NULL)")
+           && cache_db_->query("CREATE TABLE IF NOT EXISTS token_migration_meta "
+                               "(id INTEGER PRIMARY KEY CHECK (id = 1), follows_cache INTEGER NOT NULL)")
+           && (!created || cache_db_->query("DELETE FROM token_migration_meta"));
+}
+
+bool DagCache::token_migrations_follow_cache() {
+    return !cache_db_->select("SELECT follows_cache FROM token_migration_meta WHERE id = 1 AND follows_cache = 1")
+                .empty();
+}
+
+bool DagCache::mark_token_migrations_follow_cache() {
+    return cache_db_->replace("token_migration_meta", { { "id", "1" }, { "follows_cache", "1" } });
+}
+
+void DagCache::index_token_migration(const Transaction& transaction) {
+    std::lock_guard lock(mutex_);
+    if (transaction.type() != TransactionType::TokenMigration || !transaction.meta().has_value() || !init_db()) {
+        return;
+    }
+    const auto section = transaction.section().to_int();
+    if (!section.has_value()) {
+        return;
+    }
+    cache_db_->replace("token_migrations",
+                       { { "transaction_hash", transaction.hash() },
+                         { "section", std::to_string(section.value()) },
+                         { "plan", *transaction.meta() } });
+}
+
+bool DagCache::rebuild_token_migrations() {
+    std::lock_guard lock(mutex_);
+    if (!init_db() || dag == nullptr || !cache_db_->query("DELETE FROM token_migrations")) {
+        return false;
+    }
+    const auto first = dag->first_saved_section();
+    const auto last  = dag->current_section();
+    if (first >= SectionId(0) && last >= first) {
+        for (SectionId section_id = first; section_id <= last; ++section_id) {
+            const auto section = dag->read_section(section_id);
+            if (!section.has_value()) {
+                continue;
+            }
+            for (const auto& transaction : section->transactions) {
+                index_token_migration(transaction);
+            }
+        }
+    }
+    return mark_token_migrations_follow_cache();
+}
+
+std::optional<std::pair<std::vector<DagCache::IndexedTokenMigration>, SectionId>>
+DagCache::indexed_token_migrations() {
+    std::lock_guard lock(mutex_);
+    if (!init_db()) {
+        return std::nullopt;
+    }
+    // An index that predates cache-pass indexing is rebuilt once from the history.
+    if (!token_migrations_follow_cache() && !rebuild_token_migrations()) {
+        return std::nullopt;
+    }
+    // The cache pass indexes the sections it covers. A rebuild also reads past the cache,
+    // so only rows up to the cached section are returned with it.
+    const auto covered = cached_section_.to_int();
+    if (!covered.has_value() || covered.value() < 0) {
+        return std::pair { std::vector<IndexedTokenMigration> { }, SectionId(-1) };
+    }
+    std::vector<IndexedTokenMigration> rows;
+    for (const auto& row :
+         cache_db_->select("SELECT * FROM token_migrations WHERE section <= ? ORDER BY section, transaction_hash",
+                           "token_migrations",
+                           { { "section", std::to_string(covered.value()) } })) {
+        const auto section = row.find("section");
+        const auto hash    = row.find("transaction_hash");
+        const auto plan    = row.find("plan");
+        if (section == row.end() || hash == row.end() || plan == row.end()) {
+            return std::nullopt;
+        }
+        long long section_value = 0;
+        try {
+            section_value = std::stoll(section->second);
+        } catch (const std::exception&) {
+            return std::nullopt;
+        }
+        rows.push_back(
+            { .section = SectionId(section_value), .transaction_hash = hash->second, .plan = plan->second });
+    }
+    return std::pair { std::move(rows), cached_section_ };
 }
 
 void DagCache::index_contract_transaction(const Transaction& transaction) {

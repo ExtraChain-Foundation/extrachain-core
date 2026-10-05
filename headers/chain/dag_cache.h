@@ -216,6 +216,15 @@ public:
     ExtraChain::Contracts::ContractCatalogPage list_contracts(
         const ExtraChain::Contracts::ContractCatalogFilter& filter = {});
 
+    // Token migration plans the cache pass has indexed, and the section it has covered.
+    // Empty when the index has not covered the history yet.
+    struct IndexedTokenMigration {
+        SectionId   section;
+        std::string transaction_hash;
+        std::string plan;
+    };
+    std::optional<std::pair<std::vector<IndexedTokenMigration>, SectionId>> indexed_token_migrations();
+
 private:
     ExtraChain::Core::ExtraChainNode* node;                            // Node reference
     Dag*                              dag;                             // Dag reference
@@ -257,5 +266,12 @@ private:
     // has to follow the cache; an empty catalog no longer means an unscanned one.
     bool contract_catalog_follows_cache();
     bool mark_contract_catalog_follows_cache();
+    // TokenManager used to find migration plans by reading the whole history after every
+    // start; the cache pass indexes them instead.
+    bool ensure_token_migration_schema();
+    void index_token_migration(const Transaction& transaction);
+    bool rebuild_token_migrations();
+    bool token_migrations_follow_cache();
+    bool mark_token_migrations_follow_cache();
     friend Dag;
 };

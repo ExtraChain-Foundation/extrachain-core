@@ -249,6 +249,8 @@ public:
     ExtraChain::Core::Event<const LegacyTokenMigrationStatus &> &migration_status_event() noexcept;
 
 private:
+    friend class TokenManagerTestAccess;
+
     std::optional<std::string> registry_file_id() const;
     bool                       registry_row_valid(TokenData &token_data) const;
     void                       track_token_creation(const Transaction &transaction, TokenData token_data);
