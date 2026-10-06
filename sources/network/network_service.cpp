@@ -46,6 +46,7 @@
 #include <boost/asio/ip/address.hpp>
 
 namespace {
+    thread_local std::optional<SocketService::Priority> priority_override;
     constexpr std::int64_t LIVE_DAG_QUEUE_MAX_BYTES        = 256 * 1024;
     constexpr long         LIVE_DAG_QUEUE_MAX_MESSAGES     = 256;
     constexpr std::size_t  LIVE_DAG_BATCH_MAX_TRANSACTIONS = 64;
@@ -1056,6 +1057,15 @@ void NetworkService::schedule_cache_cleanup() {
     }
 }
 
+NetworkService::PriorityScope::PriorityScope(SocketService::Priority priority)
+    : previous_(priority_override) {
+    priority_override = priority;
+}
+
+NetworkService::PriorityScope::~PriorityScope() {
+    priority_override = previous_;
+}
+
 bool NetworkService::send_message_checker(MessageType      type,
                                           SendMode         send_mode,
                                           MessageStatus    status,
@@ -1307,6 +1317,8 @@ void NetworkService::send_message_connections(const std::string &serialized_mess
         || high_priority_shadow_control) {
         priority = SocketService::Priority::High;
     }
+    if (priority_override.has_value())
+        priority = priority_override.value();
 
     const auto connections = connection_snapshot();
 

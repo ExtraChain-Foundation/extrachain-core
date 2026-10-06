@@ -102,6 +102,20 @@ inline constexpr char NetworkCacheFile[] = "tmp/network.cache";
 class EXTRACHAIN_EXPORT NetworkService : public PeerContext, public ResponseSender {
 
 public:
+    // Queue priority for messages this thread sends while the scope lives. A relay envelope
+    // carries every consensus message type, and its type alone put 180 KB storage proofs in
+    // the lane of votes, proposals and pack chunks.
+    class EXTRACHAIN_EXPORT PriorityScope {
+    public:
+        explicit PriorityScope(SocketService::Priority priority);
+        ~PriorityScope();
+        PriorityScope(const PriorityScope&)            = delete;
+        PriorityScope& operator=(const PriorityScope&) = delete;
+
+    private:
+        std::optional<SocketService::Priority> previous_;
+    };
+
     using SocketActivatedEvent = ExtraChain::Core::Event<const std::string&, const std::string&>;
     using ConnectionStateEvent = ExtraChain::Core::Event<bool, int>;
     using ConnectionErrorEvent = ExtraChain::Core::

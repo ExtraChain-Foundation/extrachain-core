@@ -26,6 +26,15 @@ namespace ExtraChain::Consensus {
                   envelope.hops,
                   peers);
         }
+
+        // Intents are bulk: a storage proof is 180 KB, and the high lane they shared stalled
+        // round-0 proposals and pack sync behind them. Votes, proposals, certificates and
+        // batches keep the high lane.
+        std::optional<NetworkService::PriorityScope> relay_priority(const RelayEnvelope& envelope) {
+            if (envelope.type != MessageType::ConsensusIntent)
+                return std::nullopt;
+            return std::optional<NetworkService::PriorityScope>(std::in_place, SocketService::Priority::Normal);
+        }
     } // namespace
 
     bool ConsensusService::send_relay(MessageType   type,
@@ -89,7 +98,8 @@ namespace ExtraChain::Consensus {
                             && authenticator_->authenticated_validator(envelope.value().destination).has_value());
         if (!delivery.peers.empty()) {
             log_large_relay("Send", envelope.value(), delivery.peers.size());
-            Responder responder(node_.network());
+            const auto lane = relay_priority(envelope.value());
+            Responder  responder(node_.network());
             for (const auto& peer : delivery.peers) {
                 responder.add_identifier(peer);
             }
@@ -132,7 +142,8 @@ namespace ExtraChain::Consensus {
                             && authenticator_->authenticated_validator(envelope.destination).has_value());
         if (!delivery.peers.empty()) {
             log_large_relay("Forward", envelope, delivery.peers.size());
-            auto forwarded = envelope;
+            const auto lane      = relay_priority(envelope);
+            auto       forwarded = envelope;
             ++forwarded.hops;
             Responder responder(node_.network());
             for (const auto& peer : delivery.peers) {
