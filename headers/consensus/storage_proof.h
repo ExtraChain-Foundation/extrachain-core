@@ -4,8 +4,11 @@
 
 namespace ExtraChain::Consensus {
 
-    inline constexpr std::uint32_t StorageChunkBytes          = 16 * 1024;
-    inline constexpr std::size_t   StorageChallengeSamples    = 8;
+    // A proof carries StorageChallengeSamples chunks with their Merkle paths and goes to every
+    // node every epoch. 8 chunks of 16 KiB made it 180 KB once in an intent; 16 chunks of 1 KiB
+    // make it 38 KB and catch a missing part of a dataset with more samples.
+    inline constexpr std::uint32_t StorageChunkBytes          = 1024;
+    inline constexpr std::size_t   StorageChallengeSamples    = 16;
     inline constexpr std::uint64_t MaximumStorageDatasetBytes = (std::uint64_t(1) << 32) * StorageChunkBytes;
 
     struct StorageDataset {
