@@ -1414,8 +1414,10 @@ namespace ExtraChain::Consensus {
             pending_batches_.erase(latest_proposal_.value().batch.last_section);
             pending_checkpoints_.erase(latest_proposal_.value().batch.last_section);
         }
-        if (pacemaker_position(consensus_->engine().safety_state()) != before)
+        if (pacemaker_position(consensus_->engine().safety_state()) != before) {
+            round_opened_ = std::chrono::steady_clock::now();
             reset_timeout();
+        }
         if (finalized.value().has_value() && !apply_finalized_checkpoint(finalized.value().value())) {
             return false;
         }
@@ -1608,6 +1610,7 @@ namespace ExtraChain::Consensus {
         }
         latest_timeout_certificate_ = certificate;
         if (pacemaker_position(consensus_->engine().safety_state()) != before) {
+            round_opened_ = std::chrono::steady_clock::now();
             eInfo("[Shadow] Timeout certificate opens height {} round {}",
                   certificate.height,
                   consensus_->engine().safety_state().current_round);
@@ -2200,6 +2203,7 @@ namespace ExtraChain::Consensus {
                      proposal_value.batch.last_section);
             return;
         }
+        const auto validation_started = std::chrono::steady_clock::now();
         const auto valid = [&]() -> std::expected<void, ConsensusError> {
             try {
                 auto ancestors = staged_ancestors_for(proposal_value);
@@ -2246,6 +2250,14 @@ namespace ExtraChain::Consensus {
         if (accepted.value().certificate.has_value())
             apply_certificate(accepted.value().certificate.value(), true);
         send_to_validators(proposal_value, MessageType::ConsensusProposal);
+        const auto now = std::chrono::steady_clock::now();
+        eInfo("[Shadow] Proposed height {} round {} at +{} ms (leader checks {} ms, {} intents, {} bytes)",
+              proposal_value.header.height,
+              proposal_value.header.round,
+              std::chrono::duration_cast<std::chrono::milliseconds>(now - round_opened_).count(),
+              std::chrono::duration_cast<std::chrono::milliseconds>(now - validation_started).count(),
+              batch.manifest.transaction_hashes.size(),
+              batch.manifest.payload_bytes);
         reset_timeout();
     }
 
@@ -2376,7 +2388,7 @@ namespace ExtraChain::Consensus {
             const auto& st = consensus_->engine().safety_state();
             eWarning(
                 "[Shadow] Proposal {} at height {} round {} was not voted for: {} "
-                "(my: last_voted h{} r{}, current_round {}, highest {}, locked {}, finalized {})",
+                "(my: last_voted h{} r{}, current_round {}, highest {}, locked {}, finalized {}) at +{} ms",
                 hash_header(proposal.header),
                 proposal.header.height,
                 proposal.header.round,
@@ -2386,13 +2398,20 @@ namespace ExtraChain::Consensus {
                 st.current_round,
                 st.highest_certificate.has_value() ? st.highest_certificate.value().height : 0,
                 st.locked_certificate.has_value() ? st.locked_certificate.value().height : 0,
-                st.finalized_height);
+                st.finalized_height,
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - round_opened_)
+                    .count());
             return;
         }
         send_to_peer(vote.value(),
                      MessageType::ConsensusVote,
                      std::string(peer_identifier),
                      MessageStatus::NoStatus);
+        eInfo("[Shadow] Voted height {} round {} at +{} ms",
+              proposal.header.height,
+              proposal.header.round,
+              std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - round_opened_)
+                  .count());
         pending_proposals_.erase(header_hash);
         reset_timeout();
     }

@@ -281,6 +281,8 @@ namespace ExtraChain::Consensus {
         std::optional<Proposal>                                       latest_proposal_;
         std::optional<QuorumCertificate>                              latest_certificate_;
         std::optional<TimeoutCertificate>                             latest_timeout_certificate_;
+        // When the pacemaker last moved; proposal and vote timings are logged against it.
+        std::chrono::steady_clock::time_point round_opened_ = std::chrono::steady_clock::now();
         /// Latest timeout vote seen from each validator. A validator that missed a timeout
         /// certificate and whose pacemaker then went quiet sends nothing to answer, so the
         /// certificate is resent to it from the timer instead (tracker #97).
