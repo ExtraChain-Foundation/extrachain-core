@@ -3047,9 +3047,17 @@ namespace ExtraChain::Consensus {
 
     std::expected<void, ConsensusError> ConsensusService::expire_pending_intents(
         const std::map<ActorId, std::uint64_t>& nonces) {
-        if (!intent_store_)
+        if (!intent_store_ || !consensus_)
             return std::unexpected(ConsensusError::NotReady);
-        const auto expired = intent_pool_.expired_uncommitted(intent_height(), nonces);
+        // A certified batch can lose to another one certified at the same height in a later round, and
+        // either may be finalized. Expiring a request by the highest certificate freed its nonce for a new
+        // request while the other batch, which carried it, was finalized, so the new one was rejected.
+        // With finality, a request expires only once its last height is applied.
+        const bool finality = consensus_->configuration().mode == ShadowMode::Finality;
+        const auto applied  = applied_checkpoint_.has_value() ? applied_checkpoint_.value().height : 0;
+        const auto expired  = finality ? intent_pool_.expired_uncommitted(applied + (applied != UINT64_MAX),
+                                                                          committed_nonces_)
+                                       : intent_pool_.expired_uncommitted(intent_height(), nonces);
         if (!expired.empty()) {
             const auto stored = intent_store_->expire(expired);
             if (!stored.has_value())
