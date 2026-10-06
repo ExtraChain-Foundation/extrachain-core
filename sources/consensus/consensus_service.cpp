@@ -10,6 +10,8 @@
 
 #include "consensus/consensus_service.h"
 
+#include <tuple>
+
 #include <charconv>
 #include <ranges>
 
@@ -48,6 +50,17 @@ namespace ExtraChain::Consensus {
         // that has not voted for this long is past its own timeout, so a certificate resent after
         // it can no longer postpone that validator's next timeout vote.
         constexpr std::uint64_t QuietValidatorMarginMs = 1'250;
+
+        // Where the pacemaker stands. A certificate that leaves it in place must not restart the
+        // round timer: at height 932 round 2 on the stand, copies of the round-1 timeout
+        // certificate resent to quiet validators restarted their 16-second timer every few
+        // seconds, so they never timed the round out and stayed quiet for good.
+        std::tuple<std::uint64_t, std::uint64_t, std::uint64_t> pacemaker_position(const SafetyState& state) {
+            const auto& highest = state.highest_certificate;
+            return { highest.has_value() ? highest->height : 0,
+                     highest.has_value() ? highest->round : 0,
+                     state.current_round };
+        }
 
         template <typename Map>
         std::vector<std::pair<std::string, std::string>> state_entries(const Map& values) {
@@ -1376,6 +1389,7 @@ namespace ExtraChain::Consensus {
     }
 
     bool ConsensusService::apply_certificate(const QuorumCertificate& certificate, bool announce) {
+        const auto before    = pacemaker_position(consensus_->engine().safety_state());
         const auto finalized = consensus_->receive_certificate(certificate);
         if (!finalized.has_value()) {
             eWarning("[Consensus] Certificate {} at height {} was rejected with error {}",
@@ -1400,7 +1414,8 @@ namespace ExtraChain::Consensus {
             pending_batches_.erase(latest_proposal_.value().batch.last_section);
             pending_checkpoints_.erase(latest_proposal_.value().batch.last_section);
         }
-        reset_timeout();
+        if (pacemaker_position(consensus_->engine().safety_state()) != before)
+            reset_timeout();
         if (finalized.value().has_value() && !apply_finalized_checkpoint(finalized.value().value())) {
             return false;
         }
@@ -1582,6 +1597,7 @@ namespace ExtraChain::Consensus {
     }
 
     bool ConsensusService::apply_timeout_certificate(const TimeoutCertificate& certificate) {
+        const auto before   = pacemaker_position(consensus_->engine().safety_state());
         const auto accepted = consensus_->receive_timeout_certificate(certificate);
         if (!accepted.has_value()) {
             eWarning("[Shadow] Timeout certificate at height {} round {} was rejected with error {}",
@@ -1591,7 +1607,12 @@ namespace ExtraChain::Consensus {
             return false;
         }
         latest_timeout_certificate_ = certificate;
-        reset_timeout();
+        if (pacemaker_position(consensus_->engine().safety_state()) != before) {
+            eInfo("[Shadow] Timeout certificate opens height {} round {}",
+                  certificate.height,
+                  consensus_->engine().safety_state().current_round);
+            reset_timeout();
+        }
         // A new leader must materialize a checkpoint for the engine's current round.
         queue_next_checkpoint();
         return true;
