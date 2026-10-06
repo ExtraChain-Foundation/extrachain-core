@@ -815,6 +815,13 @@ namespace ExtraChain::Consensus {
         }
     }
 
+    void ConsensusService::remember_rejected_batch(const std::string& header_hash, std::uint64_t finalized) {
+        // Entries from earlier finalized heights are stale by definition; drop them
+        // here so the map stays as small as the current height's rejections.
+        std::erase_if(rejected_batches_, [finalized](const auto& entry) { return entry.second != finalized; });
+        rejected_batches_.insert_or_assign(header_hash, finalized);
+    }
+
     void ConsensusService::receive_batch_data(const SectionBatchData& batch, std::string_view peer_identifier) {
         std::lock_guard lock(mutex_);
         if (!consensus_ || !authenticator_ || !authenticated_sender(peer_identifier).has_value()) {
@@ -839,6 +846,18 @@ namespace ExtraChain::Consensus {
         const auto proposal = pending_proposals_.find(batch.header_hash);
         if (proposal == pending_proposals_.end()) {
             eDebug("[Shadow] Dropped batch {} without a pending proposal", batch.header_hash.substr(0, 12));
+            return;
+        }
+        // A batch that failed validation or admission is never staged, so the
+        // duplicate check above cannot catch its other copies: every validator's
+        // reply gets the full validate-and-admit pass again. Its outcome only
+        // changes with the finalized state, so retry once per finalized height.
+        const auto finalized = consensus_->engine().safety_state().finalized_height;
+        if (const auto rejected = rejected_batches_.find(batch.header_hash);
+            rejected != rejected_batches_.end() && rejected->second == finalized) {
+            eDebug("[Shadow] Dropped a copy of batch {} that already failed at finalized height {}",
+                   batch.header_hash.substr(0, 12),
+                   finalized);
             return;
         }
         eDebug("[Shadow] Resuming validation for batch {}", batch.header_hash.substr(0, 12));
@@ -866,6 +885,7 @@ namespace ExtraChain::Consensus {
                      batch.header_hash,
                      peer_identifier,
                      std::to_underlying(valid.error()));
+            remember_rejected_batch(batch.header_hash, finalized);
             return;
         }
         const auto admitted = admit_batch_intents(proposal->second, batch);
@@ -873,6 +893,7 @@ namespace ExtraChain::Consensus {
             eWarning("[Shadow] Batch {} intents could not be admitted: {}",
                      batch.header_hash,
                      std::to_underlying(admitted.error()));
+            remember_rejected_batch(batch.header_hash, finalized);
             return;
         }
         const bool already_certified =
