@@ -13,6 +13,7 @@ namespace ExtraChain::Consensus {
         constexpr std::size_t      MaximumCachedMiningStates  = 8;
         constexpr std::uint64_t    MaximumPendingMiningNonces = 8;
         constexpr std::string_view MiningSnapshotFile         = "mining-state.msgpack";
+        constexpr std::uint64_t    MiningSnapshotHeights      = 64;
 
         bool has_mining_records(const SectionBatchData& batch) {
             for (const auto& [_, bytes] : batch.sections) {
@@ -467,10 +468,18 @@ namespace ExtraChain::Consensus {
         if (finalized_mining_.value().header_hash == header)
             return { };
         MiningSnapshot snapshot { header, std::move(state) };
-        const auto     bytes = MessagePack::serialize(snapshot);
-        if (bytes.size() > MaximumMiningSnapshotBytes
-            || !FileIo::write_atomic(directory_ / MiningSnapshotFile, bytes).has_value())
-            return std::unexpected(ConsensusError::StorageFailure);
+        // The snapshot grows to megabytes and was rewritten durably at every height. A full DAG replays
+        // the heights after an older snapshot on start, so write it when a payout changes it and
+        // every MiningSnapshotHeights otherwise. A light node cannot rebuild batches and writes each one.
+        const bool due = node_.dag()->mode() != DagMode::Full
+                         || proposal.header.height % MiningSnapshotHeights == 0
+                         || snapshot.state.minted_units != finalized_mining_.value().state.minted_units;
+        if (due) {
+            const auto bytes = MessagePack::serialize(snapshot);
+            if (bytes.size() > MaximumMiningSnapshotBytes
+                || !FileIo::write_atomic(directory_ / MiningSnapshotFile, bytes).has_value())
+                return std::unexpected(ConsensusError::StorageFailure);
+        }
         finalized_mining_ = std::move(snapshot);
         // A staged state is keyed by a certified header and depends only on its ancestry,
         // so projections above the finalized section stay valid. Clearing them all made

@@ -204,6 +204,19 @@ namespace ExtraChain::Consensus {
             service.finalized_mining_.reset();
             service.staged_mining_.clear();
         }
+        static void write_snapshot(ConsensusService& service) {
+            TEST_REQUIRE(FileIo::write_atomic(service.directory_ / "mining-state.msgpack",
+                                              MessagePack::serialize(service.finalized_mining_.value()))
+                             .has_value());
+        }
+        static bool snapshot_current(ConsensusService& service) {
+            return FileIo::read_all(service.directory_ / "mining-state.msgpack").value()
+                   == MessagePack::serialize(service.finalized_mining_.value());
+        }
+        static std::string finalized_root(ConsensusService& service) {
+            TEST_REQUIRE(service.initialize_mining_state().has_value());
+            return mining_state_root(service.finalized_mining_.value().state);
+        }
     };
 } // namespace ExtraChain::Consensus
 using namespace ExtraChain::Consensus;
@@ -703,6 +716,8 @@ int main() {
             TEST_REQUIRE(ConsensusStateTestFixture::persist(service, proof, batches.at(height - 2)).has_value());
             TEST_REQUIRE(ConsensusStateTestFixture::persist(service, proof, batches.at(height - 2)).has_value());
             if (height == 5) {
+                // Heights without a payout do not rewrite the snapshot; store this one to damage it.
+                ConsensusStateTestFixture::write_snapshot(service);
                 const auto saved = FileIo::read_all("consensus/mining-state.msgpack").value();
                 auto decoded = msgpack::unpack(saved.data(), saved.size());
                 auto& epochs = decoded.get().via.array.ptr[1].via.array.ptr[6];
@@ -732,6 +747,14 @@ int main() {
             }
             TEST_REQUIRE(!ConsensusStateTestFixture::apply(service, proof).has_value());
             TEST_REQUIRE_EQ(ConsensusStateTestFixture::certified_nonce(service, provider.id()), certified_nonce);
+            if (height == 7) {
+                // The snapshot of height 4 stays on disk; a restart replays height 5 from the DAG.
+                TEST_REQUIRE(!ConsensusStateTestFixture::snapshot_current(service));
+                const auto root = ConsensusStateTestFixture::finalized_root(service);
+                ConsensusStateTestFixture::forget(service);
+                TEST_REQUIRE_EQ(ConsensusStateTestFixture::finalized_root(service), root);
+                TEST_REQUIRE(ConsensusStateTestFixture::snapshot_current(service));
+            }
         }
         parent             = certificate;
         prior_state        = proposal.header.state_commitment;
