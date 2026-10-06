@@ -232,6 +232,7 @@ namespace ExtraChain::Consensus {
         }
         committed_nonces_     = committed_nonces.value();
         nonce_frontier_.reset();
+        known_nonce_frontier_.clear();
         applied_checkpoint_   = applied_checkpoint.value();
         const auto reconciled = reconcile_finalized_checkpoint();
         if (!reconciled.has_value()) {
@@ -346,6 +347,7 @@ namespace ExtraChain::Consensus {
         pending_intents_restored_ = false;
         committed_nonces_.clear();
         nonce_frontier_.reset();
+        known_nonce_frontier_.clear();
         if (timeout_task_) {
             timeout_task_->cancel();
         }
@@ -1331,6 +1333,7 @@ namespace ExtraChain::Consensus {
         authenticator_ = std::make_unique<PeerAuthenticator>(consensus_->engine().validators(),
                                                              consensus_->engine().identity());
         nonce_frontier_.reset();
+        known_nonce_frontier_.clear();
         latest_proposal_.reset();
         latest_certificate_.reset();
         latest_timeout_certificate_.reset();
@@ -3000,6 +3003,7 @@ namespace ExtraChain::Consensus {
             nonces = staged.value();
             // Certified payloads are immutable; retain only their checked nonce frontier.
             nonce_frontier_ = NonceFrontier { certificate_hash, nonces };
+            known_nonce_frontier_ = nonces;
         }
         return nonces;
     }
@@ -3071,7 +3075,12 @@ namespace ExtraChain::Consensus {
         const auto restored = restore_pending_intents();
         if (!restored.has_value())
             return std::unexpected(restored.error());
-        const auto nonces = local_nonce_frontier();
+        auto nonces = local_nonce_frontier();
+        // A certificate or a finality proof often arrives before its batch, so on a busy node the exact
+        // frontier was missing for a minute and local requests could not be made at all. The last known
+        // one is safe: the pool keeps every local request until its height is applied.
+        if (!nonces.has_value() && nonces.error() == ConsensusError::DataUnavailable)
+            nonces = known_nonce_frontier_;
         if (!nonces.has_value())
             return std::unexpected(nonces.error());
         const auto expired = expire_pending_intents(nonces.value());

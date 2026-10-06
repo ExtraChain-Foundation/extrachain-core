@@ -277,6 +277,8 @@ namespace ExtraChain::Consensus {
             std::map<ActorId, std::uint64_t> nonces;
         };
         mutable std::optional<NonceFrontier>                          nonce_frontier_;
+        // The last frontier that could be computed, kept across finalized heights for local requests.
+        mutable std::map<ActorId, std::uint64_t>                      known_nonce_frontier_;
         std::optional<AppliedCheckpoint>                              applied_checkpoint_;
         std::unique_ptr<PeerAuthenticator>                            authenticator_;
         std::optional<Proposal>                                       latest_proposal_;

@@ -98,7 +98,7 @@ int main() {
     // Certifies an empty batch at the next height: the branch the node sees has no request in it.
     std::string prior_section_root = std::string(64, 'a');
     std::string prior_state;
-    const auto  certify = [&](std::uint64_t height) {
+    const auto  certify = [&](std::uint64_t height, bool stage = true) {
         SectionBatchData batch;
         batch.manifest.first_section         = (height - 1) * ShadowSectionInterval + 1;
         batch.manifest.last_section          = height * ShadowSectionInterval;
@@ -143,7 +143,8 @@ int main() {
         proposal.signature = sign_payload(*signer, proposal_signing_payload(proposal)).value();
         batch.header_hash  = hash_header(proposal.header);
         TEST_REQUIRE(engine.observe_proposal(proposal).has_value());
-        TEST_REQUIRE(engine.stage_batch(batch).has_value());
+        if (stage)
+            TEST_REQUIRE(engine.stage_batch(batch).has_value());
         QuorumCertificate certificate { .network_id    = network.id(),
                                          .epoch         = 1,
                                          .height        = height,
@@ -187,6 +188,12 @@ int main() {
     // Once height 2 is applied without it, the request can no longer be included and its nonce is free.
     ConsensusStateTestFixture::apply(service, 2);
     const auto after_apply = ConsensusStateTestFixture::next_nonce(service, sender.id()).value();
+    // A certificate can arrive before its batch; a local request must not wait for that batch.
+    certify(3, false);
+    const auto without_batch = ConsensusStateTestFixture::next_nonce(service, sender.id());
+    std::printf("next nonce before the certified batch arrives: %s\n",
+                without_batch.has_value() ? std::to_string(without_batch.value()).c_str() : "unavailable");
+    std::fflush(stdout);
 
     node->cleanUp();
     node.reset();
@@ -194,4 +201,5 @@ int main() {
     std::filesystem::remove_all(directory);
     TEST_REQUIRE_EQ(after_certificate, std::uint64_t(2));
     TEST_REQUIRE_EQ(after_apply, std::uint64_t(1));
+    TEST_REQUIRE(without_batch.has_value() && without_batch.value() == std::uint64_t(1));
 }
