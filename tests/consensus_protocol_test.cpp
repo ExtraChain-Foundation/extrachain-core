@@ -116,6 +116,25 @@ int main() {
     check("materialized intent can be recovered from historical DAG data",
           restored_intent.has_value()
               && hash_intent(restored_intent.value().intent) == hash_intent(first_envelope.intent));
+    const auto carried_bytes = Utils::from_base64(materialized.value().consensus_intent().value());
+    const auto carried       = MessagePack::deserialize<IntentEnvelope>(carried_bytes.value_or(""));
+    check("materialized intent keeps its metadata once, in meta",
+          carried.has_value() && carried.value().metadata.empty()
+              && restored_intent.value().metadata == first_envelope.metadata
+              && verify_materialized_intent(materialized.value(), sender_public_key));
+    auto historical = materialized.value();
+    historical.set_consensus_intent(Utils::to_base64(MessagePack::serialize(first_envelope)),
+                                    materialized.value().signature());
+    historical.update_hash();
+    const auto historical_intent = intent_from_transaction(historical);
+    check("a transaction with the metadata in both places still reads",
+          historical_intent.has_value() && historical_intent.value().metadata == first_envelope.metadata
+              && verify_materialized_intent(historical, sender_public_key));
+    auto forged_meta = materialized.value();
+    forged_meta.set_meta("changed");
+    forged_meta.update_hash();
+    check("meta outside the signed metadata hash is rejected",
+          !verify_materialized_intent(forged_meta, sender_public_key));
     auto changed_materialization = materialized.value();
     changed_materialization.set_amount(BigNumberFloat("2"));
     changed_materialization.update_hash();

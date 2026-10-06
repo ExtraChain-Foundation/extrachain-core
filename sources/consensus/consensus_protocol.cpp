@@ -296,7 +296,11 @@ namespace ExtraChain::Consensus {
         transaction.set_timestamp(logical_time);
         transaction.set_meta(envelope.metadata);
         transaction.set_prev_hashs(previous_hashes);
-        transaction.set_consensus_intent(Utils::to_base64(MessagePack::serialize(envelope)),
+        // The metadata is already the transaction's meta. A second copy inside the encoded intent
+        // doubled every storage proof in batches, packs and relays; the signed hash still binds it.
+        auto carried = envelope;
+        carried.metadata.clear();
+        transaction.set_consensus_intent(Utils::to_base64(MessagePack::serialize(carried)),
                                          signature.value().toArray<crypto_sign_BYTES>());
         transaction.update_hash();
         return transaction;
@@ -310,10 +314,13 @@ namespace ExtraChain::Consensus {
         if (!bytes.has_value()) {
             return std::unexpected(ConsensusError::InvalidIntent);
         }
-        const auto envelope = MessagePack::deserialize<IntentEnvelope>(bytes.value());
+        auto envelope = MessagePack::deserialize<IntentEnvelope>(bytes.value());
         if (!envelope.has_value()) {
             return std::unexpected(ConsensusError::InvalidIntent);
         }
+        // Older transactions carry the metadata in both places.
+        if (envelope.value().metadata.empty())
+            envelope.value().metadata = transaction.meta().value_or("");
         return envelope.value();
     }
 

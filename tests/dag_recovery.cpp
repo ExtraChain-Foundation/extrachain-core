@@ -217,8 +217,9 @@ int main(int argc, char *argv[]) {
             envelope_bytes += MessagePack::serialize(envelope).size();
             requests.push_back(std::move(envelope));
         }
-        const auto payload_limit = 2 * envelope_bytes;
-        TEST_REQUIRE_EQ(pool.ready({ }, 2, 16, payload_limit / 2).size(), requests.size());
+        // Materialized sections outweigh the envelopes, so a limit that admits every envelope cuts the batch.
+        const auto payload_limit = envelope_bytes;
+        TEST_REQUIRE_EQ(pool.ready({ }, 2, 16, payload_limit).size(), requests.size());
         const auto bounded = node->dag()->build_shadow_intent_batch(SectionId(61),
                                                                     SectionId(80),
                                                                     2,
@@ -231,7 +232,7 @@ int main(int argc, char *argv[]) {
         TEST_REQUIRE(bounded.value().manifest.payload_bytes <= payload_limit);
         TEST_REQUIRE(!bounded.value().manifest.transaction_hashes.empty());
         TEST_REQUIRE(bounded.value().manifest.transaction_hashes.size() < requests.size());
-        TEST_REQUIRE_EQ(pool.ready({ }, 2, 16, payload_limit / 2).size(), requests.size());
+        TEST_REQUIRE_EQ(pool.ready({ }, 2, 16, payload_limit).size(), requests.size());
         std::size_t             actual_bytes = 0;
         std::set<std::uint64_t> selected_nonces;
         for (const auto &[section_id, bytes] : bounded.value().sections) {
