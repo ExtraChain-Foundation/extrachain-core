@@ -143,7 +143,19 @@ class Endurance(Cycle):
             except FileNotFoundError:
                 return True
 
-        self.wait_for(stopped, f'node {index} shutdown', 30)
+        try:
+            self.wait_for(stopped, f'node {index} shutdown', 30)
+        except TimeoutError:
+            # Keep the threads of a node that does not stop; the failure alone does not say where it hangs.
+            evidence = self.work / f'shutdown-node-{index}.txt'
+            try:
+                with evidence.open('w') as stream:
+                    subprocess.run(['gdb', '-p', str(pid), '-batch', '-ex', 'set pagination off',
+                                    '-ex', 'thread apply all bt'], stdout=stream, stderr=subprocess.STDOUT,
+                                   timeout=180, check=False)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+            raise
         for child in self.children:
             if child.pid == pid:
                 child.wait(timeout=1)
