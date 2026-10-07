@@ -295,6 +295,22 @@ int main() {
     draining_runtime.stop();
     require(drained.load(std::memory_order_acquire), "runtime stop must drain accepted asynchronous work");
 
+    // A shut-down observer stayed in run() because something still waited on its context.
+    Runtime          pending_runtime({ .io_threads = 2, .storage_threads = 1, .compute_threads = 1 });
+    std::atomic_bool abandoned_ran { false };
+    const auto       pending_task = DeadlineTask::create(pending_runtime.executor(), [&] {
+        abandoned_ran.store(true, std::memory_order_release);
+    });
+    pending_runtime.start();
+    pending_task->schedule_after(std::chrono::minutes(10));
+    const auto pending_stop_started = std::chrono::steady_clock::now();
+    pending_runtime.stop();
+    const auto pending_stop_took = std::chrono::steady_clock::now() - pending_stop_started;
+    std::cout << "stop with a pending timer took "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(pending_stop_took).count() << " ms" << std::endl;
+    require(pending_stop_took < std::chrono::seconds(15) && !abandoned_ran.load(std::memory_order_acquire),
+            "runtime stop must not wait for work that never completes");
+
     Runtime          self_join_runtime({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
     std::atomic_bool self_join_rejected { false };
     self_join_runtime.start();

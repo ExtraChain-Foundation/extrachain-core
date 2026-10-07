@@ -12,6 +12,8 @@
 #include "utils/exc_logs.h"
 
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
 #include <optional>
 #include <stdexcept>
 #include <thread>
@@ -20,6 +22,11 @@
 #include <boost/asio/executor_work_guard.hpp>
 
 namespace ExtraChain::Core {
+
+    namespace {
+        // How long stopped I/O workers may finish what is still queued before the context stops.
+        constexpr auto IoDrainGrace = std::chrono::seconds(5);
+    } // namespace
 
     struct Runtime::State final {
         using WorkGuard = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
@@ -53,6 +60,9 @@ namespace ExtraChain::Core {
         std::atomic_bool         running { false };
         bool                     stop_requested = false;
         bool                     joined         = false;
+        std::mutex               exit_mutex;
+        std::condition_variable  exit_signal;
+        std::size_t              exited_io_threads = 0;
     };
 
     namespace {
@@ -97,6 +107,11 @@ namespace ExtraChain::Core {
         for (std::size_t index = 0; index < state->config.io_threads; ++index) {
             state->io_threads.emplace_back([state]() {
                 state->run_io();
+                {
+                    std::scoped_lock exit_lock(state->exit_mutex);
+                    ++state->exited_io_threads;
+                }
+                state->exit_signal.notify_all();
             });
         }
     }
@@ -148,6 +163,20 @@ namespace ExtraChain::Core {
         {
             std::scoped_lock lock(state->lifecycle_mutex);
             state->work_guard.reset();
+        }
+        // run() returns only when nothing is pending. A timer or socket that nobody cancelled kept a
+        // node that got SIGTERM in run() for good, so after the grace period the rest is abandoned.
+        {
+            std::unique_lock exit_lock(state->exit_mutex);
+            if (!state->exit_signal.wait_for(exit_lock, IoDrainGrace, [&] {
+                    return state->exited_io_threads >= threads.size();
+                })) {
+                eWarning("[Runtime] {} of {} I/O workers still had pending work after {} s; stopping them",
+                         threads.size() - state->exited_io_threads,
+                         threads.size(),
+                         IoDrainGrace.count());
+                state->io_context.stop();
+            }
         }
         for (auto& thread : threads) {
             if (thread.joinable()) {
