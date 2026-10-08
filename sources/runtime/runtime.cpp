@@ -9,6 +9,8 @@
  */
 
 #include "runtime/runtime.h"
+#include "runtime/deadline_task.h"
+#include "runtime/periodic_task.h"
 #include "utils/exc_logs.h"
 
 #include <algorithm>
@@ -171,10 +173,18 @@ namespace ExtraChain::Core {
             if (!state->exit_signal.wait_for(exit_lock, IoDrainGrace, [&] {
                     return state->exited_io_threads >= threads.size();
                 })) {
-                eWarning("[Runtime] {} of {} I/O workers still had pending work after {} s; stopping them",
+                auto armed = DeadlineTask::armed_sites();
+                for (auto& site : PeriodicTask::armed_sites())
+                    armed.push_back(std::move(site));
+                std::string sites;
+                for (const auto& site : armed)
+                    sites += (sites.empty() ? "" : ", ") + site;
+                eWarning("[Runtime] {} of {} I/O workers still had pending work after {} s; stopping them "
+                         "(armed timers: {})",
                          threads.size() - state->exited_io_threads,
                          threads.size(),
-                         IoDrainGrace.count());
+                         IoDrainGrace.count(),
+                         sites.empty() ? "none" : sites);
                 state->io_context.stop();
             }
         }

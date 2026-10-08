@@ -11,12 +11,28 @@
 #include "runtime/periodic_task.h"
 
 #include <cstdint>
+#include <format>
+#include <mutex>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
 #include <boost/asio/dispatch.hpp>
 
 namespace ExtraChain::Core {
+
+    namespace {
+        // Never destroyed: a task that outlives static destruction still finds it.
+        struct LiveTasks {
+            std::mutex                    mutex;
+            std::set<const PeriodicTask*> tasks;
+        };
+
+        LiveTasks& live_tasks() {
+            static auto* tasks = new LiveTasks;
+            return *tasks;
+        }
+    } // namespace
 
     struct PeriodicTask::State final : std::enable_shared_from_this<PeriodicTask::State> {
         State(boost::asio::any_io_executor executor, Duration interval_value, Handler handler_value)
@@ -61,21 +77,42 @@ namespace ExtraChain::Core {
 
     std::shared_ptr<PeriodicTask> PeriodicTask::create(boost::asio::any_io_executor executor,
                                                        Duration                     interval,
-                                                       Handler                      handler) {
+                                                       Handler                      handler,
+                                                       std::source_location         site) {
         if (interval <= Duration::zero()) {
             throw std::invalid_argument("PeriodicTask interval must be positive");
         }
         if (!handler) {
             throw std::invalid_argument("PeriodicTask handler is required");
         }
-        return std::shared_ptr<PeriodicTask>(new PeriodicTask(std::move(executor), interval, std::move(handler)));
+        return std::shared_ptr<PeriodicTask>(
+            new PeriodicTask(std::move(executor), interval, std::move(handler), site));
     }
 
-    PeriodicTask::PeriodicTask(boost::asio::any_io_executor executor, Duration interval, Handler handler)
-        : state_(std::make_shared<State>(std::move(executor), interval, std::move(handler))) {
+    std::vector<std::string> PeriodicTask::armed_sites() {
+        std::vector<std::string> result;
+        std::scoped_lock         lock(live_tasks().mutex);
+        for (const auto* task : live_tasks().tasks)
+            if (task->active())
+                result.push_back(std::format("{}:{}", task->site_.file_name(), task->site_.line()));
+        return result;
+    }
+
+    PeriodicTask::PeriodicTask(boost::asio::any_io_executor executor,
+                               Duration                     interval,
+                               Handler                      handler,
+                               std::source_location         site)
+        : site_(site)
+        , state_(std::make_shared<State>(std::move(executor), interval, std::move(handler))) {
+        std::scoped_lock lock(live_tasks().mutex);
+        live_tasks().tasks.insert(this);
     }
 
     PeriodicTask::~PeriodicTask() {
+        {
+            std::scoped_lock lock(live_tasks().mutex);
+            live_tasks().tasks.erase(this);
+        }
         stop();
     }
 

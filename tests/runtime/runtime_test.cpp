@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -303,6 +304,15 @@ int main() {
     });
     pending_runtime.start();
     pending_task->schedule_after(std::chrono::minutes(10));
+    std::this_thread::sleep_for(20ms);
+    const auto armed = DeadlineTask::armed_sites();
+    for (const auto& site : armed)
+        std::cout << "armed deadline task: " << site << std::endl;
+    require(std::ranges::any_of(armed,
+                                [](const auto& site) {
+                                    return site.find("runtime_test.cpp") != std::string::npos;
+                                }),
+            "an armed deadline task must name where it was created");
     const auto pending_stop_started = std::chrono::steady_clock::now();
     pending_runtime.stop();
     const auto pending_stop_took = std::chrono::steady_clock::now() - pending_stop_started;
