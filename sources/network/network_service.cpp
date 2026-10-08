@@ -788,9 +788,11 @@ void NetworkService::prepare_shutdown() {
 
     eLog("[NetworkService] Finish him with {} connections", connections_->size());
 
-    reconnect_timer_->cancel();
-    clear_network_caches_timer_->cancel();
-    live_dag_batch_timer_->cancel();
+    // Messages still being handled re-armed the two-minute cache cleanup after a plain cancel,
+    // which kept the runtime from stopping for up to two minutes.
+    reconnect_timer_->stop();
+    clear_network_caches_timer_->stop();
+    live_dag_batch_timer_->stop();
     network_runtime_->stop_listening();
 
     std::set<SocketService::Ptr> copied;

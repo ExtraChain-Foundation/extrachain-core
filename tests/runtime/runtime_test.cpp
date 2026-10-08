@@ -296,6 +296,24 @@ int main() {
     draining_runtime.stop();
     require(drained.load(std::memory_order_acquire), "runtime stop must drain accepted asynchronous work");
 
+    // The network cache cleanup was armed again by messages handled after its cancel.
+    Runtime          stopped_runtime({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
+    std::atomic_bool stopped_ran { false };
+    const auto       stopped_task = DeadlineTask::create(stopped_runtime.executor(), [&] {
+        stopped_ran.store(true, std::memory_order_release);
+    });
+    stopped_runtime.start();
+    stopped_task->stop();
+    stopped_task->schedule_after(std::chrono::minutes(2));
+    stopped_task->schedule_earlier(10ms);
+    std::this_thread::sleep_for(50ms);
+    require(!stopped_task->active() && !stopped_ran.load(std::memory_order_acquire),
+            "a stopped deadline task must ignore later schedules");
+    const auto stopped_started = std::chrono::steady_clock::now();
+    stopped_runtime.stop();
+    require(std::chrono::steady_clock::now() - stopped_started < std::chrono::seconds(2),
+            "a stopped deadline task must not hold its runtime");
+
     // A shut-down observer stayed in run() because something still waited on its context.
     Runtime          pending_runtime({ .io_threads = 2, .storage_threads = 1, .compute_threads = 1 });
     std::atomic_bool abandoned_ran { false };

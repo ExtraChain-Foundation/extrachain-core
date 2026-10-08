@@ -68,6 +68,7 @@ namespace ExtraChain::Core {
         Handler                                           handler;
         std::atomic_bool                                  active { false };
         std::uint64_t                                     generation = 0;
+        bool                                              stopped    = false;
         std::source_location                              site;
     };
 
@@ -108,6 +109,8 @@ namespace ExtraChain::Core {
             throw std::invalid_argument("DeadlineTask delay cannot be negative");
         }
         boost::asio::dispatch(state_->strand, [state = state_, delay] {
+            if (state->stopped)
+                return;
             state->timer.cancel();
             state->arm(delay);
         });
@@ -118,6 +121,8 @@ namespace ExtraChain::Core {
             throw std::invalid_argument("DeadlineTask delay cannot be negative");
         }
         boost::asio::dispatch(state_->strand, [state = state_, delay] {
+            if (state->stopped)
+                return;
             const auto requested = std::chrono::steady_clock::now() + delay;
             if (state->active.load(std::memory_order_acquire) && state->timer.expiry() <= requested) {
                 return;
@@ -133,6 +138,18 @@ namespace ExtraChain::Core {
         }
         state_->active.store(false, std::memory_order_release);
         boost::asio::dispatch(state_->strand, [state = state_] {
+            ++state->generation;
+            state->timer.cancel();
+        });
+    }
+
+    void DeadlineTask::stop() {
+        if (!state_) {
+            return;
+        }
+        state_->active.store(false, std::memory_order_release);
+        boost::asio::dispatch(state_->strand, [state = state_] {
+            state->stopped = true;
             ++state->generation;
             state->timer.cancel();
         });

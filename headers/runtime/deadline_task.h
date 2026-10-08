@@ -41,6 +41,8 @@ namespace ExtraChain::Core {
         void schedule_after(Duration delay);
         void schedule_earlier(Duration delay);
         void cancel();
+        // Cancels for good: a later schedule_after or schedule_earlier is ignored.
+        void stop();
 
         [[nodiscard]] bool active() const noexcept;
 
