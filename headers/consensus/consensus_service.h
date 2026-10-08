@@ -15,6 +15,7 @@
 #include <chrono>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -39,6 +40,11 @@ namespace ExtraChain::Core {
 }
 
 namespace ExtraChain::Consensus {
+
+    // A full page that continues our finalized height: the height to ask the next page from before
+    // this one is applied, so the reply travels while the page is validated.
+    EXTRACHAIN_EXPORT std::optional<std::uint64_t> pipelined_sync_height(const ShadowSyncResponse& response,
+                                                                         std::uint64_t finalized_height);
 
     class EXTRACHAIN_EXPORT ConsensusService {
         friend class ConsensusStateTestFixture;
@@ -173,7 +179,9 @@ namespace ExtraChain::Consensus {
         void catch_up_deferred_finalization();
         /// Request a missing ancestor from one validator, rotating peers on retry.
         void request_ancestor_batch(const std::string& header_hash, std::string_view peer_identifier);
-        void request_sync_from(std::string_view peer_identifier, bool page_progress = false);
+        void request_sync_from(std::string_view             peer_identifier,
+                               bool                         page_progress = false,
+                               std::optional<std::uint64_t> after_height  = std::nullopt);
         void vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier);
         void timeout_elapsed();
         void reset_timeout();

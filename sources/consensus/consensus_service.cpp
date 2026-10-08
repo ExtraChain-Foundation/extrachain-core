@@ -1000,6 +1000,17 @@ namespace ExtraChain::Consensus {
         return std::move(rebuilt.value());
     }
 
+    std::optional<std::uint64_t> pipelined_sync_height(const ShadowSyncResponse& response,
+                                                       std::uint64_t             finalized_height) {
+        if (response.proofs.size() != MaximumShadowSyncProofs
+            || response.proofs.front().finalized_proposal.header.height != finalized_height + 1)
+            return std::nullopt;
+        const auto last = response.proofs.back().finalized_proposal.header.height;
+        if (last != finalized_height + MaximumShadowSyncProofs)
+            return std::nullopt;
+        return last;
+    }
+
     void ConsensusService::receive_sync_response(const ShadowSyncResponse& response,
                                                  std::string_view          peer_identifier) {
         std::lock_guard lock(mutex_);
@@ -1025,6 +1036,11 @@ namespace ExtraChain::Consensus {
 
         const auto initial_height  = consensus_->engine().safety_state().finalized_height;
         auto       expected_height = initial_height + 1;
+        // Applying a page took about a second and the next request waited for it; ask now instead.
+        const auto pipelined =
+            peer_identifier == last_sync_peer_ ? pipelined_sync_height(response, initial_height) : std::nullopt;
+        if (pipelined.has_value())
+            request_sync_from(peer_identifier, true, pipelined);
         for (const auto& proof : response.proofs) {
             // A reply answers the height we had when we asked. By the time it is
             // processed we may have moved on, so proofs we no longer need are the
@@ -1098,8 +1114,9 @@ namespace ExtraChain::Consensus {
             return;
         }
         reset_timeout();
-        if (!response.proofs.empty() && peer_identifier == last_sync_peer_
-            && consensus_->engine().safety_state().finalized_height > initial_height) {
+        const auto finalized_height = consensus_->engine().safety_state().finalized_height;
+        if (!response.proofs.empty() && peer_identifier == last_sync_peer_ && finalized_height > initial_height
+            && pipelined != finalized_height) {
             request_sync_from(peer_identifier, true);
         }
     }
@@ -2285,7 +2302,9 @@ namespace ExtraChain::Consensus {
         reset_timeout();
     }
 
-    void ConsensusService::request_sync_from(std::string_view peer_identifier, bool page_progress) {
+    void ConsensusService::request_sync_from(std::string_view             peer_identifier,
+                                             bool                         page_progress,
+                                             std::optional<std::uint64_t> after_height) {
         if (!consensus_) {
             return;
         }
@@ -2316,15 +2335,14 @@ namespace ExtraChain::Consensus {
         }
         last_sync_request_ = now;
         last_sync_peer_    = selected;
-        eWarning("[Shadow] Requesting finality sync from {} at finalized height {}",
-                 selected,
-                 consensus_->engine().safety_state().finalized_height);
+        const auto height  = after_height.value_or(consensus_->engine().safety_state().finalized_height);
+        eWarning("[Shadow] Requesting finality sync from {} at finalized height {}", selected, height);
         send_to_peer(
             ShadowSyncRequest {
                 .protocol_version = ProtocolVersion,
                 .network_id       = consensus_->engine().validators().document().network_id,
                 .epoch            = consensus_->engine().validators().document().epoch,
-                .finalized_height = consensus_->engine().safety_state().finalized_height,
+                .finalized_height = height,
             },
             MessageType::ConsensusSyncRequest,
             selected,

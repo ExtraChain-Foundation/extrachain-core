@@ -1043,6 +1043,13 @@ int main() {
     service.receive_sync_response(duplicate_page, peer);
     service.receive_sync_response(duplicate_page, peer);
     TEST_REQUIRE_EQ(socket->syncs.load(), before_duplicate);
+    // A node that is behind asks for the next page before it applies this one; a page it already has,
+    // or a short one that ends the history, asks for nothing more.
+    TEST_REQUIRE(pipelined_sync_height(duplicate_page, 0) == std::optional<std::uint64_t>(MaximumShadowSyncProofs));
+    TEST_REQUIRE(!pipelined_sync_height(duplicate_page, 1).has_value());
+    auto short_page = duplicate_page;
+    short_page.proofs.pop_back();
+    TEST_REQUIRE(!pipelined_sync_height(short_page, 0).has_value());
     ConsensusStateTestFixture::reset_sync_timer(service);
     const auto before_connect = socket->syncs.load();
     for (unsigned i = 0; i < 16; ++i)
