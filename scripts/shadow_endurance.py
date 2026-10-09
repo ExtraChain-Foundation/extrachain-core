@@ -122,6 +122,13 @@ class Endurance(Cycle):
             environment.pop('EXC_SHADOW_RESUME_WAVE', None)
         elif resume:
             environment['EXC_SHADOW_RESUME_WAVE'] = str(self.wave)
+        # A restarted node keeps the shifted clock shadow_soak.sh started it with.
+        for skew in self.environment.get('EXC_SHADOW_CLOCK_SKEW', '').split():
+            node, _, offset = skew.partition(':')
+            if node == str(index):
+                environment.update(LD_PRELOAD=self.environment.get(
+                    'EXC_FAKETIME_LIB', '/usr/lib/x86_64-linux-gnu/faketime/libfaketimeMT.so.1'),
+                    FAKETIME=offset, DONT_FAKE_MONOTONIC='1')
         child = self.start([str(self.binary), 'committee', 'data', 'seed' if index == 0 else 'joiner',
                             str(index), str(self.args.port + 20 + index), str(self.args.port + 20),
                             '8' if index == 7 else '7', str(count), str(remaining), str(self.barrier), '1', '1'],

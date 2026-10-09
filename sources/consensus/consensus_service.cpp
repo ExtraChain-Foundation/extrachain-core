@@ -1594,9 +1594,10 @@ namespace ExtraChain::Consensus {
             .certificate_hash  = hash_certificate(proof.decision_certificate),
         };
         finalized_event_.publish(finalized_checkpoint);
-        eInfo("[Shadow] Finalized height {} at Dag section {}",
+        eInfo("[Shadow] Finalized height {} at Dag section {} block time {}",
               finalized_checkpoint.height,
-              finalized_checkpoint.dag_section);
+              finalized_checkpoint.dag_section,
+              proposal.header.logical_time);
         return {};
     }
 

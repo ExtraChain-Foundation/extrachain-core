@@ -37,6 +37,9 @@
 #        EXC_SHADOW_OLD_BIN      an older extrachain-node-run; together with
 #        EXC_SHADOW_OLD_INDEXES  ("3 5") those committee nodes run it instead of the
 #                                fresh build, for protocol compatibility runs
+#        EXC_SHADOW_CLOCK_SKEW   ("3:+10 5:-8") those committee nodes see their wall clock
+#                                shifted by that many seconds through libfaketime
+#                                (EXC_FAKETIME_LIB); monotonic time stays real
 
 set -u
 
@@ -59,6 +62,13 @@ if [ -n "${EXC_SHADOW_MINING_TEST+x}" ] && [ "$EXC_SHADOW_MINING_TEST" != 1 ]; t
     printf 'Invalid EXC_SHADOW_MINING_TEST: expected 1 when set\n' >&2
     exit 64
 fi
+FAKETIME_LIB="${EXC_FAKETIME_LIB:-/usr/lib/x86_64-linux-gnu/faketime/libfaketimeMT.so.1}"
+for skew in ${EXC_SHADOW_CLOCK_SKEW:-}; do
+    if ! [[ "$skew" =~ ^[0-9]+:[+-][0-9]+$ ]] || [ ! -f "$FAKETIME_LIB" ]; then
+        printf 'Invalid EXC_SHADOW_CLOCK_SKEW %s or missing %s\n' "$skew" "$FAKETIME_LIB" >&2
+        exit 64
+    fi
+done
 if ! [[ "$RECOVERY_SECONDS" =~ ^[1-9][0-9]{0,3}$ ]] || [ "$RECOVERY_SECONDS" -gt 3600 ]; then
     printf 'Invalid EXC_SHADOW_RECOVERY_SECONDS: expected 1..3600\n' >&2
     exit 64
@@ -470,6 +480,10 @@ for index in $(seq 0 $((NODE_COUNT - 1))); do
         case " ${EXC_SHADOW_OLD_INDEXES:-} " in
             *" $index "*) [ -n "${EXC_SHADOW_OLD_BIN:-}" ] && node_bin="$EXC_SHADOW_OLD_BIN" ;;
         esac
+        for skew in ${EXC_SHADOW_CLOCK_SKEW:-}; do
+            [ "${skew%%:*}" = "$index" ] || continue
+            export LD_PRELOAD="$FAKETIME_LIB" FAKETIME="${skew#*:}" DONT_FAKE_MONOTONIC=1
+        done
         EXC_DEBUG_LOG=1 EXC_BIND_IP="127.0.0.$((index + 1))" EXC_FUND_NODES="$FUND_NODES" \
             exec "$node_bin" committee data "$role" "$index" "$port" "$((BASE_PORT + 20))" "$NODE_COUNT" \
                  "$intents" "$RUN_SECONDS" "$BARRIER" 1 1
