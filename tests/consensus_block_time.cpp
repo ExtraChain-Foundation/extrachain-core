@@ -7,6 +7,7 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <thread>
 #include <vector>
 
 namespace ExtraChain::Consensus {
@@ -102,25 +103,39 @@ int main() {
     TEST_REQUIRE(proposal.has_value());
     TEST_REQUIRE(proposal.value().header.logical_time >= before && proposal.value().header.logical_time <= after);
 
-    // A copy with another time, signed by the same leader, with its batch staged.
-    const auto variant = [&](const Proposal& base, std::uint64_t time, const SectionBatchData& data) {
+    // A copy with another time, signed by the same leader, with its batch staged. A live copy
+    // arrives the way a peer's proposal does, so this validator records when it first saw it.
+    const auto variant = [&](const Proposal& base, std::uint64_t time, const SectionBatchData& data, bool live) {
         auto changed                = base;
         changed.header.logical_time = time;
         changed.signature = sign_payload(key_of(changed.proposer_id), proposal_signing_payload(changed)).value();
-        TEST_REQUIRE(engine.observe_certified_proposal(changed).has_value());
+        if (live)
+            TEST_REQUIRE(engine.observe_proposal(changed).has_value());
+        else
+            TEST_REQUIRE(engine.observe_certified_proposal(changed).has_value());
         auto staged        = data;
         staged.header_hash = hash_header(changed.header);
         TEST_REQUIRE(engine.stage_batch(staged).has_value());
         return changed;
     };
     const auto drift  = MaximumBlockClockDriftMs;
-    const auto future = engine.accept_proposal(variant(proposal.value(), now_ms() + 2 * drift, first));
+    const auto future = engine.accept_proposal(variant(proposal.value(), now_ms() + 2 * drift, first, true));
     TEST_REQUIRE(!future.has_value() && future.error() == ConsensusError::InvalidProposalTime);
-    const auto past = engine.accept_proposal(variant(proposal.value(), now_ms() - 2 * drift, first));
+    const auto past = engine.accept_proposal(variant(proposal.value(), now_ms() - 2 * drift, first, true));
     TEST_REQUIRE(!past.has_value() && past.error() == ConsensusError::InvalidProposalTime);
-    first.header_hash = hash_header(proposal.value().header);
-    TEST_REQUIRE(engine.stage_batch(first).has_value());
-    TEST_REQUIRE(engine.accept_proposal(proposal.value()).has_value());
+    const auto unseen = engine.accept_proposal(variant(proposal.value(), now_ms() - 2 * drift, first, false));
+    TEST_REQUIRE(!unseen.has_value() && unseen.error() == ConsensusError::InvalidProposalTime);
+    // Fresh when it arrived, but the vote is ready only after the drift has passed: fetching and
+    // validating a batch under load takes that long, and refusing here would stall every round.
+    const auto accepted = variant(proposal.value(), now_ms() - drift + 1500, first, true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+    const auto delayed = engine.accept_proposal(accepted);
+    if (!delayed.has_value())
+        std::fprintf(stderr,
+                     "a proposal that arrived fresh was refused: %u\n",
+                     static_cast<unsigned>(delayed.error()));
+    TEST_REQUIRE(delayed.has_value());
+    first.header_hash = hash_header(accepted.header);
 
     // Certify height 1, then propose height 2 from its leader.
     std::optional<QuorumCertificate> certificate;
@@ -137,10 +152,10 @@ int main() {
     }
     TEST_REQUIRE(certificate.has_value());
     TEST_REQUIRE(engine.accept_certificate(certificate.value()).has_value());
-    auto       second       = empty_batch(ShadowSectionInterval + 1, proposal.value().header.section_root);
+    auto       second       = empty_batch(ShadowSectionInterval + 1, accepted.header.section_root);
     const auto second_state = ConsensusStateTestFixture::build(service, second, 2, certificate.value());
     TEST_REQUIRE(second_state.has_value());
-    auto next                           = proposal.value();
+    auto next                           = accepted;
     next.header.height                  = 2;
     next.header.dag_section             = second.manifest.last_section;
     next.header.parent_certificate_hash = hash_certificate(certificate.value());
@@ -152,15 +167,15 @@ int main() {
     next.parent_certificate             = certificate.value();
     next.proposer_id                    = view.leader(2, 0).validator_id;
     // Time must move forward from the parent block.
-    const auto parent_time       = proposal.value().header.logical_time;
+    const auto parent_time       = accepted.header.logical_time;
     auto       observed          = next;
     observed.header.logical_time = parent_time;
     observed.signature = sign_payload(key_of(observed.proposer_id), proposal_signing_payload(observed)).value();
     const auto seen    = engine.observe_proposal(observed);
     TEST_REQUIRE(!seen.has_value() && seen.error() == ConsensusError::InvalidProposalTime);
-    const auto same = engine.accept_proposal(variant(next, parent_time, second));
+    const auto same = engine.accept_proposal(variant(next, parent_time, second, false));
     TEST_REQUIRE(!same.has_value() && same.error() == ConsensusError::InvalidProposalTime);
-    const auto later = engine.accept_proposal(variant(next, std::max(now_ms(), parent_time + 1), second));
+    const auto later = engine.accept_proposal(variant(next, std::max(now_ms(), parent_time + 1), second, true));
     if (!later.has_value())
         std::fprintf(stderr, "a later block time was refused: %u\n", static_cast<unsigned>(later.error()));
     TEST_REQUIRE(later.has_value());

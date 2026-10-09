@@ -117,6 +117,9 @@ namespace ExtraChain::Consensus {
         std::optional<EpochBootstrapV1>                           epoch_bootstrap_;
         SafetyState                                               safety_state_;
         std::map<std::string, Proposal>                           proposals_;
+        // Wall-clock ms when a live proposal first reached this validator; a vote can come
+        // much later, once the batch is fetched and validated, so freshness is judged here.
+        std::map<std::string, std::uint64_t>                      proposal_arrivals_;
         std::map<std::string, SectionBatchData>                   batches_;
         std::map<std::string, QuorumCertificate>                  certificates_;
         std::map<std::string, std::map<std::string, Vote>>        votes_;

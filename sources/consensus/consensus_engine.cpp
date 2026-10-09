@@ -390,14 +390,17 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::UnsafeProposal);
         }
         // Block time only moves forward and stays near the voter's clock, so a leader can shift it
-        // by at most MaximumBlockClockDriftMs.
+        // by at most MaximumBlockClockDriftMs. It must be fresh when the proposal arrived, not when
+        // the vote is ready: under load validation alone can outlast the drift.
         const auto parent_time = proposal.parent_certificate.phase == Phase::Genesis
                                      ? 0
                                      : proposals_.at(proposal.parent_certificate.header_hash).header.logical_time;
         const auto now         = wall_clock_ms();
+        const auto arrival     = proposal_arrivals_.find(hash_header(proposal.header));
+        const auto arrived     = arrival == proposal_arrivals_.end() ? now : arrival->second;
         if (proposal.header.logical_time <= parent_time
             || proposal.header.logical_time > now + MaximumBlockClockDriftMs
-            || proposal.header.logical_time + MaximumBlockClockDriftMs < now) {
+            || proposal.header.logical_time + MaximumBlockClockDriftMs < arrived) {
             return std::unexpected(ConsensusError::InvalidProposalTime);
         }
 
@@ -468,7 +471,9 @@ namespace ExtraChain::Consensus {
             if (parent != proposals_.end() && proposal.header.logical_time <= parent->second.header.logical_time)
                 return std::unexpected(ConsensusError::InvalidProposalTime);
         }
-        proposals_.insert_or_assign(hash_header(proposal.header), proposal);
+        const auto header_hash = hash_header(proposal.header);
+        proposal_arrivals_.try_emplace(header_hash, wall_clock_ms());
+        proposals_.insert_or_assign(header_hash, proposal);
         return {};
     }
 
@@ -1296,6 +1301,9 @@ namespace ExtraChain::Consensus {
         const auto minimum_height = finalized_height - 2;
         std::erase_if(proposals_, [minimum_height](const auto& item) {
             return item.second.header.height < minimum_height;
+        });
+        std::erase_if(proposal_arrivals_, [this](const auto& item) {
+            return !proposals_.contains(item.first);
         });
         std::erase_if(batches_, [minimum_height, this](const auto& item) {
             const auto proposal = proposals_.find(item.first);
