@@ -166,6 +166,10 @@ namespace ExtraChain::Consensus {
                                                   std::chrono::system_clock::now().time_since_epoch())
                                                   .count());
         }
+
+        // A height with nothing to finalize only moves mining forward by block time; epochs and proof
+        // windows last tens of seconds, so one such height this often is enough.
+        constexpr std::uint64_t EmptyHeightIntervalMs = 2'000;
     } // namespace
 
     ConsensusService::ConsensusService(Core::ExtraChainNode& node, std::filesystem::path directory)
@@ -2059,6 +2063,18 @@ namespace ExtraChain::Consensus {
             if (intents.empty() && !flush_pipeline && !mining_pending
                 && !(highest.phase == Phase::Genesis && consensus_->mining_policy().has_value())) {
                 return;
+            }
+            // An idle network proposed an empty height every second for mining alone. Requests and the
+            // heights that finalize them still go out at once.
+            if (intents.empty() && !flush_pipeline && !settlement.value().has_value()
+                && highest_proposal.has_value()) {
+                const auto due = highest_proposal.value().header.logical_time + EmptyHeightIntervalMs;
+                const auto now = wall_clock_millis();
+                if (now < due) {
+                    if (intent_batch_task_)
+                        intent_batch_task_->schedule_earlier(std::chrono::milliseconds(due - now));
+                    return;
+                }
             }
             const auto first = target == 0 ? SectionId(0) : SectionId(target) - CONTROL_INTERVAL_DIFF;
             std::optional<std::string> previous_section_bytes;
