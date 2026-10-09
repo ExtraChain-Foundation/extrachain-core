@@ -103,6 +103,7 @@ int main() {
         batch.manifest.first_section         = (height - 1) * ShadowSectionInterval + 1;
         batch.manifest.last_section          = height * ShadowSectionInterval;
         batch.manifest.previous_section_root = prior_section_root;
+        batch.manifest.parent_time           = height - 1;
         for (auto section = batch.manifest.first_section; section <= batch.manifest.last_section; ++section) {
             auto bytes = Json::serialize(Section { .id = SectionId(section) });
             batch.manifest.payload_bytes += bytes.size();

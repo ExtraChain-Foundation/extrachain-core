@@ -509,8 +509,7 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
                     || !dataset->second.providers.contains(provider.id().to_string())
                     || dataset->second.accepted.contains(provider.id().to_string()))
                     continue;
-                const auto schedule = mining_epoch_schedule(epoch_id);
-                if (!schedule.has_value() || work.value().section > schedule.value().proof_last_section)
+                if (!mining_window_accepts(epoch, work.value().section))
                     continue;
                 const auto proof = make_storage_proof_from_index(index_path(job),
                                                                  work.value().network,

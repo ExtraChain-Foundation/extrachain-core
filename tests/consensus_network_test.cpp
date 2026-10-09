@@ -279,7 +279,8 @@ int main() {
     };
     const auto reward_dataset    = commit_storage_dataset(17, reward_reader).value();
     const auto reward_dataset_id = storage_dataset_id(committee.governance.id(), reward_dataset).value();
-    const MiningEmissionPolicy certified_policy { 0, { { 1, 10 } } };
+    // One-millisecond epochs make every height start one, which keeps this chain's schedule in sections.
+    const MiningEmissionPolicy certified_policy { 0, { { 1, 10 } }, 1, 1 };
     auto certified_mining = configure_mining_state(committee.governance.id(), 0, certified_policy).value();
     check("certified mining registers immutable bytes before its epoch",
           register_storage_provider(certified_mining, committee.governance.id(), reward_dataset).has_value());
@@ -295,15 +296,18 @@ int main() {
     std::optional<MiningState>        before_settlement;
     std::string                       after_settlement_root;
     MiningPayouts                     certified_payouts;
+    std::map<std::uint64_t, std::uint64_t> block_times;
     bool quorum_guard_checked = false;
     for (std::uint64_t height = 1; height <= 13; ++height) {
+        const auto parent_time = height == 1 ? 0 : block_times.at(height - 1);
         const auto& leader       = committee.view.leader(height, 0);
         const auto  leader_index = committee.index_for(leader.validator_id);
         for (auto section = (height - 1) * ShadowSectionInterval + 1; section <= height * ShadowSectionInterval;
              ++section) {
             const auto payouts = advance_mining_state(certified_mining,
                                                       section,
-                                                      section == 1 ? 10 : 0,
+                                                      parent_time,
+                                                      certified_policy,
                                                       mining_finality,
                                                       mining_verifier);
             check("mining projects each section before certification", payouts.has_value());
@@ -340,6 +344,7 @@ int main() {
         if (!proposal.has_value()) {
             break;
         }
+        block_times[height] = proposal.value().header.logical_time;
 
         const auto               data = batch_data(proposal.value());
         std::vector<std::size_t> delivery_order(engines.size());
@@ -413,6 +418,7 @@ int main() {
         SectionBatchData  batch;
         batch.manifest.first_section = 161;
         batch.manifest.last_section  = 180;
+        batch.manifest.parent_time   = block_times.at(8);
         for (std::uint64_t section = 161; section <= 180; ++section) {
             Section content { .id = SectionId(section) };
             if (section == 161 && record.has_value())
@@ -437,7 +443,7 @@ int main() {
                .has_value());
     check("DAG batch replay rejects a substituted emission policy",
           !replay_mining_batch(before_settlement.value(),
-                               MiningEmissionPolicy { 0, { { 1, 11 } } },
+                               MiningEmissionPolicy { 0, { { 1, 11 } }, 1, 1 },
                                settlement_batch(settlement_transaction),
                                mining_finality,
                                mining_verifier)
@@ -527,14 +533,16 @@ int main() {
     check("settlement rejects the wrong section",
           !verify_mining_settlement(settlement, 160, mining_verifier).has_value()
               && !verify_mining_settlement(settlement, 162, mining_verifier).has_value());
-    // An epoch past the schedule has no sections at all: every derived number would overflow. A
-    // local node cannot build such a record, but a peer can put one on the wire, so the decode and
-    // verify paths must refuse it instead of unwrapping a schedule that does not exist.
-    for (const std::uint64_t epoch : { UINT64_MAX, UINT64_MAX / 2, UINT64_MAX / 8 }) {
-        if (mining_epoch_schedule(epoch).has_value())
+    // An epoch past the bound or a window with no recorded end has no settlement section. A local node
+    // cannot build such a record, but a peer can put one on the wire, so the decode and verify paths
+    // must refuse it instead of unwrapping a section that does not exist.
+    for (const std::uint64_t epoch : { UINT64_MAX, UINT64_MAX / 2 + 1, UINT64_MAX / 8 }) {
+        if (epoch <= MaximumMiningEpoch)
             continue;
-        auto beyond           = settlement;
+        auto beyond                = settlement;
         beyond.witness.epoch.epoch = epoch;
+        if (epoch == UINT64_MAX)
+            beyond.witness.epoch.proof_last_section = 0;
         check("settlement transaction cannot be built for an epoch past the schedule",
               !make_mining_settlement_transaction(beyond).has_value());
         // Forge the wire form by hand, since the builder above refuses to make one.
@@ -630,17 +638,21 @@ int main() {
     const auto dataset    = commit_storage_dataset(1, storage_reader).value();
     const auto dataset_id = storage_dataset_id(committee.governance.id(), dataset).value();
     auto       mining =
-        freeze_mining_epoch(committee.governance.id(), 0, 10, { { committee.governance.id(), dataset, 0 } })
+        freeze_mining_epoch(committee.governance.id(), 0, 10, { { committee.governance.id(), dataset, 0 } }, 1)
             .value();
+    check("mining has no window before the next epoch names its challenge",
+          !open_mining_proof_window(mining, newer_snapshot.proof, light_client.value(), 1000).has_value());
+    mining.challenge_section = 40;
     check("mining rejects a checkpoint from the wrong section",
-          !open_mining_proof_window(mining, balance_snapshot.proof, light_client.value()).has_value());
+          !open_mining_proof_window(mining, balance_snapshot.proof, light_client.value(), 1000).has_value());
     auto bad_mining_checkpoint = newer_snapshot.proof;
     bad_mining_checkpoint.decision_certificate.signatures.clear();
     check("mining rejects an unauthenticated challenge checkpoint",
-          !open_mining_proof_window(mining, bad_mining_checkpoint, light_client.value()).has_value());
-    check("mining opens its fixed window from authenticated Shadow finality",
-          open_mining_proof_window(mining, newer_snapshot.proof, light_client.value()).has_value()
-              && mining.proof_first_section == 81 && mining.proof_last_section == 120);
+          !open_mining_proof_window(mining, bad_mining_checkpoint, light_client.value(), 1000).has_value());
+    check("mining opens its window from authenticated Shadow finality",
+          open_mining_proof_window(mining, newer_snapshot.proof, light_client.value(), 1000).has_value()
+              && mining.proof_first_section == 81 && mining.proof_last_section == 0
+              && mining.proof_closes_ms == 1000);
     const auto storage_proof = make_storage_proof(committee.governance.id(),
                                                   committee.governance.id(),
                                                   dataset,
@@ -653,7 +665,10 @@ int main() {
     check("mining window closure has a finality proof",
           closing_proofs.has_value() && closing_proofs.value().size() == 1);
     check("mining rejects finality before the window closes",
-          !settle_mining_epoch(mining, newer_snapshot.proof, light_client.value()).has_value());
+          !settle_mining_epoch(mining, newer_snapshot.proof, light_client.value()).has_value()
+              && !settle_mining_epoch(mining, closing_proofs.value().front(), light_client.value()).has_value());
+    // Block time reached proof_closes_ms on the height that ends at section 120.
+    mining.proof_last_section = 120;
     auto bad_closing_checkpoint = closing_proofs.value().front();
     bad_closing_checkpoint.decision_certificate.signatures.clear();
     check("mining rejects a forged settlement certificate",
@@ -676,9 +691,15 @@ int main() {
             return std::unexpected(ConsensusError::DataUnavailable);
         return proof.value().value();
     };
+    // Height h has parent time h - 1: with one-millisecond epochs each height starts the next one, so
+    // epoch 0 (7 units) and epoch 1 (5 units) follow the same sections as per-height epochs.
+    const MiningEmissionPolicy ledger_policy { 0, { { 1, 7 }, { 1, 5 } }, 1, 1 };
+    const auto                 parent_time = [](std::uint64_t section) {
+        return (section - 1) / ShadowSectionInterval;
+    };
     for (std::uint64_t section = 1; section <= 80; ++section) {
-        const auto budget   = section == 1 ? 7 : section == 21 ? 5 : 0;
-        const auto advanced = advance_mining_state(ledger, section, budget, read_finality, light_client.value());
+        const auto advanced = advance_mining_state(
+            ledger, section, parent_time(section), ledger_policy, read_finality, light_client.value());
         check("mining reserves only the scheduled epoch budgets before proofs",
               advanced.has_value() && advanced.value().empty() && ledger.minted_units == 0);
         if (section == 1)
@@ -700,7 +721,7 @@ int main() {
     const auto saved_ledger       = MessagePack::serialize(ledger);
     const auto root_before_window = mining_state_root(ledger);
     check("missing finality leaves the entire mining transition unchanged",
-          !advance_mining_state(ledger, 81, 0, { }, light_client.value()).has_value()
+          !advance_mining_state(ledger, 81, parent_time(81), ledger_policy, { }, light_client.value()).has_value()
               && mining_state_root(ledger) == root_before_window);
     MiningPayouts expected_payouts;
     std::string   expected_mining_root;
@@ -721,18 +742,20 @@ int main() {
                     return proof;
                 };
                 check("forged closing finality cannot credit or prune mining state",
-                      !advance_mining_state(ledger, section, 0, forged, light_client.value()).has_value()
+                      !advance_mining_state(
+                           ledger, section, parent_time(section), ledger_policy, forged, light_client.value())
+                           .has_value()
                           && mining_state_root(ledger) == before);
-                check("a failed reservation cannot partially settle an earlier epoch",
-                      !advance_mining_state(ledger,
-                                            section,
-                                            MaximumMiningEmissionUnits,
-                                            read_finality,
-                                            light_client.value())
-                              .has_value()
+                // A valid policy never exceeds the cap, so an unreadable budget stands in for a failed one.
+                const MiningEmissionPolicy over_cap { 0, { { 1, MaximumMiningEmissionUnits }, { 1, 1 } }, 1, 1 };
+                check("a failed budget cannot partially settle an earlier epoch",
+                      !advance_mining_state(
+                           ledger, section, parent_time(section), over_cap, read_finality, light_client.value())
+                           .has_value()
                           && mining_state_root(ledger) == before);
             }
-            const auto advanced = advance_mining_state(ledger, section, 0, read_finality, light_client.value());
+            const auto advanced = advance_mining_state(
+                ledger, section, parent_time(section), ledger_policy, read_finality, light_client.value());
             check("mining advances and settles from verified finality", advanced.has_value());
             if (advanced.has_value())
                 for (const auto& [provider, amount] : advanced.value())
@@ -773,21 +796,85 @@ int main() {
     }
     const auto settled_root = mining_state_root(ledger);
     check("settlement cannot run twice for one section",
-          !advance_mining_state(ledger, 181, 0, read_finality, light_client.value()).has_value()
+          !advance_mining_state(ledger, 181, parent_time(181), ledger_policy, read_finality, light_client.value())
+                   .has_value()
               && mining_state_root(ledger) == settled_root);
-    auto capped = create_mining_state(committee.governance.id(), 0).value();
+    auto                       capped = create_mining_state(committee.governance.id(), 0).value();
+    const MiningEmissionPolicy cap_policy { 0, { { 1, MaximumMiningEmissionUnits } }, 1, 1 };
     check("an unused epoch consumes its reservation without emission",
-          advance_mining_state(capped, 1, MaximumMiningEmissionUnits, { }, light_client.value()).has_value()
-              && capped.epochs.empty() && capped.minted_units == 0);
+          advance_mining_state(capped, 1, 0, cap_policy, { }, light_client.value()).has_value()
+              && capped.epochs.empty() && capped.minted_units == 0
+              && capped.reserved_units == MaximumMiningEmissionUnits);
     for (std::uint64_t section = 2; section <= 20; ++section)
         check("an empty mining interval needs no proof traffic",
-              advance_mining_state(capped, section, 0, { }, light_client.value()).has_value());
+              advance_mining_state(capped, section, 0, cap_policy, { }, light_client.value()).has_value());
     const auto capped_root = mining_state_root(capped);
     check("unused mining allocations cannot be carried past the total cap",
-          !advance_mining_state(capped, 21, 1, { }, light_client.value()).has_value()
+          !advance_mining_state(capped,
+                                21,
+                                1,
+                                MiningEmissionPolicy { 0, { { 1, MaximumMiningEmissionUnits }, { 1, 1 } }, 1, 1 },
+                                { },
+                                light_client.value())
+                   .has_value()
               && mining_state_root(capped) == capped_root);
     check("mining proceeds without new emission after the cap",
-          advance_mining_state(capped, 21, 0, { }, light_client.value()).has_value());
+          advance_mining_state(capped, 21, 1, cap_policy, { }, light_client.value()).has_value()
+              && capped.reserved_units == MaximumMiningEmissionUnits);
+
+    // Thirty-second epochs over blocks fifteen seconds apart: an epoch spans two heights and is frozen
+    // once; the next epoch's first height is its challenge, and block time closes the window on the
+    // height that reaches it. Budgets of epochs nobody proved are never minted.
+    {
+        const MiningEmissionPolicy timed_policy { 0, { { 4, 6 } }, 30'000, 10'000 };
+        const auto                 block_time = [](std::uint64_t section) {
+            return (section - 1) / ShadowSectionInterval * 15'000;
+        };
+        auto timed = create_mining_state(committee.governance.id(), 0).value();
+        check("timed mining registers a provider before its first epoch",
+              register_storage_provider(timed, committee.governance.id(), dataset).has_value());
+        MiningPayouts timed_payouts;
+        std::size_t   frozen_epochs = 0;
+        for (std::uint64_t section = 1; section <= 221; ++section) {
+            const auto before   = timed.epochs.size();
+            const auto advanced = advance_mining_state(
+                timed, section, block_time(section), timed_policy, read_finality, light_client.value());
+            check("timed mining advances by block time", advanced.has_value());
+            if (!advanced.has_value())
+                break;
+            for (const auto& [provider, amount] : advanced.value())
+                timed_payouts[provider] += amount;
+            if (timed.epochs.size() > before)
+                ++frozen_epochs;
+            if (section == 41)
+                check("an epoch starts only when block time crosses its period",
+                      timed.epochs.size() == 2 && timed.epochs.at(0).challenge_section == 60
+                          && timed.epochs.at(1).challenge_section == 0);
+            if (section == 101 || section == 141) {
+                const auto  epoch  = section == 101 ? 0 : 1;
+                const auto& frozen = timed.epochs.at(epoch);
+                check("a timed window opens two heights after its challenge",
+                      frozen.challenge.has_value() && frozen.proof_first_section == section
+                          && frozen.proof_last_section == 0
+                          && frozen.proof_closes_ms == block_time(section) + 10'000);
+                const auto proof = make_storage_proof(committee.governance.id(),
+                                                      committee.governance.id(),
+                                                      dataset,
+                                                      frozen.challenge.value(),
+                                                      storage_reader)
+                                       .value();
+                check("the frozen provider proves within the timed window",
+                      submit_mining_proof(timed, epoch, committee.governance.id(), dataset_id, proof).has_value());
+            }
+            if (section == 121)
+                check("block time closes the window on the height that reaches it",
+                      timed.epochs.at(0).proof_last_section == 140);
+        }
+        check("each thirty-second epoch is frozen once and settles from its own window",
+              frozen_epochs == 4 && timed.reserved_units == 24 && timed.minted_units == 12
+                  && timed_payouts.at(committee.governance.id().to_string()) == 12
+                  && !timed.epochs.contains(0) && !timed.epochs.contains(1));
+    }
     check("runtime accepts only requested certified light balances and rejects rollback",
           test_balance_snapshot_runtime(balance_snapshot, newer_snapshot, committee.document));
     auto changed_inclusion             = inclusion.value().value();

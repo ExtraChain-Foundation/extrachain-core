@@ -13,8 +13,8 @@ namespace ExtraChain::Consensus {
         }
 
         bool bounded_epoch(const MiningEpochState& epoch) {
-            if (epoch.network.is_zero() || epoch.datasets.size() > MaximumMiningDatasets
-                || epoch.budget_units > MaximumMiningEmissionUnits
+            if (epoch.network.is_zero() || epoch.epoch > MaximumMiningEpoch
+                || epoch.datasets.size() > MaximumMiningDatasets || epoch.budget_units > MaximumMiningEmissionUnits
                 || epoch.rewards.size() > MaximumMiningRegistrations
                 || epoch.claimed.size() > MaximumMiningRegistrations
                 || (epoch.challenge.has_value() && epoch.challenge.value().checkpoint.size() != 64))
@@ -41,7 +41,7 @@ namespace ExtraChain::Consensus {
 
         std::expected<std::map<std::string, std::string>, ConsensusError> state_entries(const MiningState& state) {
             if (state.network.is_zero() || state.registrations.size() > MaximumMiningDatasets
-                || state.epochs.size() > 8
+                || state.epochs.size() > MaximumMiningEpochs
                 || (!state.emission_policy_hash.empty() && state.emission_policy_hash.size() != 64))
                 return std::unexpected(ConsensusError::InvalidIntent);
             std::map<std::string, std::string> entries;
@@ -50,7 +50,8 @@ namespace ExtraChain::Consensus {
                                                                 state.section,
                                                                 state.reserved_units,
                                                                 state.minted_units,
-                                                                state.emission_policy_hash }));
+                                                                state.emission_policy_hash,
+                                                                state.next_epoch }));
             std::size_t providers = 0;
             for (const auto& [identity, dataset] : state.registrations) {
                 if (identity.size() != 64 || dataset.dataset.root.size() != 64
@@ -76,7 +77,7 @@ namespace ExtraChain::Consensus {
     std::expected<MiningState, ConsensusError> create_mining_state(const ActorId& network,
                                                                    std::uint64_t  boundary) {
         if (network.is_zero() || boundary % ShadowSectionInterval != 0
-            || !mining_epoch_schedule(boundary / ShadowSectionInterval).has_value())
+            || boundary > std::uint64_t(std::numeric_limits<std::int64_t>::max()))
             return std::unexpected(ConsensusError::InvalidHeight);
         return MiningState { .network = network, .section = boundary };
     }
@@ -126,75 +127,101 @@ namespace ExtraChain::Consensus {
         return accept_mining_proof(active->second, provider, dataset_id, state.section, proof);
     }
 
-    std::expected<MiningPayouts, ConsensusError> advance_mining_state(MiningState&  state,
-                                                                      std::uint64_t section,
-                                                                      std::uint64_t epoch_budget_units,
-                                                                      const MiningFinalityReader& read_finality,
-                                                                      const LightClientVerifier&  verifier) {
+    std::expected<MiningPayouts, ConsensusError> advance_mining_state(
+        MiningState&                               state,
+        std::uint64_t                              section,
+        std::uint64_t                              parent_time,
+        const std::optional<MiningEmissionPolicy>& policy,
+        const MiningFinalityReader&                read_finality,
+        const LightClientVerifier&                 verifier) {
         if (section == 0 || state.section != section - 1
-            || !mining_epoch_schedule((section - 1) / ShadowSectionInterval).has_value())
+            || section > std::uint64_t(std::numeric_limits<std::int64_t>::max()))
             return std::unexpected(ConsensusError::InvalidHeight);
         if (state.minted_units > state.reserved_units || state.reserved_units > MaximumMiningEmissionUnits
-            || ((section - 1) % ShadowSectionInterval != 0 && epoch_budget_units != 0))
+            || (policy.has_value()
+                && (policy.value().epoch_ms == 0 || parent_time > UINT64_MAX - policy.value().proof_window_ms)))
             return std::unexpected(ConsensusError::InvalidIntent);
-        if ((section - 1) % ShadowSectionInterval != 0) {
+        // Without a policy no epoch is ever frozen.
+        if ((section - 1) % ShadowSectionInterval != 0 || !policy.has_value()) {
             state.section = section;
             return MiningPayouts { };
         }
-        auto          next = state;
+        // This height's last section: its header becomes a challenge, or it closes a window.
+        const auto    height_last = section + ShadowSectionInterval - 1;
+        const auto    epoch       = parent_time / policy.value().epoch_ms;
+        const bool    starts      = epoch >= state.next_epoch;
+        auto          next        = state;
         MiningPayouts payouts;
         for (auto entry = next.epochs.begin(); entry != next.epochs.end();) {
-            const auto schedule = mining_epoch_schedule(entry->first);
-            if (!schedule.has_value())
-                return std::unexpected(schedule.error());
-            const bool opens  = schedule.value().proof_first_section == section;
-            const bool closes = schedule.value().settlement_first_section == section;
-            if (opens || closes) {
+            auto& frozen = entry->second;
+            if (starts && frozen.challenge_section == 0)
+                frozen.challenge_section = height_last;
+            const auto opening = mining_window_opening_section(frozen);
+            if (!frozen.challenge.has_value() && opening.has_value() && opening.value() == section) {
                 if (!read_finality)
                     return std::unexpected(ConsensusError::DataUnavailable);
-                const auto proof = read_finality(opens ? schedule.value().challenge_section
-                                                       : schedule.value().proof_last_section);
+                const auto proof = read_finality(frozen.challenge_section);
                 if (!proof.has_value())
                     return std::unexpected(proof.error());
-                const auto changed = opens ? open_mining_proof_window(entry->second, proof.value(), verifier)
-                                           : settle_mining_epoch(entry->second, proof.value(), verifier);
-                if (!changed.has_value())
-                    return std::unexpected(changed.error());
+                const auto opened = open_mining_proof_window(
+                    frozen, proof.value(), verifier, parent_time + policy.value().proof_window_ms);
+                if (!opened.has_value())
+                    return std::unexpected(opened.error());
+            } else if (frozen.challenge.has_value() && frozen.proof_last_section == 0
+                       && parent_time >= frozen.proof_closes_ms) {
+                frozen.proof_last_section = height_last;
             }
-            if (closes) {
-                for (const auto& [provider, amount] : entry->second.rewards) {
-                    if (amount > next.reserved_units - next.minted_units)
-                        return std::unexpected(ConsensusError::InvalidIntent);
-                    payouts[provider] += amount;
-                    next.minted_units += amount;
-                }
-                entry = next.epochs.erase(entry);
-            } else {
+            const auto settlement = mining_settlement_section(frozen);
+            if (!settlement.has_value() || settlement.value() != section) {
                 ++entry;
+                continue;
             }
+            if (!read_finality)
+                return std::unexpected(ConsensusError::DataUnavailable);
+            const auto proof = read_finality(frozen.proof_last_section);
+            if (!proof.has_value())
+                return std::unexpected(proof.error());
+            const auto settled = settle_mining_epoch(frozen, proof.value(), verifier);
+            if (!settled.has_value())
+                return std::unexpected(settled.error());
+            for (const auto& [provider, amount] : frozen.rewards) {
+                if (amount > next.reserved_units - next.minted_units)
+                    return std::unexpected(ConsensusError::InvalidIntent);
+                payouts[provider] += amount;
+                next.minted_units += amount;
+            }
+            entry = next.epochs.erase(entry);
         }
-        if ((section - 1) % ShadowSectionInterval == 0) {
-            if (next.epochs.size() >= 8)
-                return std::unexpected(ConsensusError::DataTooLarge);
-            const auto reserved = reserve_mining_emission(next.reserved_units, epoch_budget_units);
-            if (!reserved.has_value())
-                return std::unexpected(reserved.error());
-            std::vector<MiningRegistration> registrations;
-            for (const auto& [id, dataset] : next.registrations)
-                for (const auto& [provider, registered] : dataset.providers) {
-                    const auto actor = ActorId::create(provider);
-                    if (!actor.has_value() || registrations.size() >= MaximumMiningRegistrations)
-                        return std::unexpected(ConsensusError::InvalidIntent);
-                    registrations.push_back({ actor.value(), dataset.dataset, registered });
-                }
-            const auto epoch  = (section - 1) / ShadowSectionInterval;
-            auto       frozen = freeze_mining_epoch(next.network, epoch, epoch_budget_units, registrations);
-            if (!frozen.has_value())
-                return std::unexpected(frozen.error());
-            if (epoch_budget_units != 0 && !frozen.value().datasets.empty()
-                && !next.epochs.emplace(epoch, std::move(frozen.value())).second)
-                return std::unexpected(ConsensusError::Replay);
-            next.reserved_units = reserved.value();
+        if (starts) {
+            if (epoch == UINT64_MAX)
+                return std::unexpected(ConsensusError::InvalidEpoch);
+            next.next_epoch      = epoch + 1;
+            const auto scheduled = mining_policy_budget(policy.value(), epoch);
+            if (!scheduled.has_value())
+                return std::unexpected(scheduled.error());
+            const auto budget = scheduled.value();
+            // A stalled chain can start epochs faster than it settles them; such a period's budget is
+            // never reserved, like the budget of a period no height started.
+            if (budget != 0 && next.epochs.size() < MaximumMiningEpochs) {
+                const auto reserved = reserve_mining_emission(next.reserved_units, budget);
+                if (!reserved.has_value())
+                    return std::unexpected(reserved.error());
+                std::vector<MiningRegistration> registrations;
+                for (const auto& [id, dataset] : next.registrations)
+                    for (const auto& [provider, registered] : dataset.providers) {
+                        const auto actor = ActorId::create(provider);
+                        if (!actor.has_value() || registrations.size() >= MaximumMiningRegistrations)
+                            return std::unexpected(ConsensusError::InvalidIntent);
+                        registrations.push_back({ actor.value(), dataset.dataset, registered });
+                    }
+                auto frozen = freeze_mining_epoch(next.network, epoch, budget, registrations, section);
+                if (!frozen.has_value())
+                    return std::unexpected(frozen.error());
+                if (!frozen.value().datasets.empty()
+                    && !next.epochs.emplace(epoch, std::move(frozen.value())).second)
+                    return std::unexpected(ConsensusError::Replay);
+                next.reserved_units = reserved.value();
+            }
         }
         next.section = section;
         state        = std::move(next);

@@ -665,11 +665,12 @@ int main() {
     mining_activation.mining_policy.value().segments.front().units_per_epoch += 1;
     check("a changed emission rate invalidates activation",
           !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
-    mining_activation.mining_policy.value().first_epoch = 199;
+    mining_activation.mining_policy.value().segments.front().units_per_epoch -= 1;
+    mining_activation.mining_policy.value().epoch_ms = 0;
     sign_mining_activation();
-    check("even signed mining cannot start before activation",
+    check("even signed mining needs epochs of some block time",
           !verify_activation_manifest(mining_activation, governance_policy.value(), 1'500, 9));
-    mining_activation.mining_policy.value().first_epoch                      = 201;
+    mining_activation.mining_policy.value().epoch_ms                         = DefaultMiningEpochMs;
     mining_activation.mining_policy.value().segments.front().units_per_epoch = MaximumMiningEmissionUnits;
     sign_mining_activation();
     check("even signed mining cannot exceed the total cap",

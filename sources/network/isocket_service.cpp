@@ -287,6 +287,7 @@ SocketService::Data SocketService::generate_first_message() {
                                                 std::string(DAG_REPAIR_CAPABILITY),
                                                 std::string(SHADOW_CONSENSUS_CAPABILITY),
                                                 std::string(SHADOW_LEGACY_DATA_CAPABILITY),
+                                                std::string(SHADOW_PREVIOUS_DATA_CAPABILITY),
                                                 std::string(SHADOW_RELAY_CAPABILITY) },
     };
 

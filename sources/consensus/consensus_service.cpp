@@ -1529,7 +1529,8 @@ namespace ExtraChain::Consensus {
         if (!batch.has_value()) {
             auto rebuilt = node_.dag()->build_shadow_batch(SectionId(proposal.batch.first_section),
                                                            SectionId(proposal.batch.last_section),
-                                                           checkpoint.header_hash);
+                                                           checkpoint.header_hash,
+                                                           proposal.batch.parent_time);
             if (!rebuilt.has_value()
                 || hash_batch_manifest(rebuilt.value().manifest) != proposal.header.batch_root) {
                 return std::unexpected(ConsensusError::DataUnavailable);
@@ -1934,15 +1935,20 @@ namespace ExtraChain::Consensus {
         // fires for sections the chain has certified already. Re-reading and
         // re-committing them costs a batch build on every node and can only end in
         // InvalidParent against a parent that covers them; leave early instead.
+        std::uint64_t parent_time = 0;
         if (highest.value().phase != Phase::Genesis) {
             const auto certified = consensus_->engine().proposal_for(highest.value().header_hash);
             if (certified.has_value() && certified.value().batch.last_section >= section) {
                 return;
             }
+            if (!certified.has_value()) {
+                return;
+            }
+            parent_time = certified.value().header.logical_time;
         }
         const auto control = node_.dag()->read_control(SectionId(section));
         const auto first   = section == 0 ? SectionId(0) : SectionId(section) - CONTROL_INTERVAL_DIFF;
-        const auto batch   = node_.dag()->build_shadow_batch(first, SectionId(section), {});
+        const auto batch   = node_.dag()->build_shadow_batch(first, SectionId(section), {}, parent_time);
         if (!control.has_value() || !batch.has_value()
             || batch.value().manifest.payload_bytes > consensus_->configuration().maximum_batch_bytes) {
             return;
@@ -2948,7 +2954,8 @@ namespace ExtraChain::Consensus {
 
         auto local = node_.dag()->build_shadow_batch(SectionId(proposal.batch.first_section),
                                                      SectionId(proposal.batch.last_section),
-                                                     hash_header(proposal.header));
+                                                     hash_header(proposal.header),
+                                                     proposal.batch.parent_time);
         if (!local.has_value()) {
             return std::unexpected(ConsensusError::DataUnavailable);
         }
@@ -3276,22 +3283,15 @@ namespace ExtraChain::Consensus {
         auto nonces = staged_nonces_for(proposal.parent_certificate, proposal.batch.first_section);
         if (!nonces.has_value())
             return std::unexpected(nonces.error());
-        // Every request carries the time of the parent block, which every voter knows.
-        std::optional<std::uint64_t> parent_time;
-        if (proposal.parent_certificate.phase == Phase::Genesis) {
-            parent_time = 0;
-        } else if (const auto parent = consensus_->engine().proposal_for(proposal.parent_certificate.header_hash);
-                   parent.has_value()) {
-            parent_time = parent.value().header.logical_time;
-        }
+        // Every request carries the time of the parent block; the engine checks the batch's copy of it.
         std::vector<Transaction> transactions;
         for (const auto& [_, bytes] : batch.sections) {
             auto section = Json::deserialize<Section>(bytes);
             if (!section.has_value())
                 return std::unexpected(ConsensusError::InvalidIntent);
             for (const auto& transaction : section.value().transactions) {
-                if (transaction.consensus_intent().has_value() && parent_time.has_value()
-                    && transaction.timestamp() != parent_time.value())
+                if (transaction.consensus_intent().has_value()
+                    && transaction.timestamp() != proposal.batch.parent_time)
                     return std::unexpected(ConsensusError::InvalidProposalTime);
                 transactions.push_back(transaction);
             }

@@ -94,11 +94,12 @@ namespace {
         };
     }
 
-    SectionBatchData batch_data(std::uint64_t height, std::string header_hash) {
+    // The proposal's manifest: the leader engine stamps it with the parent block's time.
+    SectionBatchData batch_data(const Proposal& proposal) {
         return SectionBatchData {
-            .header_hash = std::move(header_hash),
-            .manifest    = batch_manifest(height),
-            .sections    = batch_sections(height),
+            .header_hash = hash_header(proposal.header),
+            .manifest    = proposal.batch,
+            .sections    = batch_sections(proposal.header.height),
         };
     }
 
@@ -358,7 +359,7 @@ int main() {
 
         const auto proposal_hash = hash_header(proposal.value().header);
         check("leader stores proposal data before voting",
-              engines[leader_index]->stage_batch(batch_data(height, proposal_hash)).has_value());
+              engines[leader_index]->stage_batch(batch_data(proposal.value())).has_value());
 
         std::optional<QuorumCertificate> certificate;
         for (std::size_t index = 0; index < engines.size(); ++index) {
@@ -371,7 +372,7 @@ int main() {
                       !unavailable_vote.has_value()
                           && unavailable_vote.error() == ConsensusError::DataUnavailable);
                 check("validator stores proposal data before voting",
-                      engine->stage_batch(batch_data(height, proposal_hash)).has_value());
+                      engine->stage_batch(batch_data(proposal.value())).has_value());
             }
             const auto vote = engine->accept_proposal(proposal.value());
             check("validator accepts safe proposal", vote.has_value());
@@ -432,8 +433,7 @@ int main() {
         if (index <= 1) {
             check("certified observer stores finalized batch",
                   certified_observer
-                      ->stage_batch(batch_data(chain_proposals[index].header.height,
-                                               hash_header(chain_proposals[index].header)))
+                      ->stage_batch(batch_data(chain_proposals[index]))
                       .has_value());
         }
         check("certified observer accepts certificate without latest batch",
@@ -497,7 +497,7 @@ int main() {
               && reordered_observer->accept_certificate(chain_certificates[1]).has_value());
     check("reordered observer stores the second finalized batch",
           reordered_observer
-              ->stage_batch(batch_data(chain_proposals[1].header.height, hash_header(chain_proposals[1].header)))
+              ->stage_batch(batch_data(chain_proposals[1]))
               .has_value());
     const auto skipped_finality = reordered_observer->accept_certificate(chain_certificates[3]);
     check("out-of-order certificate cannot skip a finalized height",
@@ -505,7 +505,7 @@ int main() {
               && reordered_observer->safety_state().finalized_height == 0);
     check("reordered observer stores the first finalized batch",
           reordered_observer
-              ->stage_batch(batch_data(chain_proposals[0].header.height, hash_header(chain_proposals[0].header)))
+              ->stage_batch(batch_data(chain_proposals[0]))
               .has_value());
     const auto first_recovered  = reordered_observer->accept_certificate(chain_certificates[2]);
     const auto second_recovered = reordered_observer->accept_certificate(chain_certificates[3]);
@@ -564,7 +564,7 @@ int main() {
     check("validator accepts a proposal from another leader",
           restarted_validator->observe_proposal(last_proposal).has_value());
     check("validator durably stages data before a vote",
-          restarted_validator->stage_batch(batch_data(last_proposal.header.height, observed_hash)).has_value());
+          restarted_validator->stage_batch(batch_data(last_proposal)).has_value());
     const auto missing_parent_vote = restarted_validator->accept_proposal(last_proposal);
     check("validator cannot vote without its parent proposal",
           !missing_parent_vote.has_value() && missing_parent_vote.error() == ConsensusError::DataUnavailable);
@@ -588,7 +588,7 @@ int main() {
           vote_path_validator->observe_proposal(vote_path_proposal).has_value());
     check("vote-path validator stages data without an early commit",
           vote_path_validator
-              ->stage_batch_for_vote(batch_data(vote_path_proposal.header.height, vote_path_header_hash))
+              ->stage_batch_for_vote(batch_data(vote_path_proposal))
               .has_value());
     vote_path_validator.reset();
     vote_path_validator = std::make_unique<ConsensusEngine>(fixture.view,
@@ -601,7 +601,7 @@ int main() {
           vote_path_validator->observe_proposal(vote_path_proposal).has_value());
     check("vote-path validator stages data again",
           vote_path_validator
-              ->stage_batch_for_vote(batch_data(vote_path_proposal.header.height, vote_path_header_hash))
+              ->stage_batch_for_vote(batch_data(vote_path_proposal))
               .has_value());
     check("vote-path validator persists the complete vote state",
           vote_path_validator->accept_proposal(vote_path_proposal).has_value());
@@ -622,7 +622,7 @@ int main() {
     check("observer engine initializes", observer->initialize().has_value());
     check("observer accepts a valid proposal", observer->observe_proposal(last_proposal).has_value());
     check("observer stores proposal and batch atomically",
-          observer->stage_batch(batch_data(last_proposal.header.height, observed_hash)).has_value());
+          observer->stage_batch(batch_data(last_proposal)).has_value());
     observer.reset();
     observer = std::make_unique<ConsensusEngine>(fixture.view,
                                                  std::nullopt,
@@ -750,7 +750,7 @@ int main() {
                     check("split validator observes", split[index]->observe_proposal(proposal.value()).has_value());
                 check("split validator stores data",
                       split[index]
-                          ->stage_batch(batch_data(1, hash_header(proposal.value().header)))
+                          ->stage_batch(batch_data(proposal.value()))
                           .has_value());
                 const auto vote = split[index]->accept_proposal(proposal.value());
                 check("split validator votes", vote.has_value());
@@ -850,7 +850,7 @@ int main() {
                 if (index != leader)
                     check("late validator observes", late[index]->observe_proposal(proposal.value()).has_value());
                 check("late validator stores data",
-                      late[index]->stage_batch(batch_data(1, hash_header(proposal.value().header))).has_value());
+                      late[index]->stage_batch(batch_data(proposal.value())).has_value());
                 const auto vote = late[index]->accept_proposal(proposal.value());
                 check("late validator votes", vote.has_value());
                 const auto accepted = late[leader]->accept_vote(vote.value());

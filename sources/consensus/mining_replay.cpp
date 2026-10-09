@@ -11,9 +11,8 @@ namespace ExtraChain::Consensus {
         auto state = create_mining_state(network, boundary);
         if (!state.has_value())
             return std::unexpected(state.error());
-        if (policy.has_value()
-            && (!mining_policy_total(policy.value()).has_value()
-                || policy.value().first_epoch < boundary / ShadowSectionInterval))
+        // Policy epochs are periods of block time, so one before activation is simply never started.
+        if (policy.has_value() && !mining_policy_total(policy.value()).has_value())
             return std::unexpected(ConsensusError::InvalidGovernance);
         state.value().emission_policy_hash = mining_policy_hash(policy);
         return state.value();
@@ -50,14 +49,8 @@ namespace ExtraChain::Consensus {
             const auto decoded = Json::deserialize<Section>(bytes);
             if (!decoded.has_value() || decoded.value().transactions.size() > 256)
                 return std::unexpected(ConsensusError::InvalidIntent);
-            std::uint64_t budget = 0;
-            if (policy.has_value() && (section - 1) % ShadowSectionInterval == 0) {
-                const auto scheduled = mining_policy_budget(policy.value(), (section - 1) / ShadowSectionInterval);
-                if (!scheduled.has_value())
-                    return std::unexpected(scheduled.error());
-                budget = scheduled.value();
-            }
-            const auto payouts = advance_mining_state(state, section, budget, read_finality, verifier);
+            const auto payouts =
+                advance_mining_state(state, section, batch.manifest.parent_time, policy, read_finality, verifier);
             if (!payouts.has_value())
                 return std::unexpected(payouts.error());
             bool settled = false;

@@ -1069,10 +1069,9 @@ namespace ExtraChain::Consensus {
                && activation.activation_height > current_height && activation.activation_dag_section != 0
                && activation.activation_dag_section % ShadowSectionInterval == 0
                && !activation.validator_set_hash.empty() && activation.require_intent_v2
+               // Policy epochs are periods of block time: one before activation is simply never started.
                && (!activation.mining_policy.has_value()
-                   || (activation.mining_policy.value().first_epoch
-                           >= activation.activation_dag_section / ShadowSectionInterval
-                       && mining_policy_total(activation.mining_policy.value()).has_value()))
+                   || mining_policy_total(activation.mining_policy.value()).has_value())
                && activation.authorization.action_hash == unsigned_activation_hash(activation)
                && verify_authorization(policy, activation.authorization, minimum_sequence);
     }

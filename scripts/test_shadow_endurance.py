@@ -33,7 +33,7 @@ class RestartReadinessTest(unittest.TestCase):
             (self.run.barrier / f'node-{index}').write_text('ready')
             state = self.run.home(index) / 'data/consensus/mining-state.msgpack'
             state.parent.mkdir(parents=True)
-            state.write_bytes(msgpack.packb(['checkpoint', [0, 100, 10, 5, [], [], []]]))
+            state.write_bytes(msgpack.packb(['checkpoint', [0, 100, 10, 5, [], [], [], 0]]))
         marker = self.run.barrier / 'node-0'
         marker.unlink()
 

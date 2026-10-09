@@ -15,6 +15,7 @@
 #include <boost/json.hpp>
 
 #include <charconv>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -27,6 +28,7 @@
 #include "chain/dag.h"
 #include "chain/actor_index.h"
 #include "consensus/consensus_protocol.h"
+#include "consensus/mining_epoch.h"
 #include "consensus/shadow_consensus.h"
 #include "consensus/validator_set.h"
 #include "core/extrachain_node.h"
@@ -301,8 +303,11 @@ int main(int argc, char* argv[]) {
         const MiningEmissionSegment segment = long_test_flag == nullptr
                                                   ? MiningEmissionSegment { 32, NativeCoinUnits }
                                                   : MiningEmissionSegment { 100'000, NativeCoinUnits / 100 };
-        activation.mining_policy =
-            MiningEmissionPolicy { activation_section / ShadowSectionInterval + 1, { segment } };
+        // Policy epochs are periods of block time; the schedule starts with the current one.
+        const auto now_ms = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                           std::chrono::system_clock::now().time_since_epoch())
+                                                           .count());
+        activation.mining_policy = MiningEmissionPolicy { now_ms / DefaultMiningEpochMs, { segment } };
     }
     const auto activation_authorization =
         authorize_action(governance.value(),

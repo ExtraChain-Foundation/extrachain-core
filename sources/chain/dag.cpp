@@ -2373,7 +2373,10 @@ std::vector<Transaction> Dag::unprovable_batch_transactions(const ExtraChain::Co
 }
 
 std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError> Dag::
-    build_shadow_batch(const SectionId &first_section, const SectionId &last_section, std::string header_hash) {
+    build_shadow_batch(const SectionId &first_section,
+                       const SectionId &last_section,
+                       std::string      header_hash,
+                       std::uint64_t    parent_time) {
     using namespace ExtraChain::Consensus;
     if (first_section < SectionId(0) || last_section < first_section
         || last_section - first_section >= CONTROL_INTERVAL) {
@@ -2428,6 +2431,7 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
         batch.manifest.previous_section_root = previous.value().control;
     }
     batch.manifest.payload_bytes = payload_bytes;
+    batch.manifest.parent_time   = parent_time;
     return batch;
 }
 
@@ -2565,6 +2569,7 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
         batch.manifest.previous_section_root = std::move(previous_section_root);
     }
     batch.manifest.payload_bytes = payload_bytes;
+    batch.manifest.parent_time   = logical_time;
     return batch;
 }
 

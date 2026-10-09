@@ -48,7 +48,7 @@ namespace ExtraChain::Consensus {
         }
         const auto submission = decode<MiningProofSubmission>(bytes.value());
         if (!submission.has_value() || !dataset_identity(submission.value().dataset_id)
-            || !mining_epoch_schedule(submission.value().epoch).has_value()
+            || submission.value().epoch > MaximumMiningEpoch
             || submission.value().proof.samples.empty()
             || submission.value().proof.samples.size() > StorageChallengeSamples)
             return std::unexpected(ConsensusError::InvalidIntent);

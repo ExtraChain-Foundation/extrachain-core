@@ -326,7 +326,9 @@ int main() {
                                     .activation_height      = 1,
                                     .activation_dag_section = 20,
                                     .validator_set_hash     = view.hash(),
-                                    .mining_policy          = MiningEmissionPolicy { 2, { { 1, 10 } } } };
+                                    // One-millisecond epochs over block times equal to the height keep
+                                    // this chain's schedule in sections: epoch 2 starts at height 3.
+                                    .mining_policy = MiningEmissionPolicy { 2, { { 1, 10 } }, 1, 1 } };
     manifest.authorization =
         authorize_action(governance, 1, activation_action_hash(manifest), { keys[0], keys[1], keys[2] }).value();
     TEST_REQUIRE(ShadowConsensus::write_configuration("consensus",
@@ -505,6 +507,7 @@ int main() {
         batch.manifest.first_section         = first;
         batch.manifest.last_section          = first + ShadowSectionInterval - 1;
         batch.manifest.previous_section_root = prior_section_root;
+        batch.manifest.parent_time           = height - 1;
         for (auto section = first; section <= batch.manifest.last_section; ++section) {
             Section value { .id = SectionId(section) };
             if (section == first)
@@ -730,8 +733,8 @@ int main() {
                 auto& epochs = decoded.get().via.array.ptr[1].via.array.ptr[6];
                 TEST_REQUIRE(epochs.type == msgpack::type::MAP && epochs.via.map.size > 0);
                 auto& epoch = epochs.via.map.ptr[0].val;
-                TEST_REQUIRE(epoch.type == msgpack::type::ARRAY && epoch.via.array.size == 10);
-                epoch.via.array.size = 9;
+                TEST_REQUIRE(epoch.type == msgpack::type::ARRAY && epoch.via.array.size == 12);
+                epoch.via.array.size = 11;
                 const auto incompatible = MessagePack::serialize(decoded.get());
                 TEST_REQUIRE(FileIo::write_atomic("consensus/mining-state.msgpack", incompatible).has_value());
                 ConsensusStateTestFixture::forget(service);

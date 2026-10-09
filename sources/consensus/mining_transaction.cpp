@@ -15,8 +15,9 @@ namespace ExtraChain::Consensus {
 
     std::expected<Transaction, ConsensusError> make_mining_settlement_transaction(
         const MiningSettlementRecord& record) {
-        const auto schedule = mining_epoch_schedule(record.witness.epoch.epoch);
-        if (!schedule.has_value() || record.witness.epoch.network.is_zero())
+        const auto settlement = mining_settlement_section(record.witness.epoch);
+        if (!settlement.has_value() || record.witness.epoch.network.is_zero()
+            || record.witness.epoch.epoch > MaximumMiningEpoch)
             return std::unexpected(ConsensusError::InvalidIntent);
         const auto bytes = MessagePack::serialize(record);
         if (bytes.size() > MaximumMiningSettlementBytes)
@@ -24,7 +25,7 @@ namespace ExtraChain::Consensus {
         Transaction transaction;
         transaction.set_type(TransactionType::MiningSettlement);
         transaction.set_receiver(record.witness.epoch.network);
-        transaction.set_section(SectionId(schedule.value().settlement_first_section));
+        transaction.set_section(SectionId(settlement.value()));
         transaction.set_meta(Utils::to_base64(bytes));
         transaction.update_hash();
         return transaction;
@@ -48,8 +49,9 @@ namespace ExtraChain::Consensus {
         if (!record.has_value() || MessagePack::serialize(record.value()) != bytes.value()
             || record.value().witness.epoch.network != transaction.receiver())
             return std::unexpected(ConsensusError::InvalidProof);
-        const auto schedule = mining_epoch_schedule(record.value().witness.epoch.epoch);
-        if (!schedule.has_value() || transaction.section() != SectionId(schedule.value().settlement_first_section))
+        const auto settlement = mining_settlement_section(record.value().witness.epoch);
+        if (!settlement.has_value() || record.value().witness.epoch.epoch > MaximumMiningEpoch
+            || transaction.section() != SectionId(settlement.value()))
             return std::unexpected(ConsensusError::InvalidHeight);
         return record.value();
     }
@@ -63,14 +65,14 @@ namespace ExtraChain::Consensus {
         const auto record = decode_mining_settlement_transaction(transaction);
         if (!record.has_value())
             return std::unexpected(record.error());
-        // The epoch number arrives from the wire. decode_ already refuses an epoch with no
-        // schedule, so this lookup succeeds today — but that makes the safety of an unchecked
-        // .value() here a property of a function two calls away. Check it where it is used, so a
-        // later change to decode_ cannot turn a peer's message into std::bad_expected_access.
-        const auto schedule = mining_epoch_schedule(record.value().witness.epoch.epoch);
-        if (!schedule.has_value())
-            return std::unexpected(schedule.error());
-        return verify_mining_settlement(record.value(), schedule.value().settlement_first_section, verifier);
+        // The epoch arrives from the wire. decode_ already refuses one with no closed window, so this
+        // lookup succeeds today — but that makes the safety of an unchecked .value() here a property of
+        // a function two calls away. Check it where it is used, so a later change to decode_ cannot turn
+        // a peer's message into std::bad_optional_access.
+        const auto settlement = mining_settlement_section(record.value().witness.epoch);
+        if (!settlement.has_value())
+            return std::unexpected(ConsensusError::InvalidHeight);
+        return verify_mining_settlement(record.value(), settlement.value(), verifier);
     }
 
     std::expected<std::map<ActorId, BigNumberFloat>, ConsensusError> mining_settlement_deltas(

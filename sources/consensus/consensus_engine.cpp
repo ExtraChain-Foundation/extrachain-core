@@ -256,6 +256,8 @@ namespace ExtraChain::Consensus {
             parent_time = proposals_.at(parent.header_hash).header.logical_time;
         if (parent_time == std::numeric_limits<std::uint64_t>::max())
             return std::unexpected(ConsensusError::InvalidParent);
+        // The engine knows the parent's time; the caller built the batch's state from the same block.
+        batch.parent_time = parent_time;
         // A clock behind the parent's block time still yields a later time.
         const auto                        block_time = std::max(wall_clock_ms(), parent_time + 1);
         const auto                        batch_root = hash_batch_manifest(batch);
@@ -398,7 +400,7 @@ namespace ExtraChain::Consensus {
         const auto now         = wall_clock_ms();
         const auto arrival     = proposal_arrivals_.find(hash_header(proposal.header));
         const auto arrived     = arrival == proposal_arrivals_.end() ? now : arrival->second;
-        if (proposal.header.logical_time <= parent_time
+        if (proposal.header.logical_time <= parent_time || proposal.batch.parent_time != parent_time
             || proposal.header.logical_time > now + MaximumBlockClockDriftMs
             || proposal.header.logical_time + MaximumBlockClockDriftMs < arrived) {
             return std::unexpected(ConsensusError::InvalidProposalTime);
@@ -468,7 +470,9 @@ namespace ExtraChain::Consensus {
         }
         if (proposal.parent_certificate.phase != Phase::Genesis) {
             const auto parent = proposals_.find(proposal.parent_certificate.header_hash);
-            if (parent != proposals_.end() && proposal.header.logical_time <= parent->second.header.logical_time)
+            if (parent != proposals_.end()
+                && (proposal.header.logical_time <= parent->second.header.logical_time
+                    || proposal.batch.parent_time != parent->second.header.logical_time))
                 return std::unexpected(ConsensusError::InvalidProposalTime);
         }
         const auto header_hash = hash_header(proposal.header);

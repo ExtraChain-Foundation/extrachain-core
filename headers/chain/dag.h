@@ -596,7 +596,11 @@ public:
     std::expected<SectionId, ExtraChain::Consensus::ConsensusError> prepare_shadow_activation(
         std::optional<SectionId> requested_boundary = std::nullopt);
     std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError>
-    build_shadow_batch(const SectionId &first_section, const SectionId &last_section, std::string header_hash);
+    // parent_time comes from the proposal: the DAG keeps the sections, not the block times.
+    build_shadow_batch(const SectionId &first_section,
+                       const SectionId &last_section,
+                       std::string      header_hash,
+                       std::uint64_t    parent_time = 0);
     std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::ConsensusError>
     build_shadow_intent_batch(const SectionId                                          &first_section,
                               const SectionId                                          &last_section,

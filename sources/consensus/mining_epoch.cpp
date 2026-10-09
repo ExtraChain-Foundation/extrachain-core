@@ -6,19 +6,26 @@
 
 namespace ExtraChain::Consensus {
     namespace {
-        constexpr std::uint64_t MaximumEpoch =
-            (std::uint64_t(std::numeric_limits<std::int64_t>::max()) - 8 * ShadowSectionInterval - 1)
-            / ShadowSectionInterval;
+        // Recorded sections stay far below this, so the offsets added to them cannot overflow.
+        constexpr std::uint64_t MaximumSection = std::numeric_limits<std::int64_t>::max();
     } // namespace
 
-    std::expected<MiningEpochSchedule, ConsensusError> mining_epoch_schedule(std::uint64_t epoch) {
-        if (epoch > MaximumEpoch)
-            return std::unexpected(ConsensusError::InvalidEpoch);
-        const auto end = (epoch + 1) * ShadowSectionInterval;
-        // The next checkpoint needs two certified descendants before its challenge is final.
-        return MiningEpochSchedule { epoch * ShadowSectionInterval + 1, end,
-                                     end + ShadowSectionInterval,       end + 3 * ShadowSectionInterval + 1,
-                                     end + 5 * ShadowSectionInterval,   end + 7 * ShadowSectionInterval + 1 };
+    std::optional<std::uint64_t> mining_window_opening_section(const MiningEpochState& state) {
+        if (state.challenge_section == 0 || state.challenge_section > MaximumSection)
+            return std::nullopt;
+        return state.challenge_section + MiningFinalitySections + 1;
+    }
+
+    std::optional<std::uint64_t> mining_settlement_section(const MiningEpochState& state) {
+        if (state.proof_last_section == 0 || state.proof_last_section > MaximumSection)
+            return std::nullopt;
+        return state.proof_last_section + MiningFinalitySections + 1;
+    }
+
+    bool mining_window_accepts(const MiningEpochState& state, std::uint64_t section) {
+        return !state.settled && state.challenge.has_value() && state.proof_first_section != 0
+               && section >= state.proof_first_section
+               && (state.proof_last_section == 0 || section <= state.proof_last_section);
     }
 
     std::expected<std::uint64_t, ConsensusError> reserve_mining_emission(std::uint64_t reserved_units,
@@ -33,13 +40,14 @@ namespace ExtraChain::Consensus {
         const ActorId&                         network,
         std::uint64_t                          epoch,
         std::uint64_t                          budget_units,
-        const std::vector<MiningRegistration>& registrations) {
-        if (network.is_zero() || epoch > MaximumEpoch || budget_units > MaximumMiningEmissionUnits
-            || registrations.size() > MaximumMiningRegistrations)
+        const std::vector<MiningRegistration>& registrations,
+        std::uint64_t                          first_section) {
+        if (network.is_zero() || epoch > MaximumMiningEpoch || budget_units > MaximumMiningEmissionUnits
+            || registrations.size() > MaximumMiningRegistrations || first_section == 0
+            || first_section > MaximumSection)
             return std::unexpected(ConsensusError::InvalidIntent);
         MiningEpochState result { .network = network, .epoch = epoch, .budget_units = budget_units };
-        std::uint64_t    total_bytes   = 0;
-        const auto       first_section = epoch * ShadowSectionInterval + 1;
+        std::uint64_t    total_bytes = 0;
         for (const auto& registration : registrations) {
             const auto identity = storage_dataset_id(network, registration.dataset);
             if (!identity.has_value() || registration.provider.is_zero() || registration.section >= first_section)
@@ -64,49 +72,50 @@ namespace ExtraChain::Consensus {
 
     std::expected<void, ConsensusError> open_mining_proof_window(MiningEpochState&       state,
                                                                  const StorageChallenge& challenge,
-                                                                 std::uint64_t           first_section) {
+                                                                 std::uint64_t           first_section,
+                                                                 std::uint64_t           closes_ms) {
         if (state.challenge.has_value() || state.settled)
             return std::unexpected(ConsensusError::Replay);
-        const auto schedule = mining_epoch_schedule(state.epoch);
-        if (!schedule.has_value() || challenge.epoch != state.epoch
-            || first_section != schedule.value().proof_first_section || challenge.checkpoint.size() != 64
+        const auto opening = mining_window_opening_section(state);
+        if (!opening.has_value() || challenge.epoch != state.epoch || first_section != opening.value()
+            || closes_ms == 0 || challenge.checkpoint.size() != 64
             || !std::ranges::all_of(challenge.checkpoint, [](char value) {
                    return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f');
                }))
             return std::unexpected(ConsensusError::InvalidProof);
         state.challenge           = challenge;
         state.proof_first_section = first_section;
-        state.proof_last_section  = first_section + MiningProofWindowSections - 1;
+        state.proof_closes_ms     = closes_ms;
         return { };
     }
 
     std::expected<void, ConsensusError> open_mining_proof_window(MiningEpochState&          state,
                                                                  const FinalityProof&       checkpoint,
-                                                                 const LightClientVerifier& verifier) {
-        const auto schedule = mining_epoch_schedule(state.epoch);
-        if (!schedule.has_value() || checkpoint.finalized_proposal.header.network_id != state.network
-            || checkpoint.finalized_proposal.header.dag_section != schedule.value().challenge_section
-            || checkpoint.child_proposal.header.dag_section
-                   != schedule.value().challenge_section + ShadowSectionInterval
-            || checkpoint.grandchild_proposal.header.dag_section != schedule.value().proof_first_section - 1
+                                                                 const LightClientVerifier& verifier,
+                                                                 std::uint64_t              closes_ms) {
+        const auto opening = mining_window_opening_section(state);
+        if (!opening.has_value() || checkpoint.finalized_proposal.header.network_id != state.network
+            || checkpoint.finalized_proposal.header.dag_section != state.challenge_section
+            || checkpoint.child_proposal.header.dag_section != state.challenge_section + ShadowSectionInterval
+            || checkpoint.grandchild_proposal.header.dag_section != opening.value() - 1
             || !verifier.verify_finality_proof(checkpoint))
             return std::unexpected(ConsensusError::InvalidProof);
         return open_mining_proof_window(state,
                                         StorageChallenge { .epoch = state.epoch,
                                                            .checkpoint =
                                                                hash_header(checkpoint.finalized_proposal.header) },
-                                        schedule.value().proof_first_section);
+                                        opening.value(),
+                                        closes_ms);
     }
 
     std::expected<void, ConsensusError> settle_mining_epoch(MiningEpochState&          state,
                                                             const FinalityProof&       checkpoint,
                                                             const LightClientVerifier& verifier) {
-        const auto schedule = mining_epoch_schedule(state.epoch);
-        if (!schedule.has_value() || checkpoint.finalized_proposal.header.network_id != state.network
-            || checkpoint.finalized_proposal.header.dag_section != schedule.value().proof_last_section
-            || checkpoint.child_proposal.header.dag_section
-                   != schedule.value().proof_last_section + ShadowSectionInterval
-            || checkpoint.grandchild_proposal.header.dag_section != schedule.value().settlement_first_section - 1
+        const auto settlement = mining_settlement_section(state);
+        if (!settlement.has_value() || checkpoint.finalized_proposal.header.network_id != state.network
+            || checkpoint.finalized_proposal.header.dag_section != state.proof_last_section
+            || checkpoint.child_proposal.header.dag_section != state.proof_last_section + ShadowSectionInterval
+            || checkpoint.grandchild_proposal.header.dag_section != settlement.value() - 1
             || !verifier.verify_finality_proof(checkpoint))
             return std::unexpected(ConsensusError::InvalidProof);
         return settle_mining_epoch(state, checkpoint.finalized_proposal.header.dag_section);
@@ -117,8 +126,7 @@ namespace ExtraChain::Consensus {
                                                             const std::string&  dataset_id,
                                                             std::uint64_t       section,
                                                             const StorageProof& proof) {
-        if (state.settled || !state.challenge.has_value() || section < state.proof_first_section
-            || section > state.proof_last_section)
+        if (!mining_window_accepts(state, section))
             return std::unexpected(ConsensusError::InvalidHeight);
         auto       dataset = state.datasets.find(dataset_id);
         const auto actor   = provider.to_string();
@@ -142,7 +150,8 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::Replay);
         if (!state.claimed.empty() || !state.rewards.empty())
             return std::unexpected(ConsensusError::InvalidIntent);
-        if (!state.challenge.has_value() || finalized_section < state.proof_last_section)
+        if (!state.challenge.has_value() || state.proof_last_section == 0
+            || finalized_section < state.proof_last_section)
             return std::unexpected(ConsensusError::InvalidHeight);
         std::map<std::string, std::uint64_t> rewards;
         std::uint64_t                        paid = 0;

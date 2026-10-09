@@ -221,7 +221,7 @@ class Endurance(Cycle):
                 if not isinstance(snapshot, list) or len(snapshot) != 2:
                     raise RuntimeError('Invalid mining snapshot')
                 state = snapshot[1]
-                if (not isinstance(state, list) or len(state) != 7
+                if (not isinstance(state, list) or len(state) != 8
                         or not all(type(value) is int for value in state[1:4])
                         or not 0 <= state[3] <= state[2] <= 10000 * 100000000):
                     raise RuntimeError('Invalid mining counters')

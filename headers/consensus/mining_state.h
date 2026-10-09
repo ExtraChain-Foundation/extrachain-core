@@ -1,6 +1,7 @@
 #pragma once
 
 #include "consensus/mining_epoch.h"
+#include "consensus/mining_policy.h"
 
 namespace ExtraChain::Consensus {
     struct MiningRegisteredDataset {
@@ -18,8 +19,18 @@ namespace ExtraChain::Consensus {
         std::string                                    emission_policy_hash;
         std::map<std::string, MiningRegisteredDataset> registrations;
         std::map<std::uint64_t, MiningEpochState>      epochs;
+        // The first epoch that has not started. Epochs start in block-time order, frozen or not (a period
+        // without budget starts one too); a period no height reached never starts.
+        std::uint64_t next_epoch = 0;
 
-        MSGPACK_DEFINE(network, section, reserved_units, minted_units, emission_policy_hash, registrations, epochs)
+        MSGPACK_DEFINE(network,
+                       section,
+                       reserved_units,
+                       minted_units,
+                       emission_policy_hash,
+                       registrations,
+                       epochs,
+                       next_epoch)
     };
 
     using MiningFinalityReader = std::function<std::expected<FinalityProof, ConsensusError>(std::uint64_t)>;
@@ -49,12 +60,14 @@ namespace ExtraChain::Consensus {
                                                                    const std::string&  dataset_id,
                                                                    const StorageProof& proof);
 
-    // The caller obtains the budget from the committed emission policy and records returned native payouts
-    // with this transition. A budget is supplied only on the first section of an epoch.
-    std::expected<MiningPayouts, ConsensusError> advance_mining_state(MiningState&  state,
-                                                                      std::uint64_t section,
-                                                                      std::uint64_t epoch_budget_units,
-                                                                      const MiningFinalityReader& read_finality,
-                                                                      const LightClientVerifier&  verifier);
+    // The caller records returned native payouts with this transition. Epochs change on the first section of
+    // a height, by the time of its parent block: the height's own time is not set when its state is built.
+    std::expected<MiningPayouts, ConsensusError> advance_mining_state(
+        MiningState&                               state,
+        std::uint64_t                              section,
+        std::uint64_t                              parent_time,
+        const std::optional<MiningEmissionPolicy>& policy,
+        const MiningFinalityReader&                read_finality,
+        const LightClientVerifier&                 verifier);
     std::string                                  mining_state_root(const MiningState& state);
 } // namespace ExtraChain::Consensus

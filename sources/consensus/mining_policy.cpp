@@ -8,13 +8,15 @@ namespace ExtraChain::Consensus {
         return Utils::calculate_hash("EXC_MINING_POLICY_V1:" + MessagePack::serialize(policy));
     }
     std::expected<std::uint64_t, ConsensusError> mining_policy_total(const MiningEmissionPolicy& policy) {
-        if (policy.segments.empty() || policy.segments.size() > MaximumMiningEmissionSegments)
+        if (policy.segments.empty() || policy.segments.size() > MaximumMiningEmissionSegments
+            || policy.epoch_ms == 0 || policy.epoch_ms > MaximumMiningPeriodMs || policy.proof_window_ms == 0
+            || policy.proof_window_ms > MaximumMiningPeriodMs)
             return std::unexpected(ConsensusError::InvalidIntent);
         std::uint64_t next_epoch = policy.first_epoch;
         std::uint64_t total      = 0;
         for (const auto& segment : policy.segments) {
             if (segment.epochs == 0 || segment.epochs > UINT64_MAX - next_epoch
-                || !mining_epoch_schedule(next_epoch + segment.epochs - 1).has_value()
+                || next_epoch + segment.epochs - 1 > MaximumMiningEpoch
                 || segment.units_per_epoch > (MaximumMiningEmissionUnits - total) / segment.epochs)
                 return std::unexpected(ConsensusError::InvalidIntent);
             total += segment.epochs * segment.units_per_epoch;

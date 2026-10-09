@@ -62,9 +62,10 @@ int main() {
         TEST_REQUIRE(!apply_mining_request(state, modified).has_value());
         TEST_REQUIRE_EQ(mining_state_root(state), before);
     }
-    state.epochs.emplace(0, freeze_mining_epoch(network, 0, 10, { { provider.id(), dataset, 0 } }).value());
+    state.epochs.emplace(0, freeze_mining_epoch(network, 0, 10, { { provider.id(), dataset, 0 } }, 1).value());
+    state.epochs.at(0).challenge_section = 40;
     const StorageChallenge challenge { 0, std::string(64, 'b') };
-    TEST_REQUIRE(open_mining_proof_window(state.epochs.at(0), challenge, 81).has_value());
+    TEST_REQUIRE(open_mining_proof_window(state.epochs.at(0), challenge, 81, 1000).has_value());
     MiningProofSubmission submission {
         0,
         identity,

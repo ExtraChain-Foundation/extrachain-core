@@ -25,6 +25,8 @@ namespace {
         TEST_REQUIRE(epoch.value().datasets.empty() && !epoch.value().challenge.has_value());
         TEST_REQUIRE_EQ(epoch.value().proof_first_section, std::uint64_t(81));
         TEST_REQUIRE_EQ(epoch.value().proof_last_section, std::uint64_t(120));
+        TEST_REQUIRE_EQ(epoch.value().challenge_section, std::uint64_t(40));
+        TEST_REQUIRE_EQ(epoch.value().proof_closes_ms, std::uint64_t(5));
         TEST_REQUIRE(epoch.value().settled);
         TEST_REQUIRE_EQ(MessagePack::serialize(epoch.value()), encoded_epoch);
         TEST_REQUIRE_EQ(mining_epoch_root(epoch.value()), epoch_root);
@@ -46,6 +48,7 @@ namespace {
         TEST_REQUIRE(snapshot.value().second.emission_policy_hash.empty());
         TEST_REQUIRE(snapshot.value().second.registrations.empty());
         TEST_REQUIRE_EQ(snapshot.value().second.epochs.size(), std::size_t(1));
+        TEST_REQUIRE_EQ(snapshot.value().second.next_epoch, std::uint64_t(8));
         TEST_REQUIRE_EQ(MessagePack::serialize(snapshot.value().second.epochs.at(0)), encoded_epoch);
         TEST_REQUIRE_EQ(MessagePack::serialize(snapshot.value()), encoded_snapshot);
         TEST_REQUIRE_EQ(mining_state_root(snapshot.value().second), state_root);
@@ -100,12 +103,13 @@ int main() {
                   ClaimedStateRoot,
                   true);
 
+    // The last field, proof_closes_ms, is a single byte: dropping it leaves eleven fields.
     auto short_epoch = bytes(EmptyEpoch);
-    short_epoch[0]   = char(0x99);
+    short_epoch[0]   = char(0x9b);
     short_epoch.pop_back();
     TEST_REQUIRE(!MessagePack::deserialize<MiningEpochState>(short_epoch).has_value());
     auto long_epoch = bytes(EmptyEpoch);
-    long_epoch[0]   = char(0x9b);
+    long_epoch[0]   = char(0x9d);
     long_epoch.push_back(char(0xc0));
     TEST_REQUIRE(!MessagePack::deserialize<MiningEpochState>(long_epoch).has_value());
     auto wrong_type   = bytes(EmptyEpoch);

@@ -152,7 +152,8 @@ int main() {
     }
     TEST_REQUIRE(certificate.has_value());
     TEST_REQUIRE(engine.accept_certificate(certificate.value()).has_value());
-    auto       second       = empty_batch(ShadowSectionInterval + 1, accepted.header.section_root);
+    auto second                 = empty_batch(ShadowSectionInterval + 1, accepted.header.section_root);
+    second.manifest.parent_time = accepted.header.logical_time;
     const auto second_state = ConsensusStateTestFixture::build(service, second, 2, certificate.value());
     TEST_REQUIRE(second_state.has_value());
     auto next                           = accepted;
@@ -175,6 +176,15 @@ int main() {
     TEST_REQUIRE(!seen.has_value() && seen.error() == ConsensusError::InvalidProposalTime);
     const auto same = engine.accept_proposal(variant(next, parent_time, second, false));
     TEST_REQUIRE(!same.has_value() && same.error() == ConsensusError::InvalidProposalTime);
+    // The batch carries its parent's time for the state it was built with; another value is refused.
+    auto shifted                   = next;
+    auto shifted_batch             = second;
+    shifted_batch.manifest.parent_time += 1;
+    shifted.batch                  = shifted_batch.manifest;
+    shifted.header.batch_root      = hash_batch_manifest(shifted_batch.manifest);
+    const auto wrong_parent        = engine.accept_proposal(
+        variant(shifted, std::max(now_ms(), parent_time + 1), shifted_batch, false));
+    TEST_REQUIRE(!wrong_parent.has_value() && wrong_parent.error() == ConsensusError::InvalidProposalTime);
     const auto later = engine.accept_proposal(variant(next, std::max(now_ms(), parent_time + 1), second, true));
     if (!later.has_value())
         std::fprintf(stderr, "a later block time was refused: %u\n", static_cast<unsigned>(later.error()));

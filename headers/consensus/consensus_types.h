@@ -99,6 +99,9 @@ namespace ExtraChain::Consensus {
         std::string              data_root;
         std::string              previous_section_root;
         std::uint64_t            payload_bytes = 0;
+        // Time of the parent block in ms. A batch is built before its own block has a time, and its
+        // state transition (mining epochs) and request timestamps follow this one.
+        std::uint64_t parent_time = 0;
 
         MSGPACK_DEFINE(first_section,
                        last_section,
@@ -106,7 +109,8 @@ namespace ExtraChain::Consensus {
                        transaction_root,
                        data_root,
                        previous_section_root,
-                       payload_bytes)
+                       payload_bytes,
+                       parent_time)
     };
 
     struct SectionBatchData {

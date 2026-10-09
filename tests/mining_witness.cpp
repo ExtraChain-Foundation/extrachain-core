@@ -14,8 +14,8 @@ int main() {
     auto                 state = create_mining_state(network, 0).value();
     TEST_REQUIRE(register_storage_provider(state, provider, dataset).has_value());
     const auto identity = storage_dataset_id(network, dataset).value();
-    state.epochs.emplace(0, freeze_mining_epoch(network, 0, 123, { { provider, dataset, 0 } }).value());
-    state.epochs.emplace(1, freeze_mining_epoch(network, 1, 124, { { provider, dataset, 0 } }).value());
+    state.epochs.emplace(0, freeze_mining_epoch(network, 0, 123, { { provider, dataset, 0 } }, 1).value());
+    state.epochs.emplace(1, freeze_mining_epoch(network, 1, 124, { { provider, dataset, 0 } }, 1).value());
     const auto root = mining_state_root(state);
     TEST_REQUIRE(!root.empty());
     for (const auto epoch : { 0, 1 }) {
@@ -61,7 +61,7 @@ int main() {
     const auto before_overflow = mining_state_root(maximum);
     TEST_REQUIRE(!register_storage_provider(maximum, provider, dataset).has_value());
     TEST_REQUIRE_EQ(mining_state_root(maximum), before_overflow);
-    auto epoch = freeze_mining_epoch(network, 0, MaximumMiningEmissionUnits, registrations).value();
+    auto epoch = freeze_mining_epoch(network, 0, MaximumMiningEmissionUnits, registrations, 1).value();
     for (auto& [id, budget] : epoch.datasets)
         budget.accepted = budget.providers;
     maximum.epochs.emplace(0, std::move(epoch));

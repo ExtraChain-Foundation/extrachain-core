@@ -93,21 +93,22 @@ namespace ExtraChain::Consensus {
             || !consensus_->engine().safety_state().highest_certificate.has_value()
             || consensus_->engine().safety_state().highest_certificate.value().phase == Phase::Genesis)
             return std::unexpected(ConsensusError::NotReady);
-        auto       state    = mining_state_for(consensus_->engine().safety_state().highest_certificate.value());
+        const auto highest  = consensus_->engine().safety_state().highest_certificate.value();
+        auto       state    = mining_state_for(highest);
         const auto verifier = mining_verifier();
+        const auto parent   = consensus_->engine().proposal_for(highest.header_hash);
         if (!state.has_value() || !verifier.has_value())
             return std::unexpected(state.has_value() ? verifier.error() : state.error());
+        if (!parent.has_value())
+            return std::unexpected(ConsensusError::DataUnavailable);
         if (state.value().section == UINT64_MAX)
             return std::unexpected(ConsensusError::InvalidHeight);
-        const auto section = state.value().section + 1;
-        const auto budget =
-            mining_policy_budget(consensus_->mining_policy().value(), (section - 1) / ShadowSectionInterval);
-        if (!budget.has_value())
-            return std::unexpected(budget.error());
+        // The next height's batch carries the time of the highest certified block.
         const auto advanced = advance_mining_state(
             state.value(),
-            section,
-            budget.value(),
+            state.value().section + 1,
+            parent.value().header.logical_time,
+            consensus_->mining_policy(),
             [this](auto target) {
                 return mining_finality(target);
             },
@@ -159,18 +160,18 @@ namespace ExtraChain::Consensus {
             const auto request = decode_mining_request(envelope);
             if (!request.has_value())
                 return std::unexpected(request.error());
-            const auto& proof    = std::get<MiningProofSubmission>(request.value());
-            const auto  schedule = mining_epoch_schedule(proof.epoch);
-            if (!schedule.has_value() || work.section < schedule.value().proof_first_section
-                || work.section > schedule.value().proof_last_section)
+            const auto& proof = std::get<MiningProofSubmission>(request.value());
+            const auto  epoch = work.epochs.find(proof.epoch);
+            if (epoch == work.epochs.end() || !mining_window_accepts(epoch->second, work.section))
                 return std::unexpected(ConsensusError::InvalidHeight);
-            const auto before =
-                (work.section - schedule.value().proof_first_section) / ShadowSectionInterval;
-            const auto after =
-                (schedule.value().proof_last_section - work.section) / ShadowSectionInterval;
+            // A window closes by block time, so its last height is unknown while it is open; a request
+            // that outlives it is refused by the state machine like any late proof.
+            const auto before = (work.section - epoch->second.proof_first_section) / ShadowSectionInterval;
+            const auto after  = epoch->second.proof_last_section != 0
+                                    ? (epoch->second.proof_last_section - work.section) / ShadowSectionInterval
+                                    : MaximumMiningProofHeights;
             if (height < before || height > UINT64_MAX - after)
                 return std::unexpected(ConsensusError::InvalidHeight);
-            // Use the complete proof window, including a submission in its last Shadow interval.
             envelope.intent.valid_after_height   = height - before;
             envelope.intent.expires_after_height = height + after;
         }
@@ -307,7 +308,8 @@ namespace ExtraChain::Consensus {
             if (section != boundary || !snapshot.header_hash.empty()) {
                 const auto batch = node_.dag()->build_shadow_batch(SectionId(proposal.batch.first_section),
                                                                    SectionId(proposal.batch.last_section),
-                                                                   hash_header(proposal.header));
+                                                                   hash_header(proposal.header),
+                                                                   proposal.batch.parent_time);
                 if (!batch.has_value()
                     || hash_batch_manifest(batch.value().manifest) != proposal.header.batch_root)
                     return std::unexpected(ConsensusError::DataUnavailable);
@@ -429,13 +431,11 @@ namespace ExtraChain::Consensus {
         const MiningState& parent,
         std::uint64_t      first_section) const {
         for (const auto& [epoch, frozen] : parent.epochs) {
-            const auto schedule = mining_epoch_schedule(epoch);
-            if (!schedule.has_value())
-                return std::unexpected(schedule.error());
-            if (schedule.value().settlement_first_section != first_section)
+            const auto settlement = mining_settlement_section(frozen);
+            if (!settlement.has_value() || settlement.value() != first_section)
                 continue;
             const auto verifier = mining_verifier();
-            const auto closure  = mining_finality(schedule.value().proof_last_section);
+            const auto closure  = mining_finality(frozen.proof_last_section);
             if (!verifier.has_value() || !closure.has_value())
                 return std::unexpected(ConsensusError::DataUnavailable);
             auto       settled = frozen;
@@ -445,7 +445,7 @@ namespace ExtraChain::Consensus {
             if (settled.rewards.empty())
                 return std::optional<Transaction> { };
             if (!finalized_mining_.has_value()
-                || finalized_mining_.value().state.section != schedule.value().proof_last_section)
+                || finalized_mining_.value().state.section != frozen.proof_last_section)
                 return std::unexpected(ConsensusError::DataUnavailable);
             const auto witness = make_mining_epoch_witness(finalized_mining_.value().state, epoch);
             if (!witness.has_value())
