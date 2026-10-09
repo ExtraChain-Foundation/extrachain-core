@@ -2083,9 +2083,12 @@ namespace ExtraChain::Consensus {
                 previous_section_bytes = parent_batch.value().sections.back().second;
                 previous_section_root  = parent.header.section_root;
             }
-            auto batch = node_.dag()->build_shadow_intent_batch(first,
+            // A request takes the time of the block it was collected after: the batch is built before
+            // the proposal and may be proposed again in a later round.
+            const auto parent_time = highest.phase == Phase::Genesis ? 0 : highest_proposal.value().header.logical_time;
+            auto       batch       = node_.dag()->build_shadow_intent_batch(first,
                                                                 SectionId(target),
-                                                                highest.height + 1,
+                                                                parent_time,
                                                                 intents,
                                                                 consensus_->configuration().maximum_batch_bytes,
                                                                 { },
@@ -3272,13 +3275,25 @@ namespace ExtraChain::Consensus {
         auto nonces = staged_nonces_for(proposal.parent_certificate, proposal.batch.first_section);
         if (!nonces.has_value())
             return std::unexpected(nonces.error());
+        // Every request carries the time of the parent block, which every voter knows.
+        std::optional<std::uint64_t> parent_time;
+        if (proposal.parent_certificate.phase == Phase::Genesis) {
+            parent_time = 0;
+        } else if (const auto parent = consensus_->engine().proposal_for(proposal.parent_certificate.header_hash);
+                   parent.has_value()) {
+            parent_time = parent.value().header.logical_time;
+        }
         std::vector<Transaction> transactions;
         for (const auto& [_, bytes] : batch.sections) {
             auto section = Json::deserialize<Section>(bytes);
             if (!section.has_value())
                 return std::unexpected(ConsensusError::InvalidIntent);
-            for (const auto& transaction : section.value().transactions)
+            for (const auto& transaction : section.value().transactions) {
+                if (transaction.consensus_intent().has_value() && parent_time.has_value()
+                    && transaction.timestamp() != parent_time.value())
+                    return std::unexpected(ConsensusError::InvalidProposalTime);
                 transactions.push_back(transaction);
+            }
         }
         const auto next_nonces = advance_nonces(std::move(nonces.value()), transactions);
         if (!next_nonces.has_value())

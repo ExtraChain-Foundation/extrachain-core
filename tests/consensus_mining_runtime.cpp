@@ -463,7 +463,7 @@ int main() {
             TEST_REQUIRE(proof_pool.ready({ { provider.id(), 1 } }, 9, 10, 1024 * 1024).empty());
         }
         for (const auto& envelope : ready)
-            transactions.push_back(materialize_intent(envelope, first, height, { }).value());
+            transactions.push_back(materialize_intent(envelope, first, height - 1, { }).value());
         const auto parent_state = ConsensusStateTestFixture::parent(service, parent);
         TEST_REQUIRE(parent_state.has_value());
         const auto settlement = ConsensusStateTestFixture::settlement(service, parent_state.value(), first);
@@ -476,7 +476,7 @@ int main() {
             const auto build_settlement = [&](std::uint64_t limit, const std::vector<IntentEnvelope>& intents) {
                 return node->dag()->build_shadow_intent_batch(SectionId(first),
                                                               SectionId(first + ShadowSectionInterval - 1),
-                                                              height,
+                                                              height - 1,
                                                               intents,
                                                               limit,
                                                               { },
@@ -559,10 +559,17 @@ int main() {
             skipped.intent               = make_intent(skipped.intent, skipped.metadata, provider).value();
             auto    invalid_batch        = batch;
             Section invalid { .id = SectionId(first) };
-            invalid.transactions.insert(materialize_intent(skipped, first, height, { }).value());
+            invalid.transactions.insert(materialize_intent(skipped, first, height - 1, { }).value());
             invalid_batch.sections.front().second = Json::serialize(invalid);
             const auto rejected = ConsensusStateTestFixture::admit(service, proposal, invalid_batch);
             TEST_REQUIRE(!rejected.has_value() && rejected.error() == ConsensusError::InvalidNonce);
+            // A request must carry the parent block's time, not one the leader picked.
+            auto    late_batch = batch;
+            Section late { .id = SectionId(first) };
+            late.transactions.insert(materialize_intent(ready.front(), first, height, { }).value());
+            late_batch.sections.front().second = Json::serialize(late);
+            const auto late_rejected = ConsensusStateTestFixture::admit(service, proposal, late_batch);
+            TEST_REQUIRE(!late_rejected.has_value() && late_rejected.error() == ConsensusError::InvalidProposalTime);
             TEST_REQUIRE(!service.intent_receipt(hash_intent(skipped.intent)).value().has_value());
         }
         {
@@ -703,7 +710,7 @@ int main() {
             envelope.intent.expires_after_height = historical.header.height - 1;
             envelope.intent      = make_intent(envelope.intent, envelope.metadata, provider).value();
             section.transactions = {
-                materialize_intent(envelope, expired_batch.sections.front().first, historical.header.height, { })
+                materialize_intent(envelope, expired_batch.sections.front().first, historical.header.height - 1, { })
                     .value()
             };
             expired_batch.sections.front().second = Json::serialize(section);

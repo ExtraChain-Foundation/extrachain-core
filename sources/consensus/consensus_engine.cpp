@@ -198,6 +198,14 @@ namespace ExtraChain::Consensus {
         return {};
     }
 
+    namespace {
+        std::uint64_t wall_clock_ms() {
+            return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                  std::chrono::system_clock::now().time_since_epoch())
+                                                  .count());
+        }
+    } // namespace
+
     std::expected<Proposal, ConsensusError> ConsensusEngine::make_proposal(SectionBatchManifest batch,
                                                                            StateCommitmentV2    state,
                                                                            std::uint64_t        round) {
@@ -243,6 +251,13 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::InvalidParent);
             }
         }
+        std::uint64_t parent_time = 0;
+        if (parent.phase != Phase::Genesis)
+            parent_time = proposals_.at(parent.header_hash).header.logical_time;
+        if (parent_time == std::numeric_limits<std::uint64_t>::max())
+            return std::unexpected(ConsensusError::InvalidParent);
+        // A clock behind the parent's block time still yields a later time.
+        const auto                        block_time = std::max(wall_clock_ms(), parent_time + 1);
         const auto                        batch_root = hash_batch_manifest(batch);
         const auto                        commitment = hash_state_commitment(state);
         std::optional<TimeoutCertificate> timeout_certificate;
@@ -271,7 +286,7 @@ namespace ExtraChain::Consensus {
                     .batch_root              = batch_root,
                     .validator_set_hash      = validators_.hash(),
                     .state_commitment        = commitment,
-                    .logical_time            = height,
+                    .logical_time            = block_time,
                 },
             .state               = std::move(state),
             .batch               = std::move(batch),
@@ -374,6 +389,17 @@ namespace ExtraChain::Consensus {
         if (!safe_to_vote(proposal)) {
             return std::unexpected(ConsensusError::UnsafeProposal);
         }
+        // Block time only moves forward and stays near the voter's clock, so a leader can shift it
+        // by at most MaximumBlockClockDriftMs.
+        const auto parent_time = proposal.parent_certificate.phase == Phase::Genesis
+                                     ? 0
+                                     : proposals_.at(proposal.parent_certificate.header_hash).header.logical_time;
+        const auto now         = wall_clock_ms();
+        if (proposal.header.logical_time <= parent_time
+            || proposal.header.logical_time > now + MaximumBlockClockDriftMs
+            || proposal.header.logical_time + MaximumBlockClockDriftMs < now) {
+            return std::unexpected(ConsensusError::InvalidProposalTime);
+        }
 
         Vote vote {
             .protocol_version = ProtocolVersion,
@@ -436,6 +462,11 @@ namespace ExtraChain::Consensus {
             if (!initialized_ || !verify_proposal(proposal)) {
                 return std::unexpected(ConsensusError::NotReady);
             }
+        }
+        if (proposal.parent_certificate.phase != Phase::Genesis) {
+            const auto parent = proposals_.find(proposal.parent_certificate.header_hash);
+            if (parent != proposals_.end() && proposal.header.logical_time <= parent->second.header.logical_time)
+                return std::unexpected(ConsensusError::InvalidProposalTime);
         }
         proposals_.insert_or_assign(hash_header(proposal.header), proposal);
         return {};

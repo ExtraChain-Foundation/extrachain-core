@@ -30,6 +30,8 @@ namespace ExtraChain::Consensus {
     inline constexpr std::uint64_t MaximumShadowBatchBytes = 64ULL * 1024ULL * 1024ULL;
     inline constexpr std::uint64_t MaximumShadowSyncBytes  = 32ULL * 1024ULL * 1024ULL;
     inline constexpr std::size_t   MaximumShadowSyncProofs = 8;
+    // A voter accepts a block time at most this far from its own clock, in either direction.
+    inline constexpr std::uint64_t MaximumBlockClockDriftMs = 5'000;
     /// How far back a staged (certified but not yet finalized) chain may be walked
     /// when rebuilding the state a proposal starts from. Finalization keeps the real
     /// chain far shorter than this; the bound only stops a malformed parent link
@@ -85,7 +87,8 @@ namespace ExtraChain::Consensus {
         InvalidProof,
         InvalidGovernance,
         RecoveryConflict,
-        BootstrapIncomplete
+        BootstrapIncomplete,
+        InvalidProposalTime
     };
 
     struct SectionBatchManifest {
@@ -173,6 +176,8 @@ namespace ExtraChain::Consensus {
         std::string   batch_root;
         std::string   validator_set_hash;
         std::string   state_commitment;
+        // Block time in milliseconds since the Unix epoch: set by the leader, later than the parent's,
+        // and within MaximumBlockClockDriftMs of every voter's clock.
         std::uint64_t logical_time = 0;
 
         MSGPACK_DEFINE(protocol_version,
