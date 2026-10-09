@@ -230,6 +230,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/blake3_tree.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/file_io.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/fs_path.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/hash.cpp

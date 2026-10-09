@@ -391,6 +391,10 @@ add_core_test_executable(extrachain-storage-proof storage_proof.cpp)
 add_test(NAME storage-proof COMMAND extrachain-storage-proof)
 set_tests_properties(storage-proof PROPERTIES TIMEOUT 30)
 
+add_core_test_executable(extrachain-blake3-tree blake3_tree.cpp)
+add_test(NAME blake3-tree COMMAND extrachain-blake3-tree)
+set_tests_properties(blake3-tree PROPERTIES TIMEOUT 30)
+
 add_core_test_executable(extrachain-storage-index storage_index.cpp)
 add_test(NAME storage-index COMMAND extrachain-storage-index)
 set_tests_properties(storage-index PROPERTIES TIMEOUT 30)
