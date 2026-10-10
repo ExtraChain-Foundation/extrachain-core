@@ -25,11 +25,13 @@
 
 namespace ExtraChain::Consensus {
 
-    inline constexpr std::uint16_t ProtocolVersion         = 4;
+    inline constexpr std::uint16_t ProtocolVersion         = 5;
     inline constexpr std::uint64_t ShadowSectionInterval   = 20;
     inline constexpr std::uint64_t MaximumShadowBatchBytes = 64ULL * 1024ULL * 1024ULL;
     inline constexpr std::uint64_t MaximumShadowSyncBytes  = 32ULL * 1024ULL * 1024ULL;
     inline constexpr std::size_t   MaximumShadowSyncProofs = 8;
+    // A voter accepts a block time at most this far from its own clock, in either direction.
+    inline constexpr std::uint64_t MaximumBlockClockDriftMs = 5'000;
     /// How far back a staged (certified but not yet finalized) chain may be walked
     /// when rebuilding the state a proposal starts from. Finalization keeps the real
     /// chain far shorter than this; the bound only stops a malformed parent link
@@ -85,7 +87,8 @@ namespace ExtraChain::Consensus {
         InvalidProof,
         InvalidGovernance,
         RecoveryConflict,
-        BootstrapIncomplete
+        BootstrapIncomplete,
+        InvalidProposalTime
     };
 
     struct SectionBatchManifest {
@@ -96,6 +99,9 @@ namespace ExtraChain::Consensus {
         std::string              data_root;
         std::string              previous_section_root;
         std::uint64_t            payload_bytes = 0;
+        // Time of the parent block in ms. A batch is built before its own block has a time, and its
+        // state transition (mining epochs) and request timestamps follow this one.
+        std::uint64_t parent_time = 0;
 
         MSGPACK_DEFINE(first_section,
                        last_section,
@@ -103,7 +109,8 @@ namespace ExtraChain::Consensus {
                        transaction_root,
                        data_root,
                        previous_section_root,
-                       payload_bytes)
+                       payload_bytes,
+                       parent_time)
     };
 
     struct SectionBatchData {
@@ -173,6 +180,8 @@ namespace ExtraChain::Consensus {
         std::string   batch_root;
         std::string   validator_set_hash;
         std::string   state_commitment;
+        // Block time in milliseconds since the Unix epoch: set by the leader, later than the parent's,
+        // and within MaximumBlockClockDriftMs of every voter's clock.
         std::uint64_t logical_time = 0;
 
         MSGPACK_DEFINE(protocol_version,
@@ -200,6 +209,7 @@ namespace ExtraChain::Consensus {
         std::string   account_state_root;
         std::string   contract_state_root;
         std::string   token_registry_root;
+        std::string   mining_state_root;
         std::string   validator_set_hash;
 
         MSGPACK_DEFINE(protocol_version,
@@ -211,6 +221,7 @@ namespace ExtraChain::Consensus {
                        account_state_root,
                        contract_state_root,
                        token_registry_root,
+                       mining_state_root,
                        validator_set_hash)
     };
 

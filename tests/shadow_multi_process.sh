@@ -118,6 +118,15 @@ while [ "$(find "$BARRIER" -maxdepth 1 -type f -name 'node-*' | wc -l)" -ne 7 ];
 done
 touch "$BARRIER/go"
 
+# Trust comes from the local ceremony, independently of the responding peer.
+mkdir -p "$WORK/light/data/consensus"
+cp "${NODE_HOMES[0]}/consensus/validator-set.msgpack" "$WORK/light/data/consensus/validator-set.msgpack"
+(
+    cd "$WORK/light" || exit 73
+    EXC_BIND_IP=127.0.0.8 exec "$NODE_RUN" light data 127.0.0.1 "$((BASE_PORT + 30))" "$((BASE_PORT + 20))" 1
+) >"$WORK/light.log" 2>&1 &
+PIDS+=("$!")
+
 result=0
 for index in $(seq 0 6); do
     if ! wait "${PIDS[$index]}"; then
@@ -126,6 +135,11 @@ for index in $(seq 0 6); do
         tail -60 "$WORK/node-$index.log" >&2
     fi
 done
+if ! wait "${PIDS[7]}"; then
+    tail -60 "$WORK/light.log" >&2
+    fail "Light observer did not verify a certified balance snapshot"
+fi
+grep -q "PASS: Light snapshot verified" "$WORK/light.log" || fail "Light snapshot proof was not reported"
 PIDS=()
 [ "$result" -eq 0 ] || fail "one or more Finality nodes failed"
 grep -q "finalized intents=$INTENT_COUNT" "$WORK/node-0.log" \

@@ -95,6 +95,57 @@ int main() {
         const auto dropped = duplicates.accept(large.value(), view.value(), "node-1", "node-0", { "node-2" }, now);
         TEST_REQUIRE(!dropped.deliver && dropped.peers.empty());
     }
+    {
+        RelayTransport saturated;
+        std::string    first_wire, last_wire;
+        for (std::size_t index = 0; index <= 8192; ++index) {
+            const auto timestamp = now + index * 10;
+            const auto value     = RelayTransport::create(view.value(),
+                                                          identities[0],
+                                                          index == 8192 ? MessageType::ConsensusTimeoutVote
+                                                                        : MessageType::ConsensusIntent,
+                                                          MessageStatus::NoStatus,
+                                                          std::to_string(index),
+                                                          { },
+                                                          { },
+                                                          timestamp);
+            TEST_REQUIRE(value.has_value());
+            const auto wire = MessagePack::serialize(value.value());
+            if (index == 0)
+                first_wire = wire;
+            last_wire = wire;
+            if (index == 8192) {
+                auto invalid = value.value();
+                invalid.signature.back() ^= 1;
+                TEST_REQUIRE(!saturated.accept(invalid, view.value(), "node-1", "node-0", { }, timestamp).deliver);
+                TEST_REQUIRE(saturated.should_drop_duplicate(first_wire, timestamp));
+                const auto unsolicited = RelayTransport::create(view.value(),
+                                                                identities[0],
+                                                                MessageType::ConsensusBatchData,
+                                                                MessageStatus::Response,
+                                                                "unrequested data",
+                                                                "node-1",
+                                                                "missing-request",
+                                                                timestamp);
+                TEST_REQUIRE(unsolicited.has_value());
+                TEST_REQUIRE(
+                    !saturated.accept(unsolicited.value(), view.value(), "node-1", "node-0", { }, timestamp)
+                         .deliver);
+                TEST_REQUIRE(saturated.should_drop_duplicate(first_wire, timestamp));
+            }
+            const auto delivery =
+                saturated.accept(value.value(), view.value(), "node-1", "node-0", { "node-2" }, timestamp);
+            TEST_REQUIRE(delivery.deliver);
+            TEST_REQUIRE_EQ(delivery.peers, (std::vector<std::string> { "node-2" }));
+            TEST_REQUIRE(saturated.should_drop_duplicate(wire, timestamp));
+            TEST_REQUIRE(
+                !saturated.accept(value.value(), view.value(), "node-1", "node-0", { }, timestamp).deliver);
+        }
+        TEST_REQUIRE(!saturated.should_drop_duplicate(first_wire, now + 81920));
+        TEST_REQUIRE(saturated.should_drop_duplicate(last_wire, now + 81920));
+        saturated.clear();
+        TEST_REQUIRE(!saturated.should_drop_duplicate(last_wire, now + 81920));
+    }
     for (bool ring : { false, true }) {
         std::map<std::string, RelayTransport>           routers;
         std::map<std::string, std::vector<std::string>> edges;

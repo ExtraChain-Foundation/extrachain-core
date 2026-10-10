@@ -45,6 +45,7 @@ struct ExtraChainSettings {
     std::optional<DagMode>        dag_mode;
     std::optional<DfsMode>        dfs_mode;
     std::optional<std::string>    node_identifier;
+    std::optional<std::string>    node_nonce;
     std::optional<int>            dag_version;
     std::optional<int>            dfs_version;
     std::optional<ChainIndexMode> chain_index_mode;
@@ -57,6 +58,7 @@ BOOST_DESCRIBE_STRUCT(ExtraChainSettings,
                        dag_mode,
                        dfs_mode,
                        node_identifier,
+                       node_nonce,
                        dag_version,
                        dfs_version,
                        chain_index_mode,

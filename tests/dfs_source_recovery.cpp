@@ -2,6 +2,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <thread>
 
@@ -73,10 +74,11 @@ namespace {
             TEST_REQUIRE(request.has_value());
             requests.fetch_add(1);
             boost::asio::post(node_.serial_executor(),
-                              [node   = &node_,
-                               link   = request.value().file_link,
-                               source = identifier_,
-                               ready  = available.load()] {
+                              [node       = &node_,
+                               link       = request.value().file_link,
+                               source     = identifier_,
+                               message_id = message.value().message_id,
+                               ready      = available.load()] {
                                   if (ready) {
                                       node->dfs()
                                           ->download_manager()
@@ -87,7 +89,8 @@ namespace {
                                                                     .current_size    = 1024,
                                                                     .fragment_number = 1,
                                                                     .full_amount_fragments = 1 },
-                                                                  source);
+                                                                  source,
+                                                                  message_id);
                                   } else {
                                       Responder responder;
                                       responder.add_identifier(source);
@@ -112,6 +115,32 @@ namespace {
         return predicate();
     }
 } // namespace
+
+class LoadManagerTestAccess {
+public:
+    static bool cooling_down(LoadManager& manager, const Dfs::FileLink& link) {
+        auto locked = *manager.m_active_downloads_priority;
+        auto item   = locked->find(link);
+        return item != locked->end() && item->second.cooldown_until > std::chrono::system_clock::now();
+    }
+
+    static void expire_cooldown(LoadManager& manager, const Dfs::FileLink& link) {
+        auto locked = *manager.m_active_downloads_priority;
+        auto item   = locked->find(link);
+        TEST_REQUIRE(item != locked->end());
+        item->second.cooldown_until = std::chrono::system_clock::now() - 1s;
+    }
+
+    static bool forced(LoadManager& manager, const Dfs::FileLink& link) {
+        auto locked = *manager.m_active_downloads_priority;
+        auto item   = locked->find(link);
+        return item != locked->end() && item->second.forced;
+    }
+
+    static void kick(LoadManager& manager) {
+        manager.kick();
+    }
+};
 
 int main(int argc, char** argv) {
     TEST_REQUIRE(argc == 2);
@@ -157,6 +186,16 @@ int main(int argc, char** argv) {
     };
 
     if (std::string_view(argv[1]) == "metadata") {
+        Responder                     holder;
+        const Dfs::Packets::FileState forged { .owner_id = owner.id(),
+                                               .file_id  = row.file_id,
+                                               .state    = Dfs::FileState::Ready,
+                                               .hash     = std::string(64, '0') };
+        node->dfs()->network_response_file_state(forged, holder);
+        holder.add_identifier(std::string(64, 'f'));
+        node->dfs()->network_response_file_state(forged, holder);
+        TEST_REQUIRE_EQ(node->dfs()->download_manager().active_downloads_size(), std::size_t(0));
+        TEST_REQUIRE_EQ(ActorSpace::get_dir_row(db, owner.id(), row.file_id).value().hash, row.hash);
         node->dfs()->download_manager().add_to_queue(owner.id(), row, "");
         TEST_REQUIRE_EQ(state(), Dfs::FileState::Ready);
         ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
@@ -164,14 +203,47 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(wait_for([&] {
             return state() == Dfs::FileState::Ready;
         }));
-        ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Removed);
-        node->dfs()->completeDownloadedFile(owner.id(), row);
-        TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
         ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
         auto obsolete = row;
         obsolete.hash = std::string(64, '0');
         node->dfs()->completeDownloadedFile(owner.id(), obsolete);
         TEST_REQUIRE_EQ(state(), Dfs::FileState::Known);
+        TEST_REQUIRE(node->dfs()->remove_stored_file(owner.id(), row.file_id).has_value());
+        node->dfs()->completeDownloadedFile(owner.id(), row);
+        TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
+        ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
+        TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
+        TEST_REQUIRE(!std::filesystem::exists(path.value().native()));
+
+    } else if (std::string_view(argv[1]) == "reprobe") {
+        // A storage write holds the file's write lock and then reads the download pool.
+        // The scheduler must not wait for that write lock while it holds the pool, which
+        // it did when a cooldown ended and it asked the network for the file again.
+        std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));
+        auto&                manager = node->dfs()->download_manager();
+        const Dfs::FileLink link { .owner_id = owner.id(), .file_id = row.file_id };
+        manager.add_to_queue(owner.id(), row, "");
+        TEST_REQUIRE(wait_for([&] {
+            return LoadManagerTestAccess::cooling_down(manager, link);
+        }));
+        {
+            auto write_lock = manager.lock_file(link);
+            LoadManagerTestAccess::expire_cooldown(manager, link);
+            LoadManagerTestAccess::kick(manager);
+            std::this_thread::sleep_for(300ms);
+            auto pool_read = std::async(std::launch::async, [&] {
+                return manager.is_downloading(link);
+            });
+            if (pool_read.wait_for(5s) != std::future_status::ready) {
+                std::printf("DFS scheduler deadlocked on the file write lock\n");
+                std::fflush(stdout);
+                std::_Exit(1);
+            }
+        }
+        // The probe itself still happens once the write lock is free.
+        TEST_REQUIRE(wait_for([&] {
+            return LoadManagerTestAccess::forced(manager, link);
+        }));
     } else {
         TEST_REQUIRE(std::string_view(argv[1]) == "backoff");
         std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));

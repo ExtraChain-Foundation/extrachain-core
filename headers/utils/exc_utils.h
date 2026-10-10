@@ -512,6 +512,7 @@ namespace ChainConst {
     static const std::string DAG_RECOVERY_DATABASE = DAG_RECOVERY_FOLDER + "/Recovery.db";
     static const std::string TRANSACTION_CACHE     = DAG_CACHE_FOLDER + "/SelfTransactions.db";
     static const std::string BALANCE_CACHE         = DAG_CACHE_FOLDER + "/BalanceCache.db";
+    static const std::string PACK_REPLAY_REQUIRED  = DAG_CACHE_FOLDER + "/pack-replay-required";
 
     // Dfs
     static const int DATA_OFFSET = 512;

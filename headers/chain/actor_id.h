@@ -74,8 +74,14 @@ public:
     }
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
-        m_id = msgpack_o.as<std::string>();
-        normalize();
+        if (msgpack_o.type != msgpack::type::STR || msgpack_o.via.str.size > SIZE) {
+            throw msgpack::type_error();
+        }
+        const auto value = create(msgpack_o.as<std::string>());
+        if (!value.has_value()) {
+            throw msgpack::type_error();
+        }
+        m_id = value.value().m_id;
     }
 
 private:

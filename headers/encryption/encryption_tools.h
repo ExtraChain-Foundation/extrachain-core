@@ -85,9 +85,7 @@ namespace Cryptography {
                                                      const KeyPass &secret_key,
                                                      bool           nonce_from_key = false);
 
-    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt_password(const Bytes       &data,
-                                                              const std::string &password,
-                                                              bool               nonce_from_key = false);
+    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt_password(const Bytes &data, const std::string &password);
     EXTRACHAIN_EXPORT CryptoResult symmetric_decrypt_password(const Bytes       &data,
                                                               const std::string &password,
                                                               bool               nonce_from_key = false);

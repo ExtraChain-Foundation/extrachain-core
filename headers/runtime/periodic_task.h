@@ -14,6 +14,9 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <source_location>
+#include <string>
+#include <vector>
 
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -28,7 +31,10 @@ namespace ExtraChain::Core {
 
         static std::shared_ptr<PeriodicTask> create(boost::asio::any_io_executor executor,
                                                      Duration                     interval,
-                                                     Handler                      handler);
+                                                     Handler                      handler,
+                                                     std::source_location site = std::source_location::current());
+        // Where the tasks that are running right now were created, to name what keeps a runtime from stopping.
+        static std::vector<std::string> armed_sites();
 
         ~PeriodicTask();
 
@@ -44,7 +50,12 @@ namespace ExtraChain::Core {
     private:
         struct State;
 
-        PeriodicTask(boost::asio::any_io_executor executor, Duration interval, Handler handler);
+        PeriodicTask(boost::asio::any_io_executor executor,
+                     Duration                     interval,
+                     Handler                      handler,
+                     std::source_location         site);
+
+        std::source_location site_;
 
         std::shared_ptr<State> state_;
     };

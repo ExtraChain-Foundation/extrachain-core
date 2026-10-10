@@ -11,6 +11,8 @@
 #pragma once
 
 #include <expected>
+#include <cstdio>
+#include <functional>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -31,5 +33,12 @@ namespace FileIo {
     EXTRACHAIN_EXPORT std::expected<std::string, Error> read_all(const std::filesystem::path& path);
     EXTRACHAIN_EXPORT std::expected<void, Error> write_atomic(const std::filesystem::path& path,
                                                               std::string_view             data);
+
+    EXTRACHAIN_EXPORT std::expected<void, Error> write_private_atomic(const std::filesystem::path& path,
+                                                                      std::string_view             data);
+
+    EXTRACHAIN_EXPORT std::expected<void, Error> write_private_atomic_stream(
+        const std::filesystem::path&           path,
+        const std::function<bool(std::FILE*)>& writer);
 
 } // namespace FileIo

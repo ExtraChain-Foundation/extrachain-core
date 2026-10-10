@@ -50,6 +50,13 @@
 
 namespace {
 constexpr std::string_view THOTH_DATABASE = "ThothDevicesV2";
+constexpr std::size_t      MAX_DEVICE_TOKEN_BYTES = 4096;
+struct StoredDeviceToken {
+    int         version = 0;
+    ActorId     profile;
+    std::string token;
+};
+BOOST_DESCRIBE_STRUCT(StoredDeviceToken, (), (version, profile, token))
 
 std::uint64_t unix_time_ms() {
     return static_cast<std::uint64_t>(
@@ -548,10 +555,7 @@ bool ThothManager::send_to_service(const ThothInfo& info, const std::string& use
                               .body         = username.empty() ? "Raccoon brings word from the shadows"
                                                                : fmt::format("Message from @{}", username) };
 
-    eLog("Thoth local push POST http://localhost:{}/send token={} body={}",
-         port_,
-         info.token,
-         service_message.body);
+    eLog("[Thoth] Send local push request on port {}", port_);
     node->network_runtime().async_http_post("localhost",
                                             port_,
                                             "/send",
@@ -583,7 +587,8 @@ ExtraChain::Core::Event<>& ThothManager::device_revoked_event() noexcept {
 
 void ThothManager::set_device_token(const std::string& token) {
     std::scoped_lock lock(state_mutex_);
-    if (revoked_ || token.empty()) {
+    if (revoked_ || token.empty() || token.size() > MAX_DEVICE_TOKEN_BYTES
+        || token.find('\0') != std::string::npos) {
         return;
     }
 
@@ -930,6 +935,12 @@ bool ThothManager::check_revocation(const ThothRegistry& reg) {
             });
         }
         std::error_code error;
+        if (const auto token_path = device_token_path(); token_path.has_value()) {
+            std::filesystem::remove(token_path.value(), error);
+            if (error) {
+                eWarning("[Thoth] Cannot remove protected device token after revocation");
+            }
+        }
         for (const auto& path : { ".auth_hash", ".thoth_device_id", ".thoth_device_token", ".thoth_revoked" }) {
             error.clear();
             std::filesystem::remove(path, error);
@@ -1026,23 +1037,69 @@ bool ThothManager::remove_device(const std::string& device_id) {
     return bool(res);
 }
 
-// Cwd is the data dir; the current device token is the only token state we retain.
+std::optional<std::string> ThothManager::device_token_path() const {
+    if (node->account_controller()->empty()) {
+        return std::nullopt;
+    }
+    return fmt::format(".thoth_device_token.{}", node->account_controller()->system_actor().id());
+}
+
 void ThothManager::persist_device_tokens() {
-    if (!FileIo::write_atomic(".thoth_device_token", ios_token_).has_value()) {
-        eWarning("[Thoth] Cannot persist device token");
+    const auto path = device_token_path();
+    if (revoked_ || !path.has_value() || ios_token_.empty()
+        || (persisted_token_path_ == path.value() && persisted_token_ == ios_token_)) {
+        return;
+    }
+    const auto&             actor = node->account_controller()->system_actor();
+    const StoredDeviceToken record { .version = 1, .profile = actor.id(), .token = ios_token_ };
+    const auto              encrypted = actor.key().encrypt_self(ByteArray(Json::serialize(record)).toBytes());
+    if (!encrypted.has_value()
+        || !FileIo::write_private_atomic(path.value(), "ECTH1" + ByteArray(encrypted.value()).toString())
+                .has_value()) {
+        eWarning("[Thoth] Cannot persist protected device token");
+        return;
+    }
+    persisted_token_path_ = path.value();
+    persisted_token_      = ios_token_;
+    std::error_code error;
+    std::filesystem::remove(".thoth_device_token", error);
+    if (error) {
+        eWarning("[Thoth] Cannot remove legacy device token after encryption");
     }
 }
 
 void ThothManager::load_persisted_device_tokens() {
-    const auto content = FileIo::read_all(".thoth_device_token");
-    if (!content.has_value()) {
+    const auto path = device_token_path();
+    if (revoked_ || !path.has_value()) {
         return;
     }
-    auto token = trim(content.value());
-    if (token.empty()) {
+    std::ifstream input(path.value(), std::ios::binary);
+    if (!input) {
         return;
     }
-    ios_token_ = std::move(token);
+    std::array<char, 8192> buffer;
+    input.read(buffer.data(), buffer.size());
+    if (!input.eof()) {
+        return;
+    }
+    const std::string content(buffer.data(), static_cast<std::size_t>(input.gcount()));
+    if (!content.starts_with("ECTH1")) {
+        return;
+    }
+    const auto& actor     = node->account_controller()->system_actor();
+    const auto  decrypted = actor.key().decrypt_self(ByteArray(content.substr(5)).toBytes());
+    if (!decrypted.has_value()) {
+        return;
+    }
+    const auto record = Json::deserialize<StoredDeviceToken>(ByteArray(decrypted.value()).toString());
+    if (!record.has_value() || record.value().version != 1 || record.value().profile != actor.id()
+        || record.value().token.empty() || record.value().token.size() > MAX_DEVICE_TOKEN_BYTES
+        || record.value().token.find('\0') != std::string::npos) {
+        return;
+    }
+    ios_token_            = record.value().token;
+    persisted_token_      = ios_token_;
+    persisted_token_path_ = path.value();
 }
 
 void ThothManager::load_or_create_device_id() {
@@ -1067,6 +1124,10 @@ void ThothManager::load_or_create_device_id() {
 // Called by read_chats() with a ready chat list; registers the token per chat (deduped).
 void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& chats) {
     std::scoped_lock lock(state_mutex_);
+    if (ios_token_.empty()) {
+        load_persisted_device_tokens();
+    }
+    persist_device_tokens();
     if (revoked_ || ios_token_.empty()) {
         return;
     }

@@ -15,6 +15,7 @@
 #include <chrono>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -22,6 +23,8 @@
 #include <boost/signals2/connection.hpp>
 
 #include "consensus/peer_authenticator.h"
+#include "consensus/balance_snapshot.h"
+#include "consensus/mining_replay.h"
 #include "consensus/relay_transport.h"
 #include "consensus/intent_store.h"
 #include "consensus/shadow_consensus.h"
@@ -38,7 +41,14 @@ namespace ExtraChain::Core {
 
 namespace ExtraChain::Consensus {
 
+    // A full page that continues our finalized height: the height to ask the next page from before
+    // this one is applied, so the reply travels while the page is validated.
+    EXTRACHAIN_EXPORT std::optional<std::uint64_t> pipelined_sync_height(const ShadowSyncResponse& response,
+                                                                         std::uint64_t finalized_height);
+
     class EXTRACHAIN_EXPORT ConsensusService {
+        friend class ConsensusStateTestFixture;
+
     public:
         explicit ConsensusService(Core::ExtraChainNode& node, std::filesystem::path directory = "consensus");
         ~ConsensusService();
@@ -68,6 +78,7 @@ namespace ExtraChain::Consensus {
         void receive_batch_request(const SectionBatchRequest& request,
                                    const Responder&           responder,
                                    std::string_view           peer_identifier);
+        void remember_rejected_batch(const std::string& header_hash, std::uint64_t finalized);
         void receive_batch_data(const SectionBatchData& batch, std::string_view peer_identifier);
         void receive_sync_request(const ShadowSyncRequest& request,
                                   const Responder&         responder,
@@ -80,6 +91,10 @@ namespace ExtraChain::Consensus {
         void receive_intent(const IntentEnvelope& envelope);
 
         std::expected<std::string, ConsensusError> submit_intent(const IntentEnvelope& envelope);
+        // Allocate a nonce and sign under the submission lock, including concurrent local mining work.
+        std::expected<std::string, ConsensusError> submit_local_intent(TransactionIntentV2      intent,
+                                                                       std::string              metadata,
+                                                                       const Actor<KeyPrivate>& sender);
         [[nodiscard]] std::vector<IntentEnvelope>  ready_intents(std::size_t maximum_count,
                                                                  std::size_t maximum_bytes) const;
         [[nodiscard]] std::expected<std::optional<IntentReceipt>, ConsensusError> intent_receipt(
@@ -93,6 +108,25 @@ namespace ExtraChain::Consensus {
         std::expected<std::size_t, ConsensusError> request_bootstrap_history(const TrustAnchorV1& anchor,
                                                                              std::uint64_t        after_epoch);
 
+        std::expected<BalanceSnapshotV1, ConsensusError> balance_snapshot() const;
+        bool accept_balance_snapshot(const BalanceSnapshotV1& snapshot);
+
+        [[nodiscard]] bool                                       native_mining_enabled() const;
+        [[nodiscard]] std::expected<MiningState, ConsensusError> finalized_mining_state() const;
+        // Preview the next section for local proof work; this does not commit state or issue coins.
+        [[nodiscard]] std::expected<MiningState, ConsensusError> mining_work_state() const;
+        std::expected<std::string, ConsensusError> submit_mining_request(IntentOperation          operation,
+                                                                         std::string              metadata,
+                                                                         const Actor<KeyPrivate>& provider);
+        // Same, validated against a work state the caller already built under this
+        // consensus progress. Building one per request replays the parent batch again.
+        std::expected<std::string, ConsensusError> submit_mining_request(IntentOperation          operation,
+                                                                         std::string              metadata,
+                                                                         const Actor<KeyPrivate>& provider,
+                                                                         const MiningState&       work);
+        // Fill an unused local nonce before already signed pending requests. No asset effect.
+        std::expected<bool, ConsensusError> repair_local_nonce_gap(const Actor<KeyPrivate>& sender);
+        [[nodiscard]] bool verify_mining_transaction(const Transaction& transaction) const;
         [[nodiscard]] bool active() const noexcept;
         [[nodiscard]] bool voting() const noexcept;
         [[nodiscard]] bool controls_section(std::uint64_t section) const;
@@ -126,7 +160,7 @@ namespace ExtraChain::Consensus {
         void                                refresh_peer_authentication();
         void                                checkpoint_ready(std::uint64_t section);
         void                                queue_next_checkpoint();
-        bool                                apply_certificate(const QuorumCertificate& certificate);
+        bool apply_certificate(const QuorumCertificate& certificate, bool announce = false);
         std::expected<void, ConsensusError> apply_finality_proof(const FinalityProof& proof);
         std::expected<void, ConsensusError> reconcile_finalized_checkpoint();
         bool                                apply_timeout_certificate(const TimeoutCertificate& certificate);
@@ -143,12 +177,17 @@ namespace ExtraChain::Consensus {
         bool apply_finalized_checkpoint(const FinalizedCheckpoint& checkpoint);
         /// Drive checkpoints that were deferred for missing data to completion.
         void catch_up_deferred_finalization();
-        /// Ask every validator for a specific ancestor payload we are missing.
+        /// Request a missing ancestor from one validator, rotating peers on retry.
         void request_ancestor_batch(const std::string& header_hash, std::string_view peer_identifier);
-        void request_sync_from(std::string_view peer_identifier);
+        void request_sync_from(std::string_view             peer_identifier,
+                               bool                         page_progress = false,
+                               std::optional<std::uint64_t> after_height  = std::nullopt);
         void vote_for_proposal(const Proposal& proposal, std::string_view peer_identifier);
         void timeout_elapsed();
         void reset_timeout();
+        // Sends the timeout certificate of this height to validators whose last timeout vote is
+        // for an earlier round and older than a whole round timeout (see observed_timeouts_).
+        void resend_missed_timeout_certificate(std::uint64_t height, std::chrono::steady_clock::time_point now);
         void halt_voting();
         void send_to_peer(const auto&        payload,
                           MessageType        message_type,
@@ -168,15 +207,25 @@ namespace ExtraChain::Consensus {
         /// ancestor whose batch we simply do not hold yet. Absent data and corrupt
         /// data both break the walk, but only the former is worth another request.
         [[nodiscard]] std::expected<std::vector<Transaction>, ConsensusError> staged_ancestor_transactions(
-            const QuorumCertificate& parent,
-            std::uint64_t            first_section,
-            std::string*             missing_ancestor = nullptr) const;
+            const QuorumCertificate&     parent,
+            std::uint64_t                first_section,
+            std::string*                 missing_ancestor = nullptr,
+            std::optional<std::uint64_t> applied_height   = std::nullopt) const;
         /// Ancestors as a set, ready for the DAG's balance proofs. An empty set means
         /// the parent is already canonical; a broken ancestor chain is an error, not
         /// an empty set, so a proposal is never accepted on a silently weaker check.
         [[nodiscard]] std::expected<std::set<Transaction>, ConsensusError> staged_ancestors_for(
             const Proposal& proposal,
             std::string*    missing_ancestor = nullptr) const;
+        std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> staged_nonces_for(
+            const QuorumCertificate& parent,
+            std::uint64_t            first_section,
+            std::string*             missing_ancestor = nullptr) const;
+        [[nodiscard]] std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> local_nonce_frontier(
+            std::string* missing_ancestor = nullptr) const;
+        std::expected<void, ConsensusError>                                           restore_pending_intents();
+        std::expected<void, ConsensusError> expire_pending_intents(const std::map<ActorId, std::uint64_t>& nonces);
+        [[nodiscard]] std::expected<std::uint64_t, ConsensusError> next_local_nonce(const ActorId& sender);
         [[nodiscard]] bool                         has_unfinalized_intents() const;
         std::expected<std::string, ConsensusError> accept_intent(const IntentEnvelope& envelope, bool broadcast);
         [[nodiscard]] std::expected<std::vector<std::pair<IntentEnvelope, IntentReceipt>>, ConsensusError>
@@ -191,24 +240,86 @@ namespace ExtraChain::Consensus {
         void                                schedule_recovery_activation();
         [[nodiscard]] std::uint64_t         intent_height() const noexcept;
 
+        bool accept_light_history(const BootstrapHistoryPageV1& page);
+        void request_light_history();
+        std::expected<LightClientVerifier, ConsensusError> load_light_verifier() const;
+
+        struct MiningSnapshot {
+            std::string header_hash;
+            MiningState state;
+            MSGPACK_DEFINE(header_hash, state)
+        };
+        std::expected<const LightClientVerifier*, ConsensusError> mining_verifier() const;
+        std::expected<FinalityProof, ConsensusError>              mining_finality(std::uint64_t section) const;
+        std::expected<void, ConsensusError>                       initialize_mining_state() const;
+        std::expected<MiningState, ConsensusError>                mining_state_for(const QuorumCertificate& parent,
+                                                                                   std::size_t              depth = 0) const;
+        // The finalized proposal's batch: stored, or rebuilt from the installed DAG after pruning.
+        std::optional<SectionBatchData>            finalized_batch(const Proposal& proposal) const;
+        std::expected<MiningState, ConsensusError> project_mining_state(const SectionBatchData&  batch,
+                                                                        const QuorumCertificate& parent) const;
+        // Stores the state already projected for this proof and checked against its
+        // signed mining_state_root; projecting it a second time replays the batch again.
+        std::expected<void, ConsensusError> persist_mining_state(const FinalityProof& proof, MiningState state);
+        std::expected<std::optional<Transaction>, ConsensusError> next_mining_settlement(
+            const MiningState& parent,
+            std::uint64_t      first_section) const;
+        mutable std::optional<LightClientVerifier> mining_verifier_;
+        mutable std::optional<MiningSnapshot>      finalized_mining_;
+        mutable std::map<std::string, MiningState> staged_mining_;
+        // The pacemaker used to leave no trace when it stopped producing timeout votes;
+        // report each distinct failure once instead (see the round split in tracker #97).
+        std::optional<std::tuple<std::uint64_t, std::uint64_t, ConsensusError>> last_timeout_failure_;
+        bool                                                                     reported_stopped_pacemaker_ = false;
+
         Core::ExtraChainNode&                                         node_;
+        std::optional<LightClientVerifier>                            light_verifier_;
         std::filesystem::path                                         directory_;
         std::unique_ptr<ShadowConsensus>                              consensus_;
         std::unique_ptr<IntentStore>                                  intent_store_;
         IntentPool                                                    intent_pool_;
+        bool                                                          pending_intents_restored_ = false;
         std::map<ActorId, std::uint64_t>                              committed_nonces_;
+        struct NonceFrontier {
+            std::string                      certificate_hash;
+            std::map<ActorId, std::uint64_t> nonces;
+        };
+        mutable std::optional<NonceFrontier>                          nonce_frontier_;
+        // The last frontier that could be computed, kept across finalized heights for local requests.
+        mutable std::map<ActorId, std::uint64_t>                      known_nonce_frontier_;
         std::optional<AppliedCheckpoint>                              applied_checkpoint_;
         std::unique_ptr<PeerAuthenticator>                            authenticator_;
         std::optional<Proposal>                                       latest_proposal_;
         std::optional<QuorumCertificate>                              latest_certificate_;
         std::optional<TimeoutCertificate>                             latest_timeout_certificate_;
+        // When the pacemaker last moved; proposal and vote timings are logged against it.
+        std::chrono::steady_clock::time_point round_opened_ = std::chrono::steady_clock::now();
+        /// Latest timeout vote seen from each validator. A validator that missed a timeout
+        /// certificate and whose pacemaker then went quiet sends nothing to answer, so the
+        /// certificate is resent to it from the timer instead (tracker #97).
+        struct ObservedTimeout {
+            std::uint64_t                                        height = 0;
+            std::uint64_t                                        round  = 0;
+            std::chrono::steady_clock::time_point                seen;
+            std::optional<std::chrono::steady_clock::time_point> resent;
+        };
+        std::map<std::string, ObservedTimeout>                        observed_timeouts_;
         std::map<std::uint64_t, ShadowCheckpoint>                     pending_checkpoints_;
         std::map<std::uint64_t, SectionBatchData>                     pending_batches_;
         std::map<std::string, Proposal>                               pending_proposals_;
         /// Last time an ancestor batch was asked for, by header hash, and the last
         /// sync request: a lagging node used to re-ask on every reply it got.
-        std::map<std::string, std::chrono::steady_clock::time_point>  ancestor_requests_;
+        struct AncestorRequest {
+            std::chrono::steady_clock::time_point sent;
+            std::string                           peer;
+        };
+        std::map<std::string, AncestorRequest>                        ancestor_requests_;
         std::chrono::steady_clock::time_point                         last_sync_request_ {};
+        std::string                                                   last_sync_peer_;
+        std::chrono::steady_clock::time_point                         last_light_history_request_ { };
+        /// Batches that failed validation or admission, keyed by header hash, with
+        /// the finalized height they failed at. Copies are dropped until it moves.
+        std::map<std::string, std::uint64_t>                          rejected_batches_;
         std::shared_ptr<Core::DeadlineTask>                           timeout_task_;
         std::shared_ptr<Core::DeadlineTask>                           recovery_task_;
         std::shared_ptr<Core::DeadlineTask>                           intent_batch_task_;

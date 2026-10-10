@@ -84,7 +84,9 @@ namespace Pack {
             if (!pid.has_value())
                 continue;
 
-            auto r = Reader::open(entry.path());
+            // Headers only: hashing every pack read the whole history from disk on each
+            // start. A pack is hashed when it is first opened for reading.
+            auto r = Reader::open(entry.path(), false);
             if (!r.has_value()) {
                 eWarning("[PackRegistry] Skip broken pack {}: error {}",
                          entry.path().string(),
@@ -118,6 +120,8 @@ namespace Pack {
                     valid.push_back(m.id);
             }
             std::sort(valid.begin(), valid.end());
+            frame_cache_ = { };
+            verified_.clear();
             for (auto it = readers_.begin(); it != readers_.end();) {
                 if (!std::binary_search(valid.begin(), valid.end(), it->first)) {
                     lru_.erase(it->second.lru_position);
@@ -127,6 +131,13 @@ namespace Pack {
                 }
             }
         }
+    }
+
+    void Registry::close_readers() {
+        std::lock_guard cache_lock(cache_mutex_);
+        frame_cache_ = { };
+        readers_.clear();
+        lru_.clear();
     }
 
     std::vector<Registry::PackMeta>::const_iterator Registry::find_meta_for(std::uint64_t section) const {
@@ -159,7 +170,7 @@ namespace Pack {
             return it->second.reader.get();
         }
 
-        auto r = Reader::open(pack_path(id));
+        auto r = Reader::open(pack_path(id), !verified_.contains(id));
         if (!r.has_value()) {
             eWarning("[PackRegistry] Failed to open {}: error {}",
                      pack_path(id).string(),
@@ -167,6 +178,7 @@ namespace Pack {
             return nullptr;
         }
 
+        verified_.insert(id);
         lru_.push_front(id);
         auto [inserted_it, _] = readers_.emplace(id,
                                                  ReaderEntry {
@@ -183,6 +195,8 @@ namespace Pack {
             PackId victim = lru_.back();
             lru_.pop_back();
             readers_.erase(victim);
+            if (frame_cache_.pack == victim)
+                frame_cache_ = { };
         }
     }
 
@@ -202,7 +216,22 @@ namespace Pack {
         Reader         *reader = acquire_reader_locked(pid);
         if (!reader)
             return std::nullopt;
-        return reader->read(id);
+        const auto index = reader->frame_for(id);
+        if (!index.has_value())
+            return std::nullopt;
+        if (!frame_cache_.valid || frame_cache_.pack != pid || frame_cache_.index != index.value()) {
+            auto frame = reader->frame(index.value());
+            if (!frame.has_value())
+                return std::nullopt;
+            // A frame of proof-heavy sections is not worth holding on to between reads.
+            constexpr std::size_t MaximumCachedFrameBytes = 16 * 1024 * 1024;
+            if (frame->size() > MaximumCachedFrameBytes) {
+                frame_cache_ = { };
+                return reader->section_from_frame(id, index.value(), frame.value());
+            }
+            frame_cache_ = { .pack = pid, .index = index.value(), .data = std::move(frame.value()), .valid = true };
+        }
+        return reader->section_from_frame(id, index.value(), frame_cache_.data);
     }
 
     std::vector<std::pair<SectionId, std::string>> Registry::read_sections(const SectionId &from,
@@ -255,8 +284,21 @@ namespace Pack {
         if (!res.has_value())
             return res;
 
-        // Update metadata
-        auto r = Reader::open(path);
+        return register_pack(pack_id);
+    }
+
+    std::expected<void, Error> Registry::create_pack(PackId               pack_id,
+                                                     const SectionId     &first,
+                                                     const SectionId     &last,
+                                                     const SectionSource &read_section) {
+        const auto result = Pack::write(pack_path(pack_id), pack_id, first, last, read_section);
+        if (!result.has_value())
+            return result;
+        return register_pack(pack_id);
+    }
+
+    std::expected<void, Error> Registry::register_pack(PackId pack_id) {
+        auto r = Reader::open(pack_path(pack_id));
         if (!r.has_value())
             return std::unexpected(r.error());
 
@@ -353,25 +395,30 @@ namespace Pack {
     std::expected<void, Error> Registry::finalize_incoming(PackId                       id,
                                                            const std::filesystem::path &tmp,
                                                            const Validator             &validator) {
-        // Validate by opening; reject corrupt payloads before swapping in.
-        auto check = Reader::open(tmp);
-        if (!check.has_value()) {
-            std::error_code ec;
-            std::filesystem::remove(tmp, ec);
-            return std::unexpected(check.error());
+        // Validate by opening; reject corrupt payloads before swapping in. The reader keeps
+        // its file open, so it is closed before the rename (Windows cannot rename it).
+        PackMeta meta;
+        {
+            auto check = Reader::open(tmp);
+            if (!check.has_value()) {
+                std::error_code ec;
+                std::filesystem::remove(tmp, ec);
+                return std::unexpected(check.error());
+            }
+            if (check->id() != id) {
+                check = std::unexpected(Error::InvalidFormat);
+                std::error_code ec;
+                std::filesystem::remove(tmp, ec);
+                return std::unexpected(Error::InvalidFormat);
+            }
+            if (validator && !validator(*check)) {
+                check = std::unexpected(Error::ValidationFailed);
+                std::error_code ec;
+                std::filesystem::remove(tmp, ec);
+                return std::unexpected(Error::ValidationFailed);
+            }
+            meta = PackMeta { .id = id, .first = check->first_section(), .last = check->last_section() };
         }
-        if (check->id() != id) {
-            std::error_code ec;
-            std::filesystem::remove(tmp, ec);
-            return std::unexpected(Error::InvalidFormat);
-        }
-        if (validator && !validator(*check)) {
-            std::error_code ec;
-            std::filesystem::remove(tmp, ec);
-            return std::unexpected(Error::ValidationFailed);
-        }
-
-        PackMeta meta { .id = id, .first = check->first_section(), .last = check->last_section() };
 
         // Drop any cached reader for this id before overwriting the file (mmap on
         // some platforms keeps a hold on the path).
@@ -382,6 +429,8 @@ namespace Pack {
                 lru_.erase(reader->second.lru_position);
                 readers_.erase(reader);
             }
+            if (frame_cache_.pack == id)
+                frame_cache_ = { };
         }
 
         std::error_code ec;
@@ -389,6 +438,11 @@ namespace Pack {
         if (ec) {
             std::filesystem::remove(tmp, ec);
             return std::unexpected(Error::WriteFailed);
+        }
+        {
+            // The validation above hashed this exact file.
+            std::lock_guard cache_lock(cache_mutex_);
+            verified_.insert(id);
         }
 
         {

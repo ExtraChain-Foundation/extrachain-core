@@ -89,6 +89,10 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] bool                    is_local_leader(std::uint64_t height, std::uint64_t round) const;
         [[nodiscard]] std::optional<Proposal> proposal_for(std::string_view header_hash) const;
         [[nodiscard]] std::optional<SectionBatchData> batch_for(std::string_view header_hash) const;
+        // Whether batch_for would return the batch, without copying it out of memory.
+        [[nodiscard]] bool has_batch(std::string_view header_hash) const;
+        std::expected<void, ConsensusError>           prune_stored_batches(std::uint64_t below_height);
+        [[nodiscard]] std::optional<SectionBatchManifest> archived_manifest_for(std::string_view header_hash) const;
         [[nodiscard]] ConsensusMetricsSnapshot        metrics() const noexcept;
 
     private:
@@ -97,6 +101,9 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] bool        verify_timeout_vote(const TimeoutVote& vote) const;
         [[nodiscard]] bool        safe_to_vote(const Proposal& proposal) const;
         [[nodiscard]] static bool newer(const QuorumCertificate& left, const QuorumCertificate& right) noexcept;
+        // Whether a timeout vote for the same slot may move from one known highest certificate
+        // to another: only to a strictly newer one.
+        [[nodiscard]] bool supersedes(const std::string& certificate_hash, const std::string& previous_hash) const;
         [[nodiscard]] std::optional<FinalizedCheckpoint> finalization_for(
             const QuorumCertificate& certificate) const;
         [[nodiscard]] std::optional<FinalityProof> finality_proof_for(const QuorumCertificate& certificate) const;
@@ -110,6 +117,9 @@ namespace ExtraChain::Consensus {
         std::optional<EpochBootstrapV1>                           epoch_bootstrap_;
         SafetyState                                               safety_state_;
         std::map<std::string, Proposal>                           proposals_;
+        // Wall-clock ms when a live proposal first reached this validator; a vote can come
+        // much later, once the batch is fetched and validated, so freshness is judged here.
+        std::map<std::string, std::uint64_t>                      proposal_arrivals_;
         std::map<std::string, SectionBatchData>                   batches_;
         std::map<std::string, QuorumCertificate>                  certificates_;
         std::map<std::string, std::map<std::string, Vote>>        votes_;

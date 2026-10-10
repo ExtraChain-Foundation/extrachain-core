@@ -35,6 +35,8 @@ enum class CollectionError {
     Unknown,
     CollectionNotFound,
     CollectionEmpty,
+    InvalidHistory,
+    Conflict,
     HistoryNotFound,
     StructuralCreation,
     Adding,
@@ -46,13 +48,17 @@ enum class CollectionError {
 struct HistoricalCollectionRow {
     uint32_t                id = 0;
     std::optional<uint32_t> prev_id;
+    std::string             prev_hash;
+    std::optional<uint32_t> target_id;
     CollectionOperation     operation = CollectionOperation::Structural;
     std::string             data;
     std::uint64_t           timestamp = 0;
     ActorId                 actor_id;
     Signature               sign = Signature();
 };
-BOOST_DESCRIBE_STRUCT(HistoricalCollectionRow, (), (id, prev_id, operation, data, timestamp, actor_id, sign))
+BOOST_DESCRIBE_STRUCT(HistoricalCollectionRow,
+                      (),
+                      (id, prev_id, prev_hash, target_id, operation, data, timestamp, actor_id, sign))
 
 namespace ExtraChain::Core {
     class ExtraChainNode;
@@ -61,8 +67,7 @@ namespace ExtraChain::Core {
 class HistoricalCollection {
 private:
     ExtraChain::Core::ExtraChainNode* node;
-    FsPath                file_path_;
-    FsPath                historical_path_;
+    FsPath                            file_path_;
     Actor<KeyPrivate>     actor_;
     ActorId               file_actor_id_;
     std::string           file_id_;
@@ -124,27 +129,23 @@ public:
     std::expected<std::vector<DbRow>, CollectionError> get_collection_rows(
         const std::string& where_statement = "");
 
-    std::expected<std::vector<HistoricalCollectionRow>, CollectionError> get_historical_rows() {
-        DbConnector db(historical_path_);
-        db.open();
-        if (!db.is_open()) {
-            return std::unexpected(CollectionError::HistoryNotFound);
-        }
+    static constexpr std::size_t MaxEventBytes = 1024 * 1024;
+    static constexpr std::size_t MaxPageBytes  = 4 * 1024 * 1024;
+    static constexpr std::size_t MaxPageRows   = 128;
 
-        std::vector<HistoricalCollectionRow> rows;
-
-        std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {}", Dfs::Historical::HISTORICAL_TABLE));
-        db.close();
-
-        for (auto& row : db_rows) {
-            auto dirRow = Utils::from_dbrow<HistoricalCollectionRow>(row);
-            if (dirRow.has_value()) {
-                rows.push_back(dirRow.value());
-            }
-        }
-
-        return rows;
-    }
+    std::expected<std::vector<HistoricalCollectionRow>, CollectionError> get_historical_rows(
+        std::uint64_t after = 0,
+        std::size_t   limit = MaxPageRows);
+    static std::expected<bool, CollectionError> accept(ExtraChain::Core::ExtraChainNode*           node,
+                                                       const ActorId&                              owner,
+                                                       const std::string&                          file,
+                                                       const std::vector<HistoricalCollectionRow>& rows);
+    static std::string row_hash(const ActorId& owner, const std::string& file, const HistoricalCollectionRow& row);
+    static bool        verify(ExtraChain::Core::ExtraChainNode* node,
+                              const ActorId&                    owner,
+                              const std::string&                file,
+                              const HistoricalCollectionRow&    row);
+    static std::pair<std::string, std::uint64_t>            hash_size(DbConnector& db);
     std::expected<HistoricalCollectionRow, CollectionError> get_row(const std::string& search_value,
                                                                     const std::string& field = "id");
 
@@ -154,17 +155,14 @@ public:
 
     FsPath get_historical_path() const;
     FsPath get_file_path() const;
-    void   insert_row_to_database(const HistoricalCollectionRow& historical_row);
 
 private:
-    std::expected<std::string, CollectionError> create_table(const ActorId&     template_actor_id,
-                                                             const std::string& template_file_id);
-    std::expected<std::string, CollectionError> create_table(const Dfs::CollectionTemplate& collection_template);
-
-    void insert_historical_row(HistoricalCollectionRow& historical_row);
-    void historical_collection_row_sign(HistoricalCollectionRow& row);
-    bool historical_collection_row_verify(const HistoricalCollectionRow& row);
-
+    Dfs::CollectionTemplate                                 schema_;
+    std::expected<HistoricalCollectionRow, CollectionError> mutate(CollectionOperation          operation,
+                                                                   std::optional<std::uint32_t> target,
+                                                                   const DbRow&                 data,
+                                                                   Dfs::DataSecurity            security,
+                                                                   const Dfs::DataSecurityData& security_data);
     std::expected<DbRow, CollectionError> encrypt_data(const DbRow&                 row,
                                                        Dfs::DataSecurity            data_security,
                                                        const Dfs::DataSecurityData& security_data);

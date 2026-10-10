@@ -181,6 +181,30 @@ int main(int argc, char *argv[]) {
     check("close second concurrent database", second_database.close());
     check("close first concurrent database", first_database.close());
 
+    const auto creating_path = test_path / "creating.sqlite";
+    DbConnector creating(creating_path);
+    check("open database for creation", creating.open());
+    check("begin database creation", creating.query("BEGIN IMMEDIATE"));
+    check("create uncommitted table", creating.query("CREATE TABLE pending (value TEXT NOT NULL)"));
+    check("insert uncommitted row", creating.insert("pending", { { "value", "retained" } }));
+    check("uncommitted database has no file contents", std::filesystem::file_size(creating_path) == 0);
+    {
+        DbConnector reader(creating_path);
+        check("open reader during database creation", reader.open(false));
+        check("uncommitted schema is not visible", !reader.table_exists("pending"));
+        check("close reader during database creation", reader.close());
+    }
+    check("reader close retains the database file", std::filesystem::exists(creating_path));
+    check("commit database creation", creating.query("COMMIT"));
+    check("close database after creation", creating.close());
+    {
+        DbConnector reader(creating_path);
+        const bool  opened = reader.open(false);
+        check("reopen committed database", opened);
+        const auto rows = opened ? reader.select("SELECT value FROM pending") : std::vector<DbRow> { };
+        check("committed row survives reader close", rows.size() == 1 && rows.front().at("value") == "retained");
+    }
+
     // state now: {20:hash20b, 60:hash60} (40 erased)
     check("get missing -> nullopt", !ci->get(SectionId(99)).has_value());
     check("last<=below-all -> nullopt", !ci->last_at_or_below(SectionId(5)).has_value());

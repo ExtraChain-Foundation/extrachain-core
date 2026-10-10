@@ -60,10 +60,10 @@ namespace Dfs {
 
         for (const auto& field : m_fields) {
             auto column = field.to_db_column();
-            if (!column) {
+            if (!column.has_value()) {
                 return std::unexpected(column.error());
             }
-            schema.add_column(std::move(*column));
+            schema.add_column(std::move(column.value()));
         }
 
         return schema;
@@ -90,66 +90,23 @@ namespace Dfs {
 
         DbColumn column(m_name, map_type_to_column(m_type));
 
-        if (m_is_primary && m_autoincrement.has_value()) {
+        if (m_is_primary.value_or(false) && m_autoincrement.has_value()) {
             column.primary_key(m_autoincrement.value());
             return column;
         }
 
-        if (m_required) {
+        if (m_required.value_or(false)) {
             column.not_null();
         }
 
-        if (m_unique) {
+        if (m_unique.value_or(false)) {
             column.unique();
         }
 
-        if (m_default_now && m_type == FieldType::Timestamp) {
-            column.default_value("CURRENT_TIMESTAMP");
-        } else if (m_default) {
-            column.default_value(*m_default);
-        }
-
-        std::vector<std::string> checks;
-
-        // Length checks for string types
-        if ((m_min_length || m_max_length)
-            && (m_type == FieldType::String || m_type == FieldType::ActorId || m_type == FieldType::Email
-                || m_type == FieldType::Url || m_type == FieldType::Username)) {
-            checks.push_back(fmt::format("length({}) BETWEEN {} AND {}",
-                                         m_name,
-                                         m_min_length.value_or(0),
-                                         m_max_length.value_or(std::numeric_limits<size_t>::max())));
-        }
-
-        // Range checks for numeric types
-        if ((m_min || m_max)
-            && (m_type == FieldType::Integer || m_type == FieldType::Real || m_type == FieldType::Bool)) {
-            if (m_min) {
-                checks.push_back(fmt::format("{} >= {}", m_name, *m_min));
-            }
-            if (m_max) {
-                checks.push_back(fmt::format("{} <= {}", m_name, *m_max));
-            }
-        }
-
-        // Pattern check
-        if (m_pattern) {
-            checks.push_back(fmt::format("{} REGEXP '{}'", m_name, *m_pattern));
-        }
-
-        // Allowed values check
-        if (m_allowed_values && !m_allowed_values->empty()) {
-            std::vector<std::string> quoted;
-            quoted.reserve(m_allowed_values->size());
-            for (const auto& val : *m_allowed_values) {
-                quoted.push_back(fmt::format("'{}'", val));
-            }
-            checks.push_back(fmt::format("{} IN ({})", m_name, boost::algorithm::join(quoted, ", ")));
-        }
-
-        // Add combined checks if any exist
-        if (!checks.empty()) {
-            // column.check(boost::algorithm::join(checks, " AND "));
+        if (m_default_now.value_or(false) && m_type == FieldType::Timestamp) {
+            column.default_value("(unixepoch() * 1000)");
+        } else if (m_default.has_value()) {
+            column.default_literal(m_default.value());
         }
 
         return column;

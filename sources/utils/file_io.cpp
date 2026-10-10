@@ -42,11 +42,23 @@ namespace FileIo {
             return temporary;
         }
 
-        FILE* open_write(const std::filesystem::path& path) {
+        FILE* open_write(const std::filesystem::path& path, bool private_file) {
 #ifdef _WIN32
-            return _wfopen(path.c_str(), L"wb");
+            return _wfopen(path.c_str(), private_file ? L"wbx" : L"wb");
 #else
-            return std::fopen(path.c_str(), "wb");
+            if (!private_file) {
+                return std::fopen(path.c_str(), "wb");
+            }
+            const auto descriptor = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+            if (descriptor < 0) {
+                return nullptr;
+            }
+            auto* file = ::fdopen(descriptor, "wb");
+            if (file == nullptr) {
+                ::close(descriptor);
+                ::unlink(path.c_str());
+            }
+            return file;
 #endif
         }
 
@@ -103,15 +115,22 @@ namespace FileIo {
         return data;
     }
 
-    std::expected<void, Error> write_atomic(const std::filesystem::path& path, std::string_view data) {
+    static std::expected<void, Error> write_atomic_impl(const std::filesystem::path&           path,
+                                                        const std::function<bool(std::FILE*)>& writer,
+                                                        bool                                   private_file) {
         const auto temporary = temporary_path(path);
-        FILE*      file      = open_write(temporary);
+        FILE*      file      = open_write(temporary, private_file);
         if (file == nullptr) {
             return std::unexpected(Error::OpenFailed);
         }
 
-        const auto written = std::fwrite(data.data(), 1, data.size(), file);
-        if (written != data.size()) {
+        bool written = false;
+        try {
+            written = writer(file);
+        } catch (...) {
+            written = false;
+        }
+        if (!written) {
             std::fclose(file);
             std::error_code error;
             std::filesystem::remove(temporary, error);
@@ -137,6 +156,29 @@ namespace FileIo {
             return std::unexpected(Error::DirectorySyncFailed);
         }
         return {};
+    }
+
+    std::expected<void, Error> write_atomic(const std::filesystem::path& path, std::string_view data) {
+        return write_atomic_impl(
+            path,
+            [data](std::FILE* file) {
+                return std::fwrite(data.data(), 1, data.size(), file) == data.size();
+            },
+            false);
+    }
+
+    std::expected<void, Error> write_private_atomic(const std::filesystem::path& path, std::string_view data) {
+        return write_atomic_impl(
+            path,
+            [data](std::FILE* file) {
+                return std::fwrite(data.data(), 1, data.size(), file) == data.size();
+            },
+            true);
+    }
+
+    std::expected<void, Error> write_private_atomic_stream(const std::filesystem::path&           path,
+                                                           const std::function<bool(std::FILE*)>& writer) {
+        return write_atomic_impl(path, writer, true);
     }
 
 } // namespace FileIo

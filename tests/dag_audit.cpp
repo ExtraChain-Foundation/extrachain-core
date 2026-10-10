@@ -16,6 +16,7 @@
  */
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 
@@ -24,6 +25,9 @@
 #include "chain/transaction.h"
 #include "encryption/key_public.h"
 #include "core/extrachain_node.h"
+#include "consensus/consensus_service.h"
+#include "consensus/mining_transaction.h"
+#include "managers/data_mining_manager.h"
 #include "network/network_runtime.h"
 #include "utils/db_connector.h"
 #include "utils/exc_utils.h"
@@ -91,6 +95,7 @@ int main(int argc, char *argv[]) {
     // Live timers and peer sync can change the store between audit passes.
     node->network_runtime().stop();
     node->process();
+    node->data_mining_manager()->set_enabled(false);
     const auto login_hash = role == "seed"
                                 ? Utils::calculate_hash(LOGIN + PASSWORD)
                                 : Utils::calculate_hash(std::filesystem::current_path().string() + ":joiner");
@@ -111,6 +116,20 @@ int main(int argc, char *argv[]) {
     std::printf("=== DAG audit: sections [%s..%s] ===\n", first.to_string().c_str(), cur.to_string().c_str());
 
     long long total_fail = 0;
+    using namespace ExtraChain::Consensus;
+    const char *mining_test_flag = std::getenv("EXC_SHADOW_MINING_TEST");
+    if (mining_test_flag != nullptr && std::string_view(mining_test_flag) != "1")
+        return 64;
+    const auto    mining          = node->consensus()->finalized_mining_state();
+    const bool    mining_required = mining_test_flag != nullptr || node->consensus()->native_mining_enabled();
+    std::uint64_t mining_paid = 0, mining_settlements = 0;
+    if (mining_required && !mining.has_value()) {
+        std::printf("mining state unavailable: active=%d enabled=%d error=%d\n",
+                    node->consensus()->active(),
+                    node->consensus()->native_mining_enabled(),
+                    static_cast<int>(mining.error()));
+        ++total_fail;
+    }
 
     // 1. Section continuity + 2. tx integrity ---------------------------------
     long long sec_ok = 0, sec_missing = 0, tx_total = 0, tx_bad_hash = 0, tx_bad_sig = 0, tx_no_actor = 0;
@@ -131,6 +150,30 @@ int main(int argc, char *argv[]) {
                 tx_bad_hash++;
                 if (tx_bad_hash <= 5)
                     std::printf("  [tx] bad hash in section %s: %s\n", i.to_string().c_str(), tx.hash().c_str());
+                continue;
+            }
+            if (tx.type() == TransactionType::MiningSettlement) {
+                const auto record = decode_mining_settlement_transaction(tx);
+                if (!node->consensus()->verify_mining_transaction(tx) || !record.has_value()) {
+                    ++tx_bad_sig;
+                    continue;
+                }
+                if (mining.has_value() && i <= SectionId(mining.value().section)) {
+                    auto       epoch = record.value().witness.epoch;
+                    const auto settled =
+                        settle_mining_epoch(epoch, record.value().closure.finalized_proposal.header.dag_section);
+                    if (!settled.has_value()) {
+                        ++tx_bad_sig;
+                        continue;
+                    }
+                    ++mining_settlements;
+                    for (const auto &[provider, units] : epoch.rewards) {
+                        if (units > MaximumMiningEmissionUnits - mining_paid)
+                            ++tx_bad_sig;
+                        else
+                            mining_paid += units;
+                    }
+                }
                 continue;
             }
             if (tx.sender().is_zero())
@@ -161,6 +204,19 @@ int main(int argc, char *argv[]) {
                 tx_bad_sig,
                 tx_no_actor);
     total_fail += sec_missing + tx_bad_hash + tx_bad_sig + tx_no_actor;
+    if (mining.has_value()) {
+        const auto &state = mining.value();
+        std::printf("mining: section=%llu minted_units=%llu reserved_units=%llu settlements=%llu root=%s\n",
+                    static_cast<unsigned long long>(state.section),
+                    static_cast<unsigned long long>(state.minted_units),
+                    static_cast<unsigned long long>(state.reserved_units),
+                    static_cast<unsigned long long>(mining_settlements),
+                    mining_state_root(state).c_str());
+        if (mining_paid != state.minted_units || state.minted_units > MaximumMiningEmissionUnits
+            || state.reserved_units > MaximumMiningEmissionUnits || state.minted_units > state.reserved_units
+            || (mining_test_flag != nullptr && (mining_paid == 0 || mining_settlements == 0)))
+            ++total_fail;
+    }
 
     // 3. Control chain --------------------------------------------------------
     // Recompute the chain independently and compare to stored control at each

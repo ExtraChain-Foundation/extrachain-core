@@ -198,6 +198,14 @@ namespace ExtraChain::Consensus {
         return {};
     }
 
+    namespace {
+        std::uint64_t wall_clock_ms() {
+            return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                  std::chrono::system_clock::now().time_since_epoch())
+                                                  .count());
+        }
+    } // namespace
+
     std::expected<Proposal, ConsensusError> ConsensusEngine::make_proposal(SectionBatchManifest batch,
                                                                            StateCommitmentV2    state,
                                                                            std::uint64_t        round) {
@@ -243,6 +251,15 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::InvalidParent);
             }
         }
+        std::uint64_t parent_time = 0;
+        if (parent.phase != Phase::Genesis)
+            parent_time = proposals_.at(parent.header_hash).header.logical_time;
+        if (parent_time == std::numeric_limits<std::uint64_t>::max())
+            return std::unexpected(ConsensusError::InvalidParent);
+        // The engine knows the parent's time; the caller built the batch's state from the same block.
+        batch.parent_time = parent_time;
+        // A clock behind the parent's block time still yields a later time.
+        const auto                        block_time = std::max(wall_clock_ms(), parent_time + 1);
         const auto                        batch_root = hash_batch_manifest(batch);
         const auto                        commitment = hash_state_commitment(state);
         std::optional<TimeoutCertificate> timeout_certificate;
@@ -271,7 +288,7 @@ namespace ExtraChain::Consensus {
                     .batch_root              = batch_root,
                     .validator_set_hash      = validators_.hash(),
                     .state_commitment        = commitment,
-                    .logical_time            = height,
+                    .logical_time            = block_time,
                 },
             .state               = std::move(state),
             .batch               = std::move(batch),
@@ -319,7 +336,13 @@ namespace ExtraChain::Consensus {
         auto next_state                = safety_state_;
         next_state.last_timeout_height = height;
         next_state.last_timeout_round  = round;
-        const auto persisted           = store_->persist_timeout_vote(vote, next_state);
+        // A validator that timed out this round and then learned a newer certificate of the
+        // same height re-sends its timeout with that certificate. Refusing it as a conflict
+        // left validators on two certificates of one height, whose timeout votes never formed
+        // a quorum (Ubuntu stand: 5 votes for 535/0 and 2 for 535/1, stalled for good).
+        const auto persisted = store_->persist_timeout_vote(vote, next_state, [&](const std::string& stored_hash) {
+            return supersedes(vote.highest_certificate_hash, stored_hash);
+        });
         if (!persisted.has_value()) {
             return std::unexpected(persisted.error());
         }
@@ -367,6 +390,20 @@ namespace ExtraChain::Consensus {
         }
         if (!safe_to_vote(proposal)) {
             return std::unexpected(ConsensusError::UnsafeProposal);
+        }
+        // Block time only moves forward and stays near the voter's clock, so a leader can shift it
+        // by at most MaximumBlockClockDriftMs. It must be fresh when the proposal arrived, not when
+        // the vote is ready: under load validation alone can outlast the drift.
+        const auto parent_time = proposal.parent_certificate.phase == Phase::Genesis
+                                     ? 0
+                                     : proposals_.at(proposal.parent_certificate.header_hash).header.logical_time;
+        const auto now         = wall_clock_ms();
+        const auto arrival     = proposal_arrivals_.find(hash_header(proposal.header));
+        const auto arrived     = arrival == proposal_arrivals_.end() ? now : arrival->second;
+        if (proposal.header.logical_time <= parent_time || proposal.batch.parent_time != parent_time
+            || proposal.header.logical_time > now + MaximumBlockClockDriftMs
+            || proposal.header.logical_time + MaximumBlockClockDriftMs < arrived) {
+            return std::unexpected(ConsensusError::InvalidProposalTime);
         }
 
         Vote vote {
@@ -431,7 +468,16 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::NotReady);
             }
         }
-        proposals_.insert_or_assign(hash_header(proposal.header), proposal);
+        if (proposal.parent_certificate.phase != Phase::Genesis) {
+            const auto parent = proposals_.find(proposal.parent_certificate.header_hash);
+            if (parent != proposals_.end()
+                && (proposal.header.logical_time <= parent->second.header.logical_time
+                    || proposal.batch.parent_time != parent->second.header.logical_time))
+                return std::unexpected(ConsensusError::InvalidProposalTime);
+        }
+        const auto header_hash = hash_header(proposal.header);
+        proposal_arrivals_.try_emplace(header_hash, wall_clock_ms());
+        proposals_.insert_or_assign(header_hash, proposal);
         return {};
     }
 
@@ -566,8 +612,17 @@ namespace ExtraChain::Consensus {
         const auto        prior = observed_timeout_slots_.find(slot);
         if (prior != observed_timeout_slots_.end()
             && prior->second.highest_certificate_hash != vote.highest_certificate_hash) {
-            result.equivocation = std::pair { prior->second, vote };
-            return result;
+            // A timeout re-sent with a newer certificate of the same height replaces the
+            // earlier one; an older or unknown certificate is still two votes in one slot.
+            if (!supersedes(vote.highest_certificate_hash, prior->second.highest_certificate_hash)) {
+                result.equivocation = std::pair { prior->second, vote };
+                return result;
+            }
+            const auto group =
+                timeout_votes_.find(timeout_round(prior->second) + ':' + prior->second.highest_certificate_hash);
+            if (group != timeout_votes_.end()) {
+                group->second.erase(vote.validator_id);
+            }
         }
         observed_timeout_slots_.insert_or_assign(slot, vote);
 
@@ -664,8 +719,16 @@ namespace ExtraChain::Consensus {
         if (!next_state.highest_certificate.has_value()
             || newer(certificate, next_state.highest_certificate.value())) {
             next_state.highest_certificate = certificate;
-            next_state.current_round       = 0;
-            next_state.highest_timeout_certificate.reset();
+            // A newer certificate of the same height leaves the next height where it is. Going
+            // back to round 0 there stalled the stand at height 836: a validator that had timed
+            // out round 1 could neither time out round 0 again nor re-send round 1 with the newer
+            // certificate, so the round-1 timeout votes stayed split between two certificates.
+            const bool same_next_height = next_state.last_timeout_height == certificate.height + 1;
+            next_state.current_round    = same_next_height ? next_state.last_timeout_round : 0;
+            if (!same_next_height || !next_state.highest_timeout_certificate.has_value()
+                || next_state.highest_timeout_certificate.value().height != certificate.height + 1) {
+                next_state.highest_timeout_certificate.reset();
+            }
         }
         if (proposal != proposals_.end() && proposal->second.parent_certificate.phase != Phase::Genesis
             && (!next_state.locked_certificate.has_value()
@@ -1023,6 +1086,27 @@ namespace ExtraChain::Consensus {
         return stored.has_value() ? stored.value() : std::nullopt;
     }
 
+    bool ConsensusEngine::has_batch(std::string_view header_hash) const {
+        std::lock_guard lock(mutex_);
+        if (batches_.contains(std::string(header_hash))) {
+            return true;
+        }
+        // A stored row still has to decode, as in batch_for: a duplicate copy repairs a broken one.
+        const auto stored = store_->load_batch(header_hash);
+        return stored.has_value() && stored.value().has_value();
+    }
+
+    std::expected<void, ConsensusError> ConsensusEngine::prune_stored_batches(std::uint64_t below_height) {
+        std::lock_guard lock(mutex_);
+        return store_->archive_batches_below(below_height);
+    }
+
+    std::optional<SectionBatchManifest> ConsensusEngine::archived_manifest_for(std::string_view header_hash) const {
+        std::lock_guard lock(mutex_);
+        const auto      stored = store_->load_batch_manifest(header_hash);
+        return stored.has_value() ? stored.value() : std::nullopt;
+    }
+
     ConsensusMetricsSnapshot ConsensusEngine::metrics() const noexcept {
         return ConsensusMetricsSnapshot {
             .proposals_created = proposals_created_.load(std::memory_order_relaxed),
@@ -1158,6 +1242,13 @@ namespace ExtraChain::Consensus {
         return std::tie(left.height, left.round) > std::tie(right.height, right.round);
     }
 
+    bool ConsensusEngine::supersedes(const std::string& certificate_hash, const std::string& previous_hash) const {
+        const auto certificate = certificates_.find(certificate_hash);
+        const auto previous    = certificates_.find(previous_hash);
+        return certificate != certificates_.end() && previous != certificates_.end()
+               && newer(certificate->second, previous->second);
+    }
+
     std::optional<FinalizedCheckpoint> ConsensusEngine::finalization_for(
         const QuorumCertificate& certificate) const {
         const auto child = proposals_.find(certificate.header_hash);
@@ -1214,6 +1305,9 @@ namespace ExtraChain::Consensus {
         const auto minimum_height = finalized_height - 2;
         std::erase_if(proposals_, [minimum_height](const auto& item) {
             return item.second.header.height < minimum_height;
+        });
+        std::erase_if(proposal_arrivals_, [this](const auto& item) {
+            return !proposals_.contains(item.first);
         });
         std::erase_if(batches_, [minimum_height, this](const auto& item) {
             const auto proposal = proposals_.find(item.first);

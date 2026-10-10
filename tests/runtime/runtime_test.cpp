@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -294,6 +295,49 @@ int main() {
     draining_task->schedule_after(10ms);
     draining_runtime.stop();
     require(drained.load(std::memory_order_acquire), "runtime stop must drain accepted asynchronous work");
+
+    // The network cache cleanup was armed again by messages handled after its cancel.
+    Runtime          stopped_runtime({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
+    std::atomic_bool stopped_ran { false };
+    const auto       stopped_task = DeadlineTask::create(stopped_runtime.executor(), [&] {
+        stopped_ran.store(true, std::memory_order_release);
+    });
+    stopped_runtime.start();
+    stopped_task->stop();
+    stopped_task->schedule_after(std::chrono::minutes(2));
+    stopped_task->schedule_earlier(10ms);
+    std::this_thread::sleep_for(50ms);
+    require(!stopped_task->active() && !stopped_ran.load(std::memory_order_acquire),
+            "a stopped deadline task must ignore later schedules");
+    const auto stopped_started = std::chrono::steady_clock::now();
+    stopped_runtime.stop();
+    require(std::chrono::steady_clock::now() - stopped_started < std::chrono::seconds(2),
+            "a stopped deadline task must not hold its runtime");
+
+    // A shut-down observer stayed in run() because something still waited on its context.
+    Runtime          pending_runtime({ .io_threads = 2, .storage_threads = 1, .compute_threads = 1 });
+    std::atomic_bool abandoned_ran { false };
+    const auto       pending_task = DeadlineTask::create(pending_runtime.executor(), [&] {
+        abandoned_ran.store(true, std::memory_order_release);
+    });
+    pending_runtime.start();
+    pending_task->schedule_after(std::chrono::minutes(10));
+    std::this_thread::sleep_for(20ms);
+    const auto armed = DeadlineTask::armed_sites();
+    for (const auto& site : armed)
+        std::cout << "armed deadline task: " << site << std::endl;
+    require(std::ranges::any_of(armed,
+                                [](const auto& site) {
+                                    return site.find("runtime_test.cpp") != std::string::npos;
+                                }),
+            "an armed deadline task must name where it was created");
+    const auto pending_stop_started = std::chrono::steady_clock::now();
+    pending_runtime.stop();
+    const auto pending_stop_took = std::chrono::steady_clock::now() - pending_stop_started;
+    std::cout << "stop with a pending timer took "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(pending_stop_took).count() << " ms" << std::endl;
+    require(pending_stop_took < std::chrono::seconds(15) && !abandoned_ran.load(std::memory_order_acquire),
+            "runtime stop must not wait for work that never completes");
 
     Runtime          self_join_runtime({ .io_threads = 1, .storage_threads = 1, .compute_threads = 1 });
     std::atomic_bool self_join_rejected { false };

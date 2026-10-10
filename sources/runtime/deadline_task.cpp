@@ -11,6 +11,9 @@
 #include "runtime/deadline_task.h"
 
 #include <cstdint>
+#include <format>
+#include <mutex>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -20,11 +23,25 @@
 
 namespace ExtraChain::Core {
 
+    namespace {
+        // Never destroyed: a task that outlives static destruction still finds it.
+        struct LiveTasks {
+            std::mutex                    mutex;
+            std::set<const DeadlineTask*> tasks;
+        };
+
+        LiveTasks& live_tasks() {
+            static auto* tasks = new LiveTasks;
+            return *tasks;
+        }
+    } // namespace
+
     struct DeadlineTask::State final : std::enable_shared_from_this<DeadlineTask::State> {
-        State(boost::asio::any_io_executor executor, Handler handler_value)
+        State(boost::asio::any_io_executor executor, Handler handler_value, std::source_location site_value)
             : strand(boost::asio::make_strand(std::move(executor)))
             , timer(strand)
-            , handler(std::move(handler_value)) {
+            , handler(std::move(handler_value))
+            , site(site_value) {
         }
 
         void arm(Duration delay) {
@@ -51,20 +68,39 @@ namespace ExtraChain::Core {
         Handler                                           handler;
         std::atomic_bool                                  active { false };
         std::uint64_t                                     generation = 0;
+        bool                                              stopped    = false;
+        std::source_location                              site;
     };
 
-    std::shared_ptr<DeadlineTask> DeadlineTask::create(boost::asio::any_io_executor executor, Handler handler) {
+    std::shared_ptr<DeadlineTask> DeadlineTask::create(boost::asio::any_io_executor executor,
+                                                       Handler                      handler,
+                                                       std::source_location         site) {
         if (!handler) {
             throw std::invalid_argument("DeadlineTask handler is required");
         }
-        return std::shared_ptr<DeadlineTask>(new DeadlineTask(std::move(executor), std::move(handler)));
+        return std::shared_ptr<DeadlineTask>(new DeadlineTask(std::move(executor), std::move(handler), site));
     }
 
-    DeadlineTask::DeadlineTask(boost::asio::any_io_executor executor, Handler handler)
-        : state_(std::make_shared<State>(std::move(executor), std::move(handler))) {
+    std::vector<std::string> DeadlineTask::armed_sites() {
+        std::vector<std::string> result;
+        std::scoped_lock         lock(live_tasks().mutex);
+        for (const auto* task : live_tasks().tasks)
+            if (task->active())
+                result.push_back(std::format("{}:{}", task->state_->site.file_name(), task->state_->site.line()));
+        return result;
+    }
+
+    DeadlineTask::DeadlineTask(boost::asio::any_io_executor executor, Handler handler, std::source_location site)
+        : state_(std::make_shared<State>(std::move(executor), std::move(handler), site)) {
+        std::scoped_lock lock(live_tasks().mutex);
+        live_tasks().tasks.insert(this);
     }
 
     DeadlineTask::~DeadlineTask() {
+        {
+            std::scoped_lock lock(live_tasks().mutex);
+            live_tasks().tasks.erase(this);
+        }
         cancel();
     }
 
@@ -73,6 +109,8 @@ namespace ExtraChain::Core {
             throw std::invalid_argument("DeadlineTask delay cannot be negative");
         }
         boost::asio::dispatch(state_->strand, [state = state_, delay] {
+            if (state->stopped)
+                return;
             state->timer.cancel();
             state->arm(delay);
         });
@@ -83,6 +121,8 @@ namespace ExtraChain::Core {
             throw std::invalid_argument("DeadlineTask delay cannot be negative");
         }
         boost::asio::dispatch(state_->strand, [state = state_, delay] {
+            if (state->stopped)
+                return;
             const auto requested = std::chrono::steady_clock::now() + delay;
             if (state->active.load(std::memory_order_acquire) && state->timer.expiry() <= requested) {
                 return;
@@ -98,6 +138,18 @@ namespace ExtraChain::Core {
         }
         state_->active.store(false, std::memory_order_release);
         boost::asio::dispatch(state_->strand, [state = state_] {
+            ++state->generation;
+            state->timer.cancel();
+        });
+    }
+
+    void DeadlineTask::stop() {
+        if (!state_) {
+            return;
+        }
+        state_->active.store(false, std::memory_order_release);
+        boost::asio::dispatch(state_->strand, [state = state_] {
+            state->stopped = true;
             ++state->generation;
             state->timer.cancel();
         });

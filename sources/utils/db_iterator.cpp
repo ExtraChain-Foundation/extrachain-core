@@ -34,11 +34,13 @@ bool DbIterator::next() {
         return false;
 
     int rs = sqlite3_step(m_stmt);
-    if (rs == SQLITE_DONE) {
-        m_done = true;
-        return false;
-    }
-    return true;
+    if (rs == SQLITE_ROW)
+        return true;
+    m_done   = true;
+    m_failed = rs != SQLITE_DONE;
+    if (m_failed)
+        eWarning("[DbIterator] Read failed: {}", sqlite3_errstr(rs));
+    return false;
 }
 
 DbIterator::~DbIterator() {
@@ -48,7 +50,8 @@ DbIterator::~DbIterator() {
 }
 
 std::string DbIterator::getString(int column) {
-    return reinterpret_cast<const char *>(sqlite3_column_text(m_stmt, column));
+    const auto text = reinterpret_cast<const char *>(sqlite3_column_text(m_stmt, column));
+    return text == nullptr ? std::string { } : std::string(text, sqlite3_column_bytes(m_stmt, column));
 }
 
 int64_t DbIterator::getInt64(int column) {
@@ -60,9 +63,9 @@ double DbIterator::getDouble(int column) {
 }
 
 std::string DbIterator::getBlob(int column) {
-    int         size = sqlite3_column_bytes(m_stmt, column);
-    std::string str  = std::string(reinterpret_cast<const char *>(sqlite3_column_blob(m_stmt, column)), size);
-    return str;
+    const int size = sqlite3_column_bytes(m_stmt, column);
+    return size == 0 ? std::string { }
+                     : std::string(reinterpret_cast<const char*>(sqlite3_column_blob(m_stmt, column)), size);
 }
 
 int DbIterator::columnCount() {
@@ -77,36 +80,39 @@ DbColumnType DbIterator::columnType(int column) {
     return static_cast<DbColumnType>(sqlite3_column_type(m_stmt, column));
 }
 
+std::optional<std::string> DbIterator::read_value(sqlite3_stmt* statement, int column) {
+    switch (sqlite3_column_type(statement, column)) {
+    case SQLITE_NULL:
+        return std::nullopt;
+    case SQLITE_INTEGER:
+        return std::to_string(sqlite3_column_int64(statement, column));
+    case SQLITE_FLOAT:
+        return fmt::format("{}", sqlite3_column_double(statement, column));
+    case SQLITE_BLOB: {
+        const auto size = sqlite3_column_bytes(statement, column);
+        return size == 0
+                   ? std::string { }
+                   : std::string(reinterpret_cast<const char*>(sqlite3_column_blob(statement, column)), size);
+    }
+    default: {
+        const auto* text = sqlite3_column_text(statement, column);
+        return text == nullptr
+                   ? std::string { }
+                   : std::string(reinterpret_cast<const char*>(text), sqlite3_column_bytes(statement, column));
+    }
+    }
+}
+
 std::string DbIterator::getValue(int column) {
-    std::string value;
-
-    switch (columnType(column)) {
-    case DbColumnType::Integer:
-        value = std::to_string(sqlite3_column_int64(m_stmt, column));
-        break;
-    case DbColumnType::Float:
-        value = std::to_string(sqlite3_column_double(m_stmt, column));
-        break;
-    case DbColumnType::Text:
-        value = (reinterpret_cast<const char *>(sqlite3_column_text(m_stmt, column)));
-        break;
-    case DbColumnType::Blob: {
-        int size = sqlite3_column_bytes(m_stmt, column);
-        value    = std::string(reinterpret_cast<const char *>(sqlite3_column_blob(m_stmt, column)), size);
-        break;
-    }
-    case DbColumnType::Null:
-        eFatal("TODO: test");
-        break;
-    }
-
-    return value;
+    return read_value(m_stmt, column).value_or("");
 }
 
 std::unordered_map<std::string, std::string> DbIterator::dbRow() {
     std::unordered_map<std::string, std::string> row;
 
     for (int i = 0; i < columnCount(); i++) {
+        if (columnType(i) == DbColumnType::Null)
+            continue;
         std::string name  = columnName(i);
         std::string value = getValue(i);
 

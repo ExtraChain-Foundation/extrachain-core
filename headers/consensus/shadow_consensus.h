@@ -96,6 +96,7 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] const ConsensusEngine&                  engine() const noexcept;
         [[nodiscard]] ConsensusEngine&                        engine() noexcept;
         [[nodiscard]] const ShadowConfiguration&              configuration() const noexcept;
+        [[nodiscard]] const std::optional<MiningEmissionPolicy>& mining_policy() const noexcept;
         [[nodiscard]] const std::optional<EpochTransitionV1>& pending_epoch() const noexcept;
         [[nodiscard]] const std::optional<PendingRecoveryV1>& pending_recovery() const noexcept;
         [[nodiscard]] std::vector<EpochStartV1>               epoch_starts() const;
@@ -121,6 +122,7 @@ namespace ExtraChain::Consensus {
         std::optional<MultisigPolicy>      governance_policy_;
         std::optional<MultisigPolicy>      recovery_policy_;
         std::optional<TrustAnchorV1>       trust_anchor_;
+        std::optional<MiningEmissionPolicy> mining_policy_;
         std::vector<EpochStartV1>          epoch_history_;
         std::optional<EpochTransitionV1>   pending_epoch_;
         std::optional<EpochBootstrapV1>    active_bootstrap_;

@@ -15,7 +15,10 @@
 #include <algorithm>
 #include <cstdint>
 #include <mutex>
+#include <string_view>
+#include <vector>
 
+#include "utils/compression.h"
 #include "utils/exc_logs.h"
 
 namespace {
@@ -27,12 +30,54 @@ namespace {
         return static_cast<sqlite3_int64>(*value);
     }
 
+    // Hot sections stay here until a whole pack of them is complete, and mining proofs made
+    // them megabytes of base64 each (2.25 GB per node after an hour on the Ubuntu stand).
+    // Large payloads are kept as a zstd frame; section JSON never starts with the frame
+    // magic, and a payload that does is always stored framed, so the magic is unambiguous.
+    // Older builds cannot read framed rows: going back to one needs a resync of the tail.
+    constexpr std::string_view ZstdMagic { "\x28\xb5\x2f\xfd", 4 };
+    constexpr std::size_t      FramedPayloadThreshold = 4 * 1024;
+    constexpr std::size_t      FramedPayloadLimit     = 128 * 1024 * 1024;
+
+    bool is_framed(std::string_view stored) {
+        return stored.starts_with(ZstdMagic);
+    }
+
+    std::optional<std::string> encode_payload(const std::string &payload) {
+        const bool must_frame = is_framed(payload);
+        if (payload.size() > FramedPayloadLimit)
+            return must_frame ? std::nullopt : std::optional<std::string>(payload);
+        if (!must_frame && payload.size() < FramedPayloadThreshold)
+            return payload;
+        auto framed = Compression::compress(payload);
+        if (!framed.has_value())
+            return must_frame ? std::nullopt : std::optional<std::string>(payload);
+        if (!must_frame && framed.value().size() >= payload.size())
+            return payload;
+        return std::move(framed.value());
+    }
+
+    std::optional<std::string> decode_payload(const char *data, int size) {
+        if (!data || size <= 0)
+            return std::nullopt;
+        const std::string_view stored(data, static_cast<std::size_t>(size));
+        if (!is_framed(stored))
+            return std::string(stored);
+        auto payload = Compression::decompress(stored);
+        if (!payload.has_value()) {
+            eWarning("[HotSectionStore] cannot decompress a stored section");
+            return std::nullopt;
+        }
+        return std::move(payload.value());
+    }
+
 } // namespace
 
 struct HotSectionStore::Impl {
     sqlite3           *db               = nullptr;
     sqlite3_stmt      *put_stmt         = nullptr;
     sqlite3_stmt      *get_stmt         = nullptr;
+    sqlite3_stmt      *contains_stmt    = nullptr;
     sqlite3_stmt      *range_stmt       = nullptr;
     sqlite3_stmt      *bounds_stmt      = nullptr;
     sqlite3_stmt      *meta_put_stmt    = nullptr;
@@ -44,6 +89,7 @@ struct HotSectionStore::Impl {
     ~Impl() {
         sqlite3_finalize(put_stmt);
         sqlite3_finalize(get_stmt);
+        sqlite3_finalize(contains_stmt);
         sqlite3_finalize(range_stmt);
         sqlite3_finalize(bounds_stmt);
         sqlite3_finalize(meta_put_stmt);
@@ -89,6 +135,31 @@ struct HotSectionStore::Impl {
         return sqlite3_column_int64(meta_get_stmt, 0);
     }
 
+    bool migrate_sections_to_rowid() {
+        auto *statement = prepare("SELECT wr FROM pragma_table_list WHERE schema='main' AND name='sections'");
+        if (statement == nullptr)
+            return false;
+        const auto result        = sqlite3_step(statement);
+        const bool without_rowid = result == SQLITE_ROW && sqlite3_column_int(statement, 0) == 1;
+        const bool complete      = result == SQLITE_ROW && sqlite3_step(statement) == SQLITE_DONE;
+        sqlite3_finalize(statement);
+        if (!complete)
+            return false;
+        if (!without_rowid)
+            return true;
+        if (!exec("BEGIN IMMEDIATE"))
+            return false;
+        // Large payloads must not sit in the key index used by every section lookup.
+        if (!exec("CREATE TABLE sections_rowid(section INTEGER PRIMARY KEY,payload BLOB NOT NULL)")
+            || !exec("INSERT INTO sections_rowid SELECT section,payload FROM sections")
+            || !exec("DROP TABLE sections") || !exec("ALTER TABLE sections_rowid RENAME TO sections")
+            || !exec("COMMIT")) {
+            exec("ROLLBACK");
+            return false;
+        }
+        return true;
+    }
+
     bool open(const std::filesystem::path &path) {
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
@@ -110,16 +181,18 @@ struct HotSectionStore::Impl {
         if (!exec("PRAGMA journal_mode=WAL") || !exec("PRAGMA synchronous=NORMAL")
             || !exec("PRAGMA temp_store=MEMORY")
             || !exec("CREATE TABLE IF NOT EXISTS sections ("
-                     "section INTEGER PRIMARY KEY, payload BLOB NOT NULL) WITHOUT ROWID")
+                     "section INTEGER PRIMARY KEY, payload BLOB NOT NULL)")
             || !exec("CREATE TABLE IF NOT EXISTS chain_meta ("
-                     "key TEXT PRIMARY KEY, value INTEGER NOT NULL) WITHOUT ROWID")) {
+                     "key TEXT PRIMARY KEY, value INTEGER NOT NULL) WITHOUT ROWID")
+            || !migrate_sections_to_rowid()) {
             return false;
         }
 
         put_stmt = prepare(
             "INSERT INTO sections(section,payload) VALUES(?1,?2) "
             "ON CONFLICT(section) DO UPDATE SET payload=excluded.payload");
-        get_stmt   = prepare("SELECT payload FROM sections WHERE section=?1");
+        get_stmt      = prepare("SELECT payload FROM sections WHERE section=?1");
+        contains_stmt = prepare("SELECT 1 FROM sections WHERE section=?1");
         range_stmt = prepare(
             "SELECT section,payload FROM sections "
             "WHERE section>=?1 AND section<=?2 ORDER BY section");
@@ -130,8 +203,8 @@ struct HotSectionStore::Impl {
         meta_get_stmt    = prepare("SELECT value FROM chain_meta WHERE key=?1");
         erase_range_stmt = prepare("DELETE FROM sections WHERE section>=?1 AND section<=?2");
         erase_from_stmt  = prepare("DELETE FROM sections WHERE section>=?1");
-        return put_stmt && get_stmt && range_stmt && bounds_stmt && meta_put_stmt && meta_get_stmt
-               && erase_range_stmt && erase_from_stmt;
+        return put_stmt && get_stmt && contains_stmt && range_stmt && bounds_stmt && meta_put_stmt
+               && meta_get_stmt && erase_range_stmt && erase_from_stmt;
     }
 };
 
@@ -144,19 +217,27 @@ HotSectionStore::HotSectionStore(const std::filesystem::path &path)
 HotSectionStore::~HotSectionStore() = default;
 
 bool HotSectionStore::is_open() const {
-    return impl_->db && impl_->put_stmt && impl_->get_stmt && impl_->range_stmt && impl_->bounds_stmt
-           && impl_->meta_put_stmt && impl_->meta_get_stmt && impl_->erase_range_stmt && impl_->erase_from_stmt;
+    return impl_->db && impl_->put_stmt && impl_->get_stmt && impl_->contains_stmt && impl_->range_stmt
+           && impl_->bounds_stmt && impl_->meta_put_stmt && impl_->meta_get_stmt && impl_->erase_range_stmt
+           && impl_->erase_from_stmt;
 }
 
 bool HotSectionStore::put(const SectionId &section, const std::string &payload) {
     const auto id = section_to_i64(section);
     if (!is_open() || !id.has_value() || payload.empty())
         return false;
+    const auto stored_payload = encode_payload(payload);
+    if (!stored_payload.has_value())
+        return false;
     std::lock_guard lock(impl_->mutex);
     sqlite3_reset(impl_->put_stmt);
     sqlite3_clear_bindings(impl_->put_stmt);
     sqlite3_bind_int64(impl_->put_stmt, 1, *id);
-    sqlite3_bind_blob(impl_->put_stmt, 2, payload.data(), static_cast<int>(payload.size()), SQLITE_STATIC);
+    sqlite3_bind_blob(impl_->put_stmt,
+                      2,
+                      stored_payload->data(),
+                      static_cast<int>(stored_payload->size()),
+                      SQLITE_STATIC);
     const bool stored = sqlite3_step(impl_->put_stmt) == SQLITE_DONE;
     if (!stored)
         eWarning("[HotSectionStore] write failed: {}", sqlite3_errmsg(impl_->db));
@@ -173,19 +254,26 @@ bool HotSectionStore::commit_batch(const std::map<SectionId, std::string>       
                                    const std::optional<std::pair<SectionId, SectionId>> &committed_range) {
     if (!is_open() || sections.empty())
         return false;
+    // Compression runs outside the write transaction so readers are not held behind it.
+    std::vector<std::pair<sqlite3_int64, std::string>> stored;
+    stored.reserve(sections.size());
+    for (const auto &[section, payload] : sections) {
+        const auto id = section_to_i64(section);
+        if (!id.has_value() || payload.empty())
+            return false;
+        auto stored_payload = encode_payload(payload);
+        if (!stored_payload.has_value())
+            return false;
+        stored.emplace_back(*id, std::move(stored_payload.value()));
+    }
     std::lock_guard lock(impl_->mutex);
     if (!impl_->exec("BEGIN IMMEDIATE"))
         return false;
 
-    for (const auto &[section, payload] : sections) {
-        const auto id = section_to_i64(section);
-        if (!id.has_value() || payload.empty()) {
-            impl_->exec("ROLLBACK");
-            return false;
-        }
+    for (const auto &[id, payload] : stored) {
         sqlite3_reset(impl_->put_stmt);
         sqlite3_clear_bindings(impl_->put_stmt);
-        sqlite3_bind_int64(impl_->put_stmt, 1, *id);
+        sqlite3_bind_int64(impl_->put_stmt, 1, id);
         sqlite3_bind_blob(impl_->put_stmt, 2, payload.data(), static_cast<int>(payload.size()), SQLITE_STATIC);
         if (sqlite3_step(impl_->put_stmt) != SQLITE_DONE) {
             eWarning("[HotSectionStore] batch write failed: {}", sqlite3_errmsg(impl_->db));
@@ -234,23 +322,36 @@ std::optional<std::string> HotSectionStore::get(const SectionId &section) const 
     const auto id = section_to_i64(section);
     if (!is_open() || !id.has_value())
         return std::nullopt;
-    std::lock_guard lock(impl_->mutex);
-    sqlite3_reset(impl_->get_stmt);
-    sqlite3_clear_bindings(impl_->get_stmt);
-    sqlite3_bind_int64(impl_->get_stmt, 1, *id);
-    std::optional<std::string> payload;
-    if (sqlite3_step(impl_->get_stmt) == SQLITE_ROW) {
-        const auto *data = static_cast<const char *>(sqlite3_column_blob(impl_->get_stmt, 0));
-        const int   size = sqlite3_column_bytes(impl_->get_stmt, 0);
-        if (data && size > 0)
-            payload.emplace(data, static_cast<std::size_t>(size));
+    std::optional<std::string> stored;
+    {
+        std::lock_guard lock(impl_->mutex);
+        sqlite3_reset(impl_->get_stmt);
+        sqlite3_clear_bindings(impl_->get_stmt);
+        sqlite3_bind_int64(impl_->get_stmt, 1, *id);
+        if (sqlite3_step(impl_->get_stmt) == SQLITE_ROW) {
+            const auto *data = static_cast<const char *>(sqlite3_column_blob(impl_->get_stmt, 0));
+            const int   size = sqlite3_column_bytes(impl_->get_stmt, 0);
+            if (data && size > 0)
+                stored.emplace(data, static_cast<std::size_t>(size));
+        }
+        sqlite3_reset(impl_->get_stmt);
     }
-    sqlite3_reset(impl_->get_stmt);
-    return payload;
+    if (!stored.has_value())
+        return std::nullopt;
+    return decode_payload(stored->data(), static_cast<int>(stored->size()));
 }
 
 bool HotSectionStore::contains(const SectionId &section) const {
-    return get(section).has_value();
+    const auto id = section_to_i64(section);
+    if (!is_open() || !id.has_value())
+        return false;
+    std::lock_guard lock(impl_->mutex);
+    sqlite3_reset(impl_->contains_stmt);
+    sqlite3_clear_bindings(impl_->contains_stmt);
+    sqlite3_bind_int64(impl_->contains_stmt, 1, *id);
+    const bool found = sqlite3_step(impl_->contains_stmt) == SQLITE_ROW;
+    sqlite3_reset(impl_->contains_stmt);
+    return found;
 }
 
 std::map<SectionId, std::string> HotSectionStore::read_range(const SectionId &from, const SectionId &to) const {
@@ -269,10 +370,10 @@ std::map<SectionId, std::string> HotSectionStore::read_range(const SectionId &fr
         const auto  section = sqlite3_column_int64(impl_->range_stmt, 0);
         const auto *data    = static_cast<const char *>(sqlite3_column_blob(impl_->range_stmt, 1));
         const int   size    = sqlite3_column_bytes(impl_->range_stmt, 1);
-        if (section >= 0 && data && size > 0) {
-            result.emplace(SectionId(static_cast<long long>(section)),
-                           std::string(data, static_cast<std::size_t>(size)));
-        }
+        if (section < 0)
+            continue;
+        if (auto payload = decode_payload(data, size); payload.has_value())
+            result.emplace(SectionId(static_cast<long long>(section)), std::move(payload.value()));
     }
     sqlite3_reset(impl_->range_stmt);
     return result;

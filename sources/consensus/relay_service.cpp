@@ -13,6 +13,30 @@ namespace ExtraChain::Consensus {
         return authenticator_ ? authenticator_->authenticated_validator(identifier) : std::nullopt;
     }
 
+    namespace {
+        // Relay traffic dominates the node's bandwidth; name what the large envelopes carry.
+        void log_large_relay(std::string_view action, const RelayEnvelope& envelope, std::size_t peers) {
+            if (envelope.payload.size() < 64 * 1024)
+                return;
+            eTemp("[Shadow] {} relay {} {} bytes from {} hops {} to {} peers",
+                  action,
+                  envelope.type,
+                  envelope.payload.size(),
+                  envelope.origin.substr(0, 8),
+                  envelope.hops,
+                  peers);
+        }
+
+        // Intents are bulk: a storage proof is 180 KB, and the high lane they shared stalled
+        // round-0 proposals and pack sync behind them. Votes, proposals, certificates and
+        // batches keep the high lane.
+        std::optional<NetworkService::PriorityScope> relay_priority(const RelayEnvelope& envelope) {
+            if (envelope.type != MessageType::ConsensusIntent)
+                return std::nullopt;
+            return std::optional<NetworkService::PriorityScope>(std::in_place, SocketService::Priority::Normal);
+        }
+    } // namespace
+
     bool ConsensusService::send_relay(MessageType   type,
                                       MessageStatus status,
                                       std::string   payload,
@@ -73,7 +97,9 @@ namespace ExtraChain::Consensus {
                         authenticator_
                             && authenticator_->authenticated_validator(envelope.value().destination).has_value());
         if (!delivery.peers.empty()) {
-            Responder responder(node_.network());
+            log_large_relay("Send", envelope.value(), delivery.peers.size());
+            const auto lane = relay_priority(envelope.value());
+            Responder  responder(node_.network());
             for (const auto& peer : delivery.peers) {
                 responder.add_identifier(peer);
             }
@@ -115,7 +141,9 @@ namespace ExtraChain::Consensus {
                         authenticator_
                             && authenticator_->authenticated_validator(envelope.destination).has_value());
         if (!delivery.peers.empty()) {
-            auto forwarded = envelope;
+            log_large_relay("Forward", envelope, delivery.peers.size());
+            const auto lane      = relay_priority(envelope);
+            auto       forwarded = envelope;
             ++forwarded.hops;
             Responder responder(node_.network());
             for (const auto& peer : delivery.peers) {

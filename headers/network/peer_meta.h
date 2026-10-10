@@ -28,7 +28,13 @@ inline constexpr std::string_view DAG_TX_BATCH_CAPABILITY     = "dag_tx_batch_v1
 inline constexpr std::string_view TOKEN_MIGRATION_CAPABILITY  = "contract_token_migration_v1";
 inline constexpr std::string_view DAG_REPAIR_CAPABILITY       = "dag_repair_v1";
 inline constexpr std::string_view SHADOW_RELAY_CAPABILITY     = "shadow_relay_v1";
-inline constexpr std::string_view SHADOW_CONSENSUS_CAPABILITY = "shadow_consensus_v4";
+// v5 also shipped a nine-field mining epoch; v6 kept ten fields and counted mining epochs in heights.
+// v7 batches carry their parent block time and mining epochs follow it.
+inline constexpr std::string_view SHADOW_CONSENSUS_CAPABILITY = "shadow_consensus_v7";
+// Old v5 and v6 peers require these advertisements before they can request update files.
+// They never grant Shadow access in a current node.
+inline constexpr std::string_view SHADOW_LEGACY_DATA_CAPABILITY   = "shadow_consensus_v5";
+inline constexpr std::string_view SHADOW_PREVIOUS_DATA_CAPABILITY = "shadow_consensus_v6";
 
 #include "core/types.h"
 
@@ -47,6 +53,8 @@ struct PeerMeta {
     std::optional<int>         dfs_version;  // placeholder, filled once DFS adds the field
     std::set<std::string>      capabilities;
     DfsMode                    dfs_mode = DfsMode::Full;
+    bool                       authenticated   = false;
+    bool                       update_required = false;
     // socket_mode lives on SocketService itself — not duplicated here to avoid
     // dragging the Qt-heavy isocket_service.h into every handler that reads PeerMeta.
 
@@ -82,6 +90,6 @@ struct PeerMeta {
     }
 
     bool supports_shadow_consensus() const {
-        return capabilities.contains(std::string(SHADOW_CONSENSUS_CAPABILITY));
+        return !update_required && capabilities.contains(std::string(SHADOW_CONSENSUS_CAPABILITY));
     }
 };

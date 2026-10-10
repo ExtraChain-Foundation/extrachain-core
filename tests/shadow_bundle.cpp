@@ -15,7 +15,9 @@
 #include <boost/json.hpp>
 
 #include <charconv>
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <set>
@@ -26,6 +28,7 @@
 #include "chain/dag.h"
 #include "chain/actor_index.h"
 #include "consensus/consensus_protocol.h"
+#include "consensus/mining_epoch.h"
 #include "consensus/shadow_consensus.h"
 #include "consensus/validator_set.h"
 #include "core/extrachain_node.h"
@@ -286,6 +289,26 @@ int main(int argc, char* argv[]) {
         .activation_dag_section = activation_section,
         .validator_set_hash     = hash_validator_set(validators.value()),
     };
+    const char* mining_test_flag = std::getenv("EXC_SHADOW_MINING_TEST");
+    if (mining_test_flag != nullptr && std::string_view(mining_test_flag) != "1") {
+        std::fprintf(stderr, "[shadow-bundle] EXC_SHADOW_MINING_TEST must be 1 when set\n");
+        return 64;
+    }
+    const bool mining_test = mining_test_flag != nullptr;
+    const char* long_test_flag = std::getenv("EXC_SHADOW_MINING_LONG_TEST");
+    if (long_test_flag != nullptr && (!mining_test || std::string_view(long_test_flag) != "1"))
+        return 64;
+    if (mining_test) {
+        // Explicit fixtures: 32 ExC, or 1,000 ExC across the long test. Neither is a production schedule.
+        const MiningEmissionSegment segment = long_test_flag == nullptr
+                                                  ? MiningEmissionSegment { 32, NativeCoinUnits }
+                                                  : MiningEmissionSegment { 100'000, NativeCoinUnits / 100 };
+        // Policy epochs are periods of block time; the schedule starts with the current one.
+        const auto now_ms = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                           std::chrono::system_clock::now().time_since_epoch())
+                                                           .count());
+        activation.mining_policy = MiningEmissionPolicy { now_ms / DefaultMiningEpochMs, { segment } };
+    }
     const auto activation_authorization =
         authorize_action(governance.value(),
                          1,
@@ -303,7 +326,7 @@ int main(int argc, char* argv[]) {
         .activation_dag_section = activation.activation_dag_section,
         .proposal_timeout_ms    = 2'000,
         .maximum_timeout_ms     = 16'000,
-        .maximum_batch_bytes    = 4ULL * 1024ULL * 1024ULL,
+        .maximum_batch_bytes    = (mining_test ? 16ULL : 4ULL) * 1024ULL * 1024ULL,
     };
 
     bool written = true;
