@@ -24,7 +24,7 @@ int main() {
         for (std::uint64_t index = 0; index < count; ++index)
             values.push_back(chunk_value(piece(index), index));
         for (std::uint64_t index = 0; index < count; ++index) {
-            const auto path = count == 1 ? std::vector<ChainingValue> { } : chunk_path(values, index);
+            const auto path = count == 1 ? std::vector<ChainingValue> {} : chunk_path(values, index);
             TEST_REQUIRE(verify_chunk(piece(index), index, bytes, path, root));
             // The tree commits to bytes, not to the length: an inner chunk cannot tell the size, which a
             // verifier takes from the signed row. The last chunk's length must match it.
@@ -45,7 +45,29 @@ int main() {
                 TEST_REQUIRE(!verify_chunk(changed, index, bytes, path, root));
             }
         }
-        TEST_REQUIRE(!verify_chunk(piece(0), count, bytes, { }, root));
+        TEST_REQUIRE(!verify_chunk(piece(0), count, bytes, {}, root));
         TEST_REQUIRE(chunk_path(values, count).empty());
+
+        // An index of full blocks gives the same paths, and a missing block fails instead of guessing.
+        const auto  levels = full_levels(values);
+        std::size_t reads  = 0;
+        const auto  read   = [&](std::uint32_t level, std::uint64_t block) -> std::optional<ChainingValue> {
+            ++reads;
+            if (level >= levels.size() || block >= levels[level].size())
+                return std::nullopt;
+            return levels[level][block];
+        };
+        for (std::uint64_t index = 0; index < count; ++index) {
+            reads             = 0;
+            const auto direct = chunk_path(count, index, read);
+            TEST_REQUIRE(direct.has_value() && direct.value() == chunk_path(values, index));
+            // At most one full block per level on each side of the path.
+            TEST_REQUIRE(reads <= 2 * levels.size() * levels.size());
+        }
+        TEST_REQUIRE(!chunk_path(count, count, read).has_value());
+        if (count > 1)
+            TEST_REQUIRE(!chunk_path(count, 0, [](std::uint32_t, std::uint64_t) {
+                              return std::optional<ChainingValue> {};
+                          }).has_value());
     }
 }
