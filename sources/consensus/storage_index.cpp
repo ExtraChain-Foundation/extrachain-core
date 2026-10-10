@@ -4,7 +4,8 @@
 
 namespace ExtraChain::Consensus {
     namespace {
-        constexpr std::string_view IndexMagic = "EXC_STORAGE_INDEX_V1\n";
+        // V2 keeps BLAKE3 chaining values; a V1 index of the older Merkle tree is rebuilt.
+        constexpr std::string_view IndexMagic = "EXC_STORAGE_INDEX_V2\n";
         constexpr std::uint64_t    HashBytes  = 64;
 
         std::string index_header(std::uint64_t bytes) {

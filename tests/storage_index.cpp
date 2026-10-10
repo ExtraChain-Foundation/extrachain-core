@@ -72,11 +72,13 @@ int main() {
                      .has_value());
         }
         auto       damaged     = original;
-        const auto header_size = std::string_view("EXC_STORAGE_INDEX_V1\n").size() + 16;
+        const auto header_size = std::string_view("EXC_STORAGE_INDEX_V2\n").size() + 16;
         std::fill(damaged.begin() + header_size, damaged.end() - 64, 'a');
         TEST_REQUIRE(FileIo::write_private_atomic(path, damaged).has_value());
-        TEST_REQUIRE(!make_storage_proof_from_index(path, network, provider, dataset.value(), challenge, reader)
-                          .has_value());
+        // A single chunk is its own root and needs no node from the index.
+        TEST_REQUIRE_EQ(
+            make_storage_proof_from_index(path, network, provider, dataset.value(), challenge, reader).has_value(),
+            size <= StorageChunkBytes);
     }
     TEST_REQUIRE(!write_storage_index(directory / "invalid", 0, { }).has_value());
     TEST_REQUIRE(!write_storage_index(directory / "invalid", UINT64_MAX, { }).has_value());
