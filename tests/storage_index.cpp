@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <limits>
+#include <vector>
 
 using namespace ExtraChain::Consensus;
 
@@ -82,5 +83,39 @@ int main() {
     }
     TEST_REQUIRE(!write_storage_index(directory / "invalid", 0, { }).has_value());
     TEST_REQUIRE(!write_storage_index(directory / "invalid", UINT64_MAX, { }).has_value());
+
+    // One proof for several datasets, each read from its own index.
+    {
+        const std::vector<std::uint64_t> sizes { 3000ULL, 70000ULL, 1ULL };
+        const auto                       content = [&](std::size_t   dataset,
+                                 std::uint64_t chunk) -> std::expected<std::string, ConsensusError> {
+            return std::string(std::min<std::uint64_t>(StorageChunkBytes,
+                                                       sizes[dataset] - chunk * StorageChunkBytes),
+                               static_cast<char>((chunk + 3 * dataset) % 251));
+        };
+        std::vector<std::filesystem::path> paths;
+        std::vector<StorageDataset>        datasets;
+        for (std::size_t dataset = 0; dataset < sizes.size(); ++dataset) {
+            paths.push_back(directory / ("provider-" + std::to_string(dataset)));
+            datasets.push_back(write_storage_index(paths.back(), sizes[dataset], [&](std::uint64_t chunk) {
+                                   return content(dataset, chunk);
+                               }).value());
+        }
+        const auto proof =
+            make_provider_proof_from_indexes(paths, network, provider, datasets, challenge, content);
+        TEST_REQUIRE(proof.has_value());
+        TEST_REQUIRE(verify_provider_storage_proof(network, provider, datasets, challenge, proof.value()));
+        // The large dataset always holds samples, so its index is needed.
+        TEST_REQUIRE(std::filesystem::remove(paths[1]));
+        TEST_REQUIRE(
+            !make_provider_proof_from_indexes(paths, network, provider, datasets, challenge, content).has_value());
+        TEST_REQUIRE(!make_provider_proof_from_indexes(std::span(paths).first(2),
+                                                       network,
+                                                       provider,
+                                                       datasets,
+                                                       challenge,
+                                                       content)
+                          .has_value());
+    }
     std::filesystem::remove_all(directory);
 }

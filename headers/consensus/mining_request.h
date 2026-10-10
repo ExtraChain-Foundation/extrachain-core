@@ -5,12 +5,12 @@
 #include "consensus/mining_state.h"
 
 namespace ExtraChain::Consensus {
+    // One proof per provider and epoch, for every dataset it holds in that epoch.
     struct MiningProofSubmission {
         std::uint64_t epoch = 0;
-        std::string   dataset_id;
         StorageProof  proof;
 
-        MSGPACK_DEFINE(epoch, dataset_id, proof)
+        MSGPACK_DEFINE(epoch, proof)
     };
 
     using MiningRequest = std::variant<StorageDataset, std::string, MiningProofSubmission>;

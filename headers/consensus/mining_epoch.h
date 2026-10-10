@@ -106,9 +106,11 @@ namespace ExtraChain::Consensus {
                                                                  const StorageChallenge& challenge,
                                                                  std::uint64_t           first_section,
                                                                  std::uint64_t           closes_ms);
+    // The datasets a provider holds in an epoch, in the epoch's order: one proof covers all of them.
+    std::vector<StorageDataset>         mining_provider_datasets(const MiningEpochState& state,
+                                                                 const ActorId&          provider);
     std::expected<void, ConsensusError> accept_mining_proof(MiningEpochState&   state,
                                                             const ActorId&      provider,
-                                                            const std::string&  dataset_id,
                                                             std::uint64_t       section,
                                                             const StorageProof& proof);
     std::expected<void, ConsensusError> settle_mining_epoch(MiningEpochState& state,

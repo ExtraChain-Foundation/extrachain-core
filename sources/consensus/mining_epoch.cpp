@@ -121,26 +121,35 @@ namespace ExtraChain::Consensus {
         return settle_mining_epoch(state, checkpoint.finalized_proposal.header.dag_section);
     }
 
+    std::vector<StorageDataset> mining_provider_datasets(const MiningEpochState& state, const ActorId& provider) {
+        std::vector<StorageDataset> result;
+        const auto                  actor = provider.to_string();
+        for (const auto& [identity, dataset] : state.datasets)
+            if (dataset.providers.contains(actor))
+                result.push_back(dataset.dataset);
+        return result;
+    }
+
     std::expected<void, ConsensusError> accept_mining_proof(MiningEpochState&   state,
                                                             const ActorId&      provider,
-                                                            const std::string&  dataset_id,
                                                             std::uint64_t       section,
                                                             const StorageProof& proof) {
         if (!mining_window_accepts(state, section))
             return std::unexpected(ConsensusError::InvalidHeight);
-        auto       dataset = state.datasets.find(dataset_id);
-        const auto actor   = provider.to_string();
-        if (dataset == state.datasets.end() || !dataset->second.providers.contains(actor))
+        // One proof answers for every dataset the provider holds in the epoch, so it is accepted for all
+        // of them at once or for none.
+        const auto actor = provider.to_string();
+        const auto held  = mining_provider_datasets(state, provider);
+        if (held.empty())
             return std::unexpected(ConsensusError::InvalidIntent);
-        if (dataset->second.accepted.contains(actor))
-            return std::unexpected(ConsensusError::Replay);
-        if (!verify_storage_proof(state.network,
-                                  provider,
-                                  dataset->second.dataset,
-                                  state.challenge.value(),
-                                  proof))
+        for (const auto& [identity, dataset] : state.datasets)
+            if (dataset.providers.contains(actor) && dataset.accepted.contains(actor))
+                return std::unexpected(ConsensusError::Replay);
+        if (!verify_provider_storage_proof(state.network, provider, held, state.challenge.value(), proof))
             return std::unexpected(ConsensusError::InvalidProof);
-        dataset->second.accepted.insert(actor);
+        for (auto& [identity, dataset] : state.datasets)
+            if (dataset.providers.contains(actor))
+                dataset.accepted.insert(actor);
         return { };
     }
 

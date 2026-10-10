@@ -95,6 +95,13 @@ namespace ExtraChain::Consensus {
         const StorageChallenge&         challenge,
         const StorageChunkSource&       read_chunk,
         const StorageNodeSource&        read_node);
+    // The same proof without an index: every chunk of a sampled dataset is read to rebuild its tree.
+    std::expected<StorageProof, ConsensusError> make_provider_storage_proof(
+        const ActorId&                  network,
+        const ActorId&                  provider,
+        std::span<const StorageDataset> datasets,
+        const StorageChallenge&         challenge,
+        const StorageChunkSource&       read_chunk);
     bool verify_provider_storage_proof(const ActorId&                  network,
                                        const ActorId&                  provider,
                                        std::span<const StorageDataset> datasets,

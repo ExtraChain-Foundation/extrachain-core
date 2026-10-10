@@ -72,10 +72,24 @@ int main() {
 
     auto             state = frozen.value();
     StorageChallenge challenge { .epoch = 1, .checkpoint = std::string(64, 'a') };
-    const auto       alice_small = make_storage_proof(network, alice, small, challenge, small_reader).value();
-    const auto       bob_small   = make_storage_proof(network, bob, small, challenge, small_reader).value();
-    const auto       alice_large = make_storage_proof(network, alice, large, challenge, large_reader).value();
-    TEST_REQUIRE(!accept_mining_proof(state, alice, small_id, 100, alice_small).has_value());
+    // One proof per provider covers every dataset it holds in the epoch: both, for alice and bob.
+    const auto prove = [&](const ActorId& provider) {
+        const auto datasets = mining_provider_datasets(state, provider);
+        return make_provider_storage_proof(network,
+                                           provider,
+                                           datasets,
+                                           challenge,
+                                           [&](std::size_t index, std::uint64_t chunk) {
+                                               return datasets[index].root == small.root ? small_reader(chunk)
+                                                                                         : large_reader(chunk);
+                                           })
+            .value();
+    };
+    TEST_REQUIRE_EQ(mining_provider_datasets(state, alice).size(), std::size_t(2));
+    TEST_REQUIRE(mining_provider_datasets(state, outsider).empty());
+    const auto alice_proof = prove(alice);
+    const auto bob_proof   = prove(bob);
+    TEST_REQUIRE(!accept_mining_proof(state, alice, 100, alice_proof).has_value());
     TEST_REQUIRE(!settle_mining_epoch(state, 1000).has_value());
     TEST_REQUIRE(state.rewards.empty());
     // No window before the next epoch has named its challenge height.
@@ -97,21 +111,22 @@ int main() {
     const auto open_root = mining_epoch_root(state);
     TEST_REQUIRE(open_root != challenged_root);
     TEST_REQUIRE(!open_mining_proof_window(state, challenge, 101, 1000).has_value());
-    TEST_REQUIRE(!accept_mining_proof(state, alice, small_id, 100, alice_small).has_value());
-    TEST_REQUIRE(!accept_mining_proof(state, outsider, small_id, 120, alice_small).has_value());
-    TEST_REQUIRE(!accept_mining_proof(state, alice, "missing", 120, alice_small).has_value());
-    auto damaged                  = alice_small;
+    TEST_REQUIRE(!accept_mining_proof(state, alice, 100, alice_proof).has_value());
+    TEST_REQUIRE(!accept_mining_proof(state, outsider, 120, alice_proof).has_value());
+    // These datasets have two chunks in all, so every chunk is sampled and alice's proof would pass for bob
+    // too: a proof binds to its provider only once there are more chunks than samples (storage-proof).
+    auto damaged                  = alice_proof;
     damaged.samples.front().bytes = "b";
-    TEST_REQUIRE(!accept_mining_proof(state, alice, small_id, 101, damaged).has_value());
+    TEST_REQUIRE(!accept_mining_proof(state, alice, 101, damaged).has_value());
     TEST_REQUIRE_EQ(mining_epoch_root(state), open_root);
-    TEST_REQUIRE(accept_mining_proof(state, alice, small_id, 101, alice_small).has_value());
-    TEST_REQUIRE(!accept_mining_proof(state, alice, small_id, 120, alice_small).has_value());
+    TEST_REQUIRE(accept_mining_proof(state, alice, 101, alice_proof).has_value());
+    const auto replay = accept_mining_proof(state, alice, 120, alice_proof);
+    TEST_REQUIRE(!replay.has_value() && replay.error() == ConsensusError::Replay);
     // An open window has no last section yet and cannot settle; block time then closes it.
     TEST_REQUIRE(!settle_mining_epoch(state, 1000).has_value());
     state.proof_last_section = 140;
-    TEST_REQUIRE(!accept_mining_proof(state, bob, small_id, 141, bob_small).has_value());
-    TEST_REQUIRE(accept_mining_proof(state, bob, small_id, 140, bob_small).has_value());
-    TEST_REQUIRE(accept_mining_proof(state, alice, large_id, 140, alice_large).has_value());
+    TEST_REQUIRE(!accept_mining_proof(state, bob, 141, bob_proof).has_value());
+    TEST_REQUIRE(accept_mining_proof(state, bob, 140, bob_proof).has_value());
     auto restored = MessagePack::deserialize<MiningEpochState>(MessagePack::serialize(state));
     TEST_REQUIRE(restored.has_value());
     TEST_REQUIRE_EQ(mining_epoch_root(restored.value()), mining_epoch_root(state));
@@ -119,13 +134,14 @@ int main() {
     TEST_REQUIRE(settle_mining_epoch(state, 140).has_value());
     TEST_REQUIRE(settle_mining_epoch(restored.value(), 140).has_value());
     TEST_REQUIRE_EQ(mining_epoch_root(restored.value()), mining_epoch_root(state));
-    TEST_REQUIRE_EQ(state.rewards.at(alice.to_string()), std::uint64_t(8));
-    TEST_REQUIRE_EQ(state.rewards.at(bob.to_string()), std::uint64_t(1));
+    // Both proved both datasets: 2 units of the small one and 7 of the large one split in halves.
+    TEST_REQUIRE_EQ(state.rewards.at(alice.to_string()), std::uint64_t(4));
+    TEST_REQUIRE_EQ(state.rewards.at(bob.to_string()), std::uint64_t(4));
     const auto settled_root = mining_epoch_root(state);
     const auto repeated     = settle_mining_epoch(state, 160);
     TEST_REQUIRE(!repeated.has_value() && repeated.error() == ConsensusError::Replay);
     TEST_REQUIRE_EQ(mining_epoch_root(state), settled_root);
-    TEST_REQUIRE(!accept_mining_proof(state, bob, large_id, 140, alice_large).has_value());
+    TEST_REQUIRE(!accept_mining_proof(state, bob, 140, bob_proof).has_value());
     TEST_REQUIRE(!state.rewards.contains(outsider.to_string()));
     const auto settled_copy = MessagePack::deserialize<MiningEpochState>(MessagePack::serialize(state));
     TEST_REQUIRE(settled_copy.has_value());
@@ -134,11 +150,11 @@ int main() {
     auto unused              = frozen.value();
     unused.challenge_section = 60;
     TEST_REQUIRE(open_mining_proof_window(unused, challenge, 101, 1000).has_value());
-    TEST_REQUIRE(accept_mining_proof(unused, alice, small_id, 101, alice_small).has_value());
+    TEST_REQUIRE(accept_mining_proof(unused, alice, 101, alice_proof).has_value());
     unused.proof_last_section = 140;
     TEST_REQUIRE(settle_mining_epoch(unused, 140).has_value());
     TEST_REQUIRE_EQ(unused.rewards.size(), std::size_t(1));
-    TEST_REQUIRE_EQ(unused.rewards.at(alice.to_string()), std::uint64_t(2));
+    TEST_REQUIRE_EQ(unused.rewards.at(alice.to_string()), std::uint64_t(9));
     auto empty              = freeze_mining_epoch(network, 1, 10, { }, 21).value();
     empty.challenge_section = 60;
     TEST_REQUIRE(open_mining_proof_window(empty, challenge, 101, 1000).has_value());

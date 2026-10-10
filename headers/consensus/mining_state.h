@@ -57,7 +57,6 @@ namespace ExtraChain::Consensus {
     std::expected<void, ConsensusError>        submit_mining_proof(MiningState&        state,
                                                                    std::uint64_t       epoch,
                                                                    const ActorId&      provider,
-                                                                   const std::string&  dataset_id,
                                                                    const StorageProof& proof);
 
     // The caller records returned native payouts with this transition. Epochs change on the first section of

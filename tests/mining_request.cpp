@@ -66,11 +66,8 @@ int main() {
     state.epochs.at(0).challenge_section = 40;
     const StorageChallenge challenge { 0, std::string(64, 'b') };
     TEST_REQUIRE(open_mining_proof_window(state.epochs.at(0), challenge, 81, 1000).has_value());
-    MiningProofSubmission submission {
-        0,
-        identity,
-        make_storage_proof(network, provider.id(), dataset, challenge, reader).value()
-    };
+    MiningProofSubmission submission { .epoch = 0 };
+    submission.proof = make_storage_proof(network, provider.id(), dataset, challenge, reader).value();
     const auto proof = request(IntentOperation::StorageProof, submission, 2);
     TEST_REQUIRE(!apply_mining_request(state, proof).has_value());
     state.section                       = 81;

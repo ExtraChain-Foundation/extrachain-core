@@ -47,8 +47,7 @@ namespace ExtraChain::Consensus {
             return MiningRequest(identity.value());
         }
         const auto submission = decode<MiningProofSubmission>(bytes.value());
-        if (!submission.has_value() || !dataset_identity(submission.value().dataset_id)
-            || submission.value().epoch > MaximumMiningEpoch
+        if (!submission.has_value() || submission.value().epoch > MaximumMiningEpoch
             || submission.value().proof.samples.empty()
             || submission.value().proof.samples.size() > StorageChallengeSamples)
             return std::unexpected(ConsensusError::InvalidIntent);
@@ -70,10 +69,6 @@ namespace ExtraChain::Consensus {
         if (const auto* identity = std::get_if<std::string>(&request.value()))
             return unregister_storage_provider(state, envelope.intent.sender, *identity);
         const auto& submission = std::get<MiningProofSubmission>(request.value());
-        return submit_mining_proof(state,
-                                   submission.epoch,
-                                   envelope.intent.sender,
-                                   submission.dataset_id,
-                                   submission.proof);
+        return submit_mining_proof(state, submission.epoch, envelope.intent.sender, submission.proof);
     }
 } // namespace ExtraChain::Consensus

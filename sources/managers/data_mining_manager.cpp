@@ -21,7 +21,6 @@
 
 #include <fstream>
 #include <mutex>
-#include <fmt/ranges.h>
 
 #include "consensus/consensus_service.h"
 #include "consensus/storage_index.h"
@@ -106,6 +105,8 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
     std::chrono::steady_clock::time_point                        progress_attempt { };
     std::map<std::string, LocalJob>                              jobs;
     std::string                                                  last_submitted_job;
+    // The proof request sent for each open epoch; only advance() touches it.
+    std::map<std::uint64_t, std::string>                         proofs_pending;
     std::map<std::string, std::chrono::steady_clock::time_point> retry_after;
     std::vector<boost::signals2::scoped_connection>              connections;
     bool                                                         enabled   = false;
@@ -230,37 +231,27 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
                 std::filesystem::create_directories(index_path(selected).parent_path(), error);
                 if (error)
                     return std::unexpected(ConsensusError::StorageFailure);
-                auto          read = file_reader(path.value().native(), selected.bytes);
-                blake3_hasher hasher;
-                blake3_hasher_init(&hasher);
+                auto          read       = file_reader(path.value().native(), selected.bytes);
                 std::uint64_t next_chunk = 0;
-                const auto chunks = selected.bytes / StorageChunkBytes + (selected.bytes % StorageChunkBytes != 0);
-                return write_storage_index(index_path(selected),
-                                           selected.bytes,
-                                           [&](std::uint64_t index) -> std::expected<std::string, ConsensusError> {
-                                               {
-                                                   std::lock_guard lock(self->mutex);
-                                                   if (self->stopped || !self->enabled)
-                                                       return std::unexpected(ConsensusError::NotReady);
-                                               }
-                                               if (index != next_chunk++)
-                                                   return std::unexpected(ConsensusError::InvalidProof);
-                                               const auto chunk = read(index);
-                                               if (!chunk.has_value())
-                                                   return std::unexpected(chunk.error());
-                                               blake3_hasher_update(&hasher,
-                                                                    chunk.value().data(),
-                                                                    chunk.value().size());
-                                               if (next_chunk == chunks) {
-                                                   std::array<std::uint8_t, BLAKE3_OUT_LEN> digest;
-                                                   blake3_hasher_finalize(&hasher, digest.data(), digest.size());
-                                                   if (fmt::format("{:02x}", fmt::join(digest, ""))
-                                                           != selected.hash
-                                                       || path.value().file_size().value_or(0) != selected.bytes)
-                                                       return std::unexpected(ConsensusError::InvalidRoot);
-                                               }
-                                               return chunk;
-                                           });
+                const auto    dataset    = write_storage_index(
+                    index_path(selected),
+                    selected.bytes,
+                    [&](std::uint64_t index) -> std::expected<std::string, ConsensusError> {
+                        {
+                            std::lock_guard lock(self->mutex);
+                            if (self->stopped || !self->enabled)
+                                return std::unexpected(ConsensusError::NotReady);
+                        }
+                        if (index != next_chunk++)
+                            return std::unexpected(ConsensusError::InvalidProof);
+                        return read(index);
+                    });
+                // The dataset root is the file's BLAKE3 hash, so it must equal the hash the row signs.
+                if (dataset.has_value()
+                    && (dataset.value().root != selected.hash
+                        || path.value().file_size().value_or(0) != selected.bytes))
+                    return std::unexpected(ConsensusError::InvalidRoot);
+                return dataset;
             }();
             {
                 std::lock_guard lock(self->mutex);
@@ -500,51 +491,94 @@ struct DataMiningManager::Work : std::enable_shared_from_this<Work> {
                     submit(key, job, IntentOperation::StorageUnregister, identity.value());
                 continue;
             }
-            if (!job.indexed)
+            if (job.indexed && !registered)
+                submit(key, job, IntentOperation::StorageRegister, job.dataset.value());
+            if (submissions >= MaximumSubmissionsPerProgress)
+                break;
+        }
+        prove(work.value(), provider, datasets, admission_blocked);
+        if (submissions != 0)
+            save();
+    }
+
+    // One proof per open epoch covers every dataset this provider holds in it, read from their indexes.
+    // An epoch with a held dataset this node no longer has goes unproven.
+    void prove(const MiningState&                                             work,
+               const Actor<KeyPrivate>&                                       provider,
+               const std::map<std::string, std::pair<std::string, LocalJob>>& datasets,
+               bool                                                           admission_blocked) {
+        std::erase_if(proofs_pending, [&](const auto& item) {
+            return !work.epochs.contains(item.first);
+        });
+        const auto actor = provider.id().to_string();
+        for (const auto& [epoch_id, epoch] : work.epochs) {
+            if (admission_blocked)
+                return;
+            if (!epoch.challenge.has_value() || !mining_window_accepts(epoch, work.section))
                 continue;
-            bool proof_sent = false;
-            for (const auto& [epoch_id, epoch] : work.value().epochs) {
-                const auto dataset = epoch.datasets.find(identity.value());
-                if (!epoch.challenge.has_value() || dataset == epoch.datasets.end()
-                    || !dataset->second.providers.contains(provider.id().to_string())
-                    || dataset->second.accepted.contains(provider.id().to_string()))
+            const auto held = mining_provider_datasets(epoch, provider.id());
+            if (held.empty() || std::ranges::any_of(epoch.datasets, [&](const auto& item) {
+                    return item.second.accepted.contains(actor);
+                }))
+                continue;
+            const auto pending = proofs_pending.find(epoch_id);
+            if (pending != proofs_pending.end()) {
+                const auto receipt = node->consensus()->intent_receipt(pending->second);
+                if (receipt.has_value() && receipt.value().has_value()
+                    && (receipt.value().value().status == IntentStatus::Accepted
+                        || receipt.value().value().status == IntentStatus::Certified))
                     continue;
-                if (!mining_window_accepts(epoch, work.value().section))
-                    continue;
-                const auto proof = make_storage_proof_from_index(index_path(job),
-                                                                 work.value().network,
-                                                                 provider.id(),
-                                                                 job.dataset.value(),
-                                                                 epoch.challenge.value(),
-                                                                 file_reader(path.value().native(), job.bytes));
-                if (!proof.has_value()) {
-                    {
-                        std::lock_guard lock(mutex);
-                        const auto      found = jobs.find(key);
+            }
+            std::vector<std::filesystem::path> indexes;
+            std::vector<MerkleValueReader>     readers;
+            std::vector<std::string>           keys;
+            for (const auto& dataset : held) {
+                const auto identity = storage_dataset_id(work.network, dataset);
+                const auto local    = identity.has_value() ? datasets.find(identity.value()) : datasets.end();
+                if (local == datasets.end() || !local->second.second.available || !local->second.second.indexed)
+                    break;
+                const auto& job  = local->second.second;
+                const auto  path = Dfs::Path::file_path(job.owner, job.file_id);
+                if (!path.has_value())
+                    break;
+                indexes.push_back(index_path(job));
+                readers.push_back(file_reader(path.value().native(), job.bytes));
+                keys.push_back(local->second.first);
+            }
+            if (indexes.size() != held.size())
+                continue;
+            const auto proof = make_provider_proof_from_indexes(
+                indexes,
+                work.network,
+                provider.id(),
+                held,
+                epoch.challenge.value(),
+                [&](std::size_t dataset, std::uint64_t chunk) {
+                    return readers[dataset](chunk);
+                });
+            if (!proof.has_value()) {
+                // A file or an index changed under us: rebuild those indexes before the next epoch.
+                {
+                    std::lock_guard lock(mutex);
+                    for (const auto& key : keys) {
+                        const auto found = jobs.find(key);
                         if (found != jobs.end()) {
                             found->second.indexed = false;
                             retry_after.erase(key);
                         }
                     }
-                    job.indexed = false;
-                    prepare_next();
-                    break;
                 }
-                submit(key,
-                       job,
-                       IntentOperation::StorageProof,
-                       MiningProofSubmission { epoch_id, identity.value(), proof.value() },
-                       epoch_id);
-                proof_sent = !job.pending.empty();
-                break;
+                prepare_next();
+                continue;
             }
-            if (job.indexed && !registered && !proof_sent)
-                submit(key, job, IntentOperation::StorageRegister, job.dataset.value());
-            if (submissions >= MaximumSubmissionsPerProgress)
-                break;
+            const auto accepted = node->consensus()->submit_mining_request(
+                IntentOperation::StorageProof,
+                Utils::to_base64(MessagePack::serialize(MiningProofSubmission { epoch_id, proof.value() })),
+                provider,
+                work);
+            if (accepted.has_value())
+                proofs_pending.insert_or_assign(epoch_id, accepted.value());
         }
-        if (submissions != 0)
-            save();
     }
 };
 

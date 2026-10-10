@@ -119,12 +119,11 @@ namespace ExtraChain::Consensus {
     std::expected<void, ConsensusError> submit_mining_proof(MiningState&        state,
                                                             std::uint64_t       epoch,
                                                             const ActorId&      provider,
-                                                            const std::string&  dataset_id,
                                                             const StorageProof& proof) {
         const auto active = state.epochs.find(epoch);
         if (active == state.epochs.end())
             return std::unexpected(ConsensusError::InvalidEpoch);
-        return accept_mining_proof(active->second, provider, dataset_id, state.section, proof);
+        return accept_mining_proof(active->second, provider, state.section, proof);
     }
 
     std::expected<MiningPayouts, ConsensusError> advance_mining_state(

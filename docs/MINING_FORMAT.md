@@ -27,6 +27,17 @@ An epoch records its own schedule as block time passes:
 Epoch ids in the policy are these periods, so `first_epoch` is a point in time and emission no longer
 depends on the block rate. A policy with one-millisecond periods starts an epoch at every height.
 
+## Storage proofs
+
+A dataset (`StorageDataset` version 2) is rooted at the plain BLAKE3 hash of its bytes, the hash a DFS
+row signs. A sample is a 1 KiB chunk with the chaining values of its siblings in the BLAKE3 tree
+(`Utils::Blake3Tree`); a provider keeps every full subtree in its index, so a path costs a few reads.
+
+A provider sends one proof per epoch, `MiningProofSubmission { epoch, proof }`, for every dataset it
+holds in that epoch: `StorageChallengeSamples` chunks drawn from all of their chunks together, from a
+seed that binds the provider, the challenge and the whole set of datasets. A valid proof is accepted for
+all of those datasets at once, an invalid one for none.
+
 ## Stable epoch encoding
 
 `MiningEpochState` is a MessagePack array with exactly twelve fields, in this order:

@@ -277,8 +277,7 @@ int main() {
     const auto reward_reader = [](std::uint64_t) -> std::expected<std::string, ConsensusError> {
         return "certified storage";
     };
-    const auto reward_dataset    = commit_storage_dataset(17, reward_reader).value();
-    const auto reward_dataset_id = storage_dataset_id(committee.governance.id(), reward_dataset).value();
+    const auto reward_dataset = commit_storage_dataset(17, reward_reader).value();
     // One-millisecond epochs make every height start one, which keeps this chain's schedule in sections.
     const MiningEmissionPolicy certified_policy { 0, { { 1, 10 } }, 1, 1 };
     auto certified_mining = configure_mining_state(committee.governance.id(), 0, certified_policy).value();
@@ -323,7 +322,7 @@ int main() {
                                                       reward_reader)
                                        .value();
                 check("certified mining accepts the challenged bytes in its proof window",
-                      submit_mining_proof(certified_mining, 0, committee.governance.id(), reward_dataset_id, proof)
+                      submit_mining_proof(certified_mining, 0, committee.governance.id(), proof)
                           .has_value());
             }
         }
@@ -660,7 +659,7 @@ int main() {
                                                   storage_reader)
                                    .value();
     check("mining accepts the registered provider within the verified window",
-          accept_mining_proof(mining, committee.governance.id(), dataset_id, 81, storage_proof).has_value());
+          accept_mining_proof(mining, committee.governance.id(), 81, storage_proof).has_value());
     const auto closing_proofs = engines.front()->finality_proofs_after(5, 1);
     check("mining window closure has a finality proof",
           closing_proofs.has_value() && closing_proofs.value().size() == 1);
@@ -771,12 +770,12 @@ int main() {
                                           .value();
                 if (epoch == 0)
                     check("a late provider cannot claim the earlier epoch",
-                          !submit_mining_proof(ledger, epoch, other_provider, dataset_id, proof).has_value());
+                          !submit_mining_proof(ledger, epoch, other_provider, proof).has_value());
                 check("the frozen provider submits one proof",
-                      submit_mining_proof(ledger, epoch, provider, dataset_id, proof).has_value());
+                      submit_mining_proof(ledger, epoch, provider, proof).has_value());
                 const auto before = mining_state_root(ledger);
                 check("duplicate mining proof has no state effect",
-                      !submit_mining_proof(ledger, epoch, provider, dataset_id, proof).has_value()
+                      !submit_mining_proof(ledger, epoch, provider, proof).has_value()
                           && mining_state_root(ledger) == before);
             }
             if (section < 161)
@@ -864,7 +863,7 @@ int main() {
                                                       storage_reader)
                                        .value();
                 check("the frozen provider proves within the timed window",
-                      submit_mining_proof(timed, epoch, committee.governance.id(), dataset_id, proof).has_value());
+                      submit_mining_proof(timed, epoch, committee.governance.id(), proof).has_value());
             }
             if (section == 121)
                 check("block time closes the window on the height that reaches it",

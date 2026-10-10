@@ -5,6 +5,7 @@
 #include "utils/serialization.h"
 
 #include <blake3.h>
+#include <map>
 
 namespace ExtraChain::Consensus {
     namespace {
@@ -277,6 +278,43 @@ namespace ExtraChain::Consensus {
         if (!verify_provider_storage_proof(network, provider, datasets, challenge, result))
             return std::unexpected(ConsensusError::InvalidProof);
         return result;
+    }
+
+    std::expected<StorageProof, ConsensusError> make_provider_storage_proof(
+        const ActorId&                  network,
+        const ActorId&                  provider,
+        std::span<const StorageDataset> datasets,
+        const StorageChallenge&         challenge,
+        const StorageChunkSource&       read_chunk) {
+        if (!read_chunk)
+            return std::unexpected(ConsensusError::InvalidProof);
+        std::map<std::size_t, std::vector<std::vector<ChainingValue>>> levels;
+        return make_provider_storage_proof(
+            network,
+            provider,
+            datasets,
+            challenge,
+            read_chunk,
+            [&](std::size_t dataset, std::uint64_t begin, std::uint32_t height)
+                -> std::expected<std::string, ConsensusError> {
+                if (dataset >= datasets.size())
+                    return std::unexpected(ConsensusError::InvalidProof);
+                auto tree = levels.find(dataset);
+                if (tree == levels.end()) {
+                    std::vector<ChainingValue> chunks;
+                    for (std::uint64_t chunk = 0; chunk < chunk_count(datasets[dataset].bytes); ++chunk) {
+                        const auto bytes = read_chunk(dataset, chunk);
+                        if (!bytes.has_value())
+                            return std::unexpected(bytes.error());
+                        chunks.push_back(Utils::Blake3Tree::chunk_value(bytes.value(), chunk));
+                    }
+                    tree = levels.emplace(dataset, Utils::Blake3Tree::full_levels(chunks)).first;
+                }
+                const auto block = begin >> height;
+                if (height >= tree->second.size() || block >= tree->second[height].size())
+                    return std::unexpected(ConsensusError::InvalidProof);
+                return hex(tree->second[height][block]);
+            });
     }
 
     std::expected<StorageProof, ConsensusError> make_indexed_storage_proof(const ActorId&           network,
