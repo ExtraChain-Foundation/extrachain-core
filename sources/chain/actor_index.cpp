@@ -210,6 +210,11 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
 
     eLog("[ActorIndex] Diff size: {}, need: {}, local: {}", actor_ids.size(), count, records_);
 
+    // A peer may count more actors than it serves, so the first sync can also end here: what is
+    // already received is stored first, and only then is the sync done
+    if (records_ + 1 >= count && !sync_first_done_ && !actors_todo_map_.empty() && !save_actors().has_value()) {
+        eWarning("[ActorIndex] Received actors not stored; the first sync waits");
+    }
     if (records_ + 1 >= count && actors_todo_map_.empty()) {
         if (!sync_first_done_) {
             emit this->firstSyncEnded();
@@ -319,7 +324,10 @@ std::expected<void, ActorSaveError> ActorIndex::add(const ActorId &id, const QBy
         return std::unexpected(ActorSaveError::Undefined);
     }
     file.close();
-    if (file.error() != QFileDevice::NoError || !file.rename(path)) {
+    // A temporary file is owner-only; actor files are public data and kept the usual 0644 before
+    const auto mode =
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadOther;
+    if (file.error() != QFileDevice::NoError || !file.setPermissions(mode) || !file.rename(path)) {
         return std::unexpected(ActorSaveError::Undefined);
     }
     file.setAutoRemove(false);
@@ -456,18 +464,44 @@ ActorIndex::save_actor_batch(const std::vector<const Actor<KeyPublic> *> &actors
             }
         }
     });
+    // One actor that cannot be stored is left for a later sync and the rest still commit: failing the
+    // whole batch kept the first sync from ever ending. A lone actor still reports why it failed
+    const bool batch = actors.size() > 1;
     for (const auto *actor : actors) {
-        auto result = add(actor->id(), actor->toJson());
-        if (!result.has_value()) {
-            if (result.error() == ActorSaveError::AlreadyExists) {
+        const auto path = QString::fromStdString(build_actor_path(actor->id()));
+        bool orphan = false;
+        if (auto result = add(actor->id(), actor->toJson()); !result.has_value()) {
+            if (result.error() != ActorSaveError::AlreadyExists) {
+                if (!batch) {
+                    return std::unexpected(result.error());
+                }
+                eWarning("[ActorIndex] Actor {} not stored, left for a later sync", actor->id());
                 continue;
             }
-            return std::unexpected(result.error());
+            // A file left by an interrupted save has no row; it is indexed now rather than skipped forever
+            orphan = db.select("SELECT id FROM " + Config::DataStorage::actorsTable + " WHERE id = ?",
+                               Config::DataStorage::actorsTable, { { "id", actor->id().to_string() } })
+                         .empty();
+            if (!orphan) {
+                continue;
+            }
+        } else {
+            created.push_back(path);
         }
-        created.push_back(QString::fromStdString(build_actor_path(actor->id())));
         if (!db.insert(Config::DataStorage::actorsTable,
                        { { "id", actor->id().to_string() }, { "type", std::to_string(int(actor->type())) } })) {
-            return std::unexpected(ActorSaveError::Undefined);
+            // Without autocommit the transaction survived this one statement
+            if (!batch || sqlite3_get_autocommit(db.getDb())) {
+                return std::unexpected(ActorSaveError::Undefined);
+            }
+            eWarning("[ActorIndex] Actor {} not indexed, left for a later sync", actor->id());
+            if (!orphan) {
+                created.pop_back();
+                if (!QFile::remove(path)) {
+                    eCritical("[ActorIndex] Failed to remove an unindexed actor file");
+                }
+            }
+            continue;
         }
         added.push_back(actor->id());
     }

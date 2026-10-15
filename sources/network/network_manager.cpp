@@ -164,7 +164,15 @@ NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
     , ws_port(port) {
     receive_queue_ = std::make_unique<NetworkReceiveQueue>(this,
         [this](const NetworkReceivedMessage &incoming) { prepare_received(incoming); },
-        [](std::exception_ptr) { eWarning("[NetworkManager] Receive stage failed"); });
+        [](std::exception_ptr error) {
+            try {
+                std::rethrow_exception(error);
+            } catch (const std::exception &exception) {
+                eWarning("[NetworkManager] Receive stage failed: {}", exception.what());
+            } catch (...) {
+                eWarning("[NetworkManager] Receive stage failed");
+            }
+        });
     if (!first_nodes_.empty()) {
         first_node_ = first_nodes_.front();
     }

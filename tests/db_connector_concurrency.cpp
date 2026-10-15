@@ -594,7 +594,7 @@ private slots:
         QCOMPARE(reopened.records(), std::size_t(3));
     }
 
-    void actorBatchInsertFailureRollsBackEarlierInserts()
+    void actorBatchRejectedRowLeavesTheRestCommitted()
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -609,17 +609,46 @@ private slots:
         QVERIFY(observer.query("CREATE TRIGGER reject_actor BEFORE INSERT ON Actors WHEN NEW.id = '"
             + actors[1].id().to_string() + "' BEGIN SELECT RAISE(ABORT, 'test rejection'); END"));
         QSignalSpy saved(&index, &ActorIndex::actorSaved);
-        QVERIFY(!index.save_actors(actors).has_value());
-        QCOMPARE(index.records(), std::size_t(0));
-        QVERIFY(index.read_all_actors_ids().empty());
-        for (const auto &actor : actors) {
-            QVERIFY(index.read_by_id(actor.id()).isEmpty());
-        }
-        QCOMPARE(saved.count(), 0);
+        // One actor that keeps failing must not hold back the others, or the first sync never ends
+        QVERIFY(index.save_actors(actors).has_value());
+        QCOMPARE(index.records(), std::size_t(1));
+        QCOMPARE(index.read_all_actors_ids().size(), std::size_t(1));
+        QVERIFY(index.read_by_id(actors[0].id()) == actors[0].toJson());
+        QVERIFY(index.read_by_id(actors[1].id()).isEmpty());
+        QCOMPARE(saved.count(), 1);
+        QVERIFY(!index.save_actor(actors[1]).has_value());
+        QVERIFY(index.read_by_id(actors[1].id()).isEmpty());
         QVERIFY(observer.query("DROP TRIGGER reject_actor"));
         QVERIFY(index.save_actors(actors).has_value());
         QCOMPARE(index.records(), std::size_t(2));
         QCOMPARE(saved.count(), 2);
+    }
+
+    void actorFileWithoutRowIsIndexed()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir("actors"));
+        const auto actor = syntheticActor();
+        {
+            ActorIndex index(nullptr);
+            QVERIFY(index.save_actor(actor).has_value());
+            DbConnector observer("actors/actors", DbConnectorType::Regular, DbConnectorLockScope::Connection);
+            QVERIFY(observer.open());
+            QVERIFY(observer.query("DELETE FROM Actors"));
+        }
+        ActorIndex index(nullptr);
+        QCOMPARE(index.records(), std::size_t(0));
+        QVERIFY(index.read_by_id(actor.id()) == actor.toJson());
+        QVERIFY(index.save_actor(actor).has_value());
+        QCOMPARE(index.records(), std::size_t(1));
+        QCOMPARE(index.read_all_actors_ids().size(), std::size_t(1));
+        QVERIFY(index.read_by_id(actor.id()) == actor.toJson());
+        QVERIFY(!index.save_actor(actor).has_value());
+        QCOMPARE(index.records(), std::size_t(1));
     }
 
     void actorBatchBeginFailureDoesNotCreateFiles()
