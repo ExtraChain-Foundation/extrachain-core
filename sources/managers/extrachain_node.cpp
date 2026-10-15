@@ -1164,6 +1164,7 @@ void ExtraChainNode::set_reward_timer_active(bool active) {
     if (!timer_reward_) {
         return;
     }
+
     if (active && !timer_reward_->isActive()) {
         timer_reward_->start(MINING_TIMER_TICK);
     } else if (!active && timer_reward_->isActive()) {

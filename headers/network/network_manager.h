@@ -252,6 +252,8 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
 private:
     bool                            active_ = false;
     std::set<std::string>           failed_ips_;
+    // Port probes in flight: each one turns into a socket, so they count against the limit
+    int                             pending_port_checks_ = 0;
     std::unique_ptr<UPNPConnection> upnp_dis_;
     std::unique_ptr<UPNPConnection> upnp_net_;
     std::unique_ptr<UPnPConnector>  upnp_connector_;
@@ -410,6 +412,8 @@ public:
     bool is_connection_exists(const std::string& identifier);
     bool is_active_connection_exists();
     int  active_connections_count();
+    // Sockets not closed yet, handshaken or still opening
+    int  open_connections_count();
 
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
     void queue_luminance_cleanup();

@@ -385,7 +385,18 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     }
                 }
 
+#ifdef IS_APP_UI_CLIENT
+                // A client keeps a handful of links: every peer of a shared list would be opened
+                // at once and dropped after its handshake by the limit
+                int free_slots = Network::maxConnections - open_connections_count() - pending_port_checks_;
+#endif
+
                 for (const auto &[ip, identifier] : connections) {
+#ifdef IS_APP_UI_CLIENT
+                    if (free_slots <= 0) {
+                        break;
+                    }
+#endif
                     if (this->failed_ips_.contains(ip) || ip == "127.0.0.1") {
                         continue;
                     }
@@ -418,6 +429,9 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     }
 
                     if (can_connect) {
+#ifdef IS_APP_UI_CLIENT
+                        free_slots--;
+#endif
                         emit connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
                     }
                 }
@@ -451,6 +465,9 @@ void NetworkManager::check_port(const QString     ip,
     auto *socket = new QTcpSocket(this);
     auto *timer  = new QTimer(this);
     timer->setSingleShot(true);
+
+    pending_port_checks_++;
+    connect(socket, &QObject::destroyed, this, [this]() { pending_port_checks_--; });
 
     connect(socket, &QTcpSocket::connected, this, [this, socket, timer, ip, protocol, request, isConstant]() {
         timer->stop();
@@ -596,6 +613,14 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
             return;
         }
     }
+
+#ifdef IS_APP_UI_CLIENT
+    // Sockets still opening count too: otherwise each one completes a handshake only to be dropped
+    if (!isConstant && open_connections_count() >= Network::maxConnections) {
+        eLog("[NetworkManager] Skip {}: {} connections already open", ip, open_connections_count());
+        return;
+    }
+#endif
 
     if (ip.isEmpty()) {
         // eLog("Ip is empty");
@@ -1068,6 +1093,17 @@ bool NetworkManager::is_active_connection_exists() {
     }
 
     return false;
+}
+
+int NetworkManager::open_connections_count() {
+    auto connectionsLocked = *connections_;
+    int  count             = 0;
+    for (const auto &el : *connectionsLocked) {
+        if (el && !el->is_closed()) {
+            count++;
+        }
+    }
+    return count;
 }
 
 int NetworkManager::active_connections_count() {
