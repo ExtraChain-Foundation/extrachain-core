@@ -855,6 +855,26 @@ private slots:
         QCOMPARE(otherRows.front().at("value"), std::string("42"));
     }
 
+    void independentConnectionsWaitForTheWriteLock()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("shared.sqlite").toStdString();
+        DbConnector holder(path, DbConnectorType::Regular, DbConnectorLockScope::Connection);
+        DbConnector writer(path, DbConnectorType::Regular, DbConnectorLockScope::Connection);
+        QVERIFY(holder.open());
+        QVERIFY(writer.open());
+        QVERIFY(holder.query("CREATE TABLE rows (value INTEGER)"));
+        QCOMPARE(sqlite3_exec(holder.getDb(), "BEGIN IMMEDIATE; INSERT INTO rows VALUES (1)", nullptr, nullptr,
+                              nullptr), SQLITE_OK);
+        auto waiting = std::async(std::launch::async, [&] { return writer.query("INSERT INTO rows VALUES (2)"); });
+        const bool blocked = waiting.wait_for(200ms) == std::future_status::timeout;
+        QCOMPARE(sqlite3_exec(holder.getDb(), "COMMIT", nullptr, nullptr, nullptr), SQLITE_OK);
+        QVERIFY(blocked);
+        QVERIFY(waiting.get());
+        QCOMPARE(holder.select("SELECT value FROM rows").size(), std::size_t(2));
+    }
+
     void sameConnectionStillSerializes()
     {
         QTemporaryDir directory;

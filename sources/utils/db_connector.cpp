@@ -141,6 +141,11 @@ bool DbConnector::open() {
             return false;
         }
 
+        // Connections with their own lock reach one file side by side, and without a timeout sqlite
+        // answers SQLITE_BUSY the moment another holds the write lock: callers take that as a failure
+        // and the row is gone (0.26-2 stand: 11-24 rows per node). The lock is held briefly
+        sqlite3_busy_timeout(db, 5000);
+
         m_open = true;
         return true;
     }
