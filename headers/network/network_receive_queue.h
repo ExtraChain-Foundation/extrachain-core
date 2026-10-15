@@ -15,6 +15,8 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 
 struct NetworkReceivedMessage {
     std::string message;
@@ -41,6 +43,9 @@ public:
     ~NetworkReceiveQueue() override;
 
     bool enqueue(const std::string &message, const std::string &ip, const std::string &identifier);
+    // Whether this peer holds at least half of the waiting packets: the one filling a full queue,
+    // not whoever happens to arrive while it is full
+    bool floods(const std::string &identifier) const;
     bool enqueue_maintenance();
     void defer(std::function<void()> work, std::function<void()> continuation);
     void stop();
@@ -75,6 +80,9 @@ private:
     ErrorHandler error_handler_;
     mutable std::mutex queue_mutex_;
     std::deque<NetworkReceivedMessage> queue_;
+    // Hashes of the queued packets and the counted packets of each peer, active one included
+    std::unordered_multiset<std::size_t> queued_hashes_;
+    std::unordered_map<std::string, std::size_t> peer_packets_;
     std::optional<NetworkReceivedMessage> active_;
     NetworkReceiveMetrics::Clock::time_point active_started_;
     const std::shared_ptr<NetworkReceiveMetrics> metrics_ = std::make_shared<NetworkReceiveMetrics>();

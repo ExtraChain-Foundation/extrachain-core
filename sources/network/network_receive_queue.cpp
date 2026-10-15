@@ -3,6 +3,7 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QThread>
+#include <algorithm>
 #include <chrono>
 #include <stdexcept>
 #include <utility>
@@ -26,18 +27,33 @@ bool NetworkReceiveQueue::enqueue(const std::string &message, const std::string 
                                   const std::string &identifier) {
     {
         std::lock_guard lock(queue_mutex_);
-        if (stopped_ || message_count_ >= limits_.messages || message.size() > limits_.bytes - bytes_) {
+        const auto hash = std::hash<std::string> {}(message);
+        // A full queue still takes a copy of a packet already waiting, the same broadcast relayed by
+        // another neighbour: it needs no room, and refusing it would cut that neighbour off
+        const auto refuse = [&] {
+            const auto sameMessage = [&message](const auto &queued) {
+                return !queued.maintenance && queued.message == message;
+            };
+            if (!stopped_ && queued_hashes_.contains(hash)
+                && std::any_of(queue_.begin(), queue_.end(), sameMessage)) {
+                metrics_->increment(&NetworkReceiveMetrics::State::accepted);
+                return true;
+            }
             metrics_->increment(&NetworkReceiveMetrics::State::rejected);
             return false;
+        };
+        if (stopped_ || message_count_ >= limits_.messages || message.size() > limits_.bytes - bytes_) {
+            return refuse();
         }
         auto remaining = limits_.bytes - bytes_ - message.size();
         if (ip.size() > remaining || identifier.size() > remaining - ip.size()) {
-            metrics_->increment(&NetworkReceiveMetrics::State::rejected);
-            return false;
+            return refuse();
         }
         queue_.push_back({ message, ip, identifier, false });
         bytes_ += queue_.back().bytes();
         ++message_count_;
+        queued_hashes_.insert(hash);
+        ++peer_packets_[identifier];
         metrics_->increment(&NetworkReceiveMetrics::State::accepted);
         metrics_->pending(message_count_ + std::size_t(maintenance_pending_), bytes_);
     }
@@ -118,6 +134,12 @@ void NetworkReceiveQueue::dispatch() {
         }
         active_ = std::move(queue_.front());
         queue_.pop_front();
+        if (!active_->maintenance) {
+            if (const auto it = queued_hashes_.find(std::hash<std::string> {}(active_->message));
+                it != queued_hashes_.end()) {
+                queued_hashes_.erase(it);
+            }
+        }
         active_started_ = ReceiveClock::now();
         metrics_->timing(ReceiveStage::Pending, active_->enqueued, active_started_);
         metrics_->increment(&NetworkReceiveMetrics::State::started);
@@ -269,6 +291,10 @@ void NetworkReceiveQueue::finish_active() {
             } else {
                 --message_count_;
                 bytes_ -= active_->bytes();
+                if (const auto it = peer_packets_.find(active_->identifier); it != peer_packets_.end()
+                    && --it->second == 0) {
+                    peer_packets_.erase(it);
+                }
             }
         }
         active_.reset();
@@ -289,6 +315,8 @@ void NetworkReceiveQueue::stop() {
     }
     std::lock_guard lock(queue_mutex_);
     queue_.clear();
+    queued_hashes_.clear();
+    peer_packets_.clear();
     if (!invoking_) {
         active_.reset();
     }
@@ -299,6 +327,12 @@ void NetworkReceiveQueue::stop() {
     wake_pending_ = false;
     deferred_ = false;
     metrics_->stop();
+}
+
+bool NetworkReceiveQueue::floods(const std::string &identifier) const {
+    std::lock_guard lock(queue_mutex_);
+    const auto it = peer_packets_.find(identifier);
+    return it != peer_packets_.end() && it->second * 2 >= message_count_;
 }
 
 std::size_t NetworkReceiveQueue::pending_count() const {

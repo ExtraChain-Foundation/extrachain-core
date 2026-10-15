@@ -1169,10 +1169,12 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     if (!receive_queue_->enqueue(message, ip, identifier)) {
+        // Only the peer filling the queue is cut off; anyone else's packet is dropped, as a slow link would
+        const bool flooding = !identifier.empty() && receive_queue_->floods(identifier);
         eWarning("[NetworkManager] Receive queue capacity exceeded; rejecting packet: "
-                 "pending_count={} pending_bytes={} incoming_bytes={}",
-                 receive_queue_->pending_count(), receive_queue_->pending_bytes(), message.size());
-        if (!identifier.empty()) {
+                 "pending_count={} pending_bytes={} incoming_bytes={} flooding_peer={}",
+                 receive_queue_->pending_count(), receive_queue_->pending_bytes(), message.size(), flooding);
+        if (flooding) {
             QMetaObject::invokeMethod(this, [this, identifier] {
                 remove_connection(QString::fromStdString(identifier));
             }, Qt::AutoConnection);

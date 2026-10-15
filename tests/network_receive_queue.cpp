@@ -626,13 +626,47 @@ private slots:
         std::atomic<int> accepted = 0;
         NetworkReceiveQueue queue(nullptr, [&](const auto &) { ++dispatched; }, {}, { 1, 32 });
         std::vector<std::jthread> writers;
+        // Distinct packets: an identical copy of a waiting one is coalesced and takes no room
         for (int i = 0; i < 8; ++i) {
-            writers.emplace_back([&] { accepted += int(queue.enqueue("packet", {}, {})); });
+            writers.emplace_back([&, i] { accepted += int(queue.enqueue("packet" + std::to_string(i), {}, {})); });
         }
         writers.clear();
         QCOMPARE(accepted.load(), 1);
         QCOMPARE(queue.pending_count(), std::size_t(1));
         QTRY_COMPARE(dispatched, 1);
+    }
+
+    void fullQueueTakesCopiesOfAWaitingPacket() {
+        std::vector<std::string> seen;
+        NetworkReceiveQueue queue(
+            nullptr, [&](const auto &packet) { seen.push_back(packet.message); }, {}, { 2, 1024 });
+        // With room every copy is delivered, so per-peer accounting sees each of them
+        QVERIFY(queue.enqueue("broadcast", {}, "first-neighbour"));
+        QVERIFY(queue.enqueue("broadcast", {}, "second-neighbour"));
+        QVERIFY(queue.enqueue("broadcast", {}, "third-neighbour"));
+        QCOMPARE(queue.pending_count(), std::size_t(2));
+        QVERIFY(!queue.enqueue("other", {}, "third-neighbour"));
+        QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+        QCOMPARE(seen, (std::vector<std::string> { "broadcast", "broadcast" }));
+        // Once dispatched, the same bytes are no longer waiting and need room again
+        QVERIFY(queue.enqueue("one", {}, {}));
+        QVERIFY(queue.enqueue("two", {}, {}));
+        QVERIFY(!queue.enqueue("broadcast", {}, {}));
+        QTRY_COMPARE(seen.size(), std::size_t(4));
+    }
+
+    void floodsNamesOnlyThePeerFillingTheQueue() {
+        NetworkReceiveQueue queue(nullptr, [](const auto &) {}, {}, { 4, 1024 });
+        QVERIFY(queue.enqueue("one", {}, "flooder"));
+        QVERIFY(queue.enqueue("two", {}, "flooder"));
+        QVERIFY(queue.enqueue("three", {}, "flooder"));
+        QVERIFY(queue.enqueue("quiet-one", {}, "quiet"));
+        QVERIFY(!queue.enqueue("quiet-two", {}, "quiet"));
+        QVERIFY(!queue.floods("quiet"));
+        QVERIFY(queue.floods("flooder"));
+        QVERIFY(!queue.floods("stranger"));
+        QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+        QVERIFY(!queue.floods("flooder"));
     }
 
     void parentShutdownJoinsBeforeOwnedStorageDestruction() {
