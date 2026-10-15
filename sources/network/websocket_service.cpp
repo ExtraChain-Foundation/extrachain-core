@@ -421,15 +421,31 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
         return;
     }
 
+    // Each of these used to return silently. A message dropped here is gone with no
+    // trace anywhere: it left the send queue, so the sender counts it as sent, and it
+    // never reached the wire, so no peer can answer. For a locally created transaction
+    // that is a permanent loss — it waits in sended_transactions_ for an approval that
+    // cannot come.
     auto prepared = prepareSendMessage(data);
     if (prepared.isEmpty()) {
+        eWarning("[WS] {} Dropping message to {}: could not prepare ({} bytes in)",
+                 direction_,
+                 ip_.toStdString(),
+                 data.size());
         return;
     }
 
     if (m_ws == nullptr) {
+        eWarning("[WS] {} Dropping message to {}: socket is gone", direction_, ip_.toStdString());
         return;
     }
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !activated_) {
+    if (!m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !activated_) {
+        eWarning("[WS] {} Dropping message to {}: valid={}, state={}, activated={}",
+                 direction_,
+                 ip_.toStdString(),
+                 m_ws->isValid(),
+                 static_cast<int>(m_ws->state()),
+                 activated_);
         return;
     }
 
