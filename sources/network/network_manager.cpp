@@ -780,22 +780,27 @@ std::string NetworkManager::send_anonymous_broadcast_serialized(const std::strin
     // Neighbours echo it back, as it does not name this node: an echo is no request of someone else's
     messages_->emplace(message.message_id, std::make_pair(std::string(), QDateTime::currentDateTime()));
 
-    std::string via;
-    {
-        auto connections_locked = *connections_;
-        for (const auto *service : *connections_locked) {
-            if (service->is_active() && service->ip().toStdString() == first_node_) {
-                via = service->identifier().toStdString();
-                break;
+    // The route is read where the sockets live, at the moment it leaves: a first node gone by then leaves the
+    // ordinary broadcast
+    auto send = [this, serialized = message.serialize() + sign, message, type, status] {
+        std::string via;
+        {
+            auto connections_locked = *connections_;
+            for (const auto *service : *connections_locked) {
+                if (service->is_active() && service->ip().toStdString() == first_node_) {
+                    via = service->identifier().toStdString();
+                    break;
+                }
             }
         }
+        send_message_connections(serialized, message, via.empty() ? SendMode::Broadcast : SendMode::Focused, via,
+                                 type, status);
+    };
+    if (QThread::currentThread() != thread()) {
+        QMetaObject::invokeMethod(this, send, Qt::QueuedConnection);
+    } else {
+        send();
     }
-    send_message_connections(message.serialize() + sign,
-                             message,
-                             via.empty() ? SendMode::Broadcast : SendMode::Focused,
-                             via,
-                             type,
-                             status);
     return message.message_id;
 }
 
@@ -825,6 +830,10 @@ void NetworkManager::set_avoided_peers(const std::set<std::string> &ips) {
 }
 
 bool NetworkManager::is_avoided_peer(const std::string &ip) const {
+    // The first nodes are the way back into the network, whoever asked to keep away from them
+    if (Utils::vector_contains(first_nodes_, ip) || ip == first_node_) {
+        return false;
+    }
     std::lock_guard lock(avoided_peers_mutex_);
     return avoided_peers_.contains(ip);
 }
@@ -1054,11 +1063,15 @@ void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage 
 
     MessageBody message_edited = package_data.msg_body;
     message_edited.sender_id   = node->account_controller()->system_actor().id();
-    // Listed, the link an anonymous broadcast came by would name where it started
+    // Listed, the links an anonymous broadcast passed would name where it started, the one it came by among them;
+    // it goes on unlisted, and its echoes die by message id
     if (!message_edited.anonymous()) {
         message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
+        add_all_services_identifiers_to_message(message_edited);
+    } else {
+        message_edited.nodes_identifiers_to_ignore.clear();
+        message_edited.nodes_identifiers_to_ignore_later.clear();
     }
-    add_all_services_identifiers_to_message(message_edited);
 
     auto serialized = message_edited.serialize();
     send_message_connections(serialized + package_data.sign,

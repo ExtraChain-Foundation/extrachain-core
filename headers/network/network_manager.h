@@ -476,7 +476,8 @@ public:
                                                     MessageStatus      status,
                                                     const ActorId&     sender);
 
-    // Addresses this node keeps away from: no dial or reconnection goes there and a link to one is dropped
+    // Addresses this node keeps away from: no dial or reconnection goes there and a link to one is dropped;
+    // the first nodes never are
     void set_avoided_peers(const std::set<std::string>& ips);
     bool is_avoided_peer(const std::string& ip) const;
     // The actor of the first node, as its last message named it; zero until one came
