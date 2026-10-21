@@ -156,6 +156,11 @@ struct MessageBody {
         return MessagePack::serialize(*this);
     }
 
+    // Sent by NetworkManager::send_anonymous_broadcast: no node identifier names its origin
+    bool anonymous() const {
+        return init_sender_identifier.empty();
+    }
+
     MSGPACK_DEFINE(send_type,
                    message_type,
                    status,

@@ -71,6 +71,7 @@ struct SocketService : QObject {
         : QObject(parent), sink(out), ident(id) {}
     void check() const { require(QThread::currentThread() == thread()); ++sink->touches; }
     bool is_active() const { check(); return active; }
+    bool is_closed() const { check(); return !active; }
     const QString& identifier() const { check(); return ident; }
     const QString& ip() const { check(); return ident; }
     SocketMode mode() const { check(); return socket_mode; }
@@ -116,8 +117,9 @@ struct NetworkManager : QObject {
         ++sink->cached; sink->cached_payload = data; sink->cached_recipient = id; sink->cached_mode = mode;
     }
     bool is_active_connection_exists();
+    int open_connections_count();
     void send_message_connections(const std::string&, const MessageBody&, SendMode,
-                                  const std::string&, MessageType, MessageStatus);
+                                  const std::string&, MessageType, MessageStatus, const std::string& = "");
 };
 ''' + dispatch + active + r'''
 void drain() { QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall); }
@@ -140,7 +142,8 @@ int main(int argc, char** argv) {
         body.nodes_identifiers_to_ignore = {"other"};
         SendMode routing = SendMode::Focused;
         MessageType type = MessageType::DfsFileState;
-        if (mode == "broadcast") { routing = SendMode::Broadcast; }
+        if (mode == "broadcast" || mode == "broadcast-except") { routing = SendMode::Broadcast; }
+        const std::string except = mode == "broadcast-except" ? "target" : "";
         if (mode == "except") { routing = SendMode::Except; }
         if (mode == "neighbours") { routing = SendMode::Neighbours; }
         if (mode == "random-one") { routing = SendMode::OneNeighbourRandom; }
@@ -149,7 +152,8 @@ int main(int argc, char** argv) {
         if (mode == "low") { type = MessageType::DfsFileFragment; }
         if (mode == "high") { type = MessageType::Custom; }
         const auto send = [&] {
-            manager->send_message_connections(payload, body, routing, recipient, type, MessageStatus::Response);
+            manager->send_message_connections(payload, body, routing, recipient, type, MessageStatus::Response,
+                                              except);
         };
         if (mode == "owner") {
             send(); require(sink->records.size() == 1); drain();
@@ -232,6 +236,7 @@ int main(int argc, char** argv) {
         }
         size_t expected = 1;
         if (mode == "broadcast" || mode == "except" || mode == "ordered") { expected = 2; }
+        if (mode == "broadcast-except") { expected = 1; }
         if (mode == "neighbours" || mode == "random-three") { expected = 3; }
         require(sink->records.size() == expected && sink->cached == 0);
         for (size_t i = 0; i < sink->records.size(); ++i) {
@@ -241,6 +246,7 @@ int main(int argc, char** argv) {
                                        mode == "high" ? SocketService::Priority::High : SocketService::Priority::Normal));
             if (routing == SendMode::Focused) { require(row.recipient == (mode == "light-focused" ? "light" : "target")); }
             if (mode == "broadcast") { require(row.recipient != "other" && row.recipient != "light"); }
+            if (mode == "broadcast-except") { require(row.recipient == "fourth"); }
             if (mode == "except") { require(row.recipient != "target" && row.recipient != "light"); }
             if (mode == "neighbours") { require(row.recipient != "light"); }
         }
@@ -272,7 +278,7 @@ target_link_libraries(fixture PRIVATE Qt6::Core)
 
     def test_dispatch_contract(self):
         for mode in ('owner', 'different-owner', 'many-producers', 'worker-copy', 'ordered', 'destroyed', 'closed', 'removed',
-                     'empty-cache', 'cache-error', 'broadcast', 'except', 'neighbours', 'random-one',
+                     'empty-cache', 'cache-error', 'broadcast', 'broadcast-except', 'except', 'neighbours', 'random-one',
                      'random-three', 'light-focused', 'low', 'high'):
             with self.subTest(mode=mode):
                 result = subprocess.run([str(self.binary), mode], env=self.environment,
