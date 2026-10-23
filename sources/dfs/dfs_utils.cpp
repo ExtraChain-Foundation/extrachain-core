@@ -159,6 +159,33 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::Ac
     return dir_rows;
 }
 
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::get_rows_of_actors(
+    const std::shared_ptr<DbConnector> db,
+    const std::vector<ActorId>        &actors) {
+    std::vector<Dfs::DirRow> dir_rows;
+    if (actors.empty()) {
+        return dir_rows;
+    }
+
+    std::string ids;
+    for (const auto &actor : actors) {
+        ids += fmt::format("{}'{}'", ids.empty() ? "" : ",", actor.to_string());
+    }
+    auto db_rows = db->select(fmt::format("SELECT * FROM {} WHERE owner_id IN ({}) OR actor_id IN ({})",
+                                          TableNameActorsFiles,
+                                          ids,
+                                          ids));
+
+    for (auto &row : db_rows) {
+        auto dir_row = Utils::from_dbrow<Dfs::DirRow>(row);
+        if (dir_row.has_value()) {
+            dir_rows.push_back(dir_row.value());
+        }
+    }
+
+    return dir_rows;
+}
+
 std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::
     get_dir_rows_map(const std::shared_ptr<DbConnector> db, const ActorId &owner_id, std::uint64_t last_modified) {
     std::unordered_map<std::string, Dfs::DirRow> dir_rows;

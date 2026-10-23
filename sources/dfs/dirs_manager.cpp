@@ -365,21 +365,31 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 
 void DirsManager::network_request_all(const Responder& responder) {
     ThreadPoolBoost::instance_dfs()->post([this, responder] {
-        std::vector<ActorId> actors;
+        std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
         if (node->is_client_application()) {
-            // An app holds a copy of the nodes' table; only its own rows can be news to them, rows written
-            // offline among them. The whole table cost a phone ~1.5 MB upstream on every link
+            // An app holds a copy of the nodes' table and answers with what only it can add: its own dirs and
+            // the rows it wrote anywhere, an invite in a peer's dir among them. The whole table cost ~1.5 MB
             auto* accounts = node->account_controller();
             if (!accounts->has_current_profile()) {
                 return;
             }
-            const auto& profile = accounts->current_profile();
-            actors.push_back(profile.system().id());
+            const auto&          profile = accounts->current_profile();
+            std::vector<ActorId> actors  = { profile.system().id() };
             for (const auto& actor : profile.actors()) {
                 actors.push_back(actor.id());
             }
+
+            auto rows = Dfs::Tables::DirsFile::ActorSpace::get_rows_of_actors(db_, actors);
+            if (!rows.has_value()) {
+                return;
+            }
+            std::map<ActorId, std::vector<Dfs::DirRow>> by_owner;
+            for (auto& row : rows.value()) {
+                by_owner[row.owner_id].push_back(std::move(row));
+            }
+            response_data.assign(std::make_move_iterator(by_owner.begin()), std::make_move_iterator(by_owner.end()));
         } else {
-            actors = node->actor_index()->read_all_actors_ids();
+            auto actors = node->actor_index()->read_all_actors_ids();
 
             auto network_id = node->actor_index()->network_id();
             auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
@@ -389,23 +399,22 @@ void DirsManager::network_request_all(const Responder& responder) {
 
             actors.insert(actors.begin(), network_id);
             actors.insert(actors.begin(), raccoon_id);
-        }
 
-        std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
-        response_data.reserve(actors.size());
+            response_data.reserve(actors.size());
 
-        for (const auto& actor : actors) {
-            auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, actor, 0);
+            for (const auto& actor : actors) {
+                auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, actor, 0);
 
-            if (!dir_rows.has_value() || dir_rows->empty())
-                continue;
+                if (!dir_rows.has_value() || dir_rows->empty())
+                    continue;
 
-            response_data.emplace_back(actor, dir_rows.value());
+                response_data.emplace_back(actor, dir_rows.value());
 
-            // QThread::msleep(3);
+                // QThread::msleep(3);
 
-            if (!node_enabled.load()) {
-                return;
+                if (!node_enabled.load()) {
+                    return;
+                }
             }
         }
 
