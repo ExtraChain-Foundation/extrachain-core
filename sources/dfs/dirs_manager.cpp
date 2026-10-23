@@ -365,16 +365,31 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 
 void DirsManager::network_request_all(const Responder& responder) {
     ThreadPoolBoost::instance_dfs()->post([this, responder] {
-        auto actors = node->actor_index()->read_all_actors_ids();
+        std::vector<ActorId> actors;
+        if (node->is_client_application()) {
+            // An app holds a copy of the nodes' table; only its own rows can be news to them, rows written
+            // offline among them. The whole table cost a phone ~1.5 MB upstream on every link
+            auto* accounts = node->account_controller();
+            if (!accounts->has_current_profile()) {
+                return;
+            }
+            const auto& profile = accounts->current_profile();
+            actors.push_back(profile.system().id());
+            for (const auto& actor : profile.actors()) {
+                actors.push_back(actor.id());
+            }
+        } else {
+            actors = node->actor_index()->read_all_actors_ids();
 
-        auto network_id = node->actor_index()->network_id();
-        auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
-        std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
-            return actor == network_id || actor == raccoon_id;
-        });
+            auto network_id = node->actor_index()->network_id();
+            auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
+            std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
+                return actor == network_id || actor == raccoon_id;
+            });
 
-        actors.insert(actors.begin(), network_id);
-        actors.insert(actors.begin(), raccoon_id);
+            actors.insert(actors.begin(), network_id);
+            actors.insert(actors.begin(), raccoon_id);
+        }
 
         std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
         response_data.reserve(actors.size());

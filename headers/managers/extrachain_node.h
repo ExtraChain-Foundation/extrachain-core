@@ -179,6 +179,8 @@ public:
     bool create_subscription_vector(const std::string& file_name);
     void start();
     bool is_client_application() const;
+    // Whether a new link to this address takes the full DFS directory sync
+    bool syncs_dfs_with(const std::string& ip) const;
 
     std::pair<QString, QString> init_public_ip_and_country() const;
 

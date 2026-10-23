@@ -779,6 +779,12 @@ bool ExtraChainNode::is_client_application() const {
     return is_client_application_;
 }
 
+bool ExtraChainNode::syncs_dfs_with(const std::string& ip) const {
+    // The whole directory table is ~1.5 MB: an app takes it from its first node on every connect to it,
+    // a node from every new link
+    return !is_client_application_ || ip == network_manager_->first_node();
+}
+
 Dag* ExtraChainNode::dag() const {
     return dag_;
 }
@@ -1350,7 +1356,9 @@ void ExtraChainNode::connect_signals() {
                 dag_->start_check();
 #endif
 
-                dfs_->sync(identifier);
+                if (syncs_dfs_with(ip)) {
+                    dfs_->sync(identifier);
+                }
             });
 
     connect(network_manager_, &NetworkManager::newSocketActivatedWithParams, this,
@@ -1362,7 +1370,9 @@ void ExtraChainNode::connect_signals() {
         dag_->start_check();
 
         for (const auto& [ip, identifier] : identifiers_after_actors_sync_) {
-            dfs_->sync(identifier);
+            if (syncs_dfs_with(ip)) {
+                dfs_->sync(identifier);
+            }
         }
     });
 
