@@ -40,7 +40,6 @@
 
 #include <QJsonObject>
 #include <QThread>
-#include <sodium.h>
 
 namespace {
 using ReceiveClock = std::chrono::steady_clock;
@@ -766,44 +765,6 @@ bool NetworkManager::send_message_checker(MessageType      type,
     return true;
 }
 
-std::string NetworkManager::send_anonymous_broadcast_serialized(const std::string &data_serialized,
-                                                               MessageType        type,
-                                                               MessageStatus      status,
-                                                               const ActorId     &sender) {
-    if (!send_message_checker(type, SendMode::Broadcast, status, Responder(nullptr)) || sender.is_zero()) {
-        return "";
-    }
-    MessageBody message = make_init_message(data_serialized, SendMode::Broadcast, type, status, sender, "", "");
-    // Nobody checks it, a message only has to end with one; ours would tell whose it is
-    std::string sign(crypto_sign_BYTES, '\0');
-    randombytes_buf(sign.data(), sign.size());
-    // Neighbours echo it back, as it does not name this node: an echo is no request of someone else's
-    messages_->emplace(message.message_id, std::make_pair(std::string(), QDateTime::currentDateTime()));
-
-    // The route is read where the sockets live, at the moment it leaves: a first node gone by then leaves the
-    // ordinary broadcast
-    auto send = [this, serialized = message.serialize() + sign, message, type, status] {
-        std::string via;
-        {
-            auto connections_locked = *connections_;
-            for (const auto *service : *connections_locked) {
-                if (service->is_active() && service->ip().toStdString() == first_node_) {
-                    via = service->identifier().toStdString();
-                    break;
-                }
-            }
-        }
-        send_message_connections(serialized, message, via.empty() ? SendMode::Broadcast : SendMode::Focused, via,
-                                 type, status);
-    };
-    if (QThread::currentThread() != thread()) {
-        QMetaObject::invokeMethod(this, send, Qt::QueuedConnection);
-    } else {
-        send();
-    }
-    return message.message_id;
-}
-
 void NetworkManager::set_avoided_peers(const std::set<std::string> &ips) {
     {
         std::lock_guard lock(avoided_peers_mutex_);
@@ -836,11 +797,6 @@ bool NetworkManager::is_avoided_peer(const std::string &ip) const {
     }
     std::lock_guard lock(avoided_peers_mutex_);
     return avoided_peers_.contains(ip);
-}
-
-ActorId NetworkManager::first_node_actor() const {
-    std::lock_guard lock(avoided_peers_mutex_);
-    return first_node_actor_;
 }
 
 std::string NetworkManager::send_message_send(const std::string &data_serialized,
@@ -919,16 +875,15 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               SendMode           send_mode,
                                               const std::string &receiver_identifier,
                                               MessageType        message_type,
-                                              MessageStatus      status_info,
-                                              const std::string &except_identifier) {
+                                              MessageStatus      status_info) {
     if (QThread::currentThread() != thread()) {
         // Socket state and routing must be inspected on their owning event loop.
         QMetaObject::invokeMethod(this,
                                   [this, serialized_message, non_serialized_message, send_mode,
-                                   receiver_identifier, message_type, status_info, except_identifier]() {
+                                   receiver_identifier, message_type, status_info]() {
             try {
                 send_message_connections(serialized_message, non_serialized_message, send_mode,
-                                         receiver_identifier, message_type, status_info, except_identifier);
+                                         receiver_identifier, message_type, status_info);
             } catch (const std::exception &) {
                 eWarning("[Network] Deferred message dispatch failed");
             }
@@ -945,8 +900,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     static auto is_send_check = [](const SendMode    &type_send,
                                    const std::string &receiver_identifier,
                                    const std::string &socket_identifier,
-                                   const MessageBody &package,
-                                   const std::string &except_identifier) {
+                                   const MessageBody &package) {
         switch (type_send) {
         case SendMode::Except:
             return socket_identifier != receiver_identifier;
@@ -955,8 +909,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         case SendMode::Neighbours:
             return true;
         case SendMode::Broadcast: {
-            bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier)
-                && socket_identifier != except_identifier;
+            bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
 
             if (res) {
                 // eTemp("[VPN] brocast further to socket: {}", socket_identifier);
@@ -1028,8 +981,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         bool send_checked = is_send_check(send_mode,
                                           receiver_identifier,
                                           service->identifier().toStdString(),
-                                          non_serialized_message,
-                                          except_identifier);
+                                          non_serialized_message);
 
         if (send_checked) {
             calculate_traffic_->add_bytes_sent(service->ip().toStdString(), serialized_message.size());
@@ -1063,24 +1015,11 @@ void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage 
 
     MessageBody message_edited = package_data.msg_body;
     message_edited.sender_id   = node->account_controller()->system_actor().id();
-    // Listed, the links an anonymous broadcast passed would name where it started, the one it came by among them;
-    // it goes on unlisted, and its echoes die by message id
-    if (!message_edited.anonymous()) {
-        message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
-        add_all_services_identifiers_to_message(message_edited);
-    } else {
-        message_edited.nodes_identifiers_to_ignore.clear();
-        message_edited.nodes_identifiers_to_ignore_later.clear();
-    }
+    message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
+    add_all_services_identifiers_to_message(message_edited);
 
     auto serialized = message_edited.serialize();
-    send_message_connections(serialized + package_data.sign,
-                             message_edited,
-                             SendMode::Broadcast,
-                             "",
-                             MessageType::Unknown,
-                             MessageStatus::NoStatus,
-                             package_data.prev_identifier);
+    send_message_connections(serialized + package_data.sign, message_edited, SendMode::Broadcast, "");
 
     // eTemp("Message forwarded with messageId: {}", package_data.msg_body.message_id);
 
@@ -1429,11 +1368,6 @@ void NetworkManager::prepare_received(const NetworkReceivedMessage &incoming) {
     pending->received_bytes = message.size();
     pending->is_luminance = is_luminance;
     pending->is_node = ip == first_node_;
-    // Whatever comes over the first node's link, its own or forwarded, names the first node as its sender
-    if (pending->is_node && !message_body.sender_id.is_zero() && !message_body.anonymous()) {
-        std::lock_guard lock(avoided_peers_mutex_);
-        first_node_actor_ = message_body.sender_id;
-    }
 
     // These handlers do not consume reputation; broadcast accounting still runs below.
     const bool unused_luminance = type == MessageType::Custom || type == MessageType::NewActor

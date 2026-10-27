@@ -277,7 +277,6 @@ private:
     std::map<std::string, ReconnEntry> reconn_;
     mutable std::mutex                 avoided_peers_mutex_;
     std::set<std::string>              avoided_peers_;
-    ActorId                            first_node_actor_;
 
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           messages_;
     std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;
@@ -321,14 +320,12 @@ private:
     void resume_received(const std::shared_ptr<PendingReceive>& pending);
     void dispatch_received(const PendingReceive& pending);
 
-    // A broadcast skips except_identifier too, the link it came by when it is not listed in the message
     void send_message_connections(const std::string& serialized_message,
                                   const MessageBody& non_serialized_message,
                                   SendMode           send_mode,
                                   const std::string& receiver_identifier,
-                                  MessageType        message_type      = MessageType::Unknown,
-                                  MessageStatus      status_info       = MessageStatus::NoStatus,
-                                  const std::string& except_identifier = "");
+                                  MessageType        message_type = MessageType::Unknown,
+                                  MessageStatus      status_info  = MessageStatus::NoStatus);
 
     void clear_network_caches();
 
@@ -461,27 +458,10 @@ public:
         return message_id;
     }
 
-    // A broadcast that names no actor or node of ours: the sender is the caller's one-time id, the body is not
-    // signed and lists no identifier of this node or its links. It leaves through the first node while that link
-    // is up, so no other neighbour sees where it started; answers come back by its message id as usual
-    template <class T>
-    std::string send_anonymous_broadcast(const T&       data,
-                                         MessageType    type,
-                                         MessageStatus  status,
-                                         const ActorId& sender) {
-        return send_anonymous_broadcast_serialized(MessagePack::serialize(data), type, status, sender);
-    }
-    std::string send_anonymous_broadcast_serialized(const std::string& data_serialized,
-                                                    MessageType        type,
-                                                    MessageStatus      status,
-                                                    const ActorId&     sender);
-
     // Addresses this node keeps away from: no dial or reconnection goes there and a link to one is dropped;
     // the first nodes never are
     void set_avoided_peers(const std::set<std::string>& ips);
     bool is_avoided_peer(const std::string& ip) const;
-    // The actor of the first node, as its last message named it; zero until one came
-    ActorId first_node_actor() const;
 
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 
