@@ -27,13 +27,20 @@ class Transaction;
 
 namespace ExtraChain::Consensus {
 
-    inline constexpr std::size_t   ShadowCommitteeSize        = 7;
+    // A committee of n validators tolerates (n - 1) / 3 faults; four is the smallest that tolerates one.
+    inline constexpr std::size_t   MinimumCommitteeSize       = 4;
+    inline constexpr std::size_t   MaximumCommitteeSize       = 64;
+    inline constexpr std::size_t   DefaultCommitteeSize       = 7;
     inline constexpr std::size_t   GovernanceSignerCount      = 5;
     inline constexpr std::uint16_t GovernanceThreshold        = 3;
     inline constexpr std::uint16_t RecoveryThreshold          = 4;
     inline constexpr std::uint64_t MinimumRecoveryDelayMillis = 24ULL * 60ULL * 60ULL * 1'000ULL;
     inline constexpr std::size_t   MaximumBootstrapEntries    = 64;
     inline constexpr std::size_t   MaximumBootstrapBytes      = 4ULL * 1024ULL * 1024ULL;
+
+    [[nodiscard]] constexpr bool valid_committee_size(std::size_t count) noexcept {
+        return count >= MinimumCommitteeSize && count <= MaximumCommitteeSize;
+    }
 
     enum class IntentOperation : std::uint8_t {
         Transfer,

@@ -160,7 +160,7 @@ namespace ExtraChain::Consensus {
             const auto recovery = read_document<MultisigPolicy>(directory / RecoveryPolicyFile);
             const auto anchor   = read_document<TrustAnchorV1>(directory / TrustAnchorFile);
             const auto manifest = read_document<ActivationManifestV1>(directory / ActivationManifestFile);
-            if (initial_validators.value().active().size() != ShadowCommitteeSize || !policy.has_value()
+            if (!valid_committee_size(initial_validators.value().active().size()) || !policy.has_value()
                 || !recovery.has_value() || !anchor.has_value() || !manifest.has_value()
                 || manifest.value().activation_height == 0
                 || manifest.value().authorization.sequence == std::numeric_limits<std::uint64_t>::max()

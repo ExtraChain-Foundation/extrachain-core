@@ -20,17 +20,19 @@ namespace {
         ValidatorSet                   document;
         ValidatorSetView               view;
 
-        Committee(Actor<KeyPrivate> network_actor = {}, std::uint64_t epoch = 1)
+        Committee(Actor<KeyPrivate> network_actor = {},
+                  std::uint64_t     epoch = 1,
+                  std::size_t       size  = DefaultCommitteeSize)
             : network(std::move(network_actor))
-            , view(make_view(epoch)) {
+            , view(make_view(epoch, size)) {
         }
 
-        ValidatorSetView make_view(std::uint64_t epoch) {
+        ValidatorSetView make_view(std::uint64_t epoch, std::size_t size) {
             if (network.empty()) {
                 network.create(ActorType::Service);
             }
             std::vector<ValidatorRecord> records;
-            for (std::size_t index = 0; index < ShadowCommitteeSize; ++index) {
+            for (std::size_t index = 0; index < size; ++index) {
                 Actor<KeyPrivate> actor;
                 actor.create(ActorType::Service);
                 KeyPrivate key;
@@ -164,6 +166,26 @@ int main() {
         std::filesystem::temp_directory_path() / ("extrachain-shadow-recovery-" + Utils::generate_random_hex(8));
     std::filesystem::create_directories(root);
     try {
+        for (const std::size_t size : std::initializer_list<std::size_t> { 3, 4, 15, 64, 65 }) {
+            bool accepted = false;
+            bool quorum   = true;
+            try {
+                Committee  sized({}, 1, size);
+                const auto view =
+                    ValidatorSetView::create_recovery_transition(sized.document, operator_attestations(sized));
+                accepted = view.has_value();
+                quorum   = !accepted || view.value().quorum() == 2 * size / 3 + 1;
+            } catch (const std::runtime_error&) {
+                // Fewer than four records do not form a validator set at all.
+            }
+            const auto name = "a committee of " + std::to_string(size) + " validators is "
+                              + (valid_committee_size(size) ? "accepted" : "rejected");
+            check(name.c_str(), accepted == valid_committee_size(size) && quorum);
+        }
+        check("committee bounds are four and sixty-four",
+              !valid_committee_size(3) && valid_committee_size(4) && valid_committee_size(64)
+                  && !valid_committee_size(65));
+
         Committee               current;
         Committee               next(current.network, 2);
         std::vector<KeyPrivate> governance_keys(5);

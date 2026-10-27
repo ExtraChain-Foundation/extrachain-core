@@ -76,7 +76,10 @@ fi
 # The harness must outlive the nodes' own window, otherwise their scheduled exit
 # races our deadline and a normal end-of-run looks like a crash.
 DEADLINE_S="${EXC_SHADOW_DEADLINE_S:-$((RUN_SECONDS + 120))}"
-NODE_COUNT="${EXC_SHADOW_NODE_COUNT:-7}"
+# Validators are nodes 0..COMMITTEE_SIZE-1; one more node, if present, observes.
+COMMITTEE_SIZE="${EXC_SHADOW_COMMITTEE_SIZE:-7}"
+export EXC_SHADOW_COMMITTEE_SIZE="$COMMITTEE_SIZE"
+NODE_COUNT="${EXC_SHADOW_NODE_COUNT:-$COMMITTEE_SIZE}"
 DFS_BYTES="${EXC_SHADOW_DFS_BYTES:-0}"
 export EXC_DFS_BYTES="$DFS_BYTES"
 VECTOR_ROWS="${EXC_SHADOW_VECTOR_ROWS:-0}"
@@ -377,12 +380,15 @@ summary() {
 [ -x "$DAG_AUDIT" ] || fail "DAG audit tool is absent: $DAG_AUDIT"
 [ -f "$SHADOW_VERIFY" ] || fail "cross-node verifier is absent: $SHADOW_VERIFY"
 [ -d "$SEED/dag" ] || fail "seed DAG is absent: $SEED"
-[ "$NODE_COUNT" -eq 7 ] || [ "$NODE_COUNT" -eq 8 ] || fail "NODE_COUNT must be 7 or 8"
+[[ "$COMMITTEE_SIZE" =~ ^[0-9]+$ ]] && [ "$COMMITTEE_SIZE" -ge 4 ] && [ "$COMMITTEE_SIZE" -le 19 ] \
+    || fail "COMMITTEE_SIZE must be 4..19 (one loopback address and port per node)"
+[ "$NODE_COUNT" -eq "$COMMITTEE_SIZE" ] || [ "$NODE_COUNT" -eq $((COMMITTEE_SIZE + 1)) ] \
+    || fail "NODE_COUNT must be COMMITTEE_SIZE or COMMITTEE_SIZE + 1"
 [ "$SENDERS" -ge 1 ] && [ "$SENDERS" -le "$NODE_COUNT" ] || fail "SENDERS must be 1..$NODE_COUNT"
 [ "$PER_SENDER" -le 64 ] || fail "PER_SENDER above 64 hits maximum_nonce_gap; use more senders instead"
 
 if command -v lsof >/dev/null 2>&1; then
-    for port in $(seq "$BASE_PORT" $((BASE_PORT + 40))); do
+    for port in $(seq "$BASE_PORT" $((BASE_PORT + 20 + NODE_COUNT))); do
         lsof -ti "tcp:$port" >/dev/null 2>&1 && fail "port $port is still busy"
     done
 fi
@@ -427,15 +433,15 @@ for index in $(seq 0 $((NODE_COUNT - 1))); do
     if [ -z "$PREPARED" ]; then PREPARED="$marker"
     elif [ "$PREPARED" != "$marker" ]; then fail "node $index has a different transition boundary"; fi
 done
-"$BUNDLE" "${NODE_HOMES[0]}" "${NODE_HOMES[@]:0:7}" >"$WORK/bundle.log" 2>&1 \
+"$BUNDLE" "${NODE_HOMES[0]}" "${NODE_HOMES[@]:0:$COMMITTEE_SIZE}" >"$WORK/bundle.log" 2>&1 \
     || { tail -40 "$WORK/bundle.log" >&2; fail "Shadow bundle creation failed"; }
-if [ "$NODE_COUNT" -eq 8 ]; then
-    mkdir -p "${NODE_HOMES[7]}/consensus"
+if [ "$NODE_COUNT" -gt "$COMMITTEE_SIZE" ]; then
+    mkdir -p "${NODE_HOMES[$COMMITTEE_SIZE]}/consensus"
     for document in activation-manifest governance-policy recovery-policy shadow-config trust-anchor validator-set; do
-        cp "${NODE_HOMES[0]}/consensus/$document.msgpack" "${NODE_HOMES[7]}/consensus/"
+        cp "${NODE_HOMES[0]}/consensus/$document.msgpack" "${NODE_HOMES[$COMMITTEE_SIZE]}/consensus/"
     done
 fi
-log "boundary=$PREPARED leader=$(sed -n 's/.*leader_index=\([0-6]\).*/\1/p' "$WORK/bundle.log")"
+log "boundary=$PREPARED leader=$(sed -n 's/.*leader_index=\([0-9]*\).*/\1/p' "$WORK/bundle.log")"
 
 fi
 if [ -n "${EXC_SHADOW_SAVE_FIXTURE:-}" ]; then

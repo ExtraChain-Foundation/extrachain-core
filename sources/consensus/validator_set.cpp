@@ -76,7 +76,7 @@ namespace ExtraChain::Consensus {
                 }
                 active.push_back(validator);
             }
-            if (active.size() < 4) {
+            if (active.size() < MinimumCommitteeSize) {
                 return std::unexpected(ConsensusError::InvalidValidatorSet);
             }
             std::ranges::sort(active, {}, &ValidatorRecord::validator_id);
@@ -147,7 +147,7 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidValidatorSet);
         }
         auto records = validate_records(validators);
-        if (!records.has_value() || records.value().first.size() != ShadowCommitteeSize
+        if (!records.has_value() || !valid_committee_size(records.value().first.size())
             || !operators_match(operators, records.value().first)) {
             return std::unexpected(ConsensusError::InvalidValidatorSet);
         }
@@ -174,7 +174,7 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidValidatorSet);
         }
         auto records = validate_records(validators);
-        if (!records.has_value() || records.value().first.size() != ShadowCommitteeSize
+        if (!records.has_value() || !valid_committee_size(records.value().first.size())
             || !operators_match(change.operators, records.value().first)) {
             return std::unexpected(ConsensusError::InvalidValidatorSet);
         }
@@ -191,7 +191,7 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidValidatorSet);
         }
         auto records = validate_records(validators);
-        if (!records.has_value() || records.value().first.size() != ShadowCommitteeSize
+        if (!records.has_value() || !valid_committee_size(records.value().first.size())
             || !operators_match(operators, records.value().first)) {
             return std::unexpected(ConsensusError::InvalidValidatorSet);
         }

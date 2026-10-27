@@ -8,17 +8,20 @@
  * or (at your option) any later version.
  */
 
-// Test-only Shadow ceremony for a local seven-process stand. The generated
-// governance and recovery keys live only in this process. Production operators
-// must use independent offline key custody and authorization shares.
+// Shadow ceremony for a stand or a test network, one node home per validator. The generated
+// governance, recovery and validator keys live only in this process unless EXC_SHADOW_KEYS_DIR
+// names a new directory to keep them in. Production operators must use independent offline
+// key custody and authorization shares.
 
 #include <boost/json.hpp>
 
+#include <algorithm>
 #include <charconv>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <iostream>
 #include <memory>
 #include <set>
 #include <string>
@@ -35,11 +38,10 @@
 #include "managers/account_controller.h"
 #include "utils/exc_utils.h"
 #include "utils/file_io.h"
+#include "utils/serialization.h"
 
 namespace {
     using namespace ExtraChain::Consensus;
-
-    constexpr std::size_t NodeCount = ShadowCommitteeSize;
 
     std::expected<std::string, std::string> read_node_identifier(const std::filesystem::path& home) {
         const auto content = FileIo::read_all(home / ".settings");
@@ -77,6 +79,86 @@ namespace {
         return result;
     }
 
+    // A login hash is the hex hash of a profile's login and password, as the console computes it.
+    bool valid_login_hash(std::string_view value) {
+        return value.size() == 64 && std::ranges::all_of(value, [](unsigned char character) {
+                   return (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f');
+               });
+    }
+
+    std::string stand_seed_login_hash() {
+        return Utils::calculate_hash("gen-login"
+                                     "gen-password");
+    }
+
+    bool write_private(const std::filesystem::path& path, const std::string& bytes) {
+        if (!FileIo::write_atomic(path, bytes).has_value()) {
+            return false;
+        }
+        std::error_code error;
+        std::filesystem::permissions(path,
+                                     std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+                                     std::filesystem::perm_options::replace,
+                                     error);
+        return !error;
+    }
+
+    // Keys in the shadowctl format: a network can then sign a committee change or a recovery.
+    bool save_ceremony_keys(const std::filesystem::path&          directory,
+                            const ActorId&                        network_id,
+                            std::uint64_t                         activation_section,
+                            const std::vector<std::string>&       node_identifiers,
+                            const std::vector<Actor<KeyPrivate>>& validator_actors,
+                            const std::vector<KeyPrivate>&        consensus_keys,
+                            const std::vector<KeyPrivate>&        governance_keys,
+                            const std::vector<KeyPrivate>&        recovery_keys) {
+        std::error_code error;
+        if (std::filesystem::exists(directory, error) || !std::filesystem::create_directories(directory, error)) {
+            std::fprintf(stderr, "[shadow-bundle] keys directory must be new: %s\n", directory.string().c_str());
+            return false;
+        }
+        std::filesystem::permissions(directory,
+                                     std::filesystem::perms::owner_all,
+                                     std::filesystem::perm_options::replace,
+                                     error);
+        if (error) {
+            return false;
+        }
+        boost::json::array validators;
+        for (std::size_t index = 0; index < node_identifiers.size(); ++index) {
+            const auto name = "validator-" + std::to_string(index);
+            if (!write_private(directory / (name + "-actor.msgpack"),
+                               MessagePack::serialize(validator_actors[index]))
+                || !write_private(directory / (name + "-consensus.msgpack"),
+                                  MessagePack::serialize(consensus_keys[index]))) {
+                return false;
+            }
+            validators.push_back(boost::json::object {
+                { "index", index },
+                { "node_identifier", node_identifiers[index] },
+                { "validator_id", validator_id_for(consensus_keys[index].public_key()) },
+                { "actor_id", validator_actors[index].id().to_string() },
+            });
+        }
+        for (const auto& [prefix, keys] : { std::pair { "governance-", &governance_keys },
+                                            std::pair { "recovery-", &recovery_keys } }) {
+            for (std::size_t index = 0; index < keys->size(); ++index) {
+                if (!write_private(directory / (prefix + std::to_string(index) + ".msgpack"),
+                                   MessagePack::serialize((*keys)[index]))) {
+                    return false;
+                }
+            }
+        }
+        const boost::json::object ceremony {
+            { "network_id", network_id.to_string() },
+            { "activation_dag_section", activation_section },
+            { "governance_public_keys", boost::json::value_from(public_keys(governance_keys)) },
+            { "recovery_public_keys", boost::json::value_from(public_keys(recovery_keys)) },
+            { "validators", validators },
+        };
+        return write_private(directory / "ceremony.json", boost::json::serialize(ceremony) + "\n");
+    }
+
     bool write_node_bundle(const std::filesystem::path& home,
                            const ValidatorSet&          validators,
                            const IdentityDocument&      identity,
@@ -99,11 +181,23 @@ namespace {
 int main(int argc, char* argv[]) {
     using namespace ExtraChain::Consensus;
 
+    if (argc == 2 && std::string_view(argv[1]) == "--login-hash") {
+        // Reads the login and the password as two lines, so neither appears in the process list.
+        std::string login;
+        std::string password;
+        if (!std::getline(std::cin, login) || !std::getline(std::cin, password) || login.empty()) {
+            std::fprintf(stderr, "usage: printf '%%s\\n%%s\\n' <login> <password> | %s --login-hash\n", argv[0]);
+            return 64;
+        }
+        std::printf("%s\n", Utils::calculate_hash(login + password).c_str());
+        return 0;
+    }
+
     if (argc == 4 && std::string_view(argv[1]) == "--prepare") {
         const auto             home = std::filesystem::absolute(argv[2]).lexically_normal();
         const std::string_view role = argv[3];
-        if (role != "seed" && role != "joiner") {
-            std::fprintf(stderr, "usage: %s --prepare <node-home> <seed|joiner>\n", argv[0]);
+        if (role != "seed" && role != "joiner" && !valid_login_hash(role)) {
+            std::fprintf(stderr, "usage: %s --prepare <node-home> <seed|joiner|login-hash>\n", argv[0]);
             return 64;
         }
         std::error_code directory_error;
@@ -114,22 +208,33 @@ int main(int argc, char* argv[]) {
         }
         auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 0);
         node->process();
-        const auto login_hash = role == "seed"
-                                    ? Utils::calculate_hash(
-                                          "gen-login"
-                                          "gen-password")
-                                    : Utils::calculate_hash(std::filesystem::current_path().string() + ":joiner");
+        const auto login_hash = role == "seed"     ? stand_seed_login_hash()
+                                : role == "joiner" ? Utils::calculate_hash(std::filesystem::current_path().string()
+                                                                           + ":joiner")
+                                                   : std::string(role);
         const auto login      = node->login(login_hash);
         if (!login.has_value()) {
             std::fprintf(stderr, "[shadow-bundle] node login failed: %d\n", static_cast<int>(login.error()));
             return 2;
         }
         node->dag()->set_mode(DagMode::Full);
+        const auto current  = section_number(node->dag()->current_section());
         const auto prepared = node->dag()->prepare_shadow_activation();
         if (!prepared.has_value()) {
             std::fprintf(stderr,
                          "[shadow-bundle] transition preparation failed: %d\n",
                          static_cast<int>(prepared.error()));
+            // Every legacy transaction opens the next section, so the network reaches a boundary
+            // after this many more transactions; then stop every node and prepare again.
+            if (current.has_value() && current.value() % ShadowSectionInterval != 0) {
+                std::fprintf(stderr,
+                             "[shadow-bundle] current section %llu is not a multiple of %llu: "
+                             "about %llu more transactions reach the boundary\n",
+                             static_cast<unsigned long long>(current.value()),
+                             static_cast<unsigned long long>(ShadowSectionInterval),
+                             static_cast<unsigned long long>(ShadowSectionInterval
+                                                             - current.value() % ShadowSectionInterval));
+            }
             node->cleanUp();
             return 2;
         }
@@ -140,21 +245,25 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    if (argc != static_cast<int>(NodeCount + 2)) {
+    const auto node_count = static_cast<std::size_t>(argc > 2 ? argc - 2 : 0);
+    if (!valid_committee_size(node_count)) {
         std::printf(
-            "usage: %s --prepare <node-home> <seed|joiner> | "
-            "%s <seed-home> <node-home-0> ... <node-home-6>\n",
+            "usage: %s --login-hash | %s --prepare <node-home> <seed|joiner|login-hash> | "
+            "%s <seed-home> <node-home-0> ... <node-home-n> (%zu to %zu validators)\n",
             argv[0],
-            argv[0]);
+            argv[0],
+            argv[0],
+            MinimumCommitteeSize,
+            MaximumCommitteeSize);
         return 64;
     }
 
     std::vector<std::filesystem::path> homes;
-    homes.reserve(NodeCount);
+    homes.reserve(node_count);
     std::vector<std::string> node_identifiers;
-    node_identifiers.reserve(NodeCount);
+    node_identifiers.reserve(node_count);
     std::set<std::string> unique_identifiers;
-    for (std::size_t index = 0; index < NodeCount; ++index) {
+    for (std::size_t index = 0; index < node_count; ++index) {
         const auto home       = std::filesystem::absolute(argv[index + 2]).lexically_normal();
         const auto identifier = read_node_identifier(home);
         if (!identifier.has_value()) {
@@ -184,11 +293,15 @@ int main(int argc, char* argv[]) {
         return 73;
     }
 
+    // The seed profile owns the network actor, which signs the validator set.
+    const char* seed_login = std::getenv("EXC_SHADOW_SEED_LOGIN_HASH");
+    if (seed_login != nullptr && !valid_login_hash(seed_login)) {
+        std::fprintf(stderr, "[shadow-bundle] EXC_SHADOW_SEED_LOGIN_HASH must be a 64-digit hex hash\n");
+        return 64;
+    }
     auto node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, false, 0);
     node->process();
-    const auto login =
-        node->login(Utils::calculate_hash("gen-login"
-                                          "gen-password"));
+    const auto login = node->login(seed_login != nullptr ? std::string(seed_login) : stand_seed_login_hash());
     if (!login.has_value()) {
         std::fprintf(stderr, "[shadow-bundle] seed login failed: %d\n", static_cast<int>(login.error()));
         return 2;
@@ -213,11 +326,11 @@ int main(int argc, char* argv[]) {
 
     const auto activation_section = current_section.value() + ShadowSectionInterval;
 
-    std::vector<Actor<KeyPrivate>> validator_actors(NodeCount);
-    std::vector<KeyPrivate>        consensus_keys(NodeCount);
+    std::vector<Actor<KeyPrivate>> validator_actors(node_count);
+    std::vector<KeyPrivate>        consensus_keys(node_count);
     std::vector<ValidatorRecord>   records;
-    records.reserve(NodeCount);
-    for (std::size_t index = 0; index < NodeCount; ++index) {
+    records.reserve(node_count);
+    for (std::size_t index = 0; index < node_count; ++index) {
         validator_actors[index].create(ActorType::Service);
         consensus_keys[index].generate_random();
         auto record = make_validator_record(network_id,
@@ -254,14 +367,14 @@ int main(int argc, char* argv[]) {
         return 3;
     }
     const auto& first_leader       = validator_view.value().leader(1, 0);
-    std::size_t first_leader_index = NodeCount;
-    for (std::size_t index = 0; index < NodeCount; ++index) {
+    std::size_t first_leader_index = node_count;
+    for (std::size_t index = 0; index < node_count; ++index) {
         if (validator_id_for(consensus_keys[index].public_key()) == first_leader.validator_id) {
             first_leader_index = index;
             break;
         }
     }
-    if (first_leader_index == NodeCount) {
+    if (first_leader_index == node_count) {
         std::fprintf(stderr, "[shadow-bundle] first leader mapping failed\n");
         return 3;
     }
@@ -329,8 +442,22 @@ int main(int argc, char* argv[]) {
         .maximum_batch_bytes    = (mining_test ? 16ULL : 4ULL) * 1024ULL * 1024ULL,
     };
 
+    if (const char* keys_directory = std::getenv("EXC_SHADOW_KEYS_DIR");
+        keys_directory != nullptr
+        && !save_ceremony_keys(std::filesystem::absolute(keys_directory).lexically_normal(),
+                               network_id,
+                               activation_section,
+                               node_identifiers,
+                               validator_actors,
+                               consensus_keys,
+                               governance_keys,
+                               recovery_keys)) {
+        std::fprintf(stderr, "[shadow-bundle] ceremony keys were not saved\n");
+        return 3;
+    }
+
     bool written = true;
-    for (std::size_t index = 0; index < NodeCount; ++index) {
+    for (std::size_t index = 0; index < node_count; ++index) {
         written = write_node_bundle(homes[index],
                                     validators.value(),
                                     IdentityDocument {
@@ -360,8 +487,9 @@ int main(int argc, char* argv[]) {
     }
 
     std::printf(
-        "[shadow-bundle] verified seven-node bundle network=%s activation_section=%llu "
+        "[shadow-bundle] verified %zu-node bundle network=%s activation_section=%llu "
         "leader_index=%zu\n",
+        node_count,
         network_id.to_string().c_str(),
         static_cast<unsigned long long>(activation_section),
         first_leader_index);

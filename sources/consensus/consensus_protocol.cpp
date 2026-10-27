@@ -914,7 +914,7 @@ namespace ExtraChain::Consensus {
             || change.activation_height <= current_height || change.current_validator_set_hash.empty()
             || change.next_validator_set_hash.empty() || change.registry_document_hash.empty()
             || change.authorization.action_hash != unsigned_epoch_change_hash(change)
-            || change.operators.size() != ShadowCommitteeSize) {
+            || !valid_committee_size(change.operators.size())) {
             return false;
         }
         std::set<std::string> operator_ids;

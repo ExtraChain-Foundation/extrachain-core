@@ -249,8 +249,12 @@ int main(int argc, char* argv[]) {
             return 64;
         const auto wave_count = wave_option.value();
         auto       wave       = resume_option.value();
+        // Nodes below this index vote; at most one more node observes.
+        const auto committee_size =
+            parse_wave_option("EXC_SHADOW_COMMITTEE_SIZE", DefaultCommitteeSize).value_or(0);
         if ((role != "seed" && role != "joiner")
-            || (node_count != ShadowCommitteeSize && node_count != ShadowCommitteeSize + 1)
+            || !valid_committee_size(committee_size)
+            || (node_count != committee_size && node_count != committee_size + 1)
             || node_index >= node_count || run_seconds < 10 || first_intent_nonce == 0
             || (intent_count > 0
                 && intent_count - 1 > std::numeric_limits<std::uint64_t>::max() - first_intent_nonce)) {
@@ -287,8 +291,8 @@ int main(int argc, char* argv[]) {
             }
         }
         if (node->consensus() == nullptr || !node->consensus()->active()
-            || (node_index < ShadowCommitteeSize && !node->consensus()->voting())
-            || (node_index >= ShadowCommitteeSize && node->consensus()->voting())) {
+            || (node_index < committee_size && !node->consensus()->voting())
+            || (node_index >= committee_size && node->consensus()->voting())) {
             std::printf("[node-run] Shadow Finality did not activate\n");
             node->cleanUp();
             return 3;
