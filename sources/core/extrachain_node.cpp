@@ -2454,6 +2454,31 @@ namespace ExtraChain::Core {
             }
             return result.value();
         }
+        // Under Shadow finality a transfer is a signed intent: the committee orders it and writes the
+        // transaction itself. Callers keep this one entry point for both modes.
+        if (transaction.type() == TransactionType::Regular && consensus_service_
+            && consensus_service_->requires_intent_v2()) {
+            const auto submitted = consensus_service_->submit_local_intent(
+                Consensus::TransactionIntentV2 {
+                    .network_id = network_id(),
+                    .sender     = signer.id(),
+                    .receiver   = transaction.receiver(),
+                    .token      = transaction.token(),
+                    .amount     = transaction.amount().to_string(),
+                    .operation  = Consensus::IntentOperation::Transfer,
+                },
+                transaction.meta().value_or(""),
+                signer);
+            if (!submitted.has_value()) {
+                eWarning("[Shadow] Transfer intent was not accepted: {}", std::to_underlying(submitted.error()));
+                return std::unexpected(TransactionError::IntentRequired);
+            }
+            eInfo("[Shadow] Transfer {} to {} submitted as intent {}",
+                  transaction.amount().to_string(),
+                  transaction.receiver(),
+                  submitted.value());
+            return transaction;
+        }
         auto transaction_result = dag_->send_transaction(transaction, signer);
         return transaction_result;
     }

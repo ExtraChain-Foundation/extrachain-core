@@ -170,6 +170,10 @@ namespace ExtraChain::Consensus {
         // A height with nothing to finalize only moves mining forward by block time; epochs and proof
         // windows last tens of seconds, so one such height this often is enough.
         constexpr std::uint64_t EmptyHeightIntervalMs = 2'000;
+
+        // A local request without its own window stays valid for this many heights: hours under load,
+        // and an idle network does not advance heights at all.
+        constexpr std::uint64_t LocalIntentLifetimeHeights = 10'000;
     } // namespace
 
     ConsensusService::ConsensusService(Core::ExtraChainNode& node, std::filesystem::path directory)
@@ -1233,6 +1237,11 @@ namespace ExtraChain::Consensus {
         const auto nonce = next_local_nonce(sender.id());
         if (!nonce.has_value())
             return std::unexpected(nonce.error());
+        // A request without its own expiry height gets the default window from the current height.
+        if (intent.expires_after_height == 0) {
+            intent.valid_after_height   = 0;
+            intent.expires_after_height = intent_height() + LocalIntentLifetimeHeights;
+        }
         intent.account_nonce     = nonce.value();
         const auto signed_intent = make_intent(std::move(intent), metadata, sender);
         if (!signed_intent.has_value())
