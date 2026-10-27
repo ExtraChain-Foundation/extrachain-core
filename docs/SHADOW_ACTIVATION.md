@@ -18,17 +18,22 @@ shares instead.
 - Every other node of the network becomes an observer. Older binaries keep restricted
   data access and do not take part in Shadow.
 
-## 1. Install the new binary
+## 1. Reach a section boundary on the running network
 
-Replace the binary on every node and restart it on the same data directory, without
-Shadow documents. The network keeps running in legacy mode. Confirm that DAG and DFS
-traffic still work before you continue.
+Shadow starts at a DAG section that is a multiple of 20. A legacy transaction is
+stamped with the sender's current section plus one, so sections advance only as
+transactions are accepted. Do this while the network still runs its current binary:
+stop writes from users, then submit one transaction at a time, waiting for each to be
+accepted, until every node reports the same current section and that section is a
+multiple of 20. Stop every node.
 
-## 2. Reach a section boundary
+Do not run the new binary in legacy mode to reach the boundary. On a freshly
+bootstrapped two-node stand its legacy transfers stalled: the sender found a control
+mismatch at the last boundary, entered DAG sync, and refused further transfers.
 
-Shadow starts at a DAG section that is a multiple of 20. Each legacy transaction opens
-the next section. Stop writes from users, then submit transactions until every node
-reports the same current section and that section is a multiple of 20. Stop every node.
+## 2. Install the new binary and seal the legacy DAG
+
+Replace the binary on every node. Do not start the nodes yet.
 
 On every validator, with the node stopped:
 
@@ -40,7 +45,9 @@ extrachain-shadow-bundle --prepare /path/to/data <login-hash>
 `--prepare` seals the legacy DAG at the boundary and prints
 `prepared network=<id> boundary=<section>`. Every node must print the same pair. If
 the current section is not a boundary, it fails and prints how many more transactions
-reach the next one; start the network, submit them, and repeat this step.
+reach the next one; start the network on the previous binary, submit them, and repeat
+steps 1 and 2. The legacy transition seal itself is verified; reaching the boundary
+with new binaries is not.
 
 ## 3. Generate the documents
 
