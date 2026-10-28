@@ -93,8 +93,9 @@ class Stand:
                      'bootstrap.log', environment)
         self.homes = [self.work / 'bootstrap' / ('server' if i == 0 else f'client{i}') / 'data'
                       for i in range(8)]
-        for home in self.homes:
-            self.checked([self.args.build / 'extrachain-shadow-bundle', '--prepare', home],
+        for index, home in enumerate(self.homes):
+            self.checked([self.args.build / 'extrachain-shadow-bundle', '--prepare', home,
+                          'seed' if index == 0 else 'joiner'],
                          'prepare.log')
         self.checked([self.args.build / 'extrachain-shadow-bundle', self.homes[0], *self.homes[:7]],
                      'bundle.log')
