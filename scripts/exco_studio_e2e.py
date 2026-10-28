@@ -20,6 +20,7 @@ class Stand:
         self.work = args.work.resolve()
         self.work.mkdir(parents=True, exist_ok=False)
         self.processes, self.streams = [], []
+        self.log_paths = {}
         self.sequence = 0
         self.next_sample = 0
         self.environment = dict(os.environ, EXCO_CONTROL=str(self.work / 'control'),
@@ -43,6 +44,7 @@ class Stand:
                                    env=environment or self.environment,
                                    stdout=stream, stderr=subprocess.STDOUT)
         self.processes.append(process)
+        self.log_paths[process.pid] = self.work / log
         return process
 
     def checked(self, command, log, environment=None):
@@ -66,7 +68,8 @@ class Stand:
                 fds = sum(1 for _ in (directory / 'fd').iterdir())
                 if rss > 4 * 1024 ** 3 or fds > 4096:
                     raise RuntimeError(f'Process {process.pid} exceeded the resource limit')
-                nodes.append(dict(pid=process.pid, rss_bytes=rss, fds=fds, threads=int(values['Threads'])))
+                nodes.append(dict(pid=process.pid, rss_bytes=rss, fds=fds, threads=int(values['Threads']),
+                                  log_bytes=self.log_paths[process.pid].stat().st_size))
             except FileNotFoundError:
                 continue
         free = shutil.disk_usage(self.work).free
