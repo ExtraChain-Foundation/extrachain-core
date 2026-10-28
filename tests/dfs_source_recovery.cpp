@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
         std::ofstream file(Dfs::Path::filePath(owner.id(), row.file_id), std::ios::binary);
         file << std::string(1024, 'x');
     }
-    row.hash    = Utils::calculate_hash_file(path.value()).value();
+    row.hash                         = Utils::calculate_hash_file(path.value()).value();
     const bool notice_before_catalog = std::string_view(argv[1]) == "notice-before-catalog";
     if (notice_before_catalog) {
         Responder holder;
@@ -261,7 +261,7 @@ int main(int argc, char** argv) {
         const bool plain_completion = std::string_view(argv[1]) == "completion";
         TEST_REQUIRE(plain_completion || notice_before_catalog || std::string_view(argv[1]) == "backoff");
         std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));
-        auto source = std::make_shared<Source>(*node);
+        auto source       = std::make_shared<Source>(*node);
         source->available = notice_before_catalog;
         node->network()->connections()->insert(source);
         node->dfs()->download_manager().add_to_queue(owner.id(), row, source->identifier());
