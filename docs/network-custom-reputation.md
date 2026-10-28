@@ -26,4 +26,4 @@ MessagePack decoding and delivery endpoints are observers; unrelated handlers
 are not compiled. Six scenarios cover local/forwarded/invalid custom payloads,
 unavailable-store access, focused/broadcast non-Custom controls and interleaving.
 Controls exercise missing/zero/positive reputation and the network multiplier.
-This is not a full socket/Qt/SQLite or platform VPN workflow qualification.
+This is not a full socket/Qt/SQLite or platform workflow qualification.

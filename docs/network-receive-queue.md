@@ -110,7 +110,7 @@ message processing or durable SQL success; rejected includes stopped intake.
 The server console exposes these counters through the separately token-gated
 `/diagnostics/receive-queue` provider. Ordinary status reads do not compute this
 snapshot. The endpoint does not change admission, ordering, quantum, capacity,
-durability or any VPN deadline, and instrumentation is not performance qualification.
+durability or any deadline, and instrumentation is not performance qualification.
 
 Connection activation requests DFS size only from the activated peer, using
 `newSocketActivatedWithParams` and a Focused Request. Previously every activation

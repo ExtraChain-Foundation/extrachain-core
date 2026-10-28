@@ -88,7 +88,7 @@ operation, plus concurrent consumers of its one shared connector. The first
 case reproduces the old metadata stall; the second retains serialization. Tests
 create only temporary databases, restore their working directory and never
 instantiate a node or touch a retained profile. Captured runtime stacks establish
-the blocked metadata path, not the cause of every slow VPN connection. Collection
+the blocked metadata path, not the cause of every slow connection. Collection
 hash reads can still wait on the default lock and need separate investigation.
 
 File-state request metadata reads are dispatched through the existing DFS pool,

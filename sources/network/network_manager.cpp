@@ -909,12 +909,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         case SendMode::Neighbours:
             return true;
         case SendMode::Broadcast: {
-            bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
-
-            if (res) {
-                // eTemp("[VPN] brocast further to socket: {}", socket_identifier);
-            }
-            return res;
+            return !package.nodes_identifiers_to_ignore.contains(socket_identifier);
         }
         default:
             return false;
