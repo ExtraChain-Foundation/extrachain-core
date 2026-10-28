@@ -17,6 +17,7 @@
 #include <tuple>
 
 #include "chain/actor_id.h"
+#include "chain/actor.h"
 #include "core/types.h"
 
 class SocketService;
@@ -39,6 +40,9 @@ public:
     [[nodiscard]] virtual ActorId                  local_network_id() const                             = 0;
     virtual void                                   adopt_network_id(const ActorId& network_id)          = 0;
     [[nodiscard]] virtual std::string              local_node_identifier() const                        = 0;
+    [[nodiscard]] virtual std::optional<Actor<KeyPublic>>       local_system_actor() const                    = 0;
+    [[nodiscard]] virtual std::string                           local_node_nonce() const                      = 0;
+    virtual std::expected<Signature, Cryptography::CryptoError> sign_handshake(const Bytes& transcript) const = 0;
     [[nodiscard]] virtual DfsMode                  local_dfs_mode() const                               = 0;
     [[nodiscard]] virtual bool                     has_active_duplicate(std::string_view     identifier,
                                                                         const SocketService* candidate) = 0;

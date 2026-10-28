@@ -40,10 +40,20 @@ enum class TransactionType {
     ContractUpgrade = 10, ///< Activate a new immutable contract version
     TokenMigration  = 11, ///< Schedule deterministic legacy-token migration
     EpochChange     = 12, ///< Activate a governed Shadow validator epoch
+    StorageRegister   = 13,
+    StorageUnregister = 14,
+    StorageProof      = 15,
+    MiningSettlement  = 16,
+    IntentCancel      = 17,
     Balance         = 99, ///< Balance query transaction
     Unknown         = 100 ///< Unrecognized transaction type
 };
 MSGPACK_ADD_ENUM(TransactionType)
+
+constexpr bool is_mining_request(TransactionType type) {
+    return type == TransactionType::StorageRegister || type == TransactionType::StorageUnregister
+           || type == TransactionType::StorageProof;
+}
 
 constexpr bool is_contract_transaction(TransactionType type) {
     return type == TransactionType::ContractDeploy || type == TransactionType::ContractCall
@@ -122,7 +132,8 @@ enum class TransactionProveError {
     TokenMigrationFrozen,
     AdmissionBusy,
     StateUnavailable,
-    IntentRequired ///< Legacy transaction arrived after the V2 activation point
+    IntentRequired, ///< Legacy transaction arrived after the V2 activation point
+    MiningProofRequired
 };
 
 /**

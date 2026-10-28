@@ -20,6 +20,7 @@
 #include "chain/transaction.h"
 
 #include "consensus/consensus_protocol.h"
+#include "consensus/mining_transaction.h"
 #include "utils/exc_utils.h"
 
 namespace {
@@ -146,6 +147,8 @@ std::string Transaction::hash_preimage(bool hex) const {
 }
 
 std::string Transaction::calculate_hash() const {
+    if (type_ == TransactionType::MiningSettlement)
+        return ExtraChain::Consensus::mining_settlement_identity(receiver_, section_);
     if (is_contract_transaction(type_)) {
         return Utils::calculate_hash(contract_hash_data(*this));
     }
@@ -154,6 +157,8 @@ std::string Transaction::calculate_hash() const {
 }
 
 std::string Transaction::calculate_hash_hex() const {
+    if (type_ == TransactionType::MiningSettlement)
+        return calculate_hash();
     return Utils::calculate_hash(hash_preimage(true));
 }
 
@@ -309,29 +314,11 @@ bool Transaction::operator<(const Transaction &other) const {
 }
 
 bool Transaction::operator==(const Transaction &transaction) const {
-    if (this->section_ != transaction.section())
-        return false;
-    if (this->type() != transaction.type())
-        return false;
-    if (this->sender_ != transaction.sender())
-        return false;
-    if (this->receiver_ != transaction.receiver())
-        return false;
-    if (this->token_ != transaction.token())
-        return false;
-    if (this->amount_ != transaction.amount()) {
-        // return false; // must be commented
-    }
-    if (this->timestamp_ != transaction.timestamp())
-        return false;
-    if (this->meta_ != transaction.meta())
-        return false;
-    if (this->consensus_intent_ != transaction.consensus_intent())
-        return false;
-    if (this->prev_hashs_ != transaction.prev_hashs())
-        return false;
-
-    return true;
+    return section_ == transaction.section_ && type_ == transaction.type_ && sender_ == transaction.sender_
+           && receiver_ == transaction.receiver_ && token_ == transaction.token_ && amount_ == transaction.amount_
+           && timestamp_ == transaction.timestamp_ && meta_ == transaction.meta_
+           && consensus_intent_ == transaction.consensus_intent_ && prev_hashs_ == transaction.prev_hashs_
+           && hash_ == transaction.hash_ && signature_ == transaction.signature_;
 }
 
 void Transaction::operator=(const Transaction &other) {

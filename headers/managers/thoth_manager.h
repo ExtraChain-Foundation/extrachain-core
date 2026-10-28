@@ -192,6 +192,8 @@ private:
     std::vector<ThothPendingRecord>              pending_records_;
 
     std::string ios_token_;
+    std::string persisted_token_;
+    std::string persisted_token_path_;
 
     // Reconcile anti-spam guard: redo only when the token or the chat count changed.
     std::string reconciled_token_;
@@ -203,6 +205,7 @@ private:
     std::string registry_key_;
     std::string registry_key();
 
+    std::optional<std::string> device_token_path() const;
     void persist_device_tokens();
     void load_persisted_device_tokens();
     void load_or_create_device_id();

@@ -22,12 +22,14 @@
 #include <algorithm>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 #include <set>
 
 #include "utils/compression.h"
 #include "utils/exc_logs.h"
 #include "utils/exc_utils.h"
 #include "utils/file_io.h"
+#include "utils/hash.h"
 
 namespace Pack {
 
@@ -175,34 +177,38 @@ std::optional<std::string> extract_section(const std::string &frame,
 } // namespace
 
 struct Reader::Impl {
-    std::filesystem::path      path;
-    std::vector<std::uint8_t>  buffer;
-    Header                     header{};
-    std::string_view           dict;
-    std::vector<FrameEntry>    frame_index;
+    std::filesystem::path   path;
+    Header                  header{};
+    std::string             dict;
+    std::vector<FrameEntry> frame_index;
     mutable std::unique_ptr<Compression::Context> ctx;
+    // Frames are read from the file when asked for. A pack is 50-70 MB and the registry
+    // keeps up to 16 readers open: holding whole files kept up to a gigabyte resident.
+    mutable std::ifstream file;
+    mutable std::mutex    file_mutex;
 
-    const char *data_ptr() const {
-        return reinterpret_cast<const char *>(buffer.data());
+    bool read_at(std::uint64_t offset, void *out, std::size_t size) const {
+        std::lock_guard lock(file_mutex);
+        file.clear();
+        file.seekg(static_cast<std::streamoff>(offset));
+        return static_cast<bool>(file.read(static_cast<char *>(out), static_cast<std::streamsize>(size)));
     }
 
-    bool load(const std::filesystem::path &p) {
+    bool load(const std::filesystem::path &p, bool verify_checksum) {
         path = p;
 
-        std::ifstream f(p, std::ios::binary | std::ios::ate);
-        if (!f)
+        file.open(p, std::ios::binary);
+        if (!file)
             return false;
-        std::streamsize sz = f.tellg();
-        if (sz < static_cast<std::streamsize>(sizeof(Header) + FOOTER_SIZE))
+        std::error_code size_error;
+        const auto      sz = std::filesystem::file_size(p, size_error);
+        if (size_error || sz < sizeof(Header) + FOOTER_SIZE)
             return false;
-        if (static_cast<std::uint64_t>(sz) > MAX_PACK_FILE_BYTES)
+        if (sz > MAX_PACK_FILE_BYTES)
             return false;
-        f.seekg(0);
-        buffer.resize(sz);
-        if (!f.read(reinterpret_cast<char *>(buffer.data()), sz))
+        if (!read_at(0, &header, sizeof(Header)))
             return false;
 
-        std::memcpy(&header, buffer.data(), sizeof(Header));
         if (header.magic != MAGIC)
             return false;
         if (header.version != FORMAT_VERSION)
@@ -218,7 +224,7 @@ struct Reader::Impl {
         if (header.dict_size > MAX_PACK_DICTIONARY_BYTES)
             return false;
 
-        auto end = buffer.size();
+        const std::uint64_t end = sz;
         // A pack can arrive from an untrusted peer, so header fields are hostile.
         // Compare as (limit - offset) to avoid the offset+size sum wrapping past
         // 2^64 and passing a naive `offset + size > end` check.
@@ -245,22 +251,46 @@ struct Reader::Impl {
             || header.frame_index_offset + header.frame_index_size != footer_off) {
             return false;
         }
+        char footer[FOOTER_SIZE];
+        if (!read_at(footer_off, footer, FOOTER_SIZE))
+            return false;
         std::uint32_t footer_magic;
-        std::memcpy(&footer_magic, buffer.data() + footer_off + 64, 4);
+        std::memcpy(&footer_magic, footer + 64, 4);
         if (footer_magic != MAGIC)
             return false;
 
-        auto        expected = compute_checksum(data_ptr(), footer_off);
-        std::string stored(reinterpret_cast<const char *>(buffer.data() + footer_off), 64);
-        if (expected != stored)
+        // The same BLAKE3 digest compute_checksum takes over the whole buffer, streamed.
+        if (verify_checksum) {
+            blake3_hasher hasher;
+            blake3_hasher_init(&hasher);
+            std::vector<char> chunk(1024 * 1024);
+            for (std::uint64_t offset = 0; offset < footer_off;) {
+                const auto size = static_cast<std::size_t>(std::min<std::uint64_t>(chunk.size(), footer_off - offset));
+                if (!read_at(offset, chunk.data(), size))
+                    return false;
+                blake3_hasher_update(&hasher, chunk.data(), size);
+                offset += size;
+            }
+            std::uint8_t digest[BLAKE3_OUT_LEN];
+            blake3_hasher_finalize(&hasher, digest, BLAKE3_OUT_LEN);
+            constexpr char hex[] = "0123456789abcdef";
+            std::string    expected;
+            expected.reserve(BLAKE3_OUT_LEN * 2);
+            for (const auto byte : digest) {
+                expected.push_back(hex[byte >> 4]);
+                expected.push_back(hex[byte & 0x0f]);
+            }
+            if (expected != std::string_view(footer, 64))
+                return false;
+        }
+
+        dict.resize(header.dict_size);
+        if (header.dict_size > 0 && !read_at(header.dict_offset, dict.data(), dict.size()))
             return false;
 
-        dict = std::string_view(data_ptr() + header.dict_offset, header.dict_size);
-
         frame_index.resize(header.frame_count);
-        if (header.frame_count > 0) {
-            std::memcpy(frame_index.data(), buffer.data() + header.frame_index_offset, header.frame_index_size);
-        }
+        if (header.frame_count > 0 && !read_at(header.frame_index_offset, frame_index.data(), header.frame_index_size))
+            return false;
 
         std::uint64_t processed_sections = 0;
         std::uint64_t processed_bytes    = 0;
@@ -314,11 +344,13 @@ struct Reader::Impl {
         if (fe.offset > header.data_size || fe.size > header.data_size - fe.offset) {
             return std::nullopt;
         }
-        std::string_view frame_data(data_ptr() + header.data_offset + fe.offset, fe.size);
+        std::string frame_data(fe.size, '\0');
+        if (!read_at(header.data_offset + fe.offset, frame_data.data(), frame_data.size()))
+            return std::nullopt;
         auto out = ctx->decompress_frame(frame_data);
         if (!out.has_value()) return std::nullopt;
         if (out->size() > MAX_FRAME_DECOMPRESSED_BYTES) return std::nullopt;
-        return *out;
+        return std::move(out.value());
     }
 };
 
@@ -327,10 +359,10 @@ Reader::~Reader()                                   = default;
 Reader::Reader(Reader &&) noexcept                  = default;
 Reader &Reader::operator=(Reader &&) noexcept       = default;
 
-std::expected<Reader, Error> Reader::open(const std::filesystem::path &path) {
+std::expected<Reader, Error> Reader::open(const std::filesystem::path &path, bool verify_checksum) {
     Reader r;
     r.impl_ = std::make_unique<Impl>();
-    if (!r.impl_->load(path)) {
+    if (!r.impl_->load(path, verify_checksum)) {
         return std::unexpected(Error::OpenFailed);
     }
     return r;
@@ -363,6 +395,28 @@ std::optional<std::string> Reader::read(const SectionId &id) const {
     if (!frame.has_value()) return std::nullopt;
     const auto &fe = impl_->frame_index[frame_idx];
     return extract_section(*frame, raw, fe.first_section, fe.count);
+}
+
+std::optional<std::size_t> Reader::frame_for(const SectionId &id) const {
+    const std::uint64_t raw = section_to_u64(id);
+    if (raw < impl_->header.first_section || raw > impl_->header.last_section)
+        return std::nullopt;
+    const auto index = impl_->find_frame(raw);
+    if (index < 0)
+        return std::nullopt;
+    return static_cast<std::size_t>(index);
+}
+
+std::optional<std::string> Reader::frame(std::size_t index) const {
+    return impl_->decompress_frame(index);
+}
+
+std::optional<std::string> Reader::section_from_frame(const SectionId &id, std::size_t index,
+                                                      const std::string &frame) const {
+    if (index >= impl_->frame_index.size())
+        return std::nullopt;
+    const auto &fe = impl_->frame_index[index];
+    return extract_section(frame, section_to_u64(id), fe.first_section, fe.count);
 }
 
 std::vector<std::pair<SectionId, std::string>>
@@ -427,6 +481,22 @@ std::expected<void, Error> write(const std::filesystem::path            &path,
         return std::unexpected(Error::NonConsecutiveSections);
     }
 
+    return write(path, pack_id, first, last, [&sections](const SectionId &id) -> std::optional<std::string> {
+        const auto it = sections.find(id);
+        if (it == sections.end())
+            return std::nullopt;
+        return it->second;
+    });
+}
+
+std::expected<void, Error> write(const std::filesystem::path &path,
+                                 PackId                       pack_id,
+                                 const SectionId             &first,
+                                 const SectionId             &last,
+                                 const SectionSource         &read_section) {
+    if (!read_section || first < SectionId(0) || last < first || last - first >= SectionId(SECTIONS_PER_PACK))
+        return std::unexpected(Error::InvalidFormat);
+
     std::uint64_t first_int, last_int;
     try {
         first_int = section_to_u64(first);
@@ -435,44 +505,62 @@ std::expected<void, Error> write(const std::filesystem::path            &path,
         return std::unexpected(Error::InvalidFormat);
     }
 
-    std::string dict = build_dict(sections);
+    std::map<SectionId, std::string> sample;
+    std::size_t                      sample_bytes  = 0;
+    const auto                       section_count = last_int - first_int + 1;
+    for (std::uint64_t offset = 0; offset < std::min<std::uint64_t>(section_count, SECTIONS_PER_FRAME); ++offset) {
+        const SectionId section_id(first_int + offset);
+        auto            payload = read_section(section_id);
+        if (!payload.has_value())
+            return std::unexpected(Error::ReadFailed);
+        if (sample_bytes > MAX_FRAME_DECOMPRESSED_BYTES - 4
+            || payload.value().size() > MAX_FRAME_DECOMPRESSED_BYTES - 4 - sample_bytes)
+            return std::unexpected(Error::InvalidFormat);
+        sample_bytes += payload.value().size() + 4;
+        sample.emplace(section_id, std::move(payload.value()));
+    }
+    std::string dict = build_dict(sample);
     if (dict.size() > MAX_PACK_DICTIONARY_BYTES)
         return std::unexpected(Error::InvalidFormat);
     Compression::Context ctx(dict, COMPRESSION_LEVEL);
 
     std::vector<FrameEntry> frame_index;
     std::string             data_blob;
-    std::size_t             total_raw_size = 0;
 
-    auto it = sections.begin();
-    while (it != sections.end()) {
+    std::uint64_t next = 0;
+    while (next < section_count) {
         std::string raw_frame;
         FrameEntry  fe {};
-        fe.first_section = section_to_u64(it->first);
+        fe.first_section = first_int + next;
         fe.offset        = data_blob.size();
 
         std::uint32_t count = 0;
-        while (it != sections.end() && count < SECTIONS_PER_FRAME) {
-            const std::string &payload = it->second;
-            std::uint32_t      len     = static_cast<std::uint32_t>(payload.size());
+        while (next < section_count && count < SECTIONS_PER_FRAME) {
+            const SectionId section_id(first_int + next);
+            const auto      sampled = sample.find(section_id);
+            auto payload = sampled != sample.end() ? std::optional<std::string>(std::move(sampled->second))
+                                                   : read_section(section_id);
+            if (!payload.has_value())
+                return std::unexpected(Error::ReadFailed);
+            if (raw_frame.size() > MAX_FRAME_DECOMPRESSED_BYTES - 4
+                || payload.value().size() > MAX_FRAME_DECOMPRESSED_BYTES - 4 - raw_frame.size())
+                return std::unexpected(Error::InvalidFormat);
+            std::uint32_t len = static_cast<std::uint32_t>(payload.value().size());
             raw_frame.append(reinterpret_cast<const char *>(&len), 4);
-            raw_frame.append(payload);
+            raw_frame.append(payload.value());
             ++count;
-            ++it;
+            ++next;
         }
-        if (raw_frame.size() > MAX_FRAME_DECOMPRESSED_BYTES
-            || raw_frame.size() > MAX_PACK_DECOMPRESSED_BYTES - total_raw_size) {
-            return std::unexpected(Error::InvalidFormat);
-        }
-        total_raw_size += raw_frame.size();
         fe.count = count;
 
         auto compressed = ctx.compress_frame(raw_frame);
         if (!compressed.has_value()) {
             return std::unexpected(Error::CompressionFailed);
         }
-        fe.size = static_cast<std::uint32_t>(compressed->size());
-        data_blob.append(*compressed);
+        if (compressed.value().size() > MAX_PACK_FILE_BYTES - data_blob.size())
+            return std::unexpected(Error::InvalidFormat);
+        fe.size = static_cast<std::uint32_t>(compressed.value().size());
+        data_blob.append(compressed.value());
 
         frame_index.push_back(fe);
     }
@@ -498,6 +586,8 @@ std::expected<void, Error> write(const std::filesystem::path            &path,
     hdr.frame_index_size   = frame_index.size() * sizeof(FrameEntry);
     cursor += hdr.frame_index_size;
 
+    if (cursor > MAX_PACK_FILE_BYTES - FOOTER_SIZE)
+        return std::unexpected(Error::InvalidFormat);
     std::string out;
     out.reserve(cursor + FOOTER_SIZE);
     out.append(reinterpret_cast<const char *>(&hdr), sizeof(Header));

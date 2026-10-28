@@ -98,6 +98,9 @@ struct Context::Impl {
     ZSTD_CDict *cdict = nullptr;
     ZSTD_DDict *ddict = nullptr;
     int        level = DEFAULT_LEVEL;
+    // A pack reader only decompresses. The compression side (a CDict is about a megabyte)
+    // is built on the first compress_frame, from this copy of the dictionary.
+    std::string dict;
 
     ~Impl() {
         if (cdict) ZSTD_freeCDict(cdict);
@@ -110,11 +113,10 @@ struct Context::Impl {
 Context::Context(std::string_view dict, int level)
     : impl_(new Impl()) {
     impl_->level = level;
-    impl_->cctx  = ZSTD_createCCtx();
     impl_->dctx  = ZSTD_createDCtx();
 
     if (!dict.empty()) {
-        impl_->cdict = ZSTD_createCDict(dict.data(), dict.size(), level);
+        impl_->dict  = std::string(dict);
         impl_->ddict = ZSTD_createDDict(dict.data(), dict.size());
     }
 }
@@ -138,7 +140,15 @@ Context &Context::operator=(Context &&other) noexcept {
 }
 
 std::expected<std::string, Error> Context::compress_frame(std::string_view data) const {
-    if (!impl_ || !impl_->cctx) return std::unexpected(Error::CompressFailed);
+    if (!impl_) return std::unexpected(Error::CompressFailed);
+    if (!impl_->cctx) {
+        impl_->cctx = ZSTD_createCCtx();
+        if (!impl_->cctx) return std::unexpected(Error::CompressFailed);
+    }
+    if (!impl_->dict.empty() && !impl_->cdict) {
+        impl_->cdict = ZSTD_createCDict(impl_->dict.data(), impl_->dict.size(), impl_->level);
+        if (!impl_->cdict) return std::unexpected(Error::CompressFailed);
+    }
 
     size_t bound = ZSTD_compressBound(data.size());
     std::string out;

@@ -2,11 +2,13 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <thread>
 
 #include <boost/asio/post.hpp>
 
+#include "chain/actor_index.h"
 #include "core/extrachain_node.h"
 #include "dfs/dfs_service.h"
 #include "managers/account_controller.h"
@@ -25,9 +27,17 @@ namespace {
             activated_  = true;
         }
 
-        std::atomic_uint requests { 0 };
-        std::atomic_uint notifications { 0 };
-        std::atomic_bool available { false };
+        std::atomic_uint         requests { 0 };
+        std::atomic_uint         notifications { 0 };
+        std::atomic_bool         available { false };
+        Actor<KeyPrivate>        signer;
+        std::mutex               frames_mutex;
+        std::vector<MessageBody> frames;
+
+        std::vector<MessageBody> captured() {
+            std::lock_guard lock(frames_mutex);
+            return frames;
+        }
 
         std::string protocol_string() const override {
             return "test";
@@ -57,6 +67,11 @@ namespace {
             if (!message.has_value()) {
                 return;
             }
+            if (message.value().message_type == MessageType::DfsFileFragment) {
+                std::lock_guard lock(frames_mutex);
+                frames.push_back(message.value());
+                return;
+            }
             if (message.value().message_type == MessageType::DfsFileExistNotification) {
                 const auto state = MessagePack::deserialize<Dfs::Packets::FileState>(message.value().data);
                 TEST_REQUIRE(state.has_value());
@@ -73,11 +88,28 @@ namespace {
             TEST_REQUIRE(request.has_value());
             requests.fetch_add(1);
             boost::asio::post(node_.serial_executor(),
-                              [node   = &node_,
-                               link   = request.value().file_link,
-                               source = identifier_,
-                               ready  = available.load()] {
-                                  if (ready) {
+                              [this,
+                               node       = &node_,
+                               link       = request.value().file_link,
+                               source     = identifier_,
+                               message_id = message.value().message_id,
+                               ready      = available.load()] {
+                                  const auto batch = captured();
+                                  if (ready && !batch.empty()) {
+                                      for (auto frame : batch) {
+                                          frame.message_id             = message_id;
+                                          frame.sender_id              = signer.id();
+                                          frame.init_sender_id         = signer.id();
+                                          frame.init_sender_identifier = source;
+                                          const auto signature =
+                                              signer.key()
+                                                  .sign(ByteArray(frame.calculate_hash()).toBytes())
+                                                  .value();
+                                          const auto bytes = frame.serialize() + ByteArray(signature).toString();
+                                          node->network()->message_received(bytes, "127.0.0.1", source);
+                                          node->network()->message_received(bytes, "127.0.0.1", source);
+                                      }
+                                  } else if (ready) {
                                       node->dfs()
                                           ->download_manager()
                                           .file_fragment_achieved({ .owner_id        = link.owner_id,
@@ -87,7 +119,8 @@ namespace {
                                                                     .current_size    = 1024,
                                                                     .fragment_number = 1,
                                                                     .full_amount_fragments = 1 },
-                                                                  source);
+                                                                  source,
+                                                                  message_id);
                                   } else {
                                       Responder responder;
                                       responder.add_identifier(source);
@@ -113,6 +146,32 @@ namespace {
     }
 } // namespace
 
+class LoadManagerTestAccess {
+public:
+    static bool cooling_down(LoadManager& manager, const Dfs::FileLink& link) {
+        auto locked = *manager.m_active_downloads_priority;
+        auto item   = locked->find(link);
+        return item != locked->end() && item->second.cooldown_until > std::chrono::system_clock::now();
+    }
+
+    static void expire_cooldown(LoadManager& manager, const Dfs::FileLink& link) {
+        auto locked = *manager.m_active_downloads_priority;
+        auto item   = locked->find(link);
+        TEST_REQUIRE(item != locked->end());
+        item->second.cooldown_until = std::chrono::system_clock::now() - 1s;
+    }
+
+    static bool forced(LoadManager& manager, const Dfs::FileLink& link) {
+        auto locked = *manager.m_active_downloads_priority;
+        auto item   = locked->find(link);
+        return item != locked->end() && item->second.forced;
+    }
+
+    static void kick(LoadManager& manager) {
+        manager.kick();
+    }
+};
+
 int main(int argc, char** argv) {
     TEST_REQUIRE(argc == 2);
     const auto original = std::filesystem::current_path();
@@ -132,9 +191,10 @@ int main(int argc, char** argv) {
     row.actor_id      = owner.id();
     row.file_id       = std::string(64, 'b');
     row.name          = "recovered-file";
-    row.size          = 1024;
+    const bool batch  = std::string_view(argv[1]) == "batch";
+    row.size          = batch ? 2 * Dfs::Basic::FRAGMENT_SIZE + 17 : 1024;
     row.last_modified = 500;
-    row.state         = Dfs::FileState::Known;
+    row.state         = batch ? Dfs::FileState::Ready : Dfs::FileState::Known;
     row.type          = Dfs::FileType::File;
     const auto path   = Dfs::Path::file_path(owner.id(), row.file_id);
     TEST_REQUIRE(path.has_value());
@@ -142,9 +202,22 @@ int main(int argc, char** argv) {
         std::filesystem::path(Dfs::Path::filePath(owner.id(), row.file_id)).parent_path());
     {
         std::ofstream file(Dfs::Path::filePath(owner.id(), row.file_id), std::ios::binary);
-        file << std::string(1024, 'x');
+        file << std::string(row.size, 'x');
     }
-    row.hash    = Utils::calculate_hash_file(path.value()).value();
+    row.hash                         = Utils::calculate_hash_file(path.value()).value();
+    const bool notice_before_catalog = std::string_view(argv[1]) == "notice-before-catalog";
+    if (notice_before_catalog) {
+        Responder holder;
+        holder.add_identifier(std::string(64, 'f'));
+        node->dfs()->network_response_file_state({ .owner_id          = owner.id(),
+                                                   .file_id           = row.file_id,
+                                                   .state             = Dfs::FileState::Ready,
+                                                   .hash              = row.hash,
+                                                   .notify_neighbours = true },
+                                                 holder);
+        TEST_REQUIRE_EQ(node->dfs()->download_manager().active_downloads_size(), std::size_t(0));
+        TEST_REQUIRE(!Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db, owner.id(), row.file_id).has_value());
+    }
     auto stored = Utils::to_dbrow(row);
     stored.erase("prev_file_id");
     using namespace Dfs::Tables::DirsFile;
@@ -156,7 +229,47 @@ int main(int argc, char** argv) {
         return current.value().state;
     };
 
-    if (std::string_view(argv[1]) == "metadata") {
+    if (batch) {
+        auto source = std::make_shared<Source>(*node);
+        source->signer.create(ActorType::User);
+        TEST_REQUIRE(node->actor_index()->save_actor(source->signer.to_public()).has_value());
+        node->network()->connections()->insert(source);
+        Responder request;
+        request.add_identifier(source->identifier());
+        request.set_message_id(std::string(15, 'a'));
+        node->dfs()->download_manager().share_stored_file({ .file_link        = { .owner_id = owner.id(),
+                                                                                  .file_id  = row.file_id },
+                                                            .fragment_numbers = { 1, 2, 3 } },
+                                                          request);
+        TEST_REQUIRE(wait_for([&] {
+            return source->captured().size() == 3;
+        }));
+        std::filesystem::remove(path.value().native());
+        ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
+        row.state         = Dfs::FileState::Known;
+        source->available = true;
+        node->dfs()->download_manager().add_to_queue(owner.id(), row, source->identifier());
+        TEST_REQUIRE(wait_for([&] {
+            return state() == Dfs::FileState::Ready;
+        }));
+        TEST_REQUIRE_EQ(source->requests.load(), 1U);
+        TEST_REQUIRE_EQ(Utils::calculate_hash_file(path.value()).value(), row.hash);
+        TEST_REQUIRE(wait_for([&] {
+            return source->notifications.load() == 1;
+        }));
+        source->close_connection();
+        node->network()->connections()->erase(source);
+    } else if (std::string_view(argv[1]) == "metadata") {
+        Responder                     holder;
+        const Dfs::Packets::FileState forged { .owner_id = owner.id(),
+                                               .file_id  = row.file_id,
+                                               .state    = Dfs::FileState::Ready,
+                                               .hash     = std::string(64, '0') };
+        node->dfs()->network_response_file_state(forged, holder);
+        holder.add_identifier(std::string(64, 'f'));
+        node->dfs()->network_response_file_state(forged, holder);
+        TEST_REQUIRE_EQ(node->dfs()->download_manager().active_downloads_size(), std::size_t(0));
+        TEST_REQUIRE_EQ(ActorSpace::get_dir_row(db, owner.id(), row.file_id).value().hash, row.hash);
         node->dfs()->download_manager().add_to_queue(owner.id(), row, "");
         TEST_REQUIRE_EQ(state(), Dfs::FileState::Ready);
         ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
@@ -164,18 +277,53 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(wait_for([&] {
             return state() == Dfs::FileState::Ready;
         }));
-        ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Removed);
-        node->dfs()->completeDownloadedFile(owner.id(), row);
-        TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
         ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
         auto obsolete = row;
         obsolete.hash = std::string(64, '0');
         node->dfs()->completeDownloadedFile(owner.id(), obsolete);
         TEST_REQUIRE_EQ(state(), Dfs::FileState::Known);
-    } else {
-        TEST_REQUIRE(std::string_view(argv[1]) == "backoff");
+        TEST_REQUIRE(node->dfs()->remove_stored_file(owner.id(), row.file_id).has_value());
+        node->dfs()->completeDownloadedFile(owner.id(), row);
+        TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
+        ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
+        TEST_REQUIRE_EQ(state(), Dfs::FileState::Removed);
+        TEST_REQUIRE(!std::filesystem::exists(path.value().native()));
+
+    } else if (std::string_view(argv[1]) == "reprobe") {
+        // A storage write holds the file's write lock and then reads the download pool.
+        // The scheduler must not wait for that write lock while it holds the pool, which
+        // it did when a cooldown ended and it asked the network for the file again.
         std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));
-        auto source = std::make_shared<Source>(*node);
+        auto&                manager = node->dfs()->download_manager();
+        const Dfs::FileLink link { .owner_id = owner.id(), .file_id = row.file_id };
+        manager.add_to_queue(owner.id(), row, "");
+        TEST_REQUIRE(wait_for([&] {
+            return LoadManagerTestAccess::cooling_down(manager, link);
+        }));
+        {
+            auto write_lock = manager.lock_file(link);
+            LoadManagerTestAccess::expire_cooldown(manager, link);
+            LoadManagerTestAccess::kick(manager);
+            std::this_thread::sleep_for(300ms);
+            auto pool_read = std::async(std::launch::async, [&] {
+                return manager.is_downloading(link);
+            });
+            if (pool_read.wait_for(5s) != std::future_status::ready) {
+                std::printf("DFS scheduler deadlocked on the file write lock\n");
+                std::fflush(stdout);
+                std::_Exit(1);
+            }
+        }
+        // The probe itself still happens once the write lock is free.
+        TEST_REQUIRE(wait_for([&] {
+            return LoadManagerTestAccess::forced(manager, link);
+        }));
+    } else {
+        const bool plain_completion = std::string_view(argv[1]) == "completion";
+        TEST_REQUIRE(plain_completion || notice_before_catalog || std::string_view(argv[1]) == "backoff");
+        std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));
+        auto source       = std::make_shared<Source>(*node);
+        source->available = notice_before_catalog;
         node->network()->connections()->insert(source);
         node->dfs()->download_manager().add_to_queue(owner.id(), row, source->identifier());
         TEST_REQUIRE(wait_for([&] {
@@ -185,15 +333,17 @@ int main(int argc, char** argv) {
         std::printf("DFS refused-source requests in 250ms: %u\n", source->requests.load());
         std::fflush(stdout);
         TEST_REQUIRE(source->requests.load() <= 3);
-        source->available = true;
         Responder responder;
         responder.add_identifier(source->identifier());
-        node->dfs()->network_response_file_state({ .owner_id          = owner.id(),
-                                                   .file_id           = row.file_id,
-                                                   .state             = Dfs::FileState::Ready,
-                                                   .hash              = row.hash,
-                                                   .notify_neighbours = true },
-                                                 responder);
+        if (!notice_before_catalog) {
+            source->available = true;
+            node->dfs()->network_response_file_state({ .owner_id          = owner.id(),
+                                                       .file_id           = row.file_id,
+                                                       .state             = Dfs::FileState::Ready,
+                                                       .hash              = row.hash,
+                                                       .notify_neighbours = !plain_completion },
+                                                     responder);
+        }
         TEST_REQUIRE(wait_for([&] {
             return state() == Dfs::FileState::Ready;
         }));
@@ -201,6 +351,13 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(wait_for([&] {
             return source->notifications.load() == 1;
         }));
+        node->dfs()->network_response_file_state({ .owner_id = owner.id(),
+                                                   .file_id  = row.file_id,
+                                                   .state    = Dfs::FileState::Ready,
+                                                   .hash     = row.hash },
+                                                 responder);
+        std::this_thread::sleep_for(50ms);
+        TEST_REQUIRE_EQ(source->notifications.load(), 1U);
         source->close_connection();
         node->network()->connections()->erase(source);
     }

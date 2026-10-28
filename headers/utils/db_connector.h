@@ -152,9 +152,10 @@ enum class DbConnectorType {
 class EXTRACHAIN_EXPORT DbConnector {
 protected:
     std::string                  m_file;
-    bool                         m_open = false;
-    sqlite3                     *db     = nullptr;
-    DbConnectorType              m_type = DbConnectorType::Regular;
+    bool                         m_open             = false;
+    sqlite3                     *db                 = nullptr;
+    DbConnectorType              m_type             = DbConnectorType::Regular;
+    std::size_t                  m_lifecycle_stripe = 0;
     mutable std::recursive_mutex m_database_mutex;
 
 public:
@@ -167,6 +168,8 @@ public:
 
 public:
     static std::string sqlite_version();
+
+    [[nodiscard]] std::unique_lock<std::recursive_mutex> transaction_lock() const;
 
     bool                        open(bool create_if_missing = true);
     bool                        close();
@@ -193,6 +196,7 @@ public:
 
 public:
     bool                query(std::string query);
+    bool                query(std::string query, const std::string &table_name, const DbRow &binds);
     boost::json::object to_json_object();
     std::string         to_json();
 

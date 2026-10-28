@@ -145,9 +145,8 @@ private:
 class SeedProfile {
 public:
     std::expected<void, bool>                                  save(const std::string &hash);
-    static std::expected<SeedProfile, PrivateProfileReadError> load(
-        const std::string                        &file_name,
-        const std::variant<std::string, KeyPass> &key_or_password);
+    static std::expected<SeedProfile, PrivateProfileReadError> load(const std::string &file_name,
+                                                                    const std::string &password);
 
     void                           generate();
     std::vector<Actor<KeyPrivate>> generate_other(ExtraChain::Core::ExtraChainNode *node);

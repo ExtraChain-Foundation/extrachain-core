@@ -80,7 +80,10 @@ namespace ExtraChain::Consensus {
             MessageType   request_type;
             std::uint64_t expires_ms;
         };
+        void remember(const std::string& id, std::uint64_t expires_ms);
+
         std::map<std::string, std::uint64_t>                         seen_;
+        std::multimap<std::uint64_t, std::string>                    seen_expirations_;
         std::map<std::string, Route>                                 routes_;
         std::map<std::string, std::pair<std::uint64_t, std::size_t>> rates_;
     };

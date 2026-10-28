@@ -9,4 +9,16 @@ trailers, no merges from a work branch).
 Testing expectations are in **[docs/TESTING.md](docs/TESTING.md)** — in short: any change
 to the core is validated on a combined DAG + DFS stand, both at once.
 
+For a new device or checkout, follow **[docs/STAND_SETUP.md](docs/STAND_SETUP.md)**.
+It covers platform selection, capability probes, dependencies, build, fixture creation,
+and a first preview without previous session state or a shared server. Read only the
+sections needed for the current phase; preserve the small handoff record for resumption.
+
+Before running a prepared stand, read **[docs/STAND.md](docs/STAND.md)** as well. Use
+`scripts/stand.py` to prepare and run the validation sequence. Declare each run in a
+profile instead of creating a new supervisor script for each revision. Keep full logs
+on the stand host; use compact status, the final report, and bounded diagnostics.
+Do not use repeated model calls to wait for completion. Acceptance and retention rules
+are defined in `docs/TESTING.md` and `docs/STAND.md`.
+
 Open work is tracked in **[docs/TODO.md](docs/TODO.md)**.

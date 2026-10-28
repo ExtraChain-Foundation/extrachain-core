@@ -386,6 +386,11 @@ namespace ExtraChain::Consensus {
         if (pending_.has_value() && pending_change_.has_value()
             && proof.finalized_proposal.header.epoch == pending_.value().document().epoch
             && proof.finalized_proposal.header.height >= pending_change_.value().activation_height) {
+            retain_active_epoch(pending_bootstrap_.value().previous_finalized_height);
+            if (trust_anchor_.has_value())
+                epoch_history_.push_back(EpochStartV1 { .validators        = pending_.value().document(),
+                                                        .bootstrap         = pending_bootstrap_.value(),
+                                                        .normal_transition = pending_transition_.value() });
             active_           = std::move(pending_.value());
             active_bootstrap_ = std::move(pending_bootstrap_);
             pending_.reset();
@@ -419,7 +424,10 @@ namespace ExtraChain::Consensus {
         const MultisigPolicy&              policy,
         const TransactionInclusionProofV1& proof,
         std::uint64_t                      minimum_sequence) {
-        if (pending_.has_value() || change.current_epoch != active_.document().epoch
+        if (pending_.has_value()
+            || (trust_anchor_.has_value()
+                && policy.policy_hash != trust_anchor_.value().governance_policy.policy_hash)
+            || change.current_epoch != active_.document().epoch
             || change.current_validator_set_hash != active_.hash()
             || proof.transaction_hash != epoch_change_action_hash(change)
             || proof.height >= change.activation_height
@@ -550,6 +558,7 @@ namespace ExtraChain::Consensus {
                 }
                 trusted_height_      = finalized.header.height;
                 trusted_header_hash_ = hash_header(finalized.header);
+                retain_active_epoch(start.bootstrap.previous_finalized_height);
                 active_              = std::move(pending_.value());
                 active_bootstrap_    = std::move(pending_bootstrap_);
                 pending_.reset();
@@ -584,6 +593,7 @@ namespace ExtraChain::Consensus {
                 if (!next.has_value()) {
                     return std::unexpected(next.error());
                 }
+                retain_active_epoch(start.bootstrap.previous_finalized_height);
                 active_              = std::move(next.value());
                 active_bootstrap_    = start.bootstrap;
                 trusted_height_      = recovery.finalized_height;
@@ -626,6 +636,13 @@ namespace ExtraChain::Consensus {
         return freshness_;
     }
 
+    void LightClientVerifier::retain_active_epoch(std::uint64_t finalized_height) {
+        historical_validators_.insert_or_assign(active_.document().epoch,
+                                                HistoricalValidators { active_,
+                                                                       active_bootstrap_,
+                                                                       finalized_height });
+    }
+
     const ValidatorSetView* LightClientVerifier::validators_for(std::uint64_t epoch,
                                                                 std::uint64_t height) const noexcept {
         if (pending_.has_value() && pending_change_.has_value() && epoch == pending_.value().document().epoch
@@ -637,10 +654,18 @@ namespace ExtraChain::Consensus {
             && (!pending_change_.has_value() || height < pending_change_.value().activation_height)) {
             return &active_;
         }
+        const auto historical = historical_validators_.find(epoch);
+        if (historical != historical_validators_.end() && height <= historical->second.finalized_height
+            && (!historical->second.bootstrap.has_value()
+                || height >= historical->second.bootstrap.value().activation_height))
+            return &historical->second.validators;
         return nullptr;
     }
 
     const EpochBootstrapV1* LightClientVerifier::bootstrap_for(std::uint64_t epoch) const noexcept {
+        const auto historical = historical_validators_.find(epoch);
+        if (historical != historical_validators_.end() && historical->second.bootstrap.has_value())
+            return &historical->second.bootstrap.value();
         if (pending_.has_value() && pending_bootstrap_.has_value() && pending_.value().document().epoch == epoch) {
             return &pending_bootstrap_.value();
         }

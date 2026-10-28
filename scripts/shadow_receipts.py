@@ -77,7 +77,7 @@ def audit(work, expected, submissions, cursors, node_count):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('work', type=Path)
-    parser.add_argument('--nodes', type=int, choices=(7, 8), default=7)
+    parser.add_argument('--nodes', type=int, choices=range(4, 21), default=7)
     parser.add_argument('--expected', type=int, default=288)
     parser.add_argument('--watch', type=float, default=0, help='Maximum wait in seconds')
     args = parser.parse_args()

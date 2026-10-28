@@ -92,7 +92,9 @@ class Cycle:
         height, round_number = state[7][3] + 1, state[10]
         identifier = active[(height + round_number) % len(active)][7]
         for index in range(7):
-            if f'local node identifier={identifier} ' in (self.work / f'node-{index}.log').read_text():
+            with (self.work / f'node-{index}.log').open('rb') as stream:
+                startup = stream.read(1024 * 1024)
+            if f'local node identifier={identifier} '.encode() in startup:
                 self.event('leader', node=index, height=height, round=round_number)
                 return index
         raise RuntimeError('Current leader is absent from the committee')

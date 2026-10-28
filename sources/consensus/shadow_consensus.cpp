@@ -152,6 +152,7 @@ namespace ExtraChain::Consensus {
         std::optional<MultisigPolicy> governance_policy;
         std::optional<MultisigPolicy> recovery_policy;
         std::optional<TrustAnchorV1>  trust_anchor;
+        std::optional<MiningEmissionPolicy> mining_policy;
         std::uint64_t                 minimum_governance_sequence = 1;
         std::uint64_t                 minimum_recovery_sequence   = 1;
         if (configuration.mode == ShadowMode::Finality) {
@@ -159,7 +160,7 @@ namespace ExtraChain::Consensus {
             const auto recovery = read_document<MultisigPolicy>(directory / RecoveryPolicyFile);
             const auto anchor   = read_document<TrustAnchorV1>(directory / TrustAnchorFile);
             const auto manifest = read_document<ActivationManifestV1>(directory / ActivationManifestFile);
-            if (initial_validators.value().active().size() != ShadowCommitteeSize || !policy.has_value()
+            if (!valid_committee_size(initial_validators.value().active().size()) || !policy.has_value()
                 || !recovery.has_value() || !anchor.has_value() || !manifest.has_value()
                 || manifest.value().activation_height == 0
                 || manifest.value().authorization.sequence == std::numeric_limits<std::uint64_t>::max()
@@ -182,6 +183,7 @@ namespace ExtraChain::Consensus {
             governance_policy           = policy.value();
             recovery_policy             = recovery.value();
             trust_anchor                = anchor.value();
+            mining_policy               = manifest.value().mining_policy;
             minimum_governance_sequence = manifest.value().authorization.sequence + 1;
         }
 
@@ -321,6 +323,7 @@ namespace ExtraChain::Consensus {
                                                                              std::move(proposal_validator)));
         instance->recovery_policy_ = std::move(recovery_policy);
         instance->trust_anchor_    = std::move(trust_anchor);
+        instance->mining_policy_   = std::move(mining_policy);
         if (std::filesystem::exists(directory / PendingRecoveryFile)) {
             const auto pending = read_document<PendingRecoveryV1>(directory / PendingRecoveryFile);
             if (!pending.has_value() || !instance->recovery_policy_.has_value()) {
@@ -867,6 +870,10 @@ namespace ExtraChain::Consensus {
 
     ConsensusEngine& ShadowConsensus::engine() noexcept {
         return *engine_;
+    }
+
+    const std::optional<MiningEmissionPolicy>& ShadowConsensus::mining_policy() const noexcept {
+        return mining_policy_;
     }
 
     const ShadowConfiguration& ShadowConsensus::configuration() const noexcept {

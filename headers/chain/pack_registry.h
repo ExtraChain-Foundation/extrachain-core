@@ -26,6 +26,7 @@
 #include <functional>
 #include <list>
 #include <map>
+#include <set>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -59,6 +60,10 @@ namespace Pack {
         // Call once at startup (or after external changes).
         void rescan();
 
+        // Close every open reader. Readers keep their files open, and Windows cannot
+        // delete or replace an open file.
+        void close_readers();
+
         // Returns pack_id that contains given section, if any (requires rescan first).
         std::optional<PackId> find_pack_for_section(const SectionId &id) const;
 
@@ -70,6 +75,10 @@ namespace Pack {
 
         // Create a new pack file in the managed directory.
         std::expected<void, Error> create_pack(PackId pack_id, const std::map<SectionId, std::string> &sections);
+        std::expected<void, Error> create_pack(PackId               pack_id,
+                                               const SectionId     &first,
+                                               const SectionId     &last,
+                                               const SectionSource &read_section);
 
         // Ordered list of known pack ids
         std::vector<PackId> known_packs() const;
@@ -120,6 +129,8 @@ namespace Pack {
                                                  const Validator &validator = {});
 
     private:
+        std::expected<void, Error> register_pack(PackId pack_id);
+
         struct PackMeta {
             PackId    id;
             SectionId first;
@@ -140,7 +151,20 @@ namespace Pack {
         mutable std::mutex            cache_mutex_;
         mutable std::mutex            incoming_mutex_;
         std::map<PackId, ReaderEntry> readers_;
+        // Packs whose whole-file checksum this process has verified (guarded by cache_mutex_).
+        std::set<PackId> verified_;
         std::list<PackId>             lru_;
+        // The last decompressed frame. Sequential section reads (audit, serving file
+        // sections, rebuilding batches) used to decompress the same frame once per section,
+        // and with large blocks in mmap every one of those buffers cost fresh pages
+        // (offline audit of a 70,600-section node: 511 s -> 1342 s). Guarded by cache_mutex_.
+        struct CachedFrame {
+            PackId      pack  = 0;
+            std::size_t index = 0;
+            std::string data;
+            bool        valid = false;
+        };
+        CachedFrame frame_cache_;
 
         // Returns iterator into meta_ or meta_.end() (requires shared lock).
         std::vector<PackMeta>::const_iterator find_meta_for(std::uint64_t section) const;

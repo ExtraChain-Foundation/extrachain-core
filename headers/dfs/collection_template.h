@@ -28,6 +28,12 @@
 #include <vector>
 
 namespace Dfs {
+    enum class VectorWritePolicy {
+        OwnerOnly,
+        ActorNamespace,
+        TokenRegistry
+    };
+
     enum class FieldType {
         Id,
         ActorId,
@@ -144,6 +150,14 @@ namespace Dfs {
             return m_name;
         }
 
+        FieldType type() const {
+            return m_type;
+        }
+
+        bool is_unique() const {
+            return m_unique.value_or(false);
+        }
+
     private:
         friend struct Field;
 
@@ -153,7 +167,7 @@ namespace Dfs {
         }
 
         std::string                             m_name;
-        FieldType                               m_type;
+        FieldType                               m_type = FieldType::String;
         std::optional<bool>                     m_required;
         std::optional<bool>                     m_unique;
         std::optional<bool>                     m_is_primary;
@@ -242,6 +256,13 @@ namespace Dfs {
         CollectionTemplate&                     add_fields(const std::initializer_list<FieldBuilder>& fields);
         CollectionTemplate&                     preadd_fields(const std::initializer_list<FieldBuilder>& fields);
         CollectionTemplate&                     use_id();
+        CollectionTemplate&                     set_write_policy(VectorWritePolicy policy) {
+            write_policy_ = policy;
+            return *this;
+        }
+        VectorWritePolicy write_policy() const {
+            return write_policy_;
+        }
         std::expected<DbSchema, SqlCreateError> to_db_schema() const;
 
         const std::string                name() const;
@@ -259,7 +280,7 @@ namespace Dfs {
 
         bool operator==(const CollectionTemplate&) const = default;
 
-        BOOST_DESCRIBE_CLASS(CollectionTemplate, (), (), (), (m_name, m_fields, primary));
+        BOOST_DESCRIBE_CLASS(CollectionTemplate, (), (), (), (m_name, m_fields, primary, write_policy_));
         // no need actor_id or file_id
 
         std::optional<FieldBuilder> primary;
@@ -271,6 +292,7 @@ namespace Dfs {
         std::vector<FieldBuilder> m_fields;
         ActorId                   actor_id;
         std::string               file_id;
+        VectorWritePolicy         write_policy_ = VectorWritePolicy::OwnerOnly;
 
         friend class FieldBuilder;
     };

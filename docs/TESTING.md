@@ -6,6 +6,14 @@ classes of consensus and integrity bugs, none of which were visible by reading t
 
 Stands live in a separate worktree, never in a working repository.
 
+For mining serialization or peer-version changes, follow [MINING_FORMAT.md](MINING_FORMAT.md).
+Preserve fixed historical bytes and proofs, and use a fresh network for incompatible
+test-only formats. Never clear a production snapshot to bypass a root mismatch.
+
+Use the [autonomous validation controller](STAND.md) to run stand sequences on the
+Linux systemd host. The driver and fault-injection details below describe the checks
+inside that sequence. They do not replace the controller's process and result handling.
+
 > **Rule: any change to the core is validated on a combined DAG + DFS stand — both at
 > once, not one at a time.** Every bug in the 2026-08 sessions came from the interaction:
 > bulk file traffic delayed consensus messages until transactions fell out of the
@@ -13,6 +21,52 @@ Stands live in a separate worktree, never in a working repository.
 > perfectly healthy. A DAG-only run and a DFS-only run were both green on builds where
 > the combined run diverged within minutes. If a change touches the network layer,
 > storage, or the chain, it is not tested until it has survived a combined run.
+
+## Stand operation
+
+For the first run on a selected device, complete [STAND_SETUP.md](STAND_SETUP.md).
+It supplies the platform routes, capability probes, isolated layout, dependency and
+build commands, generated fixture, and profile generation. Use existing recorded
+inputs when they match; a missing environment is not a reason to search old sessions
+or assume access to a named shared server. Save a small handoff record for the next
+operator. For later runs, use that record and read only the relevant procedure section.
+
+1. Read [STAND.md](STAND.md) and copy [stand.example.json](stand.example.json) to a
+   profile directory outside the clean validation checkout. Set the absolute paths,
+   executable hash, required stages, expected results, deadlines, and disk budget.
+   List all external inputs that can affect the result. Use `purpose: validation`
+   for a short check or reproduction; use the complete acceptance profile for acceptance.
+2. Freeze the profile, then start one detached job. Keep the generated manifest
+   outside the source checkout. Do not change the source, controller, or declared
+   inputs while that job runs.
+
+   ```sh
+   python scripts/stand.py prepare /stand/profiles/profile.json --output /stand/profiles/frozen.json
+   python scripts/stand.py start /stand/profiles/frozen.json
+   ```
+
+3. Save the returned run directory and report path. Let systemd run the sequence.
+   Use `status` for an operational decision or a user request. Do not use repeated
+   model calls to wait or repeatedly collect full logs. Local events and the final
+   result can be read by a scheduler; the controller does not send notifications itself.
+4. On failure, use `diagnose` first. It returns less than 20 KiB. Request additional
+   evidence through `--file`, `--offset`, and `--limit`; each read is at most 16 KiB.
+   Keep the original logs and data. Fix the cause, then use a new run and manifest
+   for changed inputs. A reproduction remains separate from continuous acceptance.
+5. Use `stop` for a requested interruption. Only the controller's completed `PASS`
+   establishes success for the declared profile. `FAIL`, `INTERRUPTED`, `INFRA_ERROR`,
+   stale heartbeats, and incomplete states do not. Exit code zero alone is insufficient.
+6. Read `report` and the evidence before recording a result. Acceptance requires the
+   prerequisite stages, six uninterrupted hours, and a final short check with full
+   stopped-data audits, as specified in `STAND.md`. Do not reuse long or final results
+   or add interrupted durations. Optional command-stage reuse needs exact matching
+   inputs and unchanged evidence. Review tracker/PR drafts before publication.
+7. Archive only stopped runs. The controller checks archive integrity and compares
+   the archive with the source before `--remove-source` can remove data. Retain
+   failures, current acceptance evidence, and directories referenced by cached results.
+
+The five-second local resource sampling and full correctness checks remain enabled.
+Reduced output must not reduce the workload, fault coverage, or audit requirements.
 
 ---
 
@@ -71,9 +125,13 @@ other — a build is validated when it is clean on both.
 
 Console client (also a stand copy): `--join` creates a local user profile to join an
 existing network; stdin input had to be implemented for UNIX (the stock `startInput()` is
-empty under `Q_OS_UNIX`, so headless command control does not work at all on macOS);
-`reward self N` sends a Reward transaction, which needs no balance for `amount <= 3` —
-Regular transactions are unusable for flooding because nothing can hand out a balance.
+empty under `Q_OS_UNIX`, so headless command control does not work at all on macOS).
+
+Current acceptance uses funded Regular transfers. `extrachain-gen-sections` creates
+an initial Balance allocation and validates each transfer before it writes the fixture.
+Its transfer count excludes the allocation section: use 24,999 transfers to end at
+section 25,000 for a Shadow stand. Legacy self-reported Reward requests are rejected.
+The old `reward self N` workload does not provide a valid synchronization fixture.
 
 Loopback aliases, once per boot:
 
@@ -117,8 +175,8 @@ transaction rate limit so the stand can generate load. Keep them out of every co
 
 **Step 3 — a console entry point.** A headless binary that can create or join a network,
 accept commands on stdin, and log verbosely. Two commands are enough to drive everything:
-add a file to storage, and emit a transaction. Prefer a transaction type that needs no
-balance, otherwise the stand has to bootstrap funds before it can generate any load.
+add a file to storage, and emit a funded transaction. Prepare the initial balance
+before load starts. Validate fixture transactions through the normal proof checks.
 
 **Step 4 — process control.** Launch each node with its own working directory, its own
 log file, and stdin wired to a named pipe opened read-write (so the harness never blocks
@@ -235,6 +293,35 @@ be attributed.
     had 10. The file hashes differed even though the replicated data and DFS metadata
     hashes were equal. Compare sorted logical rows, schema, and the DFS logical hash for
     vectors and dictionaries. Use a raw byte hash only for immutable file payloads.
+12. **Shutdown is asynchronous.** A committee can finalize more checkpoints while its
+    peers stop. The endurance driver first requires all eight live mining snapshots to
+    agree on section, reserved units, and minted units. It records the common finalized
+    batch from each safety store. After shutdown, each node must retain that batch and
+    reach at least that section. Cross-node section content, coverage, individual DAG
+    replay, balances, mining state, receipts, and DFS audits must still pass. Runs without
+    this recorded live checkpoint retain the existing stopped-height check. A failed run
+    cannot be reclassified by creating a checkpoint after shutdown.
+    The pre-shutdown gate must verify this recorded checkpoint as well. Comparing
+    sequential log samples of the moving tip can fail while all nodes retain the
+    same finalized work. A missing, changed, or incomplete checkpoint must fail;
+    runs without a recorded checkpoint still require equal current heights.
+13. **Callbacks can publish messages before their prerequisite.** Applying a new local
+    quorum certificate runs finality and mining work. That work can cancel expired
+    requests while peers still retain them. Send the verified certificate before those
+    callbacks. A publication-order regression must observe the outgoing certificate
+    when the finality callback runs and reject an invalid certificate before any send.
+14. **Durable receipts do not prove restart readiness.** Remove the previous process's
+    ready marker before each restart and wait for the replacement to establish its
+    required authenticated links before recording convergence. A resumed committee
+    runner must request all adjacent peers, including higher-index peers: those peers
+    can still be waiting in reconnect backoff. Keep the existing connection deadline
+    and full stopped-data audits. Run `python -m unittest discover -s scripts
+    -p 'test_shadow_endurance.py' -v` with the validation environment's `msgpack` package.
+15. **Recovery markers must have a durable completion path.** After restart invalidates
+    the balance cache, persist the pending index rebuild before removing the pack replay
+    marker. A second restart must retain the rebuilt balance snapshot. A failed cache
+    reset must keep the replay marker. Check both restart paths and reopen the index
+    database to verify that pending reconstruction survives a process stop.
 
 ---
 

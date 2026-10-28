@@ -14,6 +14,9 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <source_location>
+#include <string>
+#include <vector>
 
 #include <boost/asio/any_io_executor.hpp>
 
@@ -24,7 +27,11 @@ namespace ExtraChain::Core {
         using Duration = std::chrono::steady_clock::duration;
         using Handler  = std::function<void()>;
 
-        static std::shared_ptr<DeadlineTask> create(boost::asio::any_io_executor executor, Handler handler);
+        static std::shared_ptr<DeadlineTask> create(boost::asio::any_io_executor executor,
+                                                    Handler                      handler,
+                                                    std::source_location site = std::source_location::current());
+        // Where the tasks that are armed right now were created, to name what keeps a runtime from stopping.
+        static std::vector<std::string> armed_sites();
 
         ~DeadlineTask();
 
@@ -34,13 +41,15 @@ namespace ExtraChain::Core {
         void schedule_after(Duration delay);
         void schedule_earlier(Duration delay);
         void cancel();
+        // Cancels for good: a later schedule_after or schedule_earlier is ignored.
+        void stop();
 
         [[nodiscard]] bool active() const noexcept;
 
     private:
         struct State;
 
-        DeadlineTask(boost::asio::any_io_executor executor, Handler handler);
+        DeadlineTask(boost::asio::any_io_executor executor, Handler handler, std::source_location site);
 
         std::shared_ptr<State> state_;
     };

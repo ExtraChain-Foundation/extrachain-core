@@ -64,7 +64,7 @@ def audit_files(work, nodes=7, size=4194304, cache=None, publishers=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('work', type=Path)
-    parser.add_argument('--nodes', type=int, choices=(7, 8), default=7)
+    parser.add_argument('--nodes', type=int, choices=range(4, 21), default=7)
     parser.add_argument('--size', type=int, default=4194304)
     parser.add_argument('--publishers', type=int, help='Existing publishers; defaults to all nodes')
     args = parser.parse_args()

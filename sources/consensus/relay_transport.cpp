@@ -164,18 +164,16 @@ namespace ExtraChain::Consensus {
         if (!valid(envelope, validators, now_ms)) {
             return result;
         }
-        std::erase_if(seen_, [now_ms](const auto& entry) {
-            return entry.second <= now_ms;
-        });
+        while (!seen_expirations_.empty() && seen_expirations_.begin()->first <= now_ms) {
+            seen_.erase(seen_expirations_.begin()->second);
+            seen_expirations_.erase(seen_expirations_.begin());
+        }
         std::erase_if(routes_, [now_ms](const auto& entry) {
             return entry.second.expires_ms <= now_ms;
         });
         std::erase_if(rates_, [now_ms](const auto& entry) {
             return entry.second.first != now_ms / 1000;
         });
-        if (seen_.contains(id) || seen_.size() >= MaximumEntries) {
-            return result;
-        }
         auto& rate = rates_[envelope.origin];
         rate.first = now_ms / 1000;
         if (++rate.second > 512) {
@@ -193,7 +191,7 @@ namespace ExtraChain::Consensus {
                         : envelope.type != MessageType::ConsensusSyncResponse)) {
                 return result;
             }
-            seen_.emplace(id, envelope.expires_ms);
+            remember(id, envelope.expires_ms);
             if (envelope.destination == local_identifier) {
                 result.deliver = true;
             } else if (!route->second.peer.empty() && route->second.peer != incoming_peer
@@ -218,7 +216,7 @@ namespace ExtraChain::Consensus {
                 return result;
             }
         }
-        seen_.emplace(id, envelope.expires_ms);
+        remember(id, envelope.expires_ms);
         result.deliver = envelope.destination.empty() || envelope.destination == local_identifier;
         if (envelope.destination != local_identifier && envelope.hops + 1 < MaximumHops) {
             // A claimed peer identifier alone cannot select the only delivery path.
@@ -236,8 +234,20 @@ namespace ExtraChain::Consensus {
         return result;
     }
 
+    void RelayTransport::remember(const std::string& id, std::uint64_t expires_ms) {
+        // Deduplication must not stop new consensus traffic when the cache is full.
+        // Only fully validated and rate-limited messages can replace an entry.
+        if (seen_.size() >= MaximumEntries) {
+            seen_.erase(seen_expirations_.begin()->second);
+            seen_expirations_.erase(seen_expirations_.begin());
+        }
+        seen_.emplace(id, expires_ms);
+        seen_expirations_.emplace(expires_ms, id);
+    }
+
     void RelayTransport::clear() {
         seen_.clear();
+        seen_expirations_.clear();
         routes_.clear();
         rates_.clear();
     }

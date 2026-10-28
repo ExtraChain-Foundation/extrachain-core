@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -20,12 +21,16 @@
 #include <vector>
 
 #include "consensus/consensus_types.h"
+#include "consensus/mining_policy.h"
 
 class Transaction;
 
 namespace ExtraChain::Consensus {
 
-    inline constexpr std::size_t   ShadowCommitteeSize        = 7;
+    // A committee of n validators tolerates (n - 1) / 3 faults; four is the smallest that tolerates one.
+    inline constexpr std::size_t   MinimumCommitteeSize       = 4;
+    inline constexpr std::size_t   MaximumCommitteeSize       = 64;
+    inline constexpr std::size_t   DefaultCommitteeSize       = 7;
     inline constexpr std::size_t   GovernanceSignerCount      = 5;
     inline constexpr std::uint16_t GovernanceThreshold        = 3;
     inline constexpr std::uint16_t RecoveryThreshold          = 4;
@@ -33,13 +38,21 @@ namespace ExtraChain::Consensus {
     inline constexpr std::size_t   MaximumBootstrapEntries    = 64;
     inline constexpr std::size_t   MaximumBootstrapBytes      = 4ULL * 1024ULL * 1024ULL;
 
+    [[nodiscard]] constexpr bool valid_committee_size(std::size_t count) noexcept {
+        return count >= MinimumCommitteeSize && count <= MaximumCommitteeSize;
+    }
+
     enum class IntentOperation : std::uint8_t {
         Transfer,
         ContractDeploy,
         ContractCall,
         ContractUpgrade,
         TokenMigration,
-        EpochChange
+        EpochChange,
+        StorageRegister,
+        StorageUnregister,
+        StorageProof,
+        Cancel
     };
 
     enum class IntentStatus : std::uint8_t {
@@ -267,6 +280,7 @@ namespace ExtraChain::Consensus {
         std::uint64_t           activation_dag_section = 0;
         std::string             validator_set_hash;
         bool                    require_intent_v2 = true;
+        std::optional<MiningEmissionPolicy> mining_policy;
         GovernanceAuthorization authorization;
 
         MSGPACK_DEFINE(protocol_version,
@@ -275,6 +289,7 @@ namespace ExtraChain::Consensus {
                        activation_dag_section,
                        validator_set_hash,
                        require_intent_v2,
+                       mining_policy,
                        authorization)
     };
 
@@ -374,6 +389,15 @@ namespace ExtraChain::Consensus {
         std::vector<std::string>                   expire(std::uint64_t current_height);
         void                                       erase(const std::vector<std::string>& intent_hashes);
 
+        [[nodiscard]] std::expected<std::uint64_t, ConsensusError> next_nonce(
+            const ActorId& sender,
+            std::uint64_t  committed_nonce,
+            std::uint64_t  certified_nonce = 0) const;
+        [[nodiscard]] std::vector<std::string>                     expired_uncommitted(
+            std::uint64_t                           height,
+            const std::map<ActorId, std::uint64_t>& nonces) const;
+        void                      discard_committed(const std::map<ActorId, std::uint64_t>& nonces);
+        [[nodiscard]] bool        has_pending_after(const ActorId& sender, std::uint64_t nonce) const;
         [[nodiscard]] std::size_t size() const noexcept;
         [[nodiscard]] std::size_t bytes() const noexcept;
 
@@ -412,6 +436,25 @@ namespace ExtraChain::Consensus {
     EXTRACHAIN_EXPORT std::expected<MerkleProof, ConsensusError> make_merkle_proof(
         const std::vector<std::string>& values,
         std::size_t                     index);
+    struct MerkleTreeResult {
+        std::string              root;
+        std::vector<MerkleProof> proofs;
+    };
+    // The reader supplies one value at a time. The optional sink receives each
+    // complete subtree for a persistent index; incomplete padding is not emitted.
+    using MerkleValueReader = std::function<std::expected<std::string, ConsensusError>(std::uint64_t)>;
+    using MerkleNodeSink    = std::function<bool(std::uint64_t, std::uint32_t, std::string_view)>;
+    using MerkleNodeReader =
+        std::function<std::expected<std::string, ConsensusError>(std::uint64_t, std::uint32_t)>;
+    EXTRACHAIN_EXPORT std::expected<MerkleProof, ConsensusError> make_indexed_merkle_proof(
+        std::uint64_t           leaves,
+        std::uint64_t           index,
+        const MerkleNodeReader& reader);
+    EXTRACHAIN_EXPORT std::expected<MerkleTreeResult, ConsensusError> build_merkle_tree(
+        std::uint64_t                     leaves,
+        const MerkleValueReader&          reader,
+        const std::vector<std::uint64_t>& targets = { },
+        const MerkleNodeSink&             sink    = { });
     EXTRACHAIN_EXPORT bool verify_merkle_proof(std::string_view   value,
                                                const MerkleProof& proof,
                                                std::string_view   expected_root);

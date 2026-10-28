@@ -94,11 +94,12 @@ namespace {
         };
     }
 
-    SectionBatchData batch_data(std::uint64_t height, std::string header_hash) {
+    // The proposal's manifest: the leader engine stamps it with the parent block's time.
+    SectionBatchData batch_data(const Proposal& proposal) {
         return SectionBatchData {
-            .header_hash = std::move(header_hash),
-            .manifest    = batch_manifest(height),
-            .sections    = batch_sections(height),
+            .header_hash = hash_header(proposal.header),
+            .manifest    = proposal.batch,
+            .sections    = batch_sections(proposal.header.height),
         };
     }
 
@@ -270,6 +271,7 @@ int main() {
             .activation_height      = 10,
             .activation_dag_section = 200,
             .validator_set_hash     = finality_fixture.view.hash(),
+            .mining_policy          = MiningEmissionPolicy { 11, { { 10, 7 }, { 10, 3 } } },
         };
         const auto manifest_authorization =
             authorize_action(governance_policy.value(),
@@ -282,6 +284,10 @@ int main() {
                   .has_value());
         const auto finality = ShadowConsensus::load(finality_directory, finality_fixture.governance.id());
         check("finality loads only after governed activation", finality.has_value());
+        check("finality restores the signed mining schedule",
+              finality.has_value() && finality.value()->mining_policy().has_value()
+                  && mining_policy_budget(finality.value()->mining_policy().value(), 11).value() == 7
+                  && mining_policy_budget(finality.value()->mining_policy().value(), 21).value() == 3);
     }
 
     std::vector<std::unique_ptr<ConsensusEngine>> engines;
@@ -353,7 +359,7 @@ int main() {
 
         const auto proposal_hash = hash_header(proposal.value().header);
         check("leader stores proposal data before voting",
-              engines[leader_index]->stage_batch(batch_data(height, proposal_hash)).has_value());
+              engines[leader_index]->stage_batch(batch_data(proposal.value())).has_value());
 
         std::optional<QuorumCertificate> certificate;
         for (std::size_t index = 0; index < engines.size(); ++index) {
@@ -366,7 +372,7 @@ int main() {
                       !unavailable_vote.has_value()
                           && unavailable_vote.error() == ConsensusError::DataUnavailable);
                 check("validator stores proposal data before voting",
-                      engine->stage_batch(batch_data(height, proposal_hash)).has_value());
+                      engine->stage_batch(batch_data(proposal.value())).has_value());
             }
             const auto vote = engine->accept_proposal(proposal.value());
             check("validator accepts safe proposal", vote.has_value());
@@ -427,8 +433,7 @@ int main() {
         if (index <= 1) {
             check("certified observer stores finalized batch",
                   certified_observer
-                      ->stage_batch(batch_data(chain_proposals[index].header.height,
-                                               hash_header(chain_proposals[index].header)))
+                      ->stage_batch(batch_data(chain_proposals[index]))
                       .has_value());
         }
         check("certified observer accepts certificate without latest batch",
@@ -492,7 +497,7 @@ int main() {
               && reordered_observer->accept_certificate(chain_certificates[1]).has_value());
     check("reordered observer stores the second finalized batch",
           reordered_observer
-              ->stage_batch(batch_data(chain_proposals[1].header.height, hash_header(chain_proposals[1].header)))
+              ->stage_batch(batch_data(chain_proposals[1]))
               .has_value());
     const auto skipped_finality = reordered_observer->accept_certificate(chain_certificates[3]);
     check("out-of-order certificate cannot skip a finalized height",
@@ -500,7 +505,7 @@ int main() {
               && reordered_observer->safety_state().finalized_height == 0);
     check("reordered observer stores the first finalized batch",
           reordered_observer
-              ->stage_batch(batch_data(chain_proposals[0].header.height, hash_header(chain_proposals[0].header)))
+              ->stage_batch(batch_data(chain_proposals[0]))
               .has_value());
     const auto first_recovered  = reordered_observer->accept_certificate(chain_certificates[2]);
     const auto second_recovered = reordered_observer->accept_certificate(chain_certificates[3]);
@@ -559,7 +564,7 @@ int main() {
     check("validator accepts a proposal from another leader",
           restarted_validator->observe_proposal(last_proposal).has_value());
     check("validator durably stages data before a vote",
-          restarted_validator->stage_batch(batch_data(last_proposal.header.height, observed_hash)).has_value());
+          restarted_validator->stage_batch(batch_data(last_proposal)).has_value());
     const auto missing_parent_vote = restarted_validator->accept_proposal(last_proposal);
     check("validator cannot vote without its parent proposal",
           !missing_parent_vote.has_value() && missing_parent_vote.error() == ConsensusError::DataUnavailable);
@@ -583,7 +588,7 @@ int main() {
           vote_path_validator->observe_proposal(vote_path_proposal).has_value());
     check("vote-path validator stages data without an early commit",
           vote_path_validator
-              ->stage_batch_for_vote(batch_data(vote_path_proposal.header.height, vote_path_header_hash))
+              ->stage_batch_for_vote(batch_data(vote_path_proposal))
               .has_value());
     vote_path_validator.reset();
     vote_path_validator = std::make_unique<ConsensusEngine>(fixture.view,
@@ -596,7 +601,7 @@ int main() {
           vote_path_validator->observe_proposal(vote_path_proposal).has_value());
     check("vote-path validator stages data again",
           vote_path_validator
-              ->stage_batch_for_vote(batch_data(vote_path_proposal.header.height, vote_path_header_hash))
+              ->stage_batch_for_vote(batch_data(vote_path_proposal))
               .has_value());
     check("vote-path validator persists the complete vote state",
           vote_path_validator->accept_proposal(vote_path_proposal).has_value());
@@ -617,7 +622,7 @@ int main() {
     check("observer engine initializes", observer->initialize().has_value());
     check("observer accepts a valid proposal", observer->observe_proposal(last_proposal).has_value());
     check("observer stores proposal and batch atomically",
-          observer->stage_batch(batch_data(last_proposal.header.height, observed_hash)).has_value());
+          observer->stage_batch(batch_data(last_proposal)).has_value());
     observer.reset();
     observer = std::make_unique<ConsensusEngine>(fixture.view,
                                                  std::nullopt,
@@ -718,6 +723,210 @@ int main() {
 
     restarted.reset();
     engines.clear();
+
+    {
+        // Two certificates of one height: validators that saw only the round-0 certificate time
+        // out height 2 with it; once they learn the round-1 certificate their timeout must move
+        // to it, or the timeout votes of the height split between the two and never reach a quorum.
+        std::vector<std::unique_ptr<ConsensusEngine>> split;
+        for (std::size_t index = 0; index < fixture.keys.size(); ++index) {
+            split.push_back(std::make_unique<ConsensusEngine>(
+                fixture.view,
+                ValidatorIdentity { .validator_id = validator_id_for(fixture.keys[index].public_key()),
+                                    .key          = fixture.keys[index] },
+                std::make_unique<SafetyStore>(root / ("split-" + std::to_string(index) + ".sqlite"))));
+            check("split validator initializes", split.back()->initialize().has_value());
+        }
+        const auto certify = [&](std::uint64_t round, const std::vector<std::size_t>& voters) {
+            const auto leader = identity_index(fixture, fixture.view.leader(1, round).validator_id);
+            auto       proposal =
+                split[leader]->make_proposal(batch_manifest(1),
+                                             state_commitment(*split[leader], 1, "split-root-" + std::to_string(round)),
+                                             round);
+            check("split leader proposes", proposal.has_value());
+            std::optional<QuorumCertificate> certificate;
+            for (const auto index : voters) {
+                if (index != leader)
+                    check("split validator observes", split[index]->observe_proposal(proposal.value()).has_value());
+                check("split validator stores data",
+                      split[index]
+                          ->stage_batch(batch_data(proposal.value()))
+                          .has_value());
+                const auto vote = split[index]->accept_proposal(proposal.value());
+                check("split validator votes", vote.has_value());
+                const auto accepted = split[leader]->accept_vote(vote.value());
+                if (accepted.has_value() && accepted.value().certificate.has_value())
+                    certificate = accepted.value().certificate;
+            }
+            check("split round is certified", certificate.has_value());
+            return std::pair { proposal.value(), certificate.value() };
+        };
+        // A sees the round-0 certificate; the other three time round 0 out and certify round 1.
+        const auto round1_leader = identity_index(fixture, fixture.view.leader(1, 1).validator_id);
+        const auto a             = round1_leader == 0 ? std::size_t(1) : std::size_t(0);
+        std::vector<std::size_t> others;
+        for (std::size_t index = 0; index < split.size(); ++index)
+            if (index != a)
+                others.push_back(index);
+        const auto [proposal0, certificate0] = certify(0, { 0, 1, 2, 3 });
+        check("A takes the round-0 certificate", split[a]->accept_certificate(certificate0).has_value());
+        std::optional<TimeoutCertificate> round0_timeout;
+        for (const auto index : others) {
+            const auto vote = split[index]->make_timeout_vote(1, 0);
+            check("partitioned validator times out round 0", vote.has_value());
+            const auto accepted = split[others.front()]->accept_timeout_vote(vote.value());
+            if (accepted.has_value() && accepted.value().certificate.has_value())
+                round0_timeout = accepted.value().certificate;
+        }
+        check("round 0 times out without A", round0_timeout.has_value());
+        for (const auto index : others)
+            check("round 1 opens", split[index]->accept_timeout_certificate(round0_timeout.value()).has_value());
+        const auto [proposal1, certificate1] = certify(1, others);
+        check("two certificates share one height",
+              certificate0.height == certificate1.height && certificate1.round == 1);
+
+        const auto receiver = others.back();
+        check("receiver knows both certificates",
+              split[receiver]->observe_proposal(proposal0).has_value()
+                  && split[receiver]->accept_certificate(certificate0).has_value()
+                  && split[receiver]->accept_certificate(certificate1).has_value());
+        const auto first = split[a]->make_timeout_vote(2, 0);
+        check("A times out height 2 with the round-0 certificate",
+              first.has_value() && first.value().highest_certificate_hash == hash_certificate(certificate0));
+        check("receiver counts A's first timeout", split[receiver]->accept_timeout_vote(first.value()).has_value());
+
+        check("A learns the round-1 certificate",
+              split[a]->observe_proposal(proposal1).has_value()
+                  && split[a]->accept_certificate(certificate1).has_value());
+        const auto second = split[a]->make_timeout_vote(2, 0);
+        check("A re-sends its timeout with the newer certificate",
+              second.has_value() && second.value().highest_certificate_hash == hash_certificate(certificate1));
+        const auto moved = split[receiver]->accept_timeout_vote(second.value());
+        check("the newer timeout replaces the older one without equivocation",
+              moved.has_value() && !moved.value().equivocation.has_value());
+        const auto back = split[receiver]->accept_timeout_vote(first.value());
+        check("going back to the older certificate is still equivocation",
+              back.has_value() && back.value().equivocation.has_value());
+
+        for (const auto index : others)
+            if (index != receiver)
+                check("validator takes the round-1 certificate", split[index]->accept_certificate(certificate1).has_value());
+        std::optional<TimeoutCertificate> height2_timeout;
+        for (const auto index : others) {
+            if (index == receiver)
+                continue;
+            const auto vote = split[index]->make_timeout_vote(2, 0);
+            check("validator times out height 2 with the newer certificate", vote.has_value());
+            const auto accepted = split[receiver]->accept_timeout_vote(vote.value());
+            if (accepted.has_value() && accepted.value().certificate.has_value())
+                height2_timeout = accepted.value().certificate;
+        }
+        check("the moved vote counts toward one timeout quorum",
+              height2_timeout.has_value()
+                  && height2_timeout.value().highest_certificate.round == certificate1.round);
+        split.clear();
+    }
+
+    {
+        // The stand stalled at height 836: validators that had already timed out the next height in
+        // round 1 learned a newer certificate of the current height, their round fell back to 0,
+        // and they could neither time out round 0 again nor re-send round 1 with that certificate.
+        std::vector<std::unique_ptr<ConsensusEngine>> late;
+        for (std::size_t index = 0; index < fixture.keys.size(); ++index) {
+            late.push_back(std::make_unique<ConsensusEngine>(
+                fixture.view,
+                ValidatorIdentity { .validator_id = validator_id_for(fixture.keys[index].public_key()),
+                                    .key          = fixture.keys[index] },
+                std::make_unique<SafetyStore>(root / ("late-" + std::to_string(index) + ".sqlite"))));
+            check("late validator initializes", late.back()->initialize().has_value());
+        }
+        const auto certify = [&](std::uint64_t round, const std::vector<std::size_t>& voters) {
+            const auto leader   = identity_index(fixture, fixture.view.leader(1, round).validator_id);
+            auto       proposal = late[leader]->make_proposal(
+                batch_manifest(1), state_commitment(*late[leader], 1, "late-root-" + std::to_string(round)), round);
+            check("late leader proposes", proposal.has_value());
+            std::optional<QuorumCertificate> certificate;
+            for (const auto index : voters) {
+                if (index != leader)
+                    check("late validator observes", late[index]->observe_proposal(proposal.value()).has_value());
+                check("late validator stores data",
+                      late[index]->stage_batch(batch_data(proposal.value())).has_value());
+                const auto vote = late[index]->accept_proposal(proposal.value());
+                check("late validator votes", vote.has_value());
+                const auto accepted = late[leader]->accept_vote(vote.value());
+                if (accepted.has_value() && accepted.value().certificate.has_value())
+                    certificate = accepted.value().certificate;
+            }
+            check("late round is certified", certificate.has_value());
+            return std::pair { proposal.value(), certificate.value() };
+        };
+        const auto timeout_quorum = [&](std::uint64_t height,
+                                        std::uint64_t round,
+                                        const std::vector<std::size_t>& voters) {
+            std::optional<TimeoutCertificate> certificate;
+            for (const auto index : voters) {
+                const auto vote = late[index]->make_timeout_vote(height, round);
+                check("late validator times out", vote.has_value());
+                const auto accepted = late[voters.front()]->accept_timeout_vote(vote.value());
+                if (accepted.has_value() && accepted.value().certificate.has_value())
+                    certificate = accepted.value().certificate;
+            }
+            check("late timeout reaches a quorum", certificate.has_value());
+            for (const auto index : voters)
+                check("late validator opens the next round",
+                      late[index]->accept_timeout_certificate(certificate.value()).has_value());
+            return certificate.value();
+        };
+        // Everyone votes round 0 of height 1; the round-1 leader's side times it out and
+        // certifies round 1 as well, but only that leader holds the round-1 certificate.
+        const auto round1_leader = identity_index(fixture, fixture.view.leader(1, 1).validator_id);
+        std::vector<std::size_t> rest;
+        for (std::size_t index = 0; index < late.size(); ++index)
+            if (index != round1_leader)
+                rest.push_back(index);
+        const auto [proposal0, certificate0] = certify(0, { 0, 1, 2, 3 });
+        const auto height1_timeout = timeout_quorum(1, 0, rest);
+        check("round-1 leader opens round 1",
+              late[round1_leader]->accept_timeout_certificate(height1_timeout).has_value());
+        const auto [proposal1, certificate1] = certify(1, { round1_leader, rest[0], rest[1] });
+        check("round-1 leader takes its certificate",
+              late[round1_leader]->accept_certificate(certificate1).has_value());
+        // The other three only see the round-0 certificate and time height 2 out twice with it.
+        for (const auto index : rest)
+            check("validator takes the round-0 certificate", late[index]->accept_certificate(certificate0).has_value());
+        const auto height2_round0 = timeout_quorum(2, 0, rest);
+        check("round-1 leader opens round 1 of height 2",
+              late[round1_leader]->accept_timeout_certificate(height2_round0).has_value());
+        for (const auto index : rest) {
+            const auto vote = late[index]->make_timeout_vote(2, 1);
+            check("validator times out height 2 round 1 with the round-0 certificate",
+                  vote.has_value() && vote.value().highest_certificate_hash == hash_certificate(certificate0));
+        }
+        // The round-1 certificate of height 1 reaches them now.
+        for (const auto index : rest) {
+            check("validator learns the round-1 certificate",
+                  late[index]->observe_proposal(proposal1).has_value()
+                      && late[index]->accept_certificate(certificate1).has_value());
+            check("the round already reached at height 2 is kept", late[index]->safety_state().current_round == 1);
+        }
+        std::optional<TimeoutCertificate> moved;
+        for (const auto index : { rest[0], rest[1], round1_leader }) {
+            const auto vote = late[index]->make_timeout_vote(2, 1);
+            check("round-1 timeout is re-sent with the newer certificate",
+                  vote.has_value() && vote.value().round == 1
+                      && vote.value().highest_certificate_hash == hash_certificate(certificate1));
+            if (!vote.has_value())
+                continue;
+            const auto accepted = late[rest[2]]->accept_timeout_vote(vote.value());
+            check("the re-sent timeout is not equivocation",
+                  accepted.has_value() && !accepted.value().equivocation.has_value());
+            if (accepted.has_value() && accepted.value().certificate.has_value())
+                moved = accepted.value().certificate;
+        }
+        check("height 2 round 1 times out on the newer certificate",
+              moved.has_value() && moved.value().highest_certificate.round == certificate1.round);
+        late.clear();
+    }
     std::filesystem::remove_all(root);
     std::printf("CONSENSUS: %d pass, %d fail\n", passed, failed);
     return failed == 0 ? 0 : 1;

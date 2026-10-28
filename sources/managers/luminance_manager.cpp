@@ -146,60 +146,32 @@ void LuminanceManager::remove_old() {
 }
 
 void LuminanceManager::update_luminance(const NodeId &node_id, Operation op, int value) {
-    // eTemp("[LuminanceManager] update_luminance: {}, {}, {}", node_id, op, value);
-    auto        node_id_str = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
-    auto        now         = Utils::current_date_ms();
-    std::string update_expr;
-    int         initial_value;
-
+    const auto      node_id_str = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
+    std::lock_guard lock(cache_mutex_);
+    if (!cache_loaded_) {
+        load_cache();
+    }
+    const auto existing = luminance_cache_.find(node_id_str);
+    int        next     = existing == luminance_cache_.end() ? 0 : std::max(0, existing->second);
     switch (op) {
     case Operation::Increment:
-        update_expr   = "luminance + 1";
-        initial_value = 1;
+        if (next < std::numeric_limits<int>::max()) {
+            ++next;
+        }
         break;
     case Operation::Decrement:
-        update_expr   = "MAX(0, luminance - 1)";
-        initial_value = 0;
+        next = std::max(0, next - 1);
         break;
     case Operation::Set:
-        update_expr   = std::to_string(std::max(0, value));
-        initial_value = std::max(0, value);
+        next = std::max(0, value);
         break;
     }
-
-    luminance_db_->query(
-        fmt::format("INSERT INTO luminance (node_id, luminance, timestamp) VALUES ('{}', {}, {}) "
-                    "ON CONFLICT(node_id) DO UPDATE SET "
-                    "luminance = {}, "
-                    "timestamp = {}",
-                    node_id_str,
-                    initial_value,
-                    now,
-                    update_expr,
-                    now));
-
-    // Mirror the same arithmetic into the cache rather than invalidating it: dropping
-    // the cache here would send the next read straight back to sqlite, which is the
-    // cost this cache exists to avoid — and writes happen on every broadcast.
-    {
-        std::lock_guard lock(cache_mutex_);
-        if (cache_loaded_) {
-            auto it = luminance_cache_.find(node_id_str);
-            if (it == luminance_cache_.end()) {
-                luminance_cache_[node_id_str] = initial_value;
-            } else {
-                switch (op) {
-                case Operation::Increment:
-                    it->second += 1;
-                    break;
-                case Operation::Decrement:
-                    it->second = std::max(0, it->second - 1);
-                    break;
-                case Operation::Set:
-                    it->second = std::max(0, value);
-                    break;
-                }
-            }
-        }
+    if (!luminance_db_->replace("luminance",
+                                { { "node_id", node_id_str },
+                                  { "luminance", std::to_string(next) },
+                                  { "timestamp", std::to_string(Utils::current_date_ms()) } })) {
+        eWarning("[LuminanceManager] Failed to persist peer score");
+        return;
     }
+    luminance_cache_[node_id_str] = next;
 }

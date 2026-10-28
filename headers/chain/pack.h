@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -72,9 +73,16 @@ public:
     Reader(Reader &&other) noexcept;
     Reader &operator=(Reader &&other) noexcept;
 
-    static std::expected<Reader, Error> open(const std::filesystem::path &path);
+    // verify_checksum = false checks the header, frame index and footer only; the registry
+    // hashes a pack once per process instead of reading the whole file on every open.
+    static std::expected<Reader, Error> open(const std::filesystem::path &path, bool verify_checksum = true);
 
     std::optional<std::string> read(const SectionId &id) const;
+    // Frame-level access for a caller that keeps the last decompressed frame: reading a
+    // section decompresses its whole frame of SECTIONS_PER_FRAME sections.
+    std::optional<std::size_t> frame_for(const SectionId &id) const;
+    std::optional<std::string> frame(std::size_t index) const;
+    std::optional<std::string> section_from_frame(const SectionId &id, std::size_t index, const std::string &frame) const;
     std::vector<std::pair<SectionId, std::string>>
     read_range(const SectionId &from, const SectionId &to) const;
 
@@ -91,7 +99,7 @@ private:
 };
 
 /**
- * One-shot writer. Takes all sections for the pack, builds dict from their content,
+ * One-shot writer. Builds a dictionary from the first frame,
  * compresses in mini-frames, writes an immutable .pack file.
  *
  * sections must contain at least one entry and keys must be consecutive integers.
@@ -100,5 +108,13 @@ EXTRACHAIN_EXPORT std::expected<void, Error>
 write(const std::filesystem::path                      &path,
       PackId                                            pack_id,
       const std::map<SectionId, std::string>           &sections);
+
+using SectionSource = std::function<std::optional<std::string>(const SectionId &)>;
+
+EXTRACHAIN_EXPORT std::expected<void, Error> write(const std::filesystem::path &path,
+                                                   PackId                       pack_id,
+                                                   const SectionId             &first,
+                                                   const SectionId             &last,
+                                                   const SectionSource         &read_section);
 
 } // namespace Pack

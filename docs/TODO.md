@@ -472,6 +472,13 @@ section that is present but *corrupt*, which the scan cannot see at all.
 
 ### 0.475 A control that is already wrong on an old boundary is never re-checked
 
+**Update 2026-10-28, issue 114:** when a requested repair confirms the local
+transactions, rebuild controls from that range instead of resuming after the last
+stored control. The regression damages only a saved control and supplies a different
+peer control; local regeneration restores the expected value without changing the
+transactions or balance cache. This corrects the repair path. It does not add a
+periodic search for damaged historical controls.
+
 Interval verification only fires when the cache advances onto a **new** boundary
 (`DagCache::check_and_update_cache` → `DagIntervalHash`). Nothing ever revisits a boundary
 the chain has moved past, so a control that was already wrong when we started looking
@@ -602,6 +609,14 @@ small tolerance, and further behind than the acceptance window allows; keep anti
 state on the receiver's own clock rather than on a value the sender supplies.
 
 ### 0.75 A node that falls behind never catches up — it only rejects
+
+**Update 2026-10-28, issue 114:** request section sync whenever a peer has a newer
+tip, including a one-section difference. Matching closed controls do not prove that
+the newer tail is local. The previous condition fixed gaps above 15 sections but left
+short gaps in the control-only path. A regression reproduces this with a valid signed
+genesis and an equal closed control. The two-node REST check and stopped-data audit
+retain all 45 transfers, including three sent after restart. The historical finding
+below explains the larger-gap case.
 
 **Found 2026-08-10 under chaos, and it is the most damaging of the chaos findings.**
 A node that was killed and frozen repeatedly came back 65 sections behind, and the gap

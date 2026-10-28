@@ -172,8 +172,8 @@ namespace {
             const auto             count_parsed =
                 std::from_chars(count_input.data(), count_input.data() + count_input.size(), count);
             if (count_parsed.ec != std::errc {} || count_parsed.ptr != count_input.data() + count_input.size()
-                || (count != 4 && count != ShadowCommitteeSize)) {
-                throw std::invalid_argument("validator-count must be 4 or 7");
+                || !valid_committee_size(count)) {
+                throw std::invalid_argument("validator-count must be 4 to 64");
             }
             result.validator_count = count;
         }
