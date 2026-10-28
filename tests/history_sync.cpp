@@ -80,7 +80,7 @@ namespace {
     };
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     const auto original = std::filesystem::current_path();
     const auto home =
         std::filesystem::temp_directory_path() / ("extrachain-history-sync-" + Utils::generate_random_hex(8));
@@ -113,6 +113,48 @@ int main() {
     dag.set_status(DagStatus::Ready);
     auto peer = std::make_shared<Peer>(*node->network());
     node->network()->connections()->insert(peer);
+    if (argc == 2 && std::string_view(argv[1]) == "controls") {
+        peer->enable_pack_sync();
+        for (SectionId id(0); id <= SectionId(20); ++id) {
+            if (!dag.read_section(id).has_value()) {
+                TEST_REQUIRE(DagAdmissionTestFixture::store_raw_section(dag, Section { .id = id }));
+            }
+        }
+        TEST_REQUIRE(dag.generate_hash_from_section(SectionId(0), Force::Active, Force::None).has_value());
+        const auto expected = dag.read_control(SectionId(20)).value().control;
+        const auto balances = dag.cache().read_cached_balances();
+        TEST_REQUIRE(dag.write_control(SectionId(20), std::string(64, '0')).has_value());
+        Responder response(node->network());
+        response.add_identifier(peer->identifier());
+        TEST_REQUIRE(DagAdmissionTestFixture::expect_repair(dag, response, SectionId(1), SectionId(20)));
+        FileSectionsSync packet { .to = SectionId(20), .last_section = SectionId(20) };
+        {
+            WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+            for (SectionId id(1); id <= SectionId(20); ++id) {
+                auto section = dag.read_section(id).value();
+                section.control = std::string(64, 'f');
+                packet.sections.push_back({ id, Json::serialize(section) });
+            }
+            const auto compressed = LegacyCompression::compress(MessagePack::serialize(packet));
+            TEST_REQUIRE(compressed.has_value());
+            dag.network_file_sections_response(compressed.value(), response);
+        }
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (dag.read_control(SectionId(20)).value_or(DagControl {}).control != expected
+               && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        TEST_REQUIRE_EQ(dag.read_control(SectionId(20)).value().control, expected);
+        TEST_REQUIRE_EQ(dag.cache().read_cached_balances(), balances);
+        TEST_REQUIRE(dag.read_section(SectionId(1)).value().transactions.contains(initial));
+        node->cleanUp();
+        peer.reset();
+        node.reset();
+        std::filesystem::current_path(original);
+        std::filesystem::remove_all(home);
+        std::puts("PASS");
+        return 0;
+    }
     dag.start_sync();
     Responder peer_response(node->network());
     peer_response.add_identifier(peer->identifier());

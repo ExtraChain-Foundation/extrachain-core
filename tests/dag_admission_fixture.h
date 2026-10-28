@@ -4,6 +4,10 @@
 
 class DagAdmissionTestFixture {
 public:
+    static bool expect_repair(Dag& dag, const Responder& responder, const SectionId& from, const SectionId& to) {
+        return dag.track_pending_sync_response(responder, from, to, true, true, Dag::SyncRequestPriority::Repair);
+    }
+
     static void refresh_packs(Dag& dag) {
         dag.pack_registry_->rescan();
     }

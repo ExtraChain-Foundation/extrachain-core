@@ -245,7 +245,8 @@ int main(int argc, char** argv) {
             return LoadManagerTestAccess::forced(manager, link);
         }));
     } else {
-        TEST_REQUIRE(std::string_view(argv[1]) == "backoff");
+        const bool plain_completion = std::string_view(argv[1]) == "completion";
+        TEST_REQUIRE(plain_completion || std::string_view(argv[1]) == "backoff");
         std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));
         auto source = std::make_shared<Source>(*node);
         node->network()->connections()->insert(source);
@@ -264,7 +265,7 @@ int main(int argc, char** argv) {
                                                    .file_id           = row.file_id,
                                                    .state             = Dfs::FileState::Ready,
                                                    .hash              = row.hash,
-                                                   .notify_neighbours = true },
+                                                   .notify_neighbours = !plain_completion },
                                                  responder);
         TEST_REQUIRE(wait_for([&] {
             return state() == Dfs::FileState::Ready;
@@ -273,6 +274,13 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(wait_for([&] {
             return source->notifications.load() == 1;
         }));
+        node->dfs()->network_response_file_state({ .owner_id = owner.id(),
+                                                   .file_id = row.file_id,
+                                                   .state = Dfs::FileState::Ready,
+                                                   .hash = row.hash },
+                                                 responder);
+        std::this_thread::sleep_for(50ms);
+        TEST_REQUIRE_EQ(source->notifications.load(), 1U);
         source->close_connection();
         node->network()->connections()->erase(source);
     }
