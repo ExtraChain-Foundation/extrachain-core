@@ -8,6 +8,7 @@
 
 #include <boost/asio/post.hpp>
 
+#include "chain/actor_index.h"
 #include "core/extrachain_node.h"
 #include "dfs/dfs_service.h"
 #include "managers/account_controller.h"
@@ -26,9 +27,17 @@ namespace {
             activated_  = true;
         }
 
-        std::atomic_uint requests { 0 };
-        std::atomic_uint notifications { 0 };
-        std::atomic_bool available { false };
+        std::atomic_uint         requests { 0 };
+        std::atomic_uint         notifications { 0 };
+        std::atomic_bool         available { false };
+        Actor<KeyPrivate>        signer;
+        std::mutex               frames_mutex;
+        std::vector<MessageBody> frames;
+
+        std::vector<MessageBody> captured() {
+            std::lock_guard lock(frames_mutex);
+            return frames;
+        }
 
         std::string protocol_string() const override {
             return "test";
@@ -58,6 +67,11 @@ namespace {
             if (!message.has_value()) {
                 return;
             }
+            if (message.value().message_type == MessageType::DfsFileFragment) {
+                std::lock_guard lock(frames_mutex);
+                frames.push_back(message.value());
+                return;
+            }
             if (message.value().message_type == MessageType::DfsFileExistNotification) {
                 const auto state = MessagePack::deserialize<Dfs::Packets::FileState>(message.value().data);
                 TEST_REQUIRE(state.has_value());
@@ -74,12 +88,28 @@ namespace {
             TEST_REQUIRE(request.has_value());
             requests.fetch_add(1);
             boost::asio::post(node_.serial_executor(),
-                              [node       = &node_,
+                              [this,
+                               node       = &node_,
                                link       = request.value().file_link,
                                source     = identifier_,
                                message_id = message.value().message_id,
                                ready      = available.load()] {
-                                  if (ready) {
+                                  const auto batch = captured();
+                                  if (ready && !batch.empty()) {
+                                      for (auto frame : batch) {
+                                          frame.message_id             = message_id;
+                                          frame.sender_id              = signer.id();
+                                          frame.init_sender_id         = signer.id();
+                                          frame.init_sender_identifier = source;
+                                          const auto signature =
+                                              signer.key()
+                                                  .sign(ByteArray(frame.calculate_hash()).toBytes())
+                                                  .value();
+                                          const auto bytes = frame.serialize() + ByteArray(signature).toString();
+                                          node->network()->message_received(bytes, "127.0.0.1", source);
+                                          node->network()->message_received(bytes, "127.0.0.1", source);
+                                      }
+                                  } else if (ready) {
                                       node->dfs()
                                           ->download_manager()
                                           .file_fragment_achieved({ .owner_id        = link.owner_id,
@@ -161,9 +191,10 @@ int main(int argc, char** argv) {
     row.actor_id      = owner.id();
     row.file_id       = std::string(64, 'b');
     row.name          = "recovered-file";
-    row.size          = 1024;
+    const bool batch  = std::string_view(argv[1]) == "batch";
+    row.size          = batch ? 2 * Dfs::Basic::FRAGMENT_SIZE + 17 : 1024;
     row.last_modified = 500;
-    row.state         = Dfs::FileState::Known;
+    row.state         = batch ? Dfs::FileState::Ready : Dfs::FileState::Known;
     row.type          = Dfs::FileType::File;
     const auto path   = Dfs::Path::file_path(owner.id(), row.file_id);
     TEST_REQUIRE(path.has_value());
@@ -171,7 +202,7 @@ int main(int argc, char** argv) {
         std::filesystem::path(Dfs::Path::filePath(owner.id(), row.file_id)).parent_path());
     {
         std::ofstream file(Dfs::Path::filePath(owner.id(), row.file_id), std::ios::binary);
-        file << std::string(1024, 'x');
+        file << std::string(row.size, 'x');
     }
     row.hash                         = Utils::calculate_hash_file(path.value()).value();
     const bool notice_before_catalog = std::string_view(argv[1]) == "notice-before-catalog";
@@ -198,7 +229,37 @@ int main(int argc, char** argv) {
         return current.value().state;
     };
 
-    if (std::string_view(argv[1]) == "metadata") {
+    if (batch) {
+        auto source = std::make_shared<Source>(*node);
+        source->signer.create(ActorType::User);
+        TEST_REQUIRE(node->actor_index()->save_actor(source->signer.to_public()).has_value());
+        node->network()->connections()->insert(source);
+        Responder request;
+        request.add_identifier(source->identifier());
+        request.set_message_id(std::string(15, 'a'));
+        node->dfs()->download_manager().share_stored_file({ .file_link        = { .owner_id = owner.id(),
+                                                                                  .file_id  = row.file_id },
+                                                            .fragment_numbers = { 1, 2, 3 } },
+                                                          request);
+        TEST_REQUIRE(wait_for([&] {
+            return source->captured().size() == 3;
+        }));
+        std::filesystem::remove(path.value().native());
+        ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
+        row.state         = Dfs::FileState::Known;
+        source->available = true;
+        node->dfs()->download_manager().add_to_queue(owner.id(), row, source->identifier());
+        TEST_REQUIRE(wait_for([&] {
+            return state() == Dfs::FileState::Ready;
+        }));
+        TEST_REQUIRE_EQ(source->requests.load(), 1U);
+        TEST_REQUIRE_EQ(Utils::calculate_hash_file(path.value()).value(), row.hash);
+        TEST_REQUIRE(wait_for([&] {
+            return source->notifications.load() == 1;
+        }));
+        source->close_connection();
+        node->network()->connections()->erase(source);
+    } else if (std::string_view(argv[1]) == "metadata") {
         Responder                     holder;
         const Dfs::Packets::FileState forged { .owner_id = owner.id(),
                                                .file_id  = row.file_id,
