@@ -163,10 +163,15 @@ namespace ExtraChain::Contracts {
             return verified.has_value() && *verified;
         }
 
+        bool toolchain_file_state(Dfs::FileState state) {
+            return state == Dfs::FileState::Ready || state == Dfs::FileState::Known
+                   || state == Dfs::FileState::Partial;
+        }
+
         bool verify_toolchain_row(ExtraChain::Core::ExtraChainNode* node,
                                   Dfs::DirRow                       row,
                                   const ActorId&                    network_id) {
-            return row.state == Dfs::FileState::Ready && !row.encryption
+            return toolchain_file_state(row.state) && !row.encryption
                    && row.folder == Dfs::Basic::TEMPLATE_CONTRACT_TOOLCHAIN
                    && verify_signed_row(node, std::move(row), network_id);
         }
@@ -201,6 +206,11 @@ namespace ExtraChain::Contracts {
             ExtraChain::Core::ExtraChainNode* node,
             const ActorId&                    network_id,
             const Dfs::DirRow&                row) {
+            if (row.state != Dfs::FileState::Ready) {
+                node->dfs()->request_file(network_id, row.file_id);
+                return std::unexpected(
+                    failure(ToolchainError::Unavailable, "Toolchain data is not available locally"));
+            }
             auto content = Dfs::Tables::DirsFile::ActorSpace::get_file_content(network_id, row.file_id);
             if (!content.has_value()) {
                 node->dfs()->request_file(network_id, row.file_id);
@@ -240,7 +250,7 @@ namespace ExtraChain::Contracts {
                 language == ToolchainLanguage::Rust && row.name.starts_with("contract-toolchain-manifest-");
             const bool named = row.name.starts_with("contract-toolchain-" + language_name + "-manifest-");
             return row.folder == Dfs::Basic::TEMPLATE_CONTRACT_TOOLCHAIN && (legacy_rust || named)
-                   && row.name.ends_with(".json") && row.state == Dfs::FileState::Ready;
+                   && row.name.ends_with(".json") && toolchain_file_state(row.state);
         });
         std::ranges::sort(manifests, std::greater {}, &Dfs::DirRow::name);
         std::optional<ToolchainFailure> unavailable;

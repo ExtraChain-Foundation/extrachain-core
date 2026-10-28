@@ -143,13 +143,16 @@ class Stand:
                   'committee startup')
         self.statuses = [self.node(i, 'status') for i in range(8)]
         assert all(x['ok'] for x in self.statuses), self.statuses
+        self.wait(lambda: self.node(0, 'status').get('finalized', 0) >= 1, 'initial Shadow finality')
         self.event('network-ready', network=self.statuses[0]['network'])
 
     def start_node(self, index, resume=False):
         environment = dict(self.environment, EXC_BIND_IP=f'127.0.0.{index + 1}')
+        if resume:
+            environment['EXC_SHADOW_RESUME_WAVE'] = '0'
         return self.start([self.args.build / 'extrachain-node-run', 'committee', self.homes[index],
                            'seed' if index == 0 else 'joiner', str(index), str(17593 + index),
-                           '17593', '8', '0', '18000', self.barrier, '1', '1'],
+                           '17593', '8', '1' if index == 0 and not resume else '0', '18000', self.barrier, '1', '1'],
                           f'node-{index}.log', environment=environment)
 
     def publish(self):
@@ -253,6 +256,8 @@ class Stand:
 
     def language(self, language):
         self.launch_ui(language)
+        self.ui('click', text='Update')
+        self.idle('first installation requires enable', 'enabled first', 90)
         self.ui('click', text='Enable tools')
         self.idle('toolchain installation', 'are ready', 600)
         self.ui('click', text='Fungible token')
@@ -306,10 +311,120 @@ class Stand:
         self.launch_ui(language, restart=True)
         response = self.operate(0, contract, 'balance_of', [receiver])
         assert '999' in response['query_result'], response
+        response = self.operate(1, contract, 'approve', [receiver, 0])
+        assert 'submitted' in response['status'], response
+        record = self.consistent(contract, final['revision'] + 1)
+        self.result['languages'][language]['final'] = record
         self.ui('quit')
         self.client.wait(timeout=60)
         self.result['languages'][language]['status'] = 'PASS'
         self.event('language-pass', language=language)
+
+    def recovery(self):
+        for index, process in enumerate(self.nodes):
+            process.terminate()
+        for process in self.nodes:
+            assert process.wait(timeout=45) == 0, 'Full node failed during clean shutdown'
+        for index, home in enumerate(self.homes):
+            self.checked([self.args.build / 'extrachain-dag-audit', home,
+                          'seed' if index == 0 else 'joiner'], f'audit-{index}.log')
+        self.nodes = [self.start_node(index, resume=True) for index in range(8)]
+        for language, record in self.result['languages'].items():
+            restored = self.consistent(record['contract'])
+            assert restored['state_hash'] == record['final']['state_hash'], restored
+            assert restored['revision'] == record['final']['revision'], restored
+            self.event('normal-restart-verified', language=language, state=restored)
+        self.nodes[7].terminate()
+        assert self.nodes[7].wait(timeout=45) == 0
+        original = self.homes[7]
+        preserved = self.work / 'recovery-original'
+        original.rename(preserved)
+        shutil.copytree(preserved, original)
+        heads = original / 'contract-heads'
+        assert heads.is_dir() and any(heads.iterdir()), 'No derived heads exist to test replay'
+        heads.rename(self.work / 'recovery-saved-heads')
+        self.nodes[7] = self.start_node(7, resume=True)
+        for language, record in self.result['languages'].items():
+            restored = self.consistent(record['contract'])
+            assert restored['state_hash'] == record['final']['state_hash'], restored
+            assert restored['revision'] == record['final']['revision'], restored
+            assert restored['checkpoint_revision'] < restored['revision'], restored
+            self.event('checkpoint-replay-verified', language=language, state=restored)
+        self.result['recovery'] = 'PASS'
+        self.save()
+
+    def negative_packages(self):
+        for language, manifest in self.manifests.items():
+            denied = self.node(1, 'publish-package-current', language=language,
+                               path=str(self.args.packages / f'{language}-0.3.0.tar.xz'), version='0.3.0')
+            assert not denied['ok'] and 'network address' in denied['error'], denied
+            damaged = dict(manifest['packages'][0], hash='0' * 64)
+            denied = self.node(1, 'package', package=json.dumps(damaged))
+            assert not denied['ok'] and 'match' in denied['error'], denied
+            invalid = dict(manifest, contract_abi='999')
+            denied = self.node(0, 'publish-manifest', manifest=json.dumps(invalid))
+            assert not denied['ok'], denied
+            denied = self.node(0, 'publish-manifest', manifest=json.dumps(manifest))
+            assert not denied['ok'] and 'increase' in denied['error'], denied
+            self.event('negative-package-checks', language=language, status='PASS')
+        self.result['negative_packages'] = 'PASS'
+        self.save()
+
+    def negative_updates(self):
+        for language, record in self.result['languages'].items():
+            other = 'rust' if language == 'assemblyscript' else 'assemblyscript'
+            contract = record['contract']
+            denied = self.node(1, 'upgrade', contract=contract,
+                               path=str(self.work / f'{language}-v1.wasm'), arguments='[]')
+            assert not denied['ok'], denied
+            self.launch_ui(language, restart=True)
+            response = self.operate(3, contract, arguments=[], module=str(self.work / f'{other}-v2.wasm'))
+            assert 'submitted' not in response['status'], response
+            self.event('language-change-rejected', language=language, detail=response['status'])
+            response = self.operate(3, contract, arguments=['invalid'],
+                                    module=str(self.work / f'{language}-v1.wasm'))
+            assert 'submitted' not in response['status'], response
+            current = self.consistent(contract)
+            assert current['state_hash'] == record['final']['state_hash'], current
+            assert current['revision'] == record['final']['revision'], current
+            self.event('failed-migration-rejected', language=language, detail=response['status'])
+            manifest = dict(self.manifests[language])
+            active_files = list((self.bridge / 'xdg').rglob('installation.json'))
+            assert len(active_files) == 1, active_files
+            active = active_files[0]
+            original_installation = active.read_bytes()
+            for sequence, changes, expected in [
+                (2, dict(core_min='99.0.0', core_max='99.0.0'), 'Core'),
+                (3, dict(revoked_versions=['0.3.0']), 'revoked')]:
+                candidate = dict(manifest, release_sequence=sequence, **changes)
+                published = self.node(0, 'publish-manifest', manifest=json.dumps(candidate))
+                assert published['ok'], published
+                self.wait(lambda: expected.lower() in self.node(1, 'manifest', language=language)
+                          .get('error', '').lower(), f'{language} negative manifest replication')
+                self.ui('click', text='Develop')
+                self.ui('click', text='Update')
+                self.idle(f'{language} rejected toolchain update', expected, 90)
+                assert active.read_bytes() == original_installation, 'A rejected update changed the active release'
+            restored = dict(manifest, release_sequence=4)
+            published = self.node(0, 'publish-manifest', manifest=json.dumps(restored))
+            assert published['ok'], published
+            self.wait(lambda: self.node(1, 'manifest', language=language).get('manifest', {})
+                      .get('release_sequence') == 4, f'{language} restored manifest')
+            self.ui('click', text='Update')
+            if language == 'rust':
+                self.wait(lambda: any(active.parent.glob('install-*')), 'installation staging directory', 60)
+                self.client.kill()
+                self.client.wait(timeout=30)
+                assert active.read_bytes() == original_installation, 'Interrupted update replaced the active release'
+                self.event('installation-interrupted', language=language, active_release_preserved=True)
+                self.launch_ui(language, restart=True)
+                self.ui('click', text='Update')
+            self.idle('valid toolchain update', 'are current', 600)
+            self.ui('quit')
+            assert self.client.wait(timeout=60) == 0
+            self.event('negative-update-checks', language=language, status='PASS')
+        self.result['negative_updates'] = 'PASS'
+        self.save()
 
     def close(self):
         for process in reversed(self.processes):
@@ -338,6 +453,9 @@ def main():
         stand.publish()
         for language in ('assemblyscript', 'rust'):
             stand.language(language)
+        stand.negative_packages()
+        stand.negative_updates()
+        stand.recovery()
         stand.result['status'] = 'PASS'
     except Exception as error:
         stand.result.update(status='FAIL', error=str(error))

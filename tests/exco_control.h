@@ -27,6 +27,7 @@ namespace ExcoStand {
             result["wallet"]      = node.account_controller()->current_wallet().id().to_string();
             result["section"]     = node.dag()->current_section().to_string();
             result["connections"] = node.network()->active_connections_count();
+            result["finalized"]   = node.consensus()->metrics().finalized;
         } else if (operation == "inspect") {
             const auto record = node.contract_manager()->inspect(text("contract"));
             if (!record.has_value())
