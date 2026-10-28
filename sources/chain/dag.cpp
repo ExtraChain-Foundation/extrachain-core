@@ -4069,10 +4069,18 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 }
             }
             if (changed_sections.empty() && recovery_incidents.empty()) {
-                eLog("[Dag] Repair range {}..{} matches the local sections; nothing to rewrite",
+                eLog("[Dag] Repair range {}..{} matches the local sections; rebuilding controls",
                      expected_range->first,
                      expected_range->second);
-                start_control(Force::Active);
+                // Equal transactions do not validate the stored controls or their derived index.
+                // Generation takes the save lock itself; do not wait for it while holding that lock.
+                save_lock.unlock();
+                clear_controls(expected_range->first);
+                if (expected_range->first == SectionId(0)) {
+                    generate_hash_from_section(SectionId(0), Force::Active, Force::None);
+                } else {
+                    start_control(Force::Active);
+                }
                 return;
             }
         }
