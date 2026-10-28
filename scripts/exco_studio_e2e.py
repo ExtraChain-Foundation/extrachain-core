@@ -278,22 +278,36 @@ class Stand:
         assert locks.get(state['owner'], 0) == locked, locks
         assert int(ledger[3]) == 1000 and sum(balances.values()) == 1000, ledger
 
+    def build_offline(self, language, label):
+        self.checked(['tc', 'qdisc', 'add', 'dev', 'lo', 'root', 'netem', 'loss', '100%'],
+                     f'{language}-offline-build-fault.log')
+        try:
+            self.ui('click', text='Build WebAssembly')
+            built = self.idle(label, 'build completed', 300)
+            assert Path(built['module']).is_file(), built
+            self.event('offline-build-pass', language=language, phase=label)
+            return built
+        finally:
+            self.checked(['tc', 'qdisc', 'del', 'dev', 'lo', 'root'],
+                         f'{language}-offline-build-restore.log')
+
     def language(self, language):
         self.launch_ui(language)
+        self.ui('click', text='Update')
+        self.idle('first installation requires enable', 'enabled first', 90)
         if language == 'assemblyscript':
             self.checked(['tc', 'qdisc', 'add', 'dev', 'lo', 'root', 'netem', 'loss', '100%'],
                          'pending-install-fault.log')
             try:
                 self.ui('click', text='Enable tools')
-                self.wait(lambda: self.ui('snapshot')['busy'], 'pending toolchain download', 15)
+                waiting = self.wait(lambda: (state if (state := self.ui('snapshot'))['busy'] else False),
+                                    'active toolchain installation', 15)
                 self.ui('quit')
-                assert self.client.wait(timeout=15) == 0, 'Studio failed to close during download'
-                self.event('pending-installation-close', status='PASS')
+                assert self.client.wait(timeout=15) == 0, 'Studio failed to close during installation'
+                self.event('installation-close', status='PASS', observed_status=waiting['status'])
             finally:
                 self.checked(['tc', 'qdisc', 'del', 'dev', 'lo', 'root'], 'pending-install-restore.log')
             self.launch_ui(language, restart=True)
-        self.ui('click', text='Update')
-        self.idle('first installation requires enable', 'enabled first', 90)
         self.ui('click', text='Enable tools')
         self.idle('toolchain installation', 'are ready', 600)
         self.ui('click', text='Fungible token')
@@ -302,18 +316,19 @@ class Stand:
         self.ui('click', text='Generate Rust' if language == 'rust' else 'Generate AssemblyScript')
         generated = self.ui('snapshot')['source']
         assert generated, 'Source generation returned no source'
-        self.ui('click', text='Build WebAssembly')
-        built = self.idle('contract build', 'build completed', 300)
+        built = self.build_offline(language, 'contract build')
         first_module = str(self.work / f'{language}-v1.wasm')
         shutil.copy2(built['module'], first_module)
         self.event('built', language=language, module_sha256=hashlib.sha256(Path(first_module).read_bytes()).hexdigest())
         self.ui('screenshot')
+        existing = {row['contractId'] for row in self.ui('snapshot')['catalog']}
         submitted = self.operate(2, arguments=[1000, []])
         assert 'submitted' in submitted['status'], submitted
         def deployed():
             self.ui('refresh')
             state = self.ui('snapshot')
-            return state['catalog'][0]['contractId'] if state['catalog'] else False
+            return next((row['contractId'] for row in state['catalog']
+                         if row['contractId'] not in existing and row['language'] == language), False)
         contract = self.wait(deployed, 'Studio confirmed contract catalog')
         initial = self.consistent(contract)
         self.event('deployed', language=language, contract=contract, state=initial)
@@ -326,8 +341,7 @@ class Stand:
         self.ui('click', text='Develop')
         self.ui('click', text='Freeze last unit')
         self.ui('click', text='Generate Rust' if language == 'rust' else 'Generate AssemblyScript')
-        self.ui('click', text='Build WebAssembly')
-        built = self.idle('upgrade build', 'build completed', 300)
+        built = self.build_offline(language, 'upgrade build')
         assert Path(built['module']).exists(), built
         shutil.copy2(built['module'], self.work / f'{language}-v2.wasm')
         response = self.operate(3, contract, arguments=[], module=built['module'])
