@@ -58,6 +58,8 @@
 #include "utils/exc_utils.h"
 #include "utils/file_io.h"
 
+#include "exco_control.h"
+
 namespace {
     const std::string LOGIN    = "gen-login";
     const std::string PASSWORD = "gen-password";
@@ -1004,6 +1006,7 @@ int main(int argc, char* argv[]) {
         bool       all_finalized         = submitted_hashes.empty();
         bool       finalization_reported = false;
         while (stop_requested == 0 && std::chrono::steady_clock::now() < run_deadline) {
+            ExcoStand::poll(*node, node_index);
             if (mining_test) {
                 const auto state = node->consensus()->finalized_mining_state();
                 if (state.has_value() && state.value().minted_units > 0)

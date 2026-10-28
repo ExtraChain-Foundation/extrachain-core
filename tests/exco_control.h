@@ -1,0 +1,117 @@
+#pragma once
+
+#include <future>
+#include <boost/asio/post.hpp>
+#include <boost/json.hpp>
+
+#include "contracts/contract_codec.h"
+#include "contracts/contract_manager.h"
+#include "contracts/toolchain_registry.h"
+
+namespace ExcoStand {
+    inline boost::json::object execute(ExtraChain::Core::ExtraChainNode& node,
+                                       const boost::json::object& request) {
+        using namespace ExtraChain::Contracts;
+        const auto text = [&](std::string_view key) {
+            const auto* value = request.if_contains(key);
+            return value && value->is_string() ? std::string(value->as_string()) : std::string {};
+        };
+        const auto operation = text("operation");
+        boost::json::object result { { "ok", false }, { "sequence", request.at("sequence") } };
+        const auto fail = [&](std::string_view detail) {
+            result["error"] = detail;
+            return result;
+        };
+        if (operation == "status") {
+            result["network"] = node.network_id().to_string();
+            result["wallet"] = node.account_controller()->current_wallet().id().to_string();
+            result["section"] = node.dag()->current_section().to_string();
+            result["connections"] = node.network()->active_connections_count();
+        } else if (operation == "inspect") {
+            const auto record = node.contract_manager()->inspect(text("contract"));
+            if (!record.has_value()) return fail(record.error().detail);
+            const auto& value = record.value();
+            const auto& version = value.versions.at(value.active_version - 1);
+            const auto& revision = version.revisions.back();
+            result["contract"] = value.contract_id;
+            result["owner"] = value.owner_id;
+            result["language"] = value.language;
+            result["version"] = value.active_version;
+            result["module_hash"] = version.module_hash;
+            result["state_hash"] = revision.state_hash;
+            result["revision"] = revision.revision;
+            result["transaction_hash"] = revision.transaction_hash;
+            result["checkpoint_revision"] = revision.checkpoint_revision;
+            result["state"] = Utils::to_base64(revision.state);
+        } else if (operation == "query") {
+            const auto id = ActorId::create(text("contract"));
+            const auto arguments = Codec::encode_json(text("arguments"));
+            if (!id.has_value() || !arguments.has_value()) return fail("Invalid query arguments");
+            const auto output = node.query_contract(id.value(), text("method"), arguments.value());
+            if (!output.has_value()) return fail(output.error().detail);
+            const auto decoded = Codec::decode_json(output.value().data);
+            if (!decoded.has_value()) return fail(decoded.error().detail);
+            result["value"] = boost::json::parse(decoded.value());
+        } else if (operation == "publish-package") {
+            const auto language = toolchain_language(text("language"));
+            const auto content = FileIo::read_all(text("path"));
+            if (!language.has_value() || !content.has_value()) return fail("Invalid package input");
+            auto* accounts = node.account_controller();
+            auto& profile = accounts->profile(accounts->current_profile().system().id());
+            const auto previous = accounts->current_wallet().id();
+            if (!profile.change_current(node.network_id())) return fail("Canonical wallet is unavailable");
+            const auto& bytes = content.value();
+            const auto package = node.toolchain_registry()->publish_package(
+                language.value(), "linux", "x86_64", "tar.xz", text("version"),
+                std::span(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()));
+            profile.change_current(previous);
+            if (!package.has_value()) return fail(package.error().detail);
+            result["package"] = boost::json::parse(Json::serialize(package.value()));
+        } else if (operation == "publish-manifest") {
+            const auto manifest = Json::deserialize<ToolchainManifest>(text("manifest"));
+            if (!manifest.has_value()) return fail("Invalid manifest input");
+            auto* accounts = node.account_controller();
+            auto& profile = accounts->profile(accounts->current_profile().system().id());
+            const auto previous = accounts->current_wallet().id();
+            if (!profile.change_current(node.network_id())) return fail("Canonical wallet is unavailable");
+            const auto published = node.toolchain_registry()->publish_manifest(manifest.value());
+            profile.change_current(previous);
+            if (!published.has_value()) return fail(published.error().detail);
+        } else if (operation == "manifest") {
+            const auto language = toolchain_language(text("language"));
+            if (!language.has_value()) return fail(language.error());
+            const auto manifest = node.toolchain_registry()->manifest(language.value());
+            if (!manifest.has_value()) return fail(manifest.error().detail);
+            result["manifest"] = boost::json::parse(Json::serialize(manifest.value()));
+        } else {
+            return fail("Unknown ExCo stand operation");
+        }
+        result["ok"] = true;
+        return result;
+    }
+
+    inline void poll(ExtraChain::Core::ExtraChainNode& node, std::size_t index) {
+        const auto* root = std::getenv("EXCO_CONTROL");
+        if (root == nullptr) return;
+        const auto directory = std::filesystem::path(root) / std::to_string(index);
+        const auto path = directory / "request.json";
+        if (!std::filesystem::exists(path)) return;
+        const auto content = FileIo::read_all(path);
+        std::filesystem::remove(path);
+        if (!content.has_value()) return;
+        auto promise = std::make_shared<std::promise<boost::json::object>>();
+        auto future = promise->get_future();
+        boost::asio::post(node.serial_executor(), [&node, promise, content = content.value()] {
+            try {
+                promise->set_value(execute(node, boost::json::parse(content).as_object()));
+            } catch (const std::exception& error) {
+                promise->set_value({ { "ok", false }, { "error", error.what() } });
+            }
+        });
+        if (future.wait_for(std::chrono::seconds(30)) != std::future_status::ready) {
+            throw std::runtime_error("ExCo stand command timed out");
+        }
+        const auto result = FileIo::write_atomic(directory / "response.json", boost::json::serialize(future.get()));
+        if (!result.has_value()) throw std::runtime_error("Cannot save ExCo stand response");
+    }
+}
