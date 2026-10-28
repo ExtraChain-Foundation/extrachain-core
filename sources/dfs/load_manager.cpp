@@ -1396,7 +1396,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
         m_active_downloads_priority->erase(file_link);
         m_active_downloads->erase(file_link);
         finish_him(file_link.owner_id, completed_row);
-        if (notify_neighbours) {
+        if (completed_row.type == Dfs::FileType::File || notify_neighbours) {
             broadcast_file_exist(file_link.owner_id, file_link.file_id);
         }
         kick();
