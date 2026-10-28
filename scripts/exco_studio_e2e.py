@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import signal
 import subprocess
 import time
 
@@ -22,6 +21,7 @@ class Stand:
         self.work.mkdir(parents=True, exist_ok=False)
         self.processes, self.streams = [], []
         self.sequence = 0
+        self.next_sample = 0
         self.environment = dict(os.environ, EXCO_CONTROL=str(self.work / 'control'),
                                 EXC_SHADOW_COMMITTEE_SIZE='7', EXC_DFS_MODE='full')
         self.result = dict(status='RUNNING', languages={}, events=[])
@@ -50,6 +50,31 @@ class Stand:
         if process.wait(timeout=600) != 0:
             raise RuntimeError(f'Command failed: {log}')
 
+    def sample(self):
+        now = time.monotonic()
+        if now < self.next_sample:
+            return
+        self.next_sample = now + 5
+        nodes = []
+        for process in self.processes:
+            if process.poll() is not None:
+                continue
+            try:
+                directory = Path('/proc') / str(process.pid)
+                values = dict(line.split(':', 1) for line in (directory / 'status').read_text().splitlines())
+                rss = int(values.get('VmRSS', '0 kB').split()[0]) * 1024
+                fds = sum(1 for _ in (directory / 'fd').iterdir())
+                if rss > 4 * 1024 ** 3 or fds > 4096:
+                    raise RuntimeError(f'Process {process.pid} exceeded the resource limit')
+                nodes.append(dict(pid=process.pid, rss_bytes=rss, fds=fds, threads=int(values['Threads'])))
+            except FileNotFoundError:
+                continue
+        free = shutil.disk_usage(self.work).free
+        if free < 10 * 1024 ** 3:
+            raise RuntimeError('Free disk space fell below 10 GiB')
+        with (self.work / 'resources.jsonl').open('a') as stream:
+            stream.write(json.dumps(dict(monotonic_s=now, disk_free_bytes=free, nodes=nodes)) + '\n')
+
     def rpc(self, directory, operation, timeout=45, **values):
         directory.mkdir(parents=True, exist_ok=True)
         self.sequence += 1
@@ -59,6 +84,7 @@ class Stand:
         temporary.rename(directory / 'request.json')
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            self.sample()
             path = directory / 'response.json'
             if path.exists():
                 response = json.loads(path.read_text())
@@ -79,6 +105,7 @@ class Stand:
     def wait(self, predicate, label, timeout=300):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            self.sample()
             value = predicate()
             if value:
                 return value
@@ -106,6 +133,9 @@ class Stand:
         self.barrier = self.work / 'barrier'
         self.barrier.mkdir()
         self.nodes = [self.start_node(index) for index in range(8)]
+        self.wait(lambda: all((self.barrier / f'node-{i}').exists() for i in range(8)),
+                  'committee start barrier', 90)
+        (self.barrier / 'go').touch()
         self.wait(lambda: all((self.barrier / f'loaded-{i}').exists() for i in range(8)),
                   'committee startup')
         self.statuses = [self.node(i, 'status') for i in range(8)]
@@ -140,6 +170,13 @@ class Stand:
             (self.work / f'manifest-{language}.json').write_text(json.dumps(manifest, indent=2))
         self.wait(lambda: all(self.node(1, 'manifest', language=language).get('ok')
                               for language in self.manifests), 'toolchain manifest replication')
+        for language, manifest in self.manifests.items():
+            expected = manifest['packages'][0]
+            received = self.wait(lambda: (value if (value := self.node(
+                1, 'package', package=json.dumps(expected))).get('ok') else False),
+                f'{language} package replication', 600)
+            assert received['hash'] == expected['hash'] and received['size'] == expected['size'], received
+            self.event('package-verified', language=language, hash=received['hash'], size=received['size'])
 
     def launch_ui(self, language, restart=False):
         self.bridge = self.work / f'ui-{language}'
@@ -186,6 +223,8 @@ class Stand:
         self.ui('select', name='operation', index=operation)
         if operation != 2:
             self.ui('type', name='contractId', value=contract)
+        else:
+            self.ui('type', name='contractKind', value='studio-token')
         if operation < 2:
             self.ui('type', name='method', value=method)
         if module:
@@ -221,7 +260,9 @@ class Stand:
         assert generated, 'Source generation returned no source'
         self.ui('click', text='Build WebAssembly')
         built = self.idle('contract build', 'build completed', 300)
-        first_module = built['module']
+        first_module = str(self.work / f'{language}-v1.wasm')
+        shutil.copy2(built['module'], first_module)
+        self.event('built', language=language, module_sha256=hashlib.sha256(Path(first_module).read_bytes()).hexdigest())
         self.ui('screenshot')
         submitted = self.operate(2, arguments=[1000, []])
         assert 'submitted' in submitted['status'], submitted
@@ -242,6 +283,7 @@ class Stand:
         self.ui('click', text='Build WebAssembly')
         built = self.idle('upgrade build', 'build completed', 300)
         assert Path(built['module']).exists(), built
+        shutil.copy2(built['module'], self.work / f'{language}-v2.wasm')
         response = self.operate(3, contract, arguments=[], module=built['module'])
         assert 'submitted' in response['status'], response
         upgraded = self.consistent(contract, after_call['revision'] + 1)
