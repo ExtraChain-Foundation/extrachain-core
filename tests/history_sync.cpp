@@ -113,8 +113,11 @@ int main(int argc, char** argv) {
     dag.set_status(DagStatus::Ready);
     auto peer = std::make_shared<Peer>(*node->network());
     node->network()->connections()->insert(peer);
-    if (argc == 2 && std::string_view(argv[1]) == "controls") {
-        peer->enable_pack_sync();
+    if (argc == 2 && (std::string_view(argv[1]) == "controls" || std::string_view(argv[1]) == "tip")) {
+        const bool tip = std::string_view(argv[1]) == "tip";
+        if (!tip) {
+            peer->enable_pack_sync();
+        }
         for (SectionId id(0); id <= SectionId(20); ++id) {
             if (!dag.read_section(id).has_value()) {
                 TEST_REQUIRE(DagAdmissionTestFixture::store_raw_section(dag, Section { .id = id }));
@@ -123,6 +126,20 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(dag.generate_hash_from_section(SectionId(0), Force::Active, Force::None).has_value());
         const auto expected = dag.read_control(SectionId(20)).value().control;
         const auto balances = dag.cache().read_cached_balances();
+        if (tip) {
+            dag.start_sync();
+            Responder response(node->network());
+            response.add_identifier(peer->identifier());
+            dag.network_status_sync_response({ SectionId(21), SectionId(20), expected, 0, DagStatus::Ready },
+                                              response);
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+            while (peer->last_request().empty() && std::chrono::steady_clock::now() < deadline) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            TEST_REQUIRE(!peer->last_request().empty());
+            TEST_REQUIRE_EQ(peer->range().first, SectionId(21));
+            TEST_REQUIRE_EQ(peer->range().second, SectionId(21));
+        } else {
         TEST_REQUIRE(DagAdmissionTestFixture::write_control(dag, SectionId(20), std::string(64, '0')));
         Responder response(node->network());
         response.add_identifier(peer->identifier());
@@ -145,6 +162,7 @@ int main(int argc, char** argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
         TEST_REQUIRE_EQ(dag.read_control(SectionId(20)).value().control, expected);
+        }
         TEST_REQUIRE_EQ(dag.cache().read_cached_balances(), balances);
         TEST_REQUIRE(dag.read_section(SectionId(1)).value().transactions.contains(initial));
         node->cleanUp();
