@@ -177,8 +177,18 @@ class Stand:
             self.manifests[language] = manifest
             self.event('published', language=language, package=package['package'])
             (self.work / f'manifest-{language}.json').write_text(json.dumps(manifest, indent=2))
-        self.wait(lambda: all(self.node(1, 'manifest', language=language).get('ok')
-                              for language in self.manifests), 'toolchain manifest replication')
+        next_snapshot = 0
+        def manifests_ready():
+            nonlocal next_snapshot
+            available = all(self.node(1, 'manifest', language=language).get('ok')
+                            for language in self.manifests)
+            if not available and time.monotonic() >= next_snapshot:
+                next_snapshot = time.monotonic() + 10
+                states = [self.node(index, 'status') for index in (0, 1)]
+                with (self.work / 'network-diagnostics.jsonl').open('a') as stream:
+                    stream.write(json.dumps(dict(monotonic_s=time.monotonic(), states=states)) + '\n')
+            return available
+        self.wait(manifests_ready, 'toolchain manifest replication')
         for language, manifest in self.manifests.items():
             expected = manifest['packages'][0]
             received = self.wait(lambda: (value if (value := self.node(

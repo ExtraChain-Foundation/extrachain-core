@@ -28,6 +28,24 @@ namespace ExcoStand {
             result["section"]     = node.dag()->current_section().to_string();
             result["connections"] = node.network()->active_connections_count();
             result["finalized"]   = node.consensus()->metrics().finalized;
+            result["downloads"]   = node.dfs()->download_manager().active_downloads_size();
+            result["enabled"]     = node_enabled.load();
+            boost::json::array peers;
+            {
+                auto connections = *node.network()->connections();
+                for (const auto& socket : *connections) {
+                    if (!socket)
+                        continue;
+                    peers.emplace_back(boost::json::object { { "identifier", socket->identifier() },
+                                                             { "active", socket->is_active() },
+                                                             { "closed", socket->is_closed() },
+                                                             { "pending_bytes", socket->pending_bytes() },
+                                                             { "queued_messages", socket->queue_size() },
+                                                             { "bytes_incoming", socket->bytes_incoming() },
+                                                             { "bytes_outgoing", socket->bytes_outgoing() } });
+                }
+            }
+            result["peers"] = std::move(peers);
         } else if (operation == "inspect") {
             const auto record = node.contract_manager()->inspect(text("contract"));
             if (!record.has_value())
