@@ -118,6 +118,16 @@ int main(int argc, char** argv) {
         if (!tip) {
             peer->enable_pack_sync();
         }
+        Transaction genesis;
+        genesis.set_type(TransactionType::Genesis);
+        genesis.set_sender(owner.id());
+        genesis.set_receiver(owner.id());
+        genesis.set_token(owner.id());
+        genesis.set_section(SectionId(0));
+        TEST_REQUIRE(genesis.sign(owner));
+        TEST_REQUIRE(DagAdmissionTestFixture::store_raw_section(dag,
+                                                                Section { .id           = SectionId(0),
+                                                                          .transactions = { genesis } }));
         for (SectionId id(0); id <= SectionId(20); ++id) {
             if (!dag.read_section(id).has_value()) {
                 TEST_REQUIRE(DagAdmissionTestFixture::store_raw_section(dag, Section { .id = id }));
@@ -131,7 +141,7 @@ int main(int argc, char** argv) {
             Responder response(node->network());
             response.add_identifier(peer->identifier());
             dag.network_status_sync_response({ SectionId(21), SectionId(20), expected, 0, DagStatus::Ready },
-                                              response);
+                                             response);
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
             while (peer->last_request().empty() && std::chrono::steady_clock::now() < deadline) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -140,28 +150,28 @@ int main(int argc, char** argv) {
             TEST_REQUIRE_EQ(peer->range().first, SectionId(21));
             TEST_REQUIRE_EQ(peer->range().second, SectionId(21));
         } else {
-        TEST_REQUIRE(DagAdmissionTestFixture::write_control(dag, SectionId(20), std::string(64, '0')));
-        Responder response(node->network());
-        response.add_identifier(peer->identifier());
-        TEST_REQUIRE(DagAdmissionTestFixture::expect_repair(dag, response, SectionId(1), SectionId(20)));
-        FileSectionsSync packet { .to = SectionId(20), .last_section = SectionId(20) };
-        {
-            WireFormat::Scope canonical(WireFormat::Mode::Canonical);
-            for (SectionId id(1); id <= SectionId(20); ++id) {
-                auto section = dag.read_section(id).value();
-                section.control = std::string(64, 'f');
-                packet.sections.push_back({ id, Json::serialize(section) });
+            TEST_REQUIRE(DagAdmissionTestFixture::write_control(dag, SectionId(20), std::string(64, '0')));
+            Responder response(node->network());
+            response.add_identifier(peer->identifier());
+            TEST_REQUIRE(DagAdmissionTestFixture::expect_repair(dag, response, SectionId(1), SectionId(20)));
+            FileSectionsSync packet { .to = SectionId(20), .last_section = SectionId(20) };
+            {
+                WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+                for (SectionId id(1); id <= SectionId(20); ++id) {
+                    auto section    = dag.read_section(id).value();
+                    section.control = std::string(64, 'f');
+                    packet.sections.push_back({ id, Json::serialize(section) });
+                }
+                const auto compressed = LegacyCompression::compress(MessagePack::serialize(packet));
+                TEST_REQUIRE(compressed.has_value());
+                dag.network_file_sections_response(compressed.value(), response);
             }
-            const auto compressed = LegacyCompression::compress(MessagePack::serialize(packet));
-            TEST_REQUIRE(compressed.has_value());
-            dag.network_file_sections_response(compressed.value(), response);
-        }
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-        while (dag.read_control(SectionId(20)).value_or(DagControl {}).control != expected
-               && std::chrono::steady_clock::now() < deadline) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        }
-        TEST_REQUIRE_EQ(dag.read_control(SectionId(20)).value().control, expected);
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+            while (dag.read_control(SectionId(20)).value_or(DagControl {}).control != expected
+                   && std::chrono::steady_clock::now() < deadline) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            TEST_REQUIRE_EQ(dag.read_control(SectionId(20)).value().control, expected);
         }
         TEST_REQUIRE_EQ(dag.cache().read_cached_balances(), balances);
         TEST_REQUIRE(dag.read_section(SectionId(1)).value().transactions.contains(initial));

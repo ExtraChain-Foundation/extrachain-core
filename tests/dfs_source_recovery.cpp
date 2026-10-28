@@ -174,6 +174,19 @@ int main(int argc, char** argv) {
         file << std::string(1024, 'x');
     }
     row.hash    = Utils::calculate_hash_file(path.value()).value();
+    const bool notice_before_catalog = std::string_view(argv[1]) == "notice-before-catalog";
+    if (notice_before_catalog) {
+        Responder holder;
+        holder.add_identifier(std::string(64, 'f'));
+        node->dfs()->network_response_file_state({ .owner_id          = owner.id(),
+                                                   .file_id           = row.file_id,
+                                                   .state             = Dfs::FileState::Ready,
+                                                   .hash              = row.hash,
+                                                   .notify_neighbours = true },
+                                                 holder);
+        TEST_REQUIRE_EQ(node->dfs()->download_manager().active_downloads_size(), std::size_t(0));
+        TEST_REQUIRE(!Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db, owner.id(), row.file_id).has_value());
+    }
     auto stored = Utils::to_dbrow(row);
     stored.erase("prev_file_id");
     using namespace Dfs::Tables::DirsFile;
@@ -246,9 +259,10 @@ int main(int argc, char** argv) {
         }));
     } else {
         const bool plain_completion = std::string_view(argv[1]) == "completion";
-        TEST_REQUIRE(plain_completion || std::string_view(argv[1]) == "backoff");
+        TEST_REQUIRE(plain_completion || notice_before_catalog || std::string_view(argv[1]) == "backoff");
         std::filesystem::remove(Dfs::Path::filePath(owner.id(), row.file_id));
         auto source = std::make_shared<Source>(*node);
+        source->available = notice_before_catalog;
         node->network()->connections()->insert(source);
         node->dfs()->download_manager().add_to_queue(owner.id(), row, source->identifier());
         TEST_REQUIRE(wait_for([&] {
@@ -258,15 +272,17 @@ int main(int argc, char** argv) {
         std::printf("DFS refused-source requests in 250ms: %u\n", source->requests.load());
         std::fflush(stdout);
         TEST_REQUIRE(source->requests.load() <= 3);
-        source->available = true;
         Responder responder;
         responder.add_identifier(source->identifier());
-        node->dfs()->network_response_file_state({ .owner_id          = owner.id(),
-                                                   .file_id           = row.file_id,
-                                                   .state             = Dfs::FileState::Ready,
-                                                   .hash              = row.hash,
-                                                   .notify_neighbours = !plain_completion },
-                                                 responder);
+        if (!notice_before_catalog) {
+            source->available = true;
+            node->dfs()->network_response_file_state({ .owner_id          = owner.id(),
+                                                       .file_id           = row.file_id,
+                                                       .state             = Dfs::FileState::Ready,
+                                                       .hash              = row.hash,
+                                                       .notify_neighbours = !plain_completion },
+                                                     responder);
+        }
         TEST_REQUIRE(wait_for([&] {
             return state() == Dfs::FileState::Ready;
         }));
@@ -275,9 +291,9 @@ int main(int argc, char** argv) {
             return source->notifications.load() == 1;
         }));
         node->dfs()->network_response_file_state({ .owner_id = owner.id(),
-                                                   .file_id = row.file_id,
-                                                   .state = Dfs::FileState::Ready,
-                                                   .hash = row.hash },
+                                                   .file_id  = row.file_id,
+                                                   .state    = Dfs::FileState::Ready,
+                                                   .hash     = row.hash },
                                                  responder);
         std::this_thread::sleep_for(50ms);
         TEST_REQUIRE_EQ(source->notifications.load(), 1U);

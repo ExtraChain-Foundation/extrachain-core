@@ -186,6 +186,8 @@ add_core_test_executable(extrachain-dfs-vector-replication dfs_vector_replicatio
 add_test(NAME dfs-complete-file-recovery COMMAND extrachain-dfs-source-tests metadata)
 add_test(NAME dfs-source-backoff COMMAND extrachain-dfs-source-tests backoff)
 add_test(NAME dfs-completion-notice COMMAND extrachain-dfs-source-tests completion)
+add_test(NAME dfs-completion-before-catalog COMMAND extrachain-dfs-source-tests notice-before-catalog)
+set_tests_properties(dfs-completion-notice dfs-completion-before-catalog PROPERTIES TIMEOUT 30)
 add_test(NAME dfs-cooldown-reprobe COMMAND extrachain-dfs-source-tests reprobe)
 add_core_test_executable(extrachain-network-priority network_priority.cpp)
 add_test(NAME network-priority COMMAND extrachain-network-priority)
