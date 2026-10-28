@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(dag.generate_hash_from_section(SectionId(0), Force::Active, Force::None).has_value());
         const auto expected = dag.read_control(SectionId(20)).value().control;
         const auto balances = dag.cache().read_cached_balances();
-        TEST_REQUIRE(dag.write_control(SectionId(20), std::string(64, '0')).has_value());
+        TEST_REQUIRE(DagAdmissionTestFixture::write_control(dag, SectionId(20), std::string(64, '0')));
         Responder response(node->network());
         response.add_identifier(peer->identifier());
         TEST_REQUIRE(DagAdmissionTestFixture::expect_repair(dag, response, SectionId(1), SectionId(20)));

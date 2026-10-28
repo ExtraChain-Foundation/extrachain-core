@@ -4,6 +4,10 @@
 
 class DagAdmissionTestFixture {
 public:
+    static bool write_control(Dag& dag, const SectionId& section, const std::string& hash) {
+        return dag.write_control(section, hash).has_value();
+    }
+
     static bool expect_repair(Dag& dag, const Responder& responder, const SectionId& from, const SectionId& to) {
         return dag.track_pending_sync_response(responder, from, to, true, true, Dag::SyncRequestPriority::Repair);
     }
