@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run live Contract Studio checks against an isolated Shadow network."""
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -8,6 +9,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
+
+import msgpack
 
 DOCUMENTS = ('activation-manifest', 'governance-policy', 'recovery-policy',
              'shadow-config', 'trust-anchor', 'validator-set')
@@ -254,8 +257,31 @@ class Stand:
             return states[0]
         return self.wait(check, f'contract {contract} convergence', timeout)
 
+    def balances(self, state, receiver, owner_balance, receiver_balance, locked):
+        encoded = base64.b64decode(state['state'])
+        value = msgpack.unpackb(encoded, raw=False)
+        ledger = value[6]
+        balances = {key: int(amount) for key, amount in ledger[0]}
+        locks = {key: int(amount) for key, amount in ledger[2]}
+        assert balances.get(state['owner'], 0) == owner_balance, balances
+        assert balances.get(receiver, 0) == receiver_balance, balances
+        assert locks.get(state['owner'], 0) == locked, locks
+        assert int(ledger[3]) == 1000 and sum(balances.values()) == 1000, ledger
+
     def language(self, language):
         self.launch_ui(language)
+        if language == 'assemblyscript':
+            self.checked(['tc', 'qdisc', 'add', 'dev', 'lo', 'root', 'netem', 'loss', '100%'],
+                         'pending-install-fault.log')
+            try:
+                self.ui('click', text='Enable tools')
+                self.wait(lambda: self.ui('snapshot')['busy'], 'pending toolchain download', 15)
+                self.ui('quit')
+                assert self.client.wait(timeout=15) == 0, 'Studio failed to close during download'
+                self.event('pending-installation-close', status='PASS')
+            finally:
+                self.checked(['tc', 'qdisc', 'del', 'dev', 'lo', 'root'], 'pending-install-restore.log')
+            self.launch_ui(language, restart=True)
         self.ui('click', text='Update')
         self.idle('first installation requires enable', 'enabled first', 90)
         self.ui('click', text='Enable tools')
@@ -282,9 +308,11 @@ class Stand:
         initial = self.consistent(contract)
         self.event('deployed', language=language, contract=contract, state=initial)
         receiver = self.statuses[1]['wallet']
+        self.balances(initial, receiver, 1000, 0, 0)
         response = self.operate(1, contract, 'transfer', [receiver, 100])
         assert 'submitted' in response['status'], response
         after_call = self.consistent(contract, initial['revision'] + 1)
+        self.balances(after_call, receiver, 900, 100, 0)
         self.ui('click', text='Develop')
         self.ui('click', text='Freeze last unit')
         self.ui('click', text='Generate Rust' if language == 'rust' else 'Generate AssemblyScript')
@@ -299,6 +327,7 @@ class Stand:
         response = self.operate(1, contract, 'transfer', [receiver, 899])
         assert 'submitted' in response['status'], response
         final = self.consistent(contract, upgraded['revision'] + 1)
+        self.balances(final, receiver, 1, 999, 1)
         response = self.operate(1, contract, 'transfer', [receiver, 1])
         assert 'submitted' not in response['status'], response
         assert self.consistent(contract)['state_hash'] == final['state_hash']
