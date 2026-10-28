@@ -162,7 +162,7 @@ namespace FileIo {
         return write_atomic_impl(
             path,
             [data](std::FILE* file) {
-                return std::fwrite(data.data(), 1, data.size(), file) == data.size();
+                return data.empty() || std::fwrite(data.data(), 1, data.size(), file) == data.size();
             },
             false);
     }
@@ -171,7 +171,7 @@ namespace FileIo {
         return write_atomic_impl(
             path,
             [data](std::FILE* file) {
-                return std::fwrite(data.data(), 1, data.size(), file) == data.size();
+                return data.empty() || std::fwrite(data.data(), 1, data.size(), file) == data.size();
             },
             true);
     }
