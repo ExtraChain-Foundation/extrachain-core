@@ -27,9 +27,12 @@ stop writes from users, then submit one transaction at a time, waiting for each 
 accepted, until every node reports the same current section and that section is a
 multiple of 20. Stop every node.
 
-Do not run the new binary in legacy mode to reach the boundary. On a freshly
-bootstrapped two-node stand its legacy transfers stalled: the sender found a control
-mismatch at the last boundary, entered DAG sync, and refused further transfers.
+Builds before the short-tail sync correction can stall in legacy mode after bootstrap.
+They request matching closed controls instead of the missing next section and then
+refuse further transfers. Use the previous binary for those builds. With the correction,
+a two-node REST check accepts 42 transfers across two control boundaries and three
+more after restart. All 45 transactions are present and equal on both stopped nodes;
+DAG, control, and balance audits pass. Check the build revision before using that path.
 
 ## 2. Install the new binary and seal the legacy DAG
 
@@ -46,8 +49,8 @@ extrachain-shadow-bundle --prepare /path/to/data <login-hash>
 `prepared network=<id> boundary=<section>`. Every node must print the same pair. If
 the current section is not a boundary, it fails and prints how many more transactions
 reach the next one; start the network on the previous binary, submit them, and repeat
-steps 1 and 2. The legacy transition seal itself is verified; reaching the boundary
-with new binaries is not.
+steps 1 and 2. The transition seal and the corrected legacy transfer path have separate
+checks; a transfer check does not replace the seal checks below.
 
 ## 3. Generate the documents
 

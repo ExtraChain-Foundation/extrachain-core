@@ -42,6 +42,11 @@ access for the controller's `systemd-run` and `systemctl stop` operations. Resol
 missing access through the host's normal administrator setup; do not remove the
 controller's service isolation or watchdog to avoid that requirement.
 
+The combined audit needs Python 3.14 or newer: `shadow_verify.py` uses the standard
+`compression.zstd` module to read compressed hot sections. A successful bootstrap
+on an older Python version does not establish that the final audit can run. Probe
+`from compression import zstd` in the selected environment before the preview.
+
 The observed Linux reference uses GCC 14.2, CMake 3.31.6, Python 3.13, and msgpack 1.2.2.
 These are reference versions, not proof that every other combination works. Package
 names differ by distribution. Install missing tools with its package manager. vcpkg
