@@ -1048,10 +1048,11 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                 responder.add_identifier(identifier);
                 responder.set_message_id(message_id);
 
+                // A batch shares one request ID; NoStatus dedup would discard every later fragment.
                 auto sent_message_id = this->node->network()->send_message(file_fragment,
                                                                            MessageType::DfsFileFragment,
                                                                            SendMode::Focused,
-                                                                           MessageStatus::NoStatus,
+                                                                           MessageStatus::Response,
                                                                            responder);
                 // eLog("[Dfs] LoadManager::share_stored_file, file fragment sended (message_id: {}). owner_id: {},
                 // file_id: {}, offset: {}", message_id, file_link_fragment.file_link.owner_id,
