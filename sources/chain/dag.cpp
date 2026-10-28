@@ -4539,28 +4539,8 @@ void Dag::handle_sync_request() {
         // TODO: better cons
         for (const auto &[_, info] : last_info_) {
             if (info.last_section_id > my_index) {
-                // Falling behind by more than the acceptance window is a missing-section
-                // problem, not a control problem. `need_recontrol` alone ends in
-                // request_control_section() followed by `return` — no section is ever
-                // fetched — so a node that came back from a restart 65 sections behind
-                // kept drifting (measured: 65 -> 137 in two minutes) while rejecting
-                // every incoming transaction as TooSectionDiff: 606 rejections against
-                // ~130 on healthy peers. See docs/TODO.md 0.75.
-                //
-                // The hot-tail gap scan above does not cover this: it walks up to
-                // `current_section_`, this node's *own* height, and a node that is
-                // merely behind has no hole below it — its chain is contiguous, just
-                // short. Only a comparison against the peers' height sees it.
-                //
-                // 15 = the acceptance window enforced in prove_transaction. Beyond it we
-                // are not merely lagging, we are rejecting live traffic.
-                if (info.last_section_id > my_index + SectionId(15)) {
-                    need_sync = true;
-                } else if (info.last_control_section_id < SectionId(0)) {
-                    need_sync = true;
-                } else {
-                    need_recontrol = true;
-                }
+                // Matching closed controls cannot prove that a peer's newer tail is already local.
+                need_sync = true;
                 break;
             }
 
