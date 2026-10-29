@@ -850,6 +850,13 @@ int main() {
             auto connections = *node->network()->connections();
             connections->insert(observer);
         }
+        TEST_REQUIRE(service.active());
+        const auto meta = node->network()->peer_meta_for(observer_peer);
+        TEST_REQUIRE(meta.has_value() && meta.value().supports_shadow_consensus());
+        TEST_REQUIRE_EQ(archive.validators().document().network_id, network.id());
+        TEST_REQUIRE_EQ(archive.validators().document().epoch, 1U);
+        const auto available = ConsensusStateTestFixture::finalized_batch(service, oldest);
+        TEST_REQUIRE(available.has_value());
         BatchReply                reply;
         const SectionBatchRequest request { .network_id = network.id(), .epoch = 1, .header_hash = header };
         service.receive_batch_request(request, Responder(&reply), observer_peer);
