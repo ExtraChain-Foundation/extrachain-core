@@ -114,7 +114,7 @@ int main() {
         node->dag()->set_mode(DagMode::Full);
         Actor<KeyPrivate> deployed_actor;
         deployed_actor.create(ActorType::Service);
-        TEST_REQUIRE(node->actor_index()->save_actor(deployed_actor.to_public()).has_value());
+        node->account_controller()->create_service({}, deployed_actor);
         ContractManager temporary;
         const auto      change = temporary.prepare_deploy(deployed_actor.id().to_string(),
                                                      owner.id().to_string(),
