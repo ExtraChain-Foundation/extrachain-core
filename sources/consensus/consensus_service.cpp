@@ -813,7 +813,17 @@ namespace ExtraChain::Consensus {
         // Observers need these public payloads to verify certificates. They have no validator identity.
         auto batch = consensus_->engine().batch_for(request.header_hash);
         if (!batch.has_value()) {
-            const auto proposal = consensus_->engine().proposal_for(request.header_hash);
+            auto proposal = consensus_->engine().proposal_for(request.header_hash);
+            if (!proposal.has_value()) {
+                const auto manifest = consensus_->engine().archived_manifest_for(request.header_hash);
+                if (manifest.has_value()) {
+                    const auto proof =
+                        consensus_->engine().finality_proof_for_section(manifest.value().last_section);
+                    if (proof.has_value() && proof.value().has_value()
+                        && hash_header(proof.value().value().finalized_proposal.header) == request.header_hash)
+                        proposal = proof.value().value().finalized_proposal;
+                }
+            }
             if (proposal.has_value())
                 batch = finalized_batch(proposal.value());
         }
