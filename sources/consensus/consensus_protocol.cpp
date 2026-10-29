@@ -1080,46 +1080,123 @@ namespace ExtraChain::Consensus {
         return domain_hash(StateDomain, commitment);
     }
 
-    std::string segmented_state_root(std::string_view                                        domain,
-                                     const std::vector<std::pair<std::string, std::string>>& entries) {
-        if (domain.empty()) {
-            return {};
-        }
-        std::array<std::vector<std::pair<std::string, std::string>>, 256> buckets;
-        for (const auto& [key, value] : entries) {
-            if (key.empty()) {
-                return {};
-            }
-            const auto   key_hash = domain_hash(StateKeyDomain, std::tuple { std::string(domain), key });
-            unsigned int bucket   = 0;
-            const auto   parsed   = std::from_chars(key_hash.data(), key_hash.data() + 2, bucket, 16);
-            if (parsed.ec != std::errc {} || parsed.ptr != key_hash.data() + 2) {
-                return {};
-            }
-            buckets[bucket].emplace_back(key, value);
+    namespace {
+        using StateBuckets = std::array<std::vector<std::pair<std::string, std::string>>, 256>;
+
+        std::optional<std::uint16_t> state_bucket(std::string_view domain, std::string_view key) {
+            if (domain.empty() || key.empty())
+                return std::nullopt;
+            const auto   hash = domain_hash(StateKeyDomain, std::tuple { std::string(domain), std::string(key) });
+            unsigned int bucket = 0;
+            const auto   parsed = std::from_chars(hash.data(), hash.data() + 2, bucket, 16);
+            if (parsed.ec != std::errc {} || parsed.ptr != hash.data() + 2)
+                return std::nullopt;
+            return static_cast<std::uint16_t>(bucket);
         }
 
-        std::vector<std::string> bucket_roots;
-        bucket_roots.reserve(buckets.size());
-        for (std::size_t index = 0; index < buckets.size(); ++index) {
-            auto& bucket = buckets[index];
-            std::ranges::sort(bucket);
-            const auto duplicate =
-                std::adjacent_find(bucket.begin(), bucket.end(), [](const auto& left, const auto& right) {
-                    return left.first == right.first;
-                });
-            if (duplicate != bucket.end()) {
-                return {};
+        std::optional<StateBuckets> state_buckets(
+            std::string_view                                        domain,
+            const std::vector<std::pair<std::string, std::string>>& entries) {
+            if (domain.empty())
+                return std::nullopt;
+            StateBuckets buckets;
+            for (const auto& entry : entries) {
+                const auto index = state_bucket(domain, entry.first);
+                if (!index.has_value())
+                    return std::nullopt;
+                buckets[index.value()].push_back(entry);
             }
-            std::vector<std::string> leaves;
-            leaves.reserve(bucket.size());
-            for (const auto& [key, value] : bucket) {
-                leaves.push_back(domain_hash(StateLeafDomain, std::tuple { std::string(domain), key, value }));
+            for (auto& bucket : buckets) {
+                std::ranges::sort(bucket);
+                if (std::adjacent_find(bucket.begin(),
+                                       bucket.end(),
+                                       [](const auto& left, const auto& right) {
+                                           return left.first == right.first;
+                                       })
+                    != bucket.end())
+                    return std::nullopt;
             }
-            bucket_roots.push_back(
-                domain_hash(StateBucketDomain, std::tuple { std::string(domain), index, leaves }));
+            return buckets;
         }
-        return domain_hash(StateRootDomain, std::tuple { std::string(domain), bucket_roots });
+
+        std::vector<std::string> state_leaves(std::string_view                                        domain,
+                                              const std::vector<std::pair<std::string, std::string>>& entries) {
+            std::vector<std::string> leaves;
+            leaves.reserve(entries.size());
+            for (const auto& [key, value] : entries)
+                leaves.push_back(domain_hash(StateLeafDomain, std::tuple { std::string(domain), key, value }));
+            return leaves;
+        }
+
+        bool state_hash_shape(std::string_view hash) {
+            return hash.size() == 64 && std::ranges::all_of(hash, [](char value) {
+                       return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f');
+                   });
+        }
+    } // namespace
+
+    std::string segmented_state_root(std::string_view                                        domain,
+                                     const std::vector<std::pair<std::string, std::string>>& entries) {
+        const auto buckets = state_buckets(domain, entries);
+        if (!buckets.has_value())
+            return {};
+        std::vector<std::string> roots;
+        roots.reserve(256);
+        for (std::size_t index = 0; index < 256; ++index)
+            roots.push_back(domain_hash(StateBucketDomain,
+                                        std::tuple { std::string(domain),
+                                                     index,
+                                                     state_leaves(domain, buckets.value()[index]) }));
+        return domain_hash(StateRootDomain, std::tuple { std::string(domain), roots });
+    }
+
+    std::expected<StateEntryProofV1, ConsensusError> make_state_entry_proof(
+        std::string_view                                        domain,
+        const std::vector<std::pair<std::string, std::string>>& entries,
+        std::string_view                                        key) {
+        const auto selected = state_bucket(domain, key);
+        const auto buckets  = state_buckets(domain, entries);
+        if (!selected.has_value() || !buckets.has_value())
+            return std::unexpected(ConsensusError::InvalidProof);
+        const auto& bucket = buckets.value()[selected.value()];
+        const auto  found  = std::ranges::find(bucket, key, &std::pair<std::string, std::string>::first);
+        if (found == bucket.end() || bucket.size() > MaximumStateProofLeaves)
+            return std::unexpected(ConsensusError::DataUnavailable);
+        StateEntryProofV1 proof {
+            .bucket   = selected.value(),
+            .position = static_cast<std::uint32_t>(found - bucket.begin()),
+            .leaves   = state_leaves(domain, bucket),
+        };
+        proof.bucket_roots.reserve(256);
+        for (std::size_t index = 0; index < 256; ++index)
+            proof.bucket_roots.push_back(domain_hash(StateBucketDomain,
+                                                     std::tuple { std::string(domain),
+                                                                  index,
+                                                                  state_leaves(domain, buckets.value()[index]) }));
+        return proof;
+    }
+
+    bool verify_state_entry_proof(std::string_view         domain,
+                                  std::string_view         key,
+                                  std::string_view         value,
+                                  const StateEntryProofV1& proof,
+                                  std::string_view         root) {
+        const auto bucket = state_bucket(domain, key);
+        if (!bucket.has_value() || proof.bucket != bucket.value() || proof.bucket_roots.size() != 256
+            || proof.leaves.empty() || proof.leaves.size() > MaximumStateProofLeaves
+            || proof.position >= proof.leaves.size() || !state_hash_shape(root)
+            || !std::ranges::all_of(proof.leaves, state_hash_shape)
+            || !std::ranges::all_of(proof.bucket_roots, state_hash_shape))
+            return false;
+        const auto leaf =
+            domain_hash(StateLeafDomain, std::tuple { std::string(domain), std::string(key), std::string(value) });
+        return proof.leaves[proof.position] == leaf
+               && proof.bucket_roots[proof.bucket]
+                      == domain_hash(StateBucketDomain,
+                                     std::tuple { std::string(domain),
+                                                  static_cast<std::size_t>(proof.bucket),
+                                                  proof.leaves })
+               && domain_hash(StateRootDomain, std::tuple { std::string(domain), proof.bucket_roots }) == root;
     }
 
 } // namespace ExtraChain::Consensus

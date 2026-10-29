@@ -980,6 +980,41 @@ int main() {
     duplicate_entries.push_back({ "alice", "11" });
     check("segmented state roots reject duplicate keys",
           segmented_state_root("accounts", duplicate_entries).empty());
+    const auto state_root = segmented_state_root("accounts", state_entries);
+    check("segmented state root preserves the fixed V1 bytes",
+          state_root == "d74fa21cdfdcb4595713579058018fd43ddda802c55f3d348a1f82fa87b4ae07");
+    const auto state_proof = make_state_entry_proof("accounts", state_entries, "alice");
+    check("state entry proof binds the key and value",
+          state_proof.has_value()
+              && verify_state_entry_proof("accounts", "alice", "10", state_proof.value(), state_root)
+              && !verify_state_entry_proof("accounts", "alice", "11", state_proof.value(), state_root)
+              && !verify_state_entry_proof("accounts", "bob", "10", state_proof.value(), state_root)
+              && !verify_state_entry_proof("contracts", "alice", "10", state_proof.value(), state_root));
+    check("state entry proof rejects absent and duplicate keys",
+          !make_state_entry_proof("accounts", state_entries, "absent").has_value()
+              && !make_state_entry_proof("accounts", duplicate_entries, "alice").has_value());
+    if (state_proof.has_value()) {
+        auto corrupted                       = state_proof.value();
+        corrupted.leaves[corrupted.position] = std::string(64, '0');
+        check("state entry proof rejects a changed leaf",
+              !verify_state_entry_proof("accounts", "alice", "10", corrupted, state_root));
+        corrupted                                            = state_proof.value();
+        corrupted.bucket_roots[(corrupted.bucket + 1) % 256] = std::string(64, '0');
+        check("state entry proof rejects a changed sibling bucket",
+              !verify_state_entry_proof("accounts", "alice", "10", corrupted, state_root));
+        corrupted          = state_proof.value();
+        corrupted.position = std::numeric_limits<std::uint32_t>::max();
+        check("state entry proof bounds the position",
+              !verify_state_entry_proof("accounts", "alice", "10", corrupted, state_root));
+        corrupted = state_proof.value();
+        corrupted.leaves.resize(MaximumStateProofLeaves + 1, std::string(64, '0'));
+        check("state entry proof bounds the leaf count",
+              !verify_state_entry_proof("accounts", "alice", "10", corrupted, state_root));
+        corrupted = state_proof.value();
+        corrupted.bucket_roots.pop_back();
+        check("state entry proof requires every bucket root",
+              !verify_state_entry_proof("accounts", "alice", "10", corrupted, state_root));
+    }
 
     std::printf("CONSENSUS PROTOCOL: %d pass, %d fail\n", passed, failed);
     return failed == 0 ? 0 : 1;

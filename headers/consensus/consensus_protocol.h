@@ -118,6 +118,17 @@ namespace ExtraChain::Consensus {
         MSGPACK_DEFINE(leaf_index, leaf_count, leaf_hash, siblings)
     };
 
+    inline constexpr std::size_t MaximumStateProofLeaves = 4096;
+
+    struct StateEntryProofV1 {
+        std::uint16_t            bucket   = 0;
+        std::uint32_t            position = 0;
+        std::vector<std::string> leaves;
+        std::vector<std::string> bucket_roots;
+
+        MSGPACK_DEFINE(bucket, position, leaves, bucket_roots)
+    };
+
     struct IndexedSignature {
         std::uint16_t signer_index = 0;
         std::string   signature;
@@ -519,6 +530,15 @@ namespace ExtraChain::Consensus {
     EXTRACHAIN_EXPORT std::string segmented_state_root(
         std::string_view                                        domain,
         const std::vector<std::pair<std::string, std::string>>& entries);
+    EXTRACHAIN_EXPORT std::expected<StateEntryProofV1, ConsensusError> make_state_entry_proof(
+        std::string_view                                        domain,
+        const std::vector<std::pair<std::string, std::string>>& entries,
+        std::string_view                                        key);
+    EXTRACHAIN_EXPORT bool verify_state_entry_proof(std::string_view         domain,
+                                                    std::string_view         key,
+                                                    std::string_view         value,
+                                                    const StateEntryProofV1& proof,
+                                                    std::string_view         root);
 
 } // namespace ExtraChain::Consensus
 
