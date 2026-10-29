@@ -188,13 +188,8 @@ bool Transaction::sign(const Actor<KeyPrivate> &actor) {
         return false;
     }
 
-    // Sign with the LEGACY hex-form hash for wire compatibility: pre-decimal
-    // peers re-derive the hash in hex and expect the signature to match that.
-    // New peers always accept either hex or decimal in verify(), so we don't
-    // lose anything on the new side.
-    //
-    // Once we stop talking to legacy peers, switch back to calculate_hash().
-    this->hash_ = calculate_hash_hex();
+    // Contract requests use the framed contract hash. Native signatures use the hex wire format.
+    this->hash_ = is_contract_transaction(type_) ? calculate_hash() : calculate_hash_hex();
     auto sign   = actor.key().sign(hash_);
     if (!sign.has_value()) {
         return false;
@@ -252,6 +247,10 @@ SectionId Transaction::section() const {
 
 std::string Transaction::hash() const {
     return this->hash_;
+}
+
+std::string Transaction::request_hash() const {
+    return ExtraChain::Consensus::consensus_transaction_hash(*this);
 }
 
 TokenId Transaction::token() const {

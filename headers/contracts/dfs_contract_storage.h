@@ -18,29 +18,35 @@
 
 class DfsService;
 class Dag;
+namespace ExtraChain::Consensus {
+    class ConsensusService;
+}
 
 namespace ExtraChain::Contracts {
 
     class EXTRACHAIN_EXPORT DfsContractStorage final : public ContractStorage {
     public:
-        DfsContractStorage(DfsService *dfs, Dag *dag);
+        DfsContractStorage(DfsService *dfs, Dag *dag, Consensus::ConsensusService *consensus = nullptr);
 
         [[nodiscard]] std::expected<ContractRecord, ContractFailure> load(
             std::string_view contract_id) const override;
 
         [[nodiscard]] std::expected<void, ContractFailure> create(const ContractRecord &record) override;
 
-        [[nodiscard]] std::expected<void, ContractFailure> stage(const ContractRecord &record) override;
+        [[nodiscard]] std::expected<void, ContractFailure> stage(const ContractRecord &record,
+                                                                 bool include_checkpoints = true) override;
 
         [[nodiscard]] std::expected<void, ContractFailure> replace(const ContractRecord &record,
                                                                    std::uint32_t         expected_version,
                                                                    std::string_view expected_state_hash) override;
 
     private:
-        [[nodiscard]] std::expected<void, ContractFailure> stage_artifacts(const ContractRecord &record) const;
+        [[nodiscard]] std::expected<void, ContractFailure> stage_artifacts(const ContractRecord &record,
+                                                                           bool include_checkpoints = true) const;
 
         DfsService                                             *dfs_ = nullptr;
         Dag                                                    *dag_ = nullptr;
+        Consensus::ConsensusService                            *consensus_ = nullptr;
         mutable std::mutex                                      mutex_;
         mutable std::unordered_map<std::string, ContractRecord> heads_;
         mutable std::unordered_set<std::string>                 absent_contracts_;

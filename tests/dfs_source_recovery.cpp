@@ -27,12 +27,13 @@ namespace {
             activated_  = true;
         }
 
-        std::atomic_uint         requests { 0 };
-        std::atomic_uint         notifications { 0 };
-        std::atomic_bool         available { false };
-        Actor<KeyPrivate>        signer;
-        std::mutex               frames_mutex;
-        std::vector<MessageBody> frames;
+        std::atomic_uint          requests { 0 };
+        std::atomic_uint          notifications { 0 };
+        std::atomic_bool          available { false };
+        std::atomic<std::int64_t> pending { 0 };
+        Actor<KeyPrivate>         signer;
+        std::mutex                frames_mutex;
+        std::vector<MessageBody>  frames;
 
         std::vector<MessageBody> captured() {
             std::lock_guard lock(frames_mutex);
@@ -55,6 +56,9 @@ namespace {
             return 0;
         }
         void flush() override {
+        }
+        std::int64_t pending_bytes() const noexcept override {
+            return pending.load();
         }
 
         void send_message(std::span<const std::uint8_t> data, Priority) override {
@@ -229,6 +233,7 @@ int main(int argc, char** argv) {
         return current.value().state;
     };
 
+    bool storage_progress = true;
     if (batch) {
         auto source = std::make_shared<Source>(*node);
         source->signer.create(ActorType::User);
@@ -244,6 +249,24 @@ int main(int argc, char** argv) {
         TEST_REQUIRE(wait_for([&] {
             return source->captured().size() == 3;
         }));
+        source->pending = 5 * 1024 * 1024;
+        for (std::size_t index = 0; index < node->runtime_limits().storage_workers; ++index) {
+            node->dfs()->download_manager().share_stored_file({ .file_link        = { .owner_id = owner.id(),
+                                                                                      .file_id  = row.file_id },
+                                                                .fragment_numbers = { 1 } },
+                                                              request);
+        }
+        TEST_REQUIRE(wait_for([&] {
+            return source->captured().size() == 3 + node->runtime_limits().storage_workers;
+        }));
+        auto probe      = std::make_shared<std::promise<void>>();
+        auto progressed = probe->get_future();
+        node->post_storage([probe] {
+            probe->set_value();
+        });
+        storage_progress = progressed.wait_for(1s) == std::future_status::ready;
+        source->pending  = 0;
+        TEST_REQUIRE(progressed.wait_for(5s) == std::future_status::ready);
         std::filesystem::remove(path.value().native());
         ActorSpace::update_file_state(db, owner.id(), row.file_id, Dfs::FileState::Known);
         row.state         = Dfs::FileState::Known;
@@ -365,4 +388,5 @@ int main(int argc, char** argv) {
     node.reset();
     std::filesystem::current_path(original);
     std::filesystem::remove_all(directory);
+    TEST_REQUIRE(storage_progress);
 }

@@ -802,7 +802,7 @@ namespace {
                 "AssemblyScript ownership component accepted another caller");
     }
 
-    void test_assemblyscript_upgrade(const Bytes &module) {
+    void test_assemblyscript_upgrade(const Bytes &module, const Bytes &rust_module) {
         ExtraChain::Contracts::ContractManager manager;
         auto deployed = manager.deploy("as-basic", Alice, "generic", module, empty_arguments(), 1);
         require(deployed.has_value(), "AssemblyScript router deployment failed");
@@ -811,6 +811,11 @@ namespace {
             throw std::runtime_error("AssemblyScript router update failed: " + upgraded.error().detail);
         }
         require(upgraded->version == 2, "AssemblyScript router update version is invalid");
+        const auto changed_language =
+            manager.prepare_upgrade("as-basic", Alice, rust_module, empty_arguments(), 3);
+        require(!changed_language.has_value()
+                    && changed_language.error().error == ExtraChain::Contracts::ContractError::UpgradeDenied,
+                "A custom contract must reject an upgrade in another language");
     }
 
     void test_assemblyscript_dfs_binding(const Bytes &module) {
@@ -1370,7 +1375,7 @@ int main(int argc, char **argv) {
         test_prepare_and_artifact_stage_are_separate(message_module);
         const auto assemblyscript_basic = read_file(argv[6]);
         test_assemblyscript(runtime, assemblyscript_basic);
-        test_assemblyscript_upgrade(assemblyscript_basic);
+        test_assemblyscript_upgrade(assemblyscript_basic, rust_fungible_module);
         test_assemblyscript_dfs_binding(read_file(argv[7]));
         std::cout << "Contract runtime tests passed\n";
         return 0;

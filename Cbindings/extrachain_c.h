@@ -191,6 +191,8 @@ EXC_API ExcError exc_transaction_get_sender(ExcHandle tx, char** out);
 EXC_API ExcError exc_transaction_get_receiver(ExcHandle tx, char** out);
 EXC_API ExcError exc_transaction_get_amount(ExcHandle tx, char** out);
 EXC_API ExcError exc_transaction_get_hash(ExcHandle tx, char** out);
+/* Stable signed request ID; the DAG hash is assigned after V2 ordering. */
+EXC_API ExcError exc_transaction_get_request_hash(ExcHandle tx, char** out);
 EXC_API ExcError exc_transaction_get_section(ExcHandle tx, char** out);
 EXC_API ExcError exc_transaction_get_type(ExcHandle tx, ExcTransactionType* out);
 EXC_API ExcError exc_transaction_get_timestamp(ExcHandle tx, uint64_t* out);

@@ -224,6 +224,13 @@ EXC_API ExcError exc_transaction_get_hash(ExcHandle tx, char** out) {
     });
 }
 
+EXC_API ExcError exc_transaction_get_request_hash(ExcHandle tx, char** out) {
+    EXC_CHECK_NULL(out);
+    return transaction_string(tx, out, [](const Transaction& value) {
+        return value.request_hash();
+    });
+}
+
 EXC_API ExcError exc_transaction_get_section(ExcHandle tx, char** out) {
     EXC_CHECK_NULL(out);
     return transaction_string(tx, out, [](const Transaction& value) {

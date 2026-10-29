@@ -356,6 +356,7 @@ namespace ExtraChain::Core {
             ExtraChain::Contracts::PreparedContractChange change);
         TransactionProveError validate_contract_transaction(const Transaction& transaction,
                                                             bool               stage_change = true);
+        TransactionProveError complete_contract_intent(Transaction& transaction);
         std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_contract_deploy(
             std::string                   kind,
             std::span<const std::uint8_t> module,
@@ -405,6 +406,10 @@ namespace ExtraChain::Core {
         [[nodiscard]] std::uint16_t configured_port() const noexcept;
 
     private:
+        TransactionProveError validate_contract_transaction_impl(const Transaction&       transaction,
+                                                                 bool                     stage_change,
+                                                                 ContractTransactionData* computed);
+        std::uint64_t         contract_section() const;
         /**
          * @brief Connect signals between NetworkManager and
          */

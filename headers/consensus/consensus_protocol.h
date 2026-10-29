@@ -37,6 +37,7 @@ namespace ExtraChain::Consensus {
     inline constexpr std::uint64_t MinimumRecoveryDelayMillis = 24ULL * 60ULL * 60ULL * 1'000ULL;
     inline constexpr std::size_t   MaximumBootstrapEntries    = 64;
     inline constexpr std::size_t   MaximumBootstrapBytes      = 4ULL * 1024ULL * 1024ULL;
+    inline constexpr std::size_t   MaximumContractMetadataBytes = 8ULL * 1024ULL * 1024ULL;
 
     [[nodiscard]] constexpr bool valid_committee_size(std::size_t count) noexcept {
         return count >= MinimumCommitteeSize && count <= MaximumCommitteeSize;
@@ -62,6 +63,11 @@ namespace ExtraChain::Consensus {
         Rejected,
         Expired
     };
+
+    [[nodiscard]] constexpr bool is_contract_operation(IntentOperation operation) noexcept {
+        return operation == IntentOperation::ContractDeploy || operation == IntentOperation::ContractCall
+               || operation == IntentOperation::ContractUpgrade;
+    }
 
     struct TransactionIntentV2 {
         std::uint16_t   protocol_version = ProtocolVersion;
@@ -116,6 +122,17 @@ namespace ExtraChain::Consensus {
         std::vector<std::string> siblings;
 
         MSGPACK_DEFINE(leaf_index, leaf_count, leaf_hash, siblings)
+    };
+
+    inline constexpr std::size_t MaximumStateProofLeaves = 4096;
+
+    struct StateEntryProofV1 {
+        std::uint16_t            bucket   = 0;
+        std::uint32_t            position = 0;
+        std::vector<std::string> leaves;
+        std::vector<std::string> bucket_roots;
+
+        MSGPACK_DEFINE(bucket, position, leaves, bucket_roots)
     };
 
     struct IndexedSignature {
@@ -385,7 +402,8 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] std::vector<IntentEnvelope>  ready(const std::map<ActorId, std::uint64_t>& committed_nonces,
                                                          std::uint64_t                           current_height,
                                                          std::size_t                             maximum_count,
-                                                         std::size_t maximum_bytes) const;
+                                                         std::size_t                             maximum_bytes,
+                                                         const std::set<std::string>& excluded = {}) const;
         std::vector<std::string>                   expire(std::uint64_t current_height);
         void                                       erase(const std::vector<std::string>& intent_hashes);
 
@@ -413,7 +431,10 @@ namespace ExtraChain::Consensus {
         std::size_t                    bytes_ = 0;
     };
 
-    EXTRACHAIN_EXPORT std::string intent_metadata_hash(std::string_view metadata);
+    EXTRACHAIN_EXPORT std::expected<std::string, ConsensusError> contract_intent_request_metadata(
+        std::string_view metadata);
+    EXTRACHAIN_EXPORT std::string intent_metadata_hash(std::string_view metadata,
+                                                       IntentOperation  operation = IntentOperation::Transfer);
     EXTRACHAIN_EXPORT std::string intent_signing_payload(const TransactionIntentV2& intent);
     EXTRACHAIN_EXPORT std::string hash_intent(const TransactionIntentV2& intent);
     EXTRACHAIN_EXPORT std::expected<TransactionIntentV2, ConsensusError> make_intent(
@@ -519,6 +540,15 @@ namespace ExtraChain::Consensus {
     EXTRACHAIN_EXPORT std::string segmented_state_root(
         std::string_view                                        domain,
         const std::vector<std::pair<std::string, std::string>>& entries);
+    EXTRACHAIN_EXPORT std::expected<StateEntryProofV1, ConsensusError> make_state_entry_proof(
+        std::string_view                                        domain,
+        const std::vector<std::pair<std::string, std::string>>& entries,
+        std::string_view                                        key);
+    EXTRACHAIN_EXPORT bool verify_state_entry_proof(std::string_view         domain,
+                                                    std::string_view         key,
+                                                    std::string_view         value,
+                                                    const StateEntryProofV1& proof,
+                                                    std::string_view         root);
 
 } // namespace ExtraChain::Consensus
 

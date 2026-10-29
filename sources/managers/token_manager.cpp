@@ -1633,7 +1633,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_nft_collection(
 void TokenManager::track_token_creation(const Transaction &transaction, TokenData token_data) {
     {
         std::scoped_lock cache_lock(cache_creation_mutex_);
-        cache_creation_.insert_or_assign(transaction.hash(), std::move(token_data));
+        cache_creation_.insert_or_assign(transaction.request_hash(), std::move(token_data));
     }
     const auto committed = node->dag()->find_transaction(transaction.section(), transaction.hash());
     if (committed.has_value()) {
@@ -1646,7 +1646,7 @@ void TokenManager::final_token_creation(const Transaction &transaction) {
     TokenData  token_data;
     {
         std::scoped_lock cache_lock(cache_creation_mutex_);
-        const auto       cache_entry = cache_creation_.find(transaction_hash);
+        const auto       cache_entry = cache_creation_.find(transaction.request_hash());
         if (cache_entry == cache_creation_.end()) {
             return;
         }

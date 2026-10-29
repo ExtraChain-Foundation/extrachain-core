@@ -8,6 +8,7 @@
 #include "test_support.h"
 
 #include <future>
+#include <random>
 #include <thread>
 
 using namespace std::chrono_literals;
@@ -58,7 +59,7 @@ namespace {
             return 10;
         }
         std::set<PeerConnection> shareable_peers(std::string_view) const override {
-            return { };
+            return {};
         }
         void peer_authenticated(std::string_view, std::string_view) override {
             ++activations;
@@ -71,7 +72,13 @@ namespace {
         }
     };
 
-    void check_queue(bool byte_limit, bool drain = false) {
+    void check_queue(bool byte_limit, bool drain = false, bool incompressible = false) {
+        std::string payload(incompressible ? 262144 : 65536, 'x');
+        if (incompressible) {
+            std::mt19937 random(42);
+            for (auto& value : payload)
+                value = static_cast<char>(random());
+        }
         Context        alice, bob;
         NetworkRuntime runtime({ .io_threads = 2, .storage_threads = 1, .compute_threads = 1 });
         std::promise<WebSocketService::Service> accepted_promise, connected_promise;
@@ -87,7 +94,7 @@ namespace {
                                           SocketService::ReceivedMessage& message,
                                           std::string,
                                           std::string) {
-                    if (message.data != std::string(65536, 'x')) {
+                    if (message.data != payload) {
                         if (received < 32)
                             checked.set_exception(std::make_exception_ptr(std::runtime_error("Changed payload")));
                         received = 33;
@@ -107,8 +114,29 @@ namespace {
             auto service          = result.value();
             service->on_activated = [&](SocketService::Ptr socket) {
                 try {
+                    if (drain && incompressible) {
+                        asio::post(runtime.storage_executor(), [&, socket] {
+                            try {
+                                const SocketService::Data data(payload.begin(), payload.end());
+                                const auto                deadline = std::chrono::steady_clock::now() + 5s;
+                                for (unsigned index = 0; index < 32; ++index) {
+                                    socket->send_message(data, SocketService::Priority::Low);
+                                    if (socket->pending_bytes() > 4 * 1024 * 1024) {
+                                        while (socket->is_active() && socket->pending_bytes() > 2 * 1024 * 1024) {
+                                            if (std::chrono::steady_clock::now() > deadline)
+                                                throw std::runtime_error("Bulk queue did not drain");
+                                            std::this_thread::sleep_for(1ms);
+                                        }
+                                    }
+                                }
+                            } catch (...) {
+                                checked.set_exception(std::current_exception());
+                            }
+                        });
+                        return;
+                    }
                     if (drain) {
-                        const SocketService::Data data(65536, 'x');
+                        const SocketService::Data data(payload.begin(), payload.end());
                         for (unsigned i = 0; i < 32; ++i)
                             socket->send_message(data, static_cast<SocketService::Priority>(i % 3));
                         TEST_REQUIRE_EQ(socket->pending_bytes(), std::int64_t(32 * 65536));
@@ -312,7 +340,7 @@ namespace {
         while (!node->network_runtime().listening() && std::chrono::steady_clock::now() < listening_deadline)
             std::this_thread::sleep_for(10ms);
         TEST_REQUIRE(node->network_runtime().listening());
-        const auto     port = node->network_runtime().listen({ }, { }).value();
+        const auto     port = node->network_runtime().listen({}, {}).value();
         Context        peer;
         NetworkRuntime remote({ .io_threads = 2, .storage_threads = 1, .compute_threads = 1 });
         std::promise<WebSocketService::Service> connection;
@@ -375,6 +403,9 @@ int main() {
     });
     runner.run("queue drain and byte accounting", [] {
         check_queue(false, true);
+    });
+    runner.run("incompressible bulk data drains under producer backpressure", [] {
+        check_queue(false, true, true);
     });
     runner.run("retained frame resumes after backpressure", [] {
         check_read_backpressure(false);

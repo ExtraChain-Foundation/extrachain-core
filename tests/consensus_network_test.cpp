@@ -20,8 +20,8 @@
 #include "consensus/validator_set.h"
 #include "utils/exc_utils.h"
 
-bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV1& snapshot,
-                                   const ExtraChain::Consensus::BalanceSnapshotV1& newer,
+bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV2& snapshot,
+                                   const ExtraChain::Consensus::BalanceSnapshotV2& newer,
                                    const ExtraChain::Consensus::ValidatorSet&      validators);
 
 namespace {
@@ -606,8 +606,8 @@ int main() {
     check("light client verifies finality and transaction inclusion without DAG state",
           light_client.has_value() && inclusion.has_value() && inclusion.value().has_value()
               && light_client.value().verify_transaction_proof(inclusion.value().value()));
-    BalanceSnapshotV1 balance_snapshot {
-        .balances = { { { committee.governance.id(), ActorId { } }, BigNumberFloat(25) } },
+    BalanceSnapshotV2 balance_snapshot {
+        .balances = { { { committee.governance.id(), ActorId {} }, BigNumberFloat(25) } },
         .proof    = inclusion.value().value().finality_proof,
     };
     check("light client verifies balances against the certified state root",
@@ -630,7 +630,7 @@ int main() {
     const auto newer_proofs =
         engines.front()->finality_proofs_after(balance_snapshot.proof.finalized_proposal.header.height, 1);
     check("newer finalized snapshot is available", newer_proofs.has_value() && !newer_proofs.value().empty());
-    BalanceSnapshotV1 newer_snapshot { balance_snapshot.balances, newer_proofs.value().front() };
+    BalanceSnapshotV2 newer_snapshot { balance_snapshot.balances, newer_proofs.value().front() };
     const auto        storage_reader = [](std::uint64_t) -> std::expected<std::string, ConsensusError> {
         return "a";
     };

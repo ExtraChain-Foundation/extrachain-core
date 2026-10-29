@@ -135,7 +135,9 @@ public:
     bool is_downloading(const Dfs::FileLink& file_link) const;
 
     size_t active_downloads_size() {
-        return m_active_downloads->size() + m_active_downloads_priority->size();
+        const auto regular  = m_active_downloads->size();
+        const auto priority = m_active_downloads_priority->size();
+        return regular + priority;
     }
 
 private:

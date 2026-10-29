@@ -13,6 +13,7 @@
 #include "utils/db_connector.h"
 #include "network/network_service.h"
 #include "network/isocket_service.h"
+#include "network/responder.h"
 
 #include <filesystem>
 #include <memory>
@@ -23,7 +24,9 @@ namespace ExtraChain::Consensus {
         static void attach(ConsensusService&                service,
                            std::unique_ptr<ShadowConsensus> shadow,
                            std::optional<AppliedCheckpoint> applied = std::nullopt) {
-            service.consensus_          = std::move(shadow);
+            service.consensus_     = std::move(shadow);
+            service.authenticator_ = std::make_unique<PeerAuthenticator>(service.consensus_->engine().validators(),
+                                                                         service.consensus_->engine().identity());
             service.applied_checkpoint_ = applied;
             service.intent_store_       = std::make_unique<IntentStore>(service.directory_ / "intent-pool.sqlite");
             TEST_REQUIRE(service.intent_store_->open().has_value());
@@ -269,6 +272,23 @@ public:
             ++syncs;
         }
     }
+};
+
+class BatchReply final : public ResponseSender {
+public:
+    std::string send_response(const std::string& payload,
+                              MessageType        type,
+                              SendMode           mode,
+                              MessageStatus      status,
+                              const Responder&) override {
+        TEST_REQUIRE(type == MessageType::ConsensusBatchData && mode == SendMode::Focused
+                     && status == MessageStatus::Response);
+        batch = MessagePack::deserialize<ExtraChain::Consensus::SectionBatchData>(payload).value();
+        ++responses;
+        return {};
+    }
+    ExtraChain::Consensus::SectionBatchData batch;
+    std::size_t                             responses = 0;
 };
 
 int main() {
@@ -824,6 +844,35 @@ int main() {
         TEST_REQUIRE(archive.prune_stored_batches(oldest.header.height + 1).has_value());
         TEST_REQUIRE(!archive.batch_for(header).has_value());
         TEST_REQUIRE(!archive.has_batch(header));
+        const auto observer_peer = "public-batch-observer";
+        auto       observer      = std::make_shared<RecoverySocket>(*node->network(), observer_peer);
+        {
+            auto connections = *node->network()->connections();
+            connections->insert(observer);
+        }
+        TEST_REQUIRE(service.active());
+        const auto meta = node->network()->peer_meta_for(observer_peer);
+        TEST_REQUIRE(meta.has_value() && meta.value().supports_shadow_consensus());
+        TEST_REQUIRE_EQ(archive.validators().document().network_id, network.id());
+        TEST_REQUIRE_EQ(archive.validators().document().epoch, 1U);
+        const auto available = ConsensusStateTestFixture::finalized_batch(service, oldest);
+        TEST_REQUIRE(available.has_value());
+        BatchReply                reply;
+        const SectionBatchRequest request { .network_id = network.id(), .epoch = 1, .header_hash = header };
+        service.receive_batch_request(request, Responder(&reply), observer_peer);
+        TEST_REQUIRE_EQ(reply.responses, 1U);
+        TEST_REQUIRE_EQ(reply.batch.header_hash, header);
+        TEST_REQUIRE_EQ(reply.batch.sections, stored.value().sections);
+        auto wrong_network       = request;
+        wrong_network.network_id = provider.id();
+        service.receive_batch_request(wrong_network, Responder(&reply), observer_peer);
+        TEST_REQUIRE_EQ(reply.responses, 1U);
+        service.receive_batch_request(request, Responder(&reply), "unknown-peer");
+        TEST_REQUIRE_EQ(reply.responses, 1U);
+        {
+            auto connections = *node->network()->connections();
+            connections->erase(observer);
+        }
         const auto rebuilt = ConsensusStateTestFixture::finalized_batch(service, oldest);
         TEST_REQUIRE(rebuilt.has_value());
         TEST_REQUIRE_EQ(hash_batch_manifest(rebuilt.value().manifest), oldest.header.batch_root);

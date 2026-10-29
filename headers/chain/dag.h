@@ -53,6 +53,7 @@ namespace ExtraChain::Core {
     class ExtraChainNode;
 }
 namespace ExtraChain::Consensus {
+    struct LightSnapshotRequestV1;
     struct IntentEnvelope;
 }
 class Responder;
@@ -609,8 +610,10 @@ public:
                               std::uint64_t                                             maximum_payload_bytes,
                               std::string                                               header_hash,
                               std::optional<std::string> previous_section_bytes = std::nullopt,
-                              std::string                previous_section_root  = { },
-                              std::optional<Transaction> settlement             = std::nullopt);
+                              std::string                previous_section_root  = {},
+                              std::optional<Transaction> settlement             = std::nullopt,
+                              std::vector<std::string>  *rejected_contracts     = nullptr,
+                              std::vector<std::string>  *deferred_contracts     = nullptr);
     std::expected<std::string, ExtraChain::Consensus::ConsensusError> shadow_batch_section_root(
         const ExtraChain::Consensus::SectionBatchData &batch) const;
     std::vector<Transaction> unprovable_batch_transactions(const ExtraChain::Consensus::SectionBatchData &batch,
@@ -696,7 +699,8 @@ public:
      *
      * @param responder The responder to send the request to
      */
-    void network_request_light(const Responder &responder);
+    void network_request_light(const Responder                                     &responder,
+                               const ExtraChain::Consensus::LightSnapshotRequestV1 &request);
     void request_light(const Responder &responder);
 
     /**
@@ -1062,9 +1066,10 @@ private:
         const std::set<Transaction>            &prior = {});
     bool validate_repair_transaction(const Transaction           &transaction,
                                      const std::set<Transaction> &pending,
-                                     bool                         report_failure  = true,
-                                     const Balances              *balances_before = nullptr,
-                                     bool                         historical      = false);
+                                     bool                         report_failure     = true,
+                                     const Balances              *balances_before    = nullptr,
+                                     bool                         historical         = false,
+                                     bool                        *dependency_missing = nullptr);
 
     std::optional<Section> read_section_unlocked(const SectionId &section_id, bool include_packs) const;
 

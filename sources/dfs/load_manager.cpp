@@ -29,6 +29,10 @@
 #include "runtime/deadline_task.h"
 
 #include <boost/asio/dispatch.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/post.hpp>
 #include <algorithm>
 #include <optional>
@@ -1004,7 +1008,8 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
            file_link_fragment.file_link.file_id.substr(0, 12),
            file_link_fragment.fragment_numbers.size(),
            identifier.substr(0, 8));
-    node->post_storage(
+    boost::asio::co_spawn(
+        node->storage_executor(),
         [this,
          identifier,
          message_id = responder.message_id(),
@@ -1012,10 +1017,14 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
          total_size,
          file_link_fragment,
          path = path.value(),
-         dir_row]() {
-            uint64_t offset = 0;
+         dir_row]() -> boost::asio::awaitable<void> {
+            boost::asio::steady_timer backpressure(node->runtime_executor());
+            uint64_t                  offset = 0;
 
             for (const auto& fragment_number : file_link_fragment.fragment_numbers) {
+                if (stopping_.load(std::memory_order_acquire) || !node_enabled.load()) {
+                    co_return;
+                }
                 if (fragment_number == 0 || fragment_number > max_offsets) {
                     continue;
                 }
@@ -1025,7 +1034,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                     // eCritical("[Dfs] LoadManager::share_stored_file, empy file chunk. owner_id: {}, file_id: {},
                     // fragment number: {}", file_link_fragment.file_link.owner_id,
                     // file_link_fragment.file_link.file_id, fragment_number);
-                    return;
+                    co_return;
                 }
                 auto chunk_size = chunk->size();
 
@@ -1041,7 +1050,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                     // eCritical("[Dfs] LoadManager::share_stored_file, no active connections. Cannot share file.
                     // owner_id: {}, file_id: {}, offset: {}", file_link_fragment.file_link.owner_id,
                     // file_link_fragment.file_link.file_id, offset);
-                    return;
+                    co_return;
                 }
 
                 Responder responder(nullptr);
@@ -1060,14 +1069,20 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
 
                 // offset += Dfs::Basic::FRAGMENT_SIZE;
 
-                int  progress = static_cast<int>((fragment_number * 100) / max_offsets);
+                int progress = static_cast<int>((fragment_number * 100) / max_offsets);
                 node->dfs()->notify_upload_progress(file_link_fragment.file_link.owner_id,
                                                     file_link_fragment.file_link.file_id,
                                                     progress);
                 if (node->network()->connection_pending_bytes(identifier) > DFS_QUEUE_HIGH_WATER) {
-                    while (node->network()->is_connection_exists(identifier)
+                    while (!stopping_.load(std::memory_order_acquire) && node_enabled.load()
+                           && node->network()->is_connection_exists(identifier)
                            && node->network()->connection_pending_bytes(identifier) > DFS_QUEUE_LOW_WATER) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                        backpressure.expires_after(std::chrono::milliseconds(2));
+                        boost::system::error_code error;
+                        co_await backpressure.async_wait(
+                            boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                        if (error)
+                            co_return;
                     }
                 }
             }
@@ -1075,6 +1090,17 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
             node->dfs()->notify_upload_progress(file_link_fragment.file_link.owner_id,
                                                 file_link_fragment.file_link.file_id,
                                                 100);
+        },
+        [](std::exception_ptr error) {
+            if (!error)
+                return;
+            try {
+                std::rethrow_exception(error);
+            } catch (const std::exception& exception) {
+                eWarning("[Load] Fragment upload failed: {}", exception.what());
+            } catch (...) {
+                eWarning("[Load] Fragment upload failed");
+            }
         });
     // eLog("[Dfs] LoadManager::share_stored_file, file pushed to waiting send queue. owner_id: {}, file_id: {}",
     // file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);

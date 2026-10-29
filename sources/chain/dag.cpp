@@ -2127,7 +2127,10 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
                                       const std::set<Transaction> &pending,
                                       bool                         report_failure,
                                       const Balances              *balances_before,
-                                      bool                         historical) {
+                                      bool                         historical,
+                                      bool                        *dependency_missing) {
+    if (dependency_missing != nullptr)
+        *dependency_missing = false;
     const auto hash = transaction.hash();
     if (hash != transaction.calculate_hash() && hash != transaction.calculate_hash_hex()) {
         if (report_failure) {
@@ -2215,6 +2218,8 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
     }
     const auto prove =
         prove_transaction_with_facts(transaction, empty, &pending, nullptr, &frontier, &facts, false);
+    if (dependency_missing != nullptr)
+        *dependency_missing = prove == TransactionProveError::ContractDependencyMissing;
     if (report_failure && prove != TransactionProveError::NoError) {
         eWarning("[Dag] Repair transaction proof failed: prove={} tx={} sender={} section={} pending={}",
                  std::to_underlying(prove),
@@ -2362,9 +2367,17 @@ std::vector<Transaction> Dag::unprovable_batch_transactions(const ExtraChain::Co
             return {};
         }
         for (const auto &transaction : candidate->transactions) {
-            if (validate_repair_transaction(transaction, accepted_transactions, false)) {
+            bool dependency_missing = false;
+            if (validate_repair_transaction(transaction,
+                                            accepted_transactions,
+                                            false,
+                                            nullptr,
+                                            false,
+                                            &dependency_missing)) {
                 accepted_transactions.insert(transaction);
             } else {
+                if (dependency_missing)
+                    return {};
                 unprovable.push_back(transaction);
             }
         }
@@ -2444,7 +2457,9 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
                               std::string                                               header_hash,
                               std::optional<std::string>                                previous_section_bytes,
                               std::string                                               previous_section_root,
-                              std::optional<Transaction>                                settlement) {
+                              std::optional<Transaction>                                settlement,
+                              std::vector<std::string>                                 *rejected_contracts,
+                              std::vector<std::string>                                 *deferred_contracts) {
     using namespace ExtraChain::Consensus;
     constexpr std::size_t MaximumTransactionsPerSection = 256;
     if (first_section < SectionId(0) || last_section < first_section
@@ -2500,10 +2515,14 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
             return std::unexpected(ConsensusError::DataTooLarge);
         encoded_payload_bytes += bytes;
     }
+    std::size_t       included = 0;
+    std::set<ActorId> blocked_senders;
     for (std::size_t index = 0; index < intents.size(); ++index) {
-        const auto position      = index + static_cast<std::size_t>(settlement.has_value());
+        if (blocked_senders.contains(intents[index].intent.sender))
+            continue;
+        const auto position      = included + static_cast<std::size_t>(settlement.has_value());
         const auto section_index = position / MaximumTransactionsPerSection;
-        const auto materialized =
+        auto       materialized =
             materialize_intent(intents[index],
                                static_cast<std::uint64_t>(sections[section_index].id.to_int().value_or(0)),
                                logical_time,
@@ -2511,18 +2530,33 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
         if (!materialized.has_value()) {
             return std::unexpected(materialized.error());
         }
+        if (is_contract_operation(intents[index].intent.operation)) {
+            const auto result = node->complete_contract_intent(materialized.value());
+            if (result != TransactionProveError::NoError) {
+                auto *requests = result == TransactionProveError::ContractDependencyMissing ? deferred_contracts
+                                                                                            : rejected_contracts;
+                if (requests == nullptr)
+                    return std::unexpected(result == TransactionProveError::ContractDependencyMissing
+                                               ? ConsensusError::DataUnavailable
+                                               : ConsensusError::InvalidIntent);
+                requests->push_back(hash_intent(intents[index].intent));
+                blocked_senders.insert(intents[index].intent.sender);
+                continue;
+            }
+        }
         auto &transactions = sections[section_index].transactions;
         // Section JSON adds only the transaction and, for a nonempty array, a comma.
         const auto added_bytes =
             Json::serialize(materialized.value()).size() + static_cast<std::size_t>(!transactions.empty());
         if (added_bytes > maximum_payload_bytes - encoded_payload_bytes) {
-            if (index == 0 && !settlement.has_value())
+            if (included == 0 && !settlement.has_value())
                 return std::unexpected(ConsensusError::DataTooLarge);
             break;
         }
         if (!transactions.insert(materialized.value()).second)
             return std::unexpected(ConsensusError::InvalidIntent);
         encoded_payload_bytes += added_bytes;
+        ++included;
         if ((position + 1) % MaximumTransactionsPerSection == 0 && section_index + 1 < sections.size()) {
             previous_hashes = sections[section_index].hashs();
         }
@@ -2697,12 +2731,16 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
     std::set<Transaction> accepted_transactions = std::move(staged_ancestors);
     for (auto &section : sections) {
         while (!section.transactions.empty()) {
-            const auto transaction = section.transactions.begin();
+            const auto transaction        = section.transactions.begin();
+            bool       dependency_missing = false;
             if (!validate_repair_transaction(*transaction,
                                              accepted_transactions,
                                              true,
-                                             needs_balances ? &balances : nullptr)) {
-                return std::unexpected(ConsensusError::InvalidRoot);
+                                             needs_balances ? &balances : nullptr,
+                                             false,
+                                             &dependency_missing)) {
+                return std::unexpected(dependency_missing ? ConsensusError::DataUnavailable
+                                                          : ConsensusError::InvalidRoot);
             }
             if (needs_balances)
                 cache_.process_transaction(*transaction, balances);
@@ -2717,6 +2755,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     const ExtraChain::Consensus::SectionBatchData &batch,
     std::uint64_t                                  maximum_batch_bytes,
     const std::string                             &proof_hash) {
+    WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
     using ExtraChain::Consensus::ConsensusError;
     const auto contract_committed = [this](const Transaction &transaction) {
         const auto record = node->contract_manager()->inspect(transaction.receiver().to_string());
@@ -2758,7 +2797,6 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     bool       already_installed =
         last_control.has_value() && last_control.value().control == proposal.header.section_root;
     if (already_installed) {
-        WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
         for (const auto &[section_id, expected] : canonical_sections) {
             auto stored = read_section(section_id);
             if (!stored.has_value()) {
@@ -3153,7 +3191,10 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     }
 
     if (is_contract_transaction(tx.type())) {
-        if (tx.amount() != 0 || tx.meta().value_or("").empty() || tx.meta()->size() > 1024 * 1024
+        if (tx.amount() != 0 || tx.meta().value_or("").empty()
+            || tx.meta()->size() > (tx.consensus_intent().has_value()
+                                        ? ExtraChain::Consensus::MaximumContractMetadataBytes
+                                        : 1024 * 1024)
             || targetReceiver.is_zero() || targetSender == targetReceiver || !tx.token().is_zero()) {
             return TransactionProveError::InvalidContractPayload;
         }
@@ -4297,14 +4338,15 @@ void Dag::request_light(const Responder &responder) {
         pending_light_response_ =
             PendingLightResponse { request.message_id(), request.identifiers(), Utils::current_date_ms() };
     }
-    node->network()->send_message(true,
+    node->network()->send_message(node->consensus()->light_snapshot_request(),
                                   MessageType::DagLightData,
                                   SendMode::Focused,
                                   MessageStatus::Request,
                                   request);
 }
 
-void Dag::network_request_light(const Responder &responder) {
+void Dag::network_request_light(const Responder                                     &responder,
+                                const ExtraChain::Consensus::LightSnapshotRequestV1 &request) {
     if (mode_ != DagMode::Full || status_ != DagStatus::Ready || responder.identifiers().size() != 1) {
         return;
     }
@@ -4312,12 +4354,13 @@ void Dag::network_request_light(const Responder &responder) {
     if (!reservation) {
         return;
     }
-    node->post_storage([this, responder, reservation = std::move(reservation)] {
+    node->post_storage([this, responder, request, reservation = std::move(reservation)] {
         if (reservation->stopped() || node->consensus() == nullptr) {
             return;
         }
-        auto snapshot = node->consensus()->balance_snapshot();
+        auto snapshot = node->consensus()->balance_snapshot(request);
         if (!snapshot.has_value()) {
+            eLog("[Dag] Light snapshot is unavailable: {}", std::to_underlying(snapshot.error()));
             return;
         }
         WireFormat::Scope canonical(WireFormat::Mode::Canonical);
@@ -4361,7 +4404,7 @@ void Dag::network_response_light(const std::string &serialized, const Responder 
         WireFormat::Scope canonical(WireFormat::Mode::Canonical);
         SectionId         section;
         {
-            const auto snapshot = MessagePack::deserialize<BalanceSnapshotV1>(payload);
+            const auto snapshot = decode_balance_snapshot(payload);
             if (!snapshot.has_value()) {
                 return;
             }

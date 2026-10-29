@@ -241,7 +241,7 @@ namespace ExtraChain::Contracts {
         return {};
     }
 
-    std::expected<void, ContractFailure> MemoryContractStorage::stage(const ContractRecord &) {
+    std::expected<void, ContractFailure> MemoryContractStorage::stage(const ContractRecord &, bool) {
         return {};
     }
 
@@ -670,11 +670,11 @@ namespace ExtraChain::Contracts {
         if (record.owner_id != sender_id) {
             return std::unexpected(failure(ContractError::InvalidOwner, "Only the contract owner can upgrade"));
         }
-        if (is_system_token_kind(record.kind)) {
+        if (!record.language.empty() || is_system_token_kind(record.kind)) {
             auto language = module_language(module);
             if (!language.has_value() || *language != record.language) {
                 return std::unexpected(
-                    failure(ContractError::UpgradeDenied, "A token update must use its original language"));
+                    failure(ContractError::UpgradeDenied, "A contract update must use its original language"));
             }
         }
         auto      &current                 = active_version(record);
@@ -751,7 +751,8 @@ namespace ExtraChain::Contracts {
         };
     }
 
-    std::expected<void, ContractFailure> ContractManager::stage(const PreparedContractChange &change) {
+    std::expected<void, ContractFailure> ContractManager::stage(const PreparedContractChange &change,
+                                                                bool include_checkpoints) {
         std::shared_lock                            lock(mutex_);
         std::vector<const PreparedContractChange *> changes;
         const auto collect = [&](const auto &self, const PreparedContractChange &current) -> void {
@@ -765,7 +766,7 @@ namespace ExtraChain::Contracts {
             return current->record.contract_id;
         });
         for (const auto *current : changes) {
-            auto staged = storage_->stage(current->record);
+            auto staged = storage_->stage(current->record, include_checkpoints);
             if (!staged.has_value()) {
                 return staged;
             }
