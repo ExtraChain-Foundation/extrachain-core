@@ -1120,7 +1120,7 @@ namespace ExtraChain::Core {
 
     void ExtraChainNode::start() {
         static_cast<void>(node_identifier());
-        if (consensus_service_ && !actor_index_->network_id().is_zero()) {
+        if (consensus_service_ && (!actor_index_->network_id().is_zero() || dag_->mode() == DagMode::Light)) {
             auto activated = consensus_service_->activate(actor_index_->network_id());
             if (!activated.has_value() && activated.error() == Consensus::ConsensusError::BootstrapIncomplete) {
                 const auto prepared = consensus_service_->prepare_observer_bootstrap(actor_index_->network_id());

@@ -253,7 +253,7 @@ namespace ExtraChain::Consensus {
         bool accept_light_history(const BootstrapHistoryPageV1& page);
         void request_light_history();
         std::expected<LightClientVerifier, ConsensusError> load_light_verifier() const;
-        std::expected<void, ConsensusError>                activate_light();
+        std::expected<void, ConsensusError>                activate_light(const ActorId& expected_network = {});
         bool apply_light_snapshot(const BalanceSnapshotV2& snapshot, bool persist);
 
         struct MiningSnapshot {

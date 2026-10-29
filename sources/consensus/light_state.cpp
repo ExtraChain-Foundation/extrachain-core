@@ -5,6 +5,7 @@
 #include <set>
 
 #include "chain/dag.h"
+#include "chain/actor_index.h"
 #include "contracts/contract_manager.h"
 #include "core/extrachain_node.h"
 #include "managers/account_controller.h"
@@ -128,10 +129,15 @@ namespace ExtraChain::Consensus {
         return result;
     }
 
-    std::expected<void, ConsensusError> ConsensusService::activate_light() {
+    std::expected<void, ConsensusError> ConsensusService::activate_light(const ActorId& expected_network) {
         auto verifier = load_light_verifier();
         if (!verifier.has_value())
             return std::unexpected(verifier.error());
+        if (!expected_network.is_zero()
+            && verifier.value().snapshot().active_validators.network_id != expected_network)
+            return std::unexpected(ConsensusError::InvalidNetwork);
+        if (node_.network_id().is_zero())
+            node_.actor_index()->set_network_id(verifier.value().snapshot().active_validators.network_id);
         light_verifier_ = std::move(verifier.value());
         if (!intent_store_)
             intent_store_ = std::make_unique<IntentStore>(directory_ / "intent-pool.sqlite");

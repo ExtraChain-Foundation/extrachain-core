@@ -187,10 +187,14 @@ bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV
         WireFormat::Scope legacy(WireFormat::Mode::Legacy);
         node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, true, 0);
         node->process();
-        node->actor_index()->set_network_id(validators.network_id);
+        TEST_REQUIRE(node->network_id().is_zero());
         TEST_REQUIRE(node->dag()->mode() == DagMode::Light && !node->dag()->state_projection_ready());
+        const auto wrong_network = node->consensus()->activate(account.id());
+        TEST_REQUIRE(!wrong_network.has_value() && wrong_network.error() == ConsensusError::InvalidNetwork);
+        TEST_REQUIRE(node->network_id().is_zero());
         const auto activated = node->consensus()->activate(validators.network_id);
         TEST_REQUIRE(activated.has_value() && !activated.value());
+        TEST_REQUIRE(node->network_id() == validators.network_id);
         TEST_REQUIRE(node->consensus()->requires_intent_v2());
         TEST_REQUIRE(!node->consensus()->accept_balance_snapshot(snapshot));
         TEST_REQUIRE(node->consensus()->accept_balance_snapshot(newer));

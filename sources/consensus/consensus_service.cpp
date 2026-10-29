@@ -188,7 +188,7 @@ namespace ExtraChain::Consensus {
     std::expected<bool, ConsensusError> ConsensusService::activate(const ActorId& network_id) {
         std::lock_guard lock(mutex_);
         if (node_.dag()->mode() == DagMode::Light) {
-            const auto activated = activate_light();
+            const auto activated = activate_light(network_id);
             return activated.has_value() ? std::expected<bool, ConsensusError>(false)
                                          : std::unexpected(activated.error());
         }
@@ -1731,7 +1731,11 @@ namespace ExtraChain::Consensus {
     std::expected<LightClientVerifier, ConsensusError> ConsensusService::load_light_verifier() const {
         std::error_code error;
         if (std::filesystem::exists(directory_ / "light-client.msgpack", error)) {
-            return LightClientVerifier::load(directory_ / "light-client.msgpack");
+            auto loaded = LightClientVerifier::load(directory_ / "light-client.msgpack");
+            if (loaded.has_value() && !node_.network_id().is_zero()
+                && loaded.value().snapshot().active_validators.network_id != node_.network_id())
+                return std::unexpected(ConsensusError::InvalidNetwork);
+            return loaded;
         }
         if (error) {
             return std::unexpected(ConsensusError::StorageUnavailable);
@@ -1742,7 +1746,8 @@ namespace ExtraChain::Consensus {
                 return std::unexpected(ConsensusError::StorageUnavailable);
             }
             const auto anchor = MessagePack::deserialize<TrustAnchorV1>(bytes.value());
-            if (!anchor.has_value() || anchor.value().network_id != node_.network_id()) {
+            if (!anchor.has_value()
+                || (!node_.network_id().is_zero() && anchor.value().network_id != node_.network_id())) {
                 return std::unexpected(ConsensusError::InvalidNetwork);
             }
             return LightClientVerifier::bootstrap(anchor.value());
@@ -1755,7 +1760,8 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::StorageUnavailable);
         }
         const auto validators = MessagePack::deserialize<ValidatorSet>(bytes.value());
-        if (!validators.has_value() || validators.value().network_id != node_.network_id()) {
+        if (!validators.has_value()
+            || (!node_.network_id().is_zero() && validators.value().network_id != node_.network_id())) {
             return std::unexpected(ConsensusError::InvalidNetwork);
         }
         return LightClientVerifier::create(validators.value());
