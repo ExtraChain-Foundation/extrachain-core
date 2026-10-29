@@ -670,11 +670,11 @@ namespace ExtraChain::Contracts {
         if (record.owner_id != sender_id) {
             return std::unexpected(failure(ContractError::InvalidOwner, "Only the contract owner can upgrade"));
         }
-        if (is_system_token_kind(record.kind)) {
+        if (!record.language.empty() || is_system_token_kind(record.kind)) {
             auto language = module_language(module);
             if (!language.has_value() || *language != record.language) {
                 return std::unexpected(
-                    failure(ContractError::UpgradeDenied, "A token update must use its original language"));
+                    failure(ContractError::UpgradeDenied, "A contract update must use its original language"));
             }
         }
         auto      &current                 = active_version(record);

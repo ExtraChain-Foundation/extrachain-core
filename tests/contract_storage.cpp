@@ -3,6 +3,8 @@
 
 #include "chain/dag.h"
 #include "contracts/dfs_contract_storage.h"
+#include "contracts/contract_codec.h"
+#include "contracts/standard_token.h"
 #include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "test_support.h"
@@ -41,6 +43,21 @@ int main() {
     Actor<KeyPrivate> owner;
     owner.create(ActorType::User);
     node->account_controller()->create_profile("contract-storage", ActorType::User, owner);
+    const auto actor_count  = node->account_controller()->current_profile().actors().size();
+    const auto token_module = standard_token_module(FungibleTokenKind, ToolchainLanguage::Rust);
+    TEST_REQUIRE(token_module.has_value());
+    const auto token_arguments = Codec::encode_json(R"(["Example Token","EXT",0,1000,[]])");
+    TEST_REQUIRE(token_arguments.has_value());
+    const auto protected_kind =
+        node->submit_contract_deploy("fungible-token", token_module.value(), token_arguments.value());
+    TEST_REQUIRE(!protected_kind.has_value());
+    TEST_REQUIRE_EQ(protected_kind.error().error, ContractError::InvalidArguments);
+    const auto custom_token =
+        node->submit_contract_deploy("custom-token", token_module.value(), token_arguments.value());
+    TEST_REQUIRE(!custom_token.has_value());
+    TEST_REQUIRE_EQ(custom_token.error().error, ContractError::InvalidResponse);
+    TEST_REQUIRE_EQ(custom_token.error().detail, "Contract initialization emitted an invalid effect");
+    TEST_REQUIRE_EQ(node->account_controller()->current_profile().actors().size(), actor_count);
     const auto contract = ActorId::create("1111111111111111111111111111111111111111");
     TEST_REQUIRE(contract.has_value());
     Transaction reward;

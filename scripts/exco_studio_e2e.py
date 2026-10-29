@@ -243,7 +243,7 @@ class Stand:
         if operation != 2:
             self.ui('type', name='contractId', value=contract)
         else:
-            self.ui('type', name='contractKind', value='studio-token')
+            self.ui('type', name='contractKind', value='studio-counter')
         if operation < 2:
             self.ui('type', name='method', value=method)
         if module:
@@ -267,16 +267,10 @@ class Stand:
             return states[0]
         return self.wait(check, f'contract {contract} convergence', timeout)
 
-    def balances(self, state, receiver, owner_balance, receiver_balance, locked):
+    def counter(self, state, expected_value, expected_limit):
         encoded = base64.b64decode(state['state'])
         value = msgpack.unpackb(encoded, raw=False)
-        ledger = value[6]
-        balances = {key: int(amount) for key, amount in ledger[0]}
-        locks = {key: int(amount) for key, amount in ledger[2]}
-        assert balances.get(state['owner'], 0) == owner_balance, balances
-        assert balances.get(receiver, 0) == receiver_balance, balances
-        assert locks.get(state['owner'], 0) == locked, locks
-        assert int(ledger[3]) == 1000 and sum(balances.values()) == 1000, ledger
+        assert value == [1, state['owner'], expected_value, expected_limit], value
 
     def build_offline(self, language, label):
         self.checked(['tc', 'qdisc', 'add', 'dev', 'lo', 'root', 'netem', 'loss', '100%'],
@@ -319,13 +313,31 @@ class Stand:
         assert generated, 'Source generation returned no source'
         assert ('freeze_last_unit = false' if language == 'rust' else ', 0, false);') in generated, generated
         built = self.build_offline(language, 'contract build')
+        token_v1 = self.work / f'{language}-token-unfrozen.wasm'
+        shutil.copy2(built['module'], token_v1)
+        self.ui('click', text='Freeze last unit')
+        self.ui('click', text='Generate Rust' if language == 'rust' else 'Generate AssemblyScript')
+        upgraded_source = self.ui('snapshot')['source']
+        assert ('freeze_last_unit = true' if language == 'rust' else ', 0, true);') in upgraded_source, upgraded_source
+        built = self.build_offline(language, 'token policy build')
+        token_v2 = self.work / f'{language}-token-frozen.wasm'
+        shutil.copy2(built['module'], token_v2)
+        assert token_v1.read_bytes() != token_v2.read_bytes(), 'The token policy did not change the module'
+        self.event('token-preset-build-pass', language=language)
+        self.ui('click', text='Custom contract')
+        self.ui('click', text='Generate Rust' if language == 'rust' else 'Generate AssemblyScript')
+        extension = 'rs' if language == 'rust' else 'ts'
+        source = (self.root / f'tests/contracts/studio_counter.{extension}').read_text()
+        self.ui('type', name='contractSource', value=source)
+        built = self.build_offline(language, 'counter build')
         first_module = str(self.work / f'{language}-v1.wasm')
         shutil.copy2(built['module'], first_module)
+        (self.work / f'{language}-v1.{extension}').write_text(source)
         self.event('built', language=language, module_sha256=hashlib.sha256(Path(first_module).read_bytes()).hexdigest())
         self.ui('screenshot')
         existing = {row['contractId'] for row in self.ui('snapshot')['catalog']}
-        submitted = self.operate(2, arguments=[1000, []])
-        assert 'submitted' in submitted['status'], submitted
+        submitted = self.operate(2, arguments=[])
+        assert 'submitted' in submitted['status'], submitted['status']
         def deployed():
             self.ui('refresh')
             state = self.ui('snapshot')
@@ -334,30 +346,29 @@ class Stand:
         contract = self.wait(deployed, 'Studio confirmed contract catalog')
         initial = self.consistent(contract)
         self.event('deployed', language=language, contract=contract, state=initial)
-        receiver = self.statuses[1]['wallet']
-        self.balances(initial, receiver, 1000, 0, 0)
-        response = self.operate(1, contract, 'transfer', [receiver, 100])
-        assert 'submitted' in response['status'], response
+        self.counter(initial, 0, 0)
+        response = self.operate(1, contract, 'add', [100])
+        assert 'submitted' in response['status'], response['status']
         after_call = self.consistent(contract, initial['revision'] + 1)
-        self.balances(after_call, receiver, 900, 100, 0)
+        self.counter(after_call, 100, 0)
         self.ui('click', text='Develop')
-        self.ui('click', text='Freeze last unit')
-        self.ui('click', text='Generate Rust' if language == 'rust' else 'Generate AssemblyScript')
-        upgraded_source = self.ui('snapshot')['source']
-        assert ('freeze_last_unit = true' if language == 'rust' else ', 0, true);') in upgraded_source, upgraded_source
+        source = source.replace('MIGRATED_LIMIT: u64 = 0;', 'MIGRATED_LIMIT: u64 = 1000;')
+        self.ui('type', name='contractSource', value=source)
+        (self.work / f'{language}-v2.{extension}').write_text(source)
         built = self.build_offline(language, 'upgrade build')
         assert Path(built['module']).exists(), built
         shutil.copy2(built['module'], self.work / f'{language}-v2.wasm')
         response = self.operate(3, contract, arguments=[], module=built['module'])
-        assert 'submitted' in response['status'], response
+        assert 'submitted' in response['status'], response['status']
         upgraded = self.consistent(contract, after_call['revision'] + 1)
         assert upgraded['version'] == 2 and upgraded['module_hash'] != initial['module_hash'], upgraded
-        response = self.operate(1, contract, 'transfer', [receiver, 899])
-        assert 'submitted' in response['status'], response
+        self.counter(upgraded, 100, 1000)
+        response = self.operate(1, contract, 'add', [899])
+        assert 'submitted' in response['status'], response['status']
         final = self.consistent(contract, upgraded['revision'] + 1)
-        self.balances(final, receiver, 1, 999, 1)
-        response = self.operate(1, contract, 'transfer', [receiver, 1])
-        assert 'submitted' not in response['status'], response
+        self.counter(final, 999, 1000)
+        response = self.operate(1, contract, 'add', [1])
+        assert 'Counter limit reached' in response['status'], response['status']
         assert self.consistent(contract)['state_hash'] == final['state_hash']
         self.result['languages'][language] = dict(status='LIFECYCLE_PASS', contract=contract,
                                                  first_module=first_module, final=final)
@@ -366,10 +377,10 @@ class Stand:
         self.ui('quit')
         self.client.wait(timeout=60)
         self.launch_ui(language, restart=True)
-        response = self.operate(0, contract, 'balance_of', [receiver])
-        assert '999' in response['query_result'], response
-        response = self.operate(1, contract, 'approve', [receiver, 0])
-        assert 'submitted' in response['status'], response
+        response = self.operate(0, contract, 'get', [])
+        assert '999' in response['query_result'], response['query_result']
+        response = self.operate(1, contract, 'touch', [])
+        assert 'submitted' in response['status'], response['status']
         record = self.consistent(contract, final['revision'] + 1)
         self.result['languages'][language]['final'] = record
         self.ui('quit')

@@ -1850,14 +1850,10 @@ namespace ExtraChain::Core {
                 .detail = "The token kind is reserved for a standard token contract",
             });
         }
-        auto block = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
-        auto validation =
-            contract_manager_->evaluate(module, signer.id().to_string(), "init", init_arguments, {}, block);
-        if (!validation.has_value()) {
-            return std::unexpected(validation.error());
-        }
-        auto contract_actor = account_controller_->create_service();
-        auto change         = contract_manager_->prepare_deploy(contract_actor.id().to_string(),
+        auto              block = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
+        Actor<KeyPrivate> contract_actor;
+        contract_actor.create(ActorType::Service);
+        auto change = contract_manager_->prepare_deploy(contract_actor.id().to_string(),
                                                         signer.id().to_string(),
                                                         std::move(kind),
                                                         module,
@@ -1866,6 +1862,7 @@ namespace ExtraChain::Core {
         if (!change.has_value()) {
             return std::unexpected(change.error());
         }
+        account_controller_->create_service({}, contract_actor);
         const auto&             version  = change->record.versions.back();
         const auto&             revision = version.revisions.back();
         ContractTransactionData metadata {
