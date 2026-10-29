@@ -88,6 +88,37 @@ int main() {
                                                              Dfs::FileState::Ready);
         TEST_REQUIRE(registry->manifest(ToolchainLanguage::AssemblyScript).has_value());
         TEST_REQUIRE_EQ(registry->package(package.value()).value(), bytes);
+        auto revoked             = manifest;
+        revoked.release_sequence = 2;
+        revoked.revoked_versions = { "0.3.0" };
+        TEST_REQUIRE(registry->publish_manifest(revoked).has_value());
+        const auto latest = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+            db,
+            owner,
+            Dfs::Basic::TEMPLATE_CONTRACT_TOOLCHAIN,
+            "contract-toolchain-assemblyscript-manifest-r00000000000000000002.json");
+        TEST_REQUIRE(latest.has_value());
+        const auto latest_path = root / "dfs" / owner.to_string() / latest.value().file_id;
+        std::filesystem::rename(latest_path, root / "saved-latest");
+        for (const auto state : { Dfs::FileState::Known, Dfs::FileState::Partial }) {
+            Dfs::Tables::DirsFile::ActorSpace::update_file_state(db, owner, latest.value().file_id, state);
+            const auto pending_latest = registry->manifest(ToolchainLanguage::AssemblyScript);
+            TEST_REQUIRE(!pending_latest.has_value());
+            TEST_REQUIRE_EQ(pending_latest.error().error, ToolchainError::Unavailable);
+        }
+        Dfs::Tables::DirsFile::ActorSpace::update_file_state(db,
+                                                             owner,
+                                                             latest.value().file_id,
+                                                             Dfs::FileState::Ready);
+        TEST_REQUIRE(FileIo::write_atomic(latest_path, "invalid manifest bytes").has_value());
+        const auto damaged_latest = registry->manifest(ToolchainLanguage::AssemblyScript);
+        TEST_REQUIRE(!damaged_latest.has_value());
+        TEST_REQUIRE_EQ(damaged_latest.error().error, ToolchainError::InvalidHash);
+        TEST_REQUIRE(std::filesystem::remove(latest_path));
+        std::filesystem::rename(root / "saved-latest", latest_path);
+        const auto revoked_latest = registry->manifest(ToolchainLanguage::AssemblyScript);
+        TEST_REQUIRE(!revoked_latest.has_value());
+        TEST_REQUIRE_EQ(revoked_latest.error().error, ToolchainError::Revoked);
         TEST_REQUIRE(db->update("ActorsFiles",
                                 { { "sign", Utils::to_base64(Signature {}) } },
                                 { { "owner_id", owner.to_string() }, { "file_id", row.value().file_id } }));

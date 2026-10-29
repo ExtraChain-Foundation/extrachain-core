@@ -547,6 +547,8 @@ class Stand:
                 assert published['ok'], published
                 self.wait(lambda: expected.lower() in self.node(1, 'manifest', language=language)
                           .get('error', '').lower(), f'{language} negative manifest replication')
+                self.wait(lambda: expected.lower() in self.ui('toolchain-manifest', language=language)
+                          .get('manifest_error', '').lower(), f'{language} Light manifest replication')
                 self.ui('click', text='Develop')
                 self.ui('click', text='Update')
                 self.idle(f'{language} rejected toolchain update', expected, 90)
@@ -556,6 +558,8 @@ class Stand:
             assert published['ok'], published
             self.wait(lambda: self.node(1, 'manifest', language=language).get('manifest', {})
                       .get('release_sequence') == 4, f'{language} restored manifest')
+            self.wait(lambda: self.ui('toolchain-manifest', language=language)
+                      .get('release_sequence') == 4, f'{language} restored Light manifest')
             self.ui('click', text='Update')
             if language == 'rust':
                 self.wait(lambda: any(active.parent.glob('install-*')), 'installation staging directory', 60)

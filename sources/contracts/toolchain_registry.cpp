@@ -253,17 +253,14 @@ namespace ExtraChain::Contracts {
                    && row.name.ends_with(".json") && toolchain_file_state(row.state);
         });
         std::ranges::sort(manifests, std::greater {}, &Dfs::DirRow::name);
-        std::optional<ToolchainFailure> unavailable;
         for (auto row : manifests) {
             if (!verify_toolchain_row(node_, row, network_id) || !verify_chain(node_, *rows, row, network_id)) {
                 continue;
             }
             auto content = read_content(node_, network_id, row);
             if (!content.has_value()) {
-                if (content.error().error == ToolchainError::Unavailable) {
-                    unavailable = content.error();
-                }
-                continue;
+                // A newer signed release can revoke the previous one. Wait for its content.
+                return std::unexpected(content.error());
             }
             const auto parsed = Json::deserialize<ToolchainManifest>(
                 std::string(reinterpret_cast<const char*>(content->data()), content->size()));
@@ -282,9 +279,6 @@ namespace ExtraChain::Contracts {
                 return std::unexpected(failure(ToolchainError::Revoked, "Toolchain release is revoked"));
             }
             return *parsed;
-        }
-        if (unavailable.has_value()) {
-            return std::unexpected(*unavailable);
         }
         return std::unexpected(failure(ToolchainError::InvalidManifest, "No valid toolchain manifest was found"));
     }
