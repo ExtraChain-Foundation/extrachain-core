@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import time
 
@@ -197,7 +198,7 @@ class Stand:
             assert received['hash'] == expected['hash'] and received['size'] == expected['size'], received
             self.event('package-verified', language=language, hash=received['hash'], size=received['size'])
 
-    def launch_ui(self, language, restart=False):
+    def launch_ui(self, language, restart=False, network=True):
         self.bridge = self.work / f'ui-{language}'
         self.bridge.mkdir(exist_ok=True)
         data = self.bridge / 'xdg' / 'ExtraChain Foundation' / 'ExtraChain Client'
@@ -220,7 +221,13 @@ class Stand:
         self.ui('type', name='password', value='exco-test-password')
         self.ui('click', text='Sign in' if restart else 'Create profile')
         self.wait(lambda: self.ui('snapshot')['authenticated'], 'Studio authentication', 60)
-        self.wait(lambda: self.ui('snapshot')['connections'] > 0, 'Studio network connection', 90)
+        if network:
+            self.wait(lambda: self.ui('snapshot')['connections'] > 0, 'Studio network connection', 90)
+            def projected():
+                self.ui('refresh')
+                section = self.ui('snapshot')['section']
+                return section.isdigit() and int(section) > 0
+            self.wait(projected, 'Studio verified state projection', 180)
         self.ui('navigate')
         self.ui('click', text='Develop')
         if language == 'rust':
@@ -264,6 +271,14 @@ class Stand:
                 return False
             if revision is not None and states[0]['revision'] < revision:
                 return False
+            if self.client.poll() is None:
+                self.ui('refresh')
+                rows = self.ui('snapshot')['catalog']
+                row = next((item for item in rows if item['contractId'] == contract), None)
+                if not row or row['revision'] != states[0]['revision'] or row['stateHash'] != states[0]['state_hash']:
+                    return False
+                if row['moduleHash'] != states[0]['module_hash']:
+                    return False
             return states[0]
         return self.wait(check, f'contract {contract} convergence', timeout)
 
@@ -271,6 +286,22 @@ class Stand:
         encoded = base64.b64decode(state['state'])
         value = msgpack.unpackb(encoded, raw=False)
         assert value == [1, state['owner'], expected_value, expected_limit, touches], value
+
+    def assert_light_storage(self, language):
+        data = self.bridge / 'xdg' / 'ExtraChain Foundation' / 'ExtraChain Client'
+        assert json.loads((data / '.settings').read_text())['dag_mode'] == 1
+        assert not list((data / 'dag/packs').glob('*.pack')), 'Light client stored full DAG packs'
+        rows = 0
+        database = data / 'dag/hot/HotSections.db'
+        if database.exists():
+            with sqlite3.connect('file:' + str(database) + '?mode=ro', uri=True) as connection:
+                rows = connection.execute('SELECT COUNT(*) FROM sections').fetchone()[0]
+        assert rows == 0, f'Light client stored {rows} full DAG sections'
+        snapshot = data / 'consensus/light-state.msgpack'
+        assert snapshot.is_file(), 'No verified Light snapshot was saved'
+        digest = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+        self.event('light-storage-verified', language=language, dag_packs=0, hot_sections=rows, snapshot_sha256=digest)
+        return snapshot, digest
 
     def build_offline(self, language, label):
         self.checked(['tc', 'qdisc', 'add', 'dev', 'lo', 'root', 'netem', 'loss', '100%'],
@@ -375,10 +406,19 @@ class Stand:
         self.save()
         self.ui('screenshot')
         self.ui('quit')
-        self.client.wait(timeout=60)
-        self.launch_ui(language, restart=True)
-        response = self.operate(0, contract, 'get', [])
-        assert '999' in response['query_result'], response['query_result']
+        assert self.client.wait(timeout=60) == 0
+        snapshot, digest = self.assert_light_storage(language)
+        self.checked(['tc', 'qdisc', 'add', 'dev', 'lo', 'root', 'netem', 'loss', '100%'],
+                     f'{language}-restart-offline.log')
+        try:
+            self.launch_ui(language, restart=True, network=False)
+            response = self.operate(0, contract, 'get', [])
+            assert '999' in response['query_result'], response['query_result']
+            assert hashlib.sha256(snapshot.read_bytes()).hexdigest() == digest
+            self.event('offline-light-recovery-pass', language=language, snapshot_sha256=digest)
+        finally:
+            self.checked(['tc', 'qdisc', 'del', 'dev', 'lo', 'root'], f'{language}-restart-online.log')
+        self.wait(lambda: self.ui('snapshot')['connections'] > 0, 'Studio reconnect after recovery', 90)
         response = self.operate(1, contract, 'touch', [])
         assert 'submitted' in response['status'], response['status']
         record = self.consistent(contract, final['revision'] + 1)

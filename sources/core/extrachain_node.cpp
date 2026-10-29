@@ -2174,8 +2174,13 @@ namespace ExtraChain::Core {
 
     ExtraChain::Contracts::ContractCatalogPage ExtraChainNode::list_contracts(
         const ExtraChain::Contracts::ContractCatalogFilter& filter) {
-        if (dag_ != nullptr && dag_->mode() == DagMode::Light && consensus_service_)
+        if (dag_ != nullptr && dag_->mode() == DagMode::Light && consensus_service_) {
+            Responder peers(nullptr);
+            for (const auto& identifier : network_service_->active_full_peer_identifiers())
+                peers.add_identifier(identifier);
+            dag_->request_light(peers);
             return consensus_service_->light_contracts(filter);
+        }
         return dag_ == nullptr ? ExtraChain::Contracts::ContractCatalogPage {}
                                : dag_->cache().list_contracts(filter);
     }
