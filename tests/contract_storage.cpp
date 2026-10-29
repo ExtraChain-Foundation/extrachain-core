@@ -1,6 +1,8 @@
 #include <filesystem>
 #include <memory>
 
+#include <fmt/format.h>
+
 #include "chain/dag.h"
 #include "chain/actor_index.h"
 #include "contracts/dfs_contract_storage.h"
@@ -327,8 +329,9 @@ int main() {
         std::uint64_t             owner_nonce = 1;
         std::uint64_t             other_nonce = 0;
         std::vector<std::uint8_t> checkpoint_state;
-        for (std::uint64_t next_revision = 2; next_revision <= ContractCheckpointInterval; ++next_revision) {
-            const bool  from_owner = next_revision <= 3 || next_revision % 2 == 1;
+        constexpr auto            boundary_revision = ContractCheckpointInterval + 1;
+        for (std::uint64_t next_revision = 2; next_revision <= boundary_revision; ++next_revision) {
+            const bool  from_owner = next_revision % 2 == 0;
             const auto& caller     = from_owner ? owner : other;
             const auto  recipient  = (from_owner ? other.id() : owner.id()).to_string();
             const auto  arguments  = Codec::encode_json("[\"" + recipient + "\",1]");
@@ -370,18 +373,19 @@ int main() {
             TEST_REQUIRE_EQ(node->validate_contract_transaction(call.value()), TransactionProveError::NoError);
             const auto result = Json::deserialize<ContractTransactionData>(call.value().meta().value());
             TEST_REQUIRE(result.has_value());
-            TEST_REQUIRE_EQ(result.value().checkpoint, next_revision == ContractCheckpointInterval);
+            TEST_REQUIRE_EQ(result.value().checkpoint, next_revision == boundary_revision);
             TEST_REQUIRE(node->dag()->save_transaction(call.value()));
             node->dag()->set_current_section(SectionId(next_revision + 1));
             node->finalize_contract_change(call.value().hash(), true);
-            if (next_revision == ContractCheckpointInterval) {
+            if (next_revision == boundary_revision) {
                 TEST_REQUIRE_EQ(caller.id(), other.id());
                 TEST_REQUIRE(result.value().checkpoint_state_base64.has_value());
                 checkpoint_state =
                     Utils::from_base64<std::vector<std::uint8_t>>(result.value().checkpoint_state_base64.value())
                         .value();
-                const auto name = "contract-checkpoint-v000001-r000000000256-"
-                                  + result.value().state_hash.substr(0, 12) + ".msgpack";
+                const auto name = fmt::format("contract-checkpoint-v000001-r{:012}-{}.msgpack",
+                                              boundary_revision,
+                                              result.value().state_hash.substr(0, 12));
                 TEST_REQUIRE(!node->dfs()
                                   ->read_file_status(deployed_actor.id(), name, Dfs::Basic::TEMPLATE_CONTRACTS)
                                   .has_value());
@@ -393,8 +397,8 @@ int main() {
         const auto         boundary = boundary_recovery.load(deployed_actor.id().to_string());
         TEST_REQUIRE(boundary.has_value());
         const auto& checkpoint = boundary.value().versions.back().revisions.back();
-        TEST_REQUIRE_EQ(checkpoint.revision, ContractCheckpointInterval);
-        TEST_REQUIRE_EQ(checkpoint.checkpoint_revision, ContractCheckpointInterval);
+        TEST_REQUIRE_EQ(checkpoint.revision, boundary_revision);
+        TEST_REQUIRE_EQ(checkpoint.checkpoint_revision, boundary_revision);
         TEST_REQUIRE_EQ(checkpoint.checkpoint_author_id, other.id().to_string());
         TEST_REQUIRE(checkpoint.checkpoint_storage_id.empty());
         TEST_REQUIRE_EQ(checkpoint.state, checkpoint_state);
