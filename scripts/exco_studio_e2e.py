@@ -360,6 +360,16 @@ class Stand:
         extension = 'rs' if language == 'rust' else 'ts'
         source = (self.root / f'tests/contracts/studio_counter.{extension}').read_text()
         self.ui('type', name='contractSource', value=source)
+        if language == 'assemblyscript':
+            self.ui('click', text='Build WebAssembly')
+            self.wait(lambda: self.ui('snapshot')['busy'], 'active contract build', 15)
+            self.ui('quit')
+            assert self.client.wait(timeout=15) == 0, 'Studio failed to close during a contract build'
+            self.event('build-close', language=language, status='PASS')
+            self.launch_ui(language, restart=True)
+            self.ui('click', text='Custom contract')
+            self.ui('type', name='projectName', value=f'exco_{language}')
+            self.ui('type', name='contractSource', value=source)
         built = self.build_offline(language, 'counter build')
         first_module = str(self.work / f'{language}-v1.wasm')
         shutil.copy2(built['module'], first_module)
