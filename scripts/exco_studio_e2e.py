@@ -217,6 +217,7 @@ class Stand:
         self.client = self.start([self.args.client, '--viewport=1600x1100'], f'ui-{language}.log',
                                  environment=environment)
         self.wait(lambda: self.ui('snapshot')['core_ready'], 'Studio Core startup', 90)
+        assert self.ui('snapshot')['qt_services_ready'], 'Qt services have incorrect thread ownership'
         self.ui('type', name='login', value=f'exco-{language}')
         self.ui('type', name='password', value='exco-test-password')
         self.ui('click', text='Sign in' if restart else 'Create profile')
@@ -259,7 +260,18 @@ class Stand:
         self.ui('click', text=('Run query', 'Submit call', 'Deploy contract', 'Submit upgrade')[operation])
         if operation != 0:
             self.ui('click', text='OK')
-        return self.ui('snapshot')
+        response = self.ui('snapshot')
+        if operation != 0 and 'submitted. Request: ' in response['status']:
+            request = response['status'].rsplit('Request: ', 1)[1]
+            assert len(request) == 64, request
+            def finalized():
+                self.ui('refresh')
+                receipt = self.ui('receipt', hash=request)
+                return receipt if receipt.get('finalized') else False
+            receipt = self.wait(finalized, 'verified Light request receipt', 180)
+            self.last_receipt = request
+            self.event('light-receipt-verified', request=request, height=receipt['height'])
+        return response
 
     def consistent(self, contract, revision=None, timeout=180):
         def check():
@@ -283,7 +295,8 @@ class Stand:
         return self.wait(check, f'contract {contract} convergence', timeout)
 
     def counter(self, state, expected_value, expected_limit, touches=0):
-        encoded = base64.b64decode(state['state'])
+        text = state['state']
+        encoded = base64.b64decode(text + '=' * (-len(text) % 4), validate=True)
         value = msgpack.unpackb(encoded, raw=False)
         assert value == [1, state['owner'], expected_value, expected_limit, touches], value
 
@@ -422,6 +435,7 @@ class Stand:
                      f'{language}-restart-offline.log')
         try:
             self.launch_ui(language, restart=True, network=False)
+            assert self.ui('receipt', hash=self.last_receipt)['finalized'], 'Saved Light receipt is not verified'
             response = self.operate(0, contract, 'get', [])
             assert '999' in response['query_result'], response['query_result']
             assert hashlib.sha256(snapshot.read_bytes()).hexdigest() == digest
