@@ -1089,8 +1089,10 @@ int main(int argc, char* argv[]) {
         }
         const auto metrics    = node->consensus()->metrics();
         const bool progressed = metrics.certificates > 0 && metrics.finalized > 0;
+        const bool restored_idle =
+            resumed && intent_count == 0 && node->consensus()->active() && node->dag()->state_projection_ready();
         node->cleanUp();
-        return progressed && all_finalized && wave + 1 == wave_count ? 0 : 6;
+        return (progressed || restored_idle) && all_finalized && wave + 1 == wave_count ? 0 : 6;
     }
 
     if (mode == "serve") {

@@ -467,8 +467,10 @@ class Stand:
             assert restored['state_hash'] == record['final']['state_hash'], restored
             assert restored['revision'] == record['final']['revision'], restored
             self.event('normal-restart-verified', language=language, state=restored)
+        status = self.node(7, 'status')
         self.nodes[7].terminate()
-        assert self.nodes[7].wait(timeout=45) == 0
+        code = self.nodes[7].wait(timeout=45)
+        assert code == 0, dict(exit_code=code, state=status)
         original = self.homes[7]
         preserved = self.work / 'recovery-original'
         original.rename(preserved)

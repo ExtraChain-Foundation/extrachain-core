@@ -30,6 +30,8 @@ namespace ExcoStand {
             result["finalized"]   = node.consensus()->metrics().finalized;
             result["downloads"]   = node.dfs()->download_manager().active_downloads_size();
             result["enabled"]     = node_enabled.load();
+            result["projection_ready"] = node.dag()->state_projection_ready();
+            result["projection_reason"] = node.dag()->state_projection().reason;
             boost::json::array peers;
             {
                 auto connections = *node.network()->connections();
