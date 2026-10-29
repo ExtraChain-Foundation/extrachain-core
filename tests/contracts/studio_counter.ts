@@ -9,6 +9,7 @@ export class StudioCounter {
   @state owner: string = "";
   @state value: u64 = 0;
   @state limit: u64 = 0;
+  @state touches: u64 = 0;
 
   @init
   initialize(context: Context): ContractResult<EmptyValue> {
@@ -33,6 +34,7 @@ export class StudioCounter {
 
   @call({ access: "owner" })
   touch(_context: Context): ContractResult<u64> {
+    this.touches += 1;
     return success(this.value);
   }
 

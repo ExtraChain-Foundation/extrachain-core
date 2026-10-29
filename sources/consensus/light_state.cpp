@@ -137,6 +137,12 @@ namespace ExtraChain::Consensus {
         const auto opened = intent_store_->open();
         if (!opened.has_value())
             return std::unexpected(opened.error());
+        if (connections_.empty()) {
+            connections_.emplace_back(node_.network()->socket_activated_event().subscribe(
+                [this](const std::string&, const std::string& identifier) {
+                    peer_connected(identifier);
+                }));
+        }
         std::error_code error;
         const auto      path = directory_ / "light-state.msgpack";
         if (!std::filesystem::exists(path, error))
@@ -172,11 +178,22 @@ namespace ExtraChain::Consensus {
         const auto stored = intent_store_->apply_verified_light_state(snapshot.nonces, snapshot.receipts);
         if (!stored.has_value())
             return false;
+        const bool advanced = !light_snapshot_.has_value()
+                              || snapshot.proof.finalized_proposal.header.height
+                                     > light_snapshot_.value().proof.finalized_proposal.header.height;
         committed_nonces_         = snapshot.nonces;
         light_verifier_           = std::move(verifier);
         light_snapshot_           = snapshot;
         pending_intents_restored_ = false;
         intent_pool_.discard_committed(committed_nonces_);
+        if (advanced && restore_pending_intents().has_value()) {
+            for (const auto& envelope :
+                 intent_pool_.ready(committed_nonces_, intent_height(), 64, 4 * 1024 * 1024))
+                node_.network()->send_message(envelope,
+                                              MessageType::ConsensusIntent,
+                                              SendMode::Broadcast,
+                                              MessageStatus::NoStatus);
+        }
         return true;
     }
 

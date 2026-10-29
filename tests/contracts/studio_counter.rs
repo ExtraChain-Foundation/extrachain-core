@@ -13,6 +13,7 @@ pub struct StudioCounter {
     owner: String,
     value: u64,
     limit: u64,
+    touches: u64,
 }
 
 #[contract]
@@ -43,6 +44,7 @@ impl StudioCounter {
 
     #[call(access = "owner")]
     fn touch(&mut self) -> ContractResult<u64> {
+        self.touches += 1;
         Ok(self.value)
     }
 

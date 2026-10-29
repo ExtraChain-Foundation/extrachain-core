@@ -267,10 +267,10 @@ class Stand:
             return states[0]
         return self.wait(check, f'contract {contract} convergence', timeout)
 
-    def counter(self, state, expected_value, expected_limit):
+    def counter(self, state, expected_value, expected_limit, touches=0):
         encoded = base64.b64decode(state['state'])
         value = msgpack.unpackb(encoded, raw=False)
-        assert value == [1, state['owner'], expected_value, expected_limit], value
+        assert value == [1, state['owner'], expected_value, expected_limit, touches], value
 
     def build_offline(self, language, label):
         self.checked(['tc', 'qdisc', 'add', 'dev', 'lo', 'root', 'netem', 'loss', '100%'],
@@ -382,6 +382,7 @@ class Stand:
         response = self.operate(1, contract, 'touch', [])
         assert 'submitted' in response['status'], response['status']
         record = self.consistent(contract, final['revision'] + 1)
+        self.counter(record, 999, 1000, 1)
         self.result['languages'][language]['final'] = record
         self.ui('quit')
         self.client.wait(timeout=60)
