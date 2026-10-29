@@ -74,11 +74,15 @@ void ExtraChainNode::notificationToken(QString os, QString actor_id, QString tok
 }
 
 std::unique_ptr<DfsService> ExtraChainNode::create_dfs_service() {
-    return std::make_unique<DfsController>(this, this);
+    auto service = std::make_unique<DfsController>(this);
+    service->moveToThread(thread());
+    return service;
 }
 
 std::unique_ptr<NetworkService> ExtraChainNode::create_network_service() {
-    return std::make_unique<NetworkManager>(this, network_runtime(), configured_port(), this);
+    auto service = std::make_unique<NetworkManager>(this, network_runtime(), configured_port());
+    service->moveToThread(thread());
+    return service;
 }
 
 void ExtraChainNode::bridge_node_events() {
