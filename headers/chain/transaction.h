@@ -234,6 +234,8 @@ public:
      * @return Hash string
      */
     std::string hash() const;
+    // Stable request identity before and after V2 ordering; hash() remains the DAG transaction hash.
+    std::string request_hash() const;
 
     /**
      * @brief Get token contract address

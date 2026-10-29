@@ -53,6 +53,7 @@ namespace ExtraChain::Core {
     class ExtraChainNode;
 }
 namespace ExtraChain::Consensus {
+    struct LightSnapshotRequestV1;
     struct IntentEnvelope;
 }
 class Responder;
@@ -696,7 +697,8 @@ public:
      *
      * @param responder The responder to send the request to
      */
-    void network_request_light(const Responder &responder);
+    void network_request_light(const Responder                                     &responder,
+                               const ExtraChain::Consensus::LightSnapshotRequestV1 &request);
     void request_light(const Responder &responder);
 
     /**

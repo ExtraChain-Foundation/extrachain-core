@@ -2978,13 +2978,13 @@ void NetworkService::message_received(const std::string &message,
             }
 #endif
 
-            auto range = MessagePack::deserialize<bool>(serialized);
-            if (!range.has_value()) {
-                eWarning("[NetworkService] {} deserialization failed for dag sync vector", type);
+            if (serialized.size() > 16 * 1024)
                 break;
-            }
-
-            node->dag()->network_request_light(responder);
+            const auto request =
+                MessagePack::deserialize<ExtraChain::Consensus::LightSnapshotRequestV1>(serialized);
+            if (!request.has_value())
+                break;
+            node->dag()->network_request_light(responder, request.value());
         } else if (status == MessageStatus::Response) {
             node->dag()->network_response_light(serialized, responder);
         }

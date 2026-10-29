@@ -18,12 +18,15 @@
 
 class DfsService;
 class Dag;
+namespace ExtraChain::Consensus {
+    class ConsensusService;
+}
 
 namespace ExtraChain::Contracts {
 
     class EXTRACHAIN_EXPORT DfsContractStorage final : public ContractStorage {
     public:
-        DfsContractStorage(DfsService *dfs, Dag *dag);
+        DfsContractStorage(DfsService *dfs, Dag *dag, Consensus::ConsensusService *consensus = nullptr);
 
         [[nodiscard]] std::expected<ContractRecord, ContractFailure> load(
             std::string_view contract_id) const override;
@@ -41,6 +44,7 @@ namespace ExtraChain::Contracts {
 
         DfsService                                             *dfs_ = nullptr;
         Dag                                                    *dag_ = nullptr;
+        Consensus::ConsensusService                            *consensus_ = nullptr;
         mutable std::mutex                                      mutex_;
         mutable std::unordered_map<std::string, ContractRecord> heads_;
         mutable std::unordered_set<std::string>                 absent_contracts_;

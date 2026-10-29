@@ -95,6 +95,10 @@ namespace ExtraChain::Consensus {
         std::expected<std::string, ConsensusError> submit_local_intent(TransactionIntentV2      intent,
                                                                        std::string              metadata,
                                                                        const Actor<KeyPrivate>& sender);
+        std::expected<IntentEnvelope, ConsensusError> submit_local_intent_envelope(
+            TransactionIntentV2      intent,
+            std::string              metadata,
+            const Actor<KeyPrivate>& sender);
         [[nodiscard]] std::vector<IntentEnvelope>  ready_intents(std::size_t maximum_count,
                                                                  std::size_t maximum_bytes) const;
         [[nodiscard]] std::expected<std::optional<IntentReceipt>, ConsensusError> intent_receipt(
@@ -108,8 +112,14 @@ namespace ExtraChain::Consensus {
         std::expected<std::size_t, ConsensusError> request_bootstrap_history(const TrustAnchorV1& anchor,
                                                                              std::uint64_t        after_epoch);
 
-        std::expected<BalanceSnapshotV1, ConsensusError> balance_snapshot() const;
-        bool accept_balance_snapshot(const BalanceSnapshotV1& snapshot);
+        std::expected<BalanceSnapshotV2, ConsensusError> balance_snapshot(
+            const LightSnapshotRequestV1& request = {}) const;
+        bool                                 accept_balance_snapshot(const BalanceSnapshotV2& snapshot);
+        [[nodiscard]] LightSnapshotRequestV1 light_snapshot_request() const;
+        bool                                 watch_light_contract(const ActorId& contract);
+        std::expected<Contracts::ContractRecord, Contracts::ContractFailure> light_contract(
+            std::string_view contract_id) const;
+        Contracts::ContractCatalogPage light_contracts(const Contracts::ContractCatalogFilter& filter) const;
 
         [[nodiscard]] bool                                       native_mining_enabled() const;
         [[nodiscard]] std::expected<MiningState, ConsensusError> finalized_mining_state() const;
@@ -243,6 +253,8 @@ namespace ExtraChain::Consensus {
         bool accept_light_history(const BootstrapHistoryPageV1& page);
         void request_light_history();
         std::expected<LightClientVerifier, ConsensusError> load_light_verifier() const;
+        std::expected<void, ConsensusError>                activate_light();
+        bool apply_light_snapshot(const BalanceSnapshotV2& snapshot, bool persist);
 
         struct MiningSnapshot {
             std::string header_hash;
@@ -274,6 +286,8 @@ namespace ExtraChain::Consensus {
 
         Core::ExtraChainNode&                                         node_;
         std::optional<LightClientVerifier>                            light_verifier_;
+        std::optional<BalanceSnapshotV2>                              light_snapshot_;
+        std::set<ActorId>                                             watched_light_contracts_;
         std::filesystem::path                                         directory_;
         std::unique_ptr<ShadowConsensus>                              consensus_;
         std::unique_ptr<IntentStore>                                  intent_store_;

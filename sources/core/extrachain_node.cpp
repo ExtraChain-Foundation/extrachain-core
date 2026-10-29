@@ -349,18 +349,16 @@ namespace ExtraChain::Core {
         info_timer_       = periodic_task(std::chrono::seconds(10), &ExtraChainNode::timer_info_print);
         luminance_timer_  = periodic_task(std::chrono::seconds(30), &ExtraChainNode::timer_luminance_autoremove);
         dfs_              = create_dfs_service();
-        contract_manager_ = std::make_unique<
-            ExtraChain::Contracts::ContractManager>(std::make_unique<
-                                                        ExtraChain::Contracts::DfsContractStorage>(dfs_.get(),
-                                                                                                   dag_.get()),
-                                                    ExtraChain::Contracts::ExecutionLimits {},
-                                                    ExtraChain::Contracts::RuntimeTuning {
-                                                        .max_concurrent_executions = limits.wasm_concurrency,
-                                                        .module_cache_entries =
-                                                            runtime_profile() == RuntimeProfile::MobileLight ? 2U
-                                                                                                             : 8U,
-                                                        .module_cache_bytes = limits.wasm_cache_bytes_per_thread,
-                                                    });
+        contract_manager_ = std::make_unique<ExtraChain::Contracts::ContractManager>(
+            std::make_unique<ExtraChain::Contracts::DfsContractStorage>(dfs_.get(),
+                                                                        dag_.get(),
+                                                                        consensus_service_.get()),
+            ExtraChain::Contracts::ExecutionLimits {},
+            ExtraChain::Contracts::RuntimeTuning {
+                .max_concurrent_executions = limits.wasm_concurrency,
+                .module_cache_entries      = runtime_profile() == RuntimeProfile::MobileLight ? 2U : 8U,
+                .module_cache_bytes        = limits.wasm_cache_bytes_per_thread,
+            });
         toolchain_registry_  = std::make_unique<ExtraChain::Contracts::ToolchainRegistry>(this);
         auto retry_contracts = [this](const ActorId&, const Dfs::DirRow& row) {
             if (row.folder == Dfs::Basic::TEMPLATE_CONTRACTS) {
@@ -1553,6 +1551,49 @@ namespace ExtraChain::Core {
         Transaction                                   transaction,
         const Actor<KeyPrivate>&                      signer,
         ExtraChain::Contracts::PreparedContractChange change) {
+        if (dag_->mode() == DagMode::Light || (consensus_service_ && consensus_service_->requires_intent_v2())) {
+            if (!consensus_service_ || !consensus_service_->requires_intent_v2())
+                return std::unexpected(TransactionError::NotReady);
+            Consensus::IntentOperation operation;
+            switch (transaction.type()) {
+            case TransactionType::ContractDeploy:
+                operation = Consensus::IntentOperation::ContractDeploy;
+                break;
+            case TransactionType::ContractCall:
+                operation = Consensus::IntentOperation::ContractCall;
+                break;
+            case TransactionType::ContractUpgrade:
+                operation = Consensus::IntentOperation::ContractUpgrade;
+                break;
+            default:
+                return std::unexpected(TransactionError::Unknown);
+            }
+            if (!contract_manager_->stage(change).has_value())
+                return std::unexpected(TransactionError::Unknown);
+            if (dag_->mode() == DagMode::Light)
+                consensus_service_->watch_light_contract(transaction.receiver());
+            const auto submitted = consensus_service_->submit_local_intent_envelope(
+                Consensus::TransactionIntentV2 {
+                    .network_id = network_id(),
+                    .sender     = signer.id(),
+                    .receiver   = transaction.receiver(),
+                    .token      = transaction.token(),
+                    .amount     = transaction.amount().to_string(),
+                    .operation  = operation,
+                },
+                transaction.meta().value_or(""),
+                signer);
+            if (!submitted.has_value()) {
+                eWarning("[Contract] V2 intent submission failed: {}", std::to_underlying(submitted.error()));
+                return std::unexpected(submitted.error() == Consensus::ConsensusError::NotReady
+                                           ? TransactionError::NotReady
+                                           : TransactionError::Unknown);
+            }
+            // No DAG section or block time is assigned until the committee orders the signed request.
+            const auto pending = Consensus::materialize_intent(submitted.value(), 0, 0, {});
+            return pending.has_value() ? std::expected<Transaction, TransactionError>(pending.value())
+                                       : std::unexpected(TransactionError::Unknown);
+        }
         auto prepared = dag_->prepare_transaction(transaction, signer);
         if (!prepared.has_value()) {
             eWarning("[Contract] Cannot prepare transaction: {}", prepared.error());
@@ -1709,8 +1750,8 @@ namespace ExtraChain::Core {
                 return TransactionProveError::InvalidContractPayload;
             }
             const auto language = ExtraChain::Contracts::module_language(*module);
-            if ((metadata->kind == "fungible-token" || metadata->kind == "non-fungible-token")
-                && (!language.has_value() || *language != metadata->language)) {
+            if (metadata->language != language.value_or(std::string())
+                || (ExtraChain::Contracts::is_system_token_kind(metadata->kind) && !language.has_value())) {
                 return TransactionProveError::InvalidContractPayload;
             }
             if (ExtraChain::Contracts::is_system_token_kind(metadata->kind)) {
@@ -1920,6 +1961,8 @@ namespace ExtraChain::Core {
                 .detail = "No current wallet",
             });
         }
+        if (dag_->mode() == DagMode::Light && consensus_service_)
+            consensus_service_->watch_light_contract(contract_id);
         auto block    = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
         auto verified = verify_contract_inputs(dag_.get(), dfs_.get(), verified_inputs, block);
         if (!verified.has_value()) {
@@ -2061,6 +2104,8 @@ namespace ExtraChain::Core {
                 .detail = "No current wallet",
             });
         }
+        if (dag_->mode() == DagMode::Light && consensus_service_)
+            consensus_service_->watch_light_contract(contract_id);
         auto block  = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
         auto change = contract_manager_->prepare_upgrade(contract_id.to_string(),
                                                          signer.id().to_string(),
@@ -2117,6 +2162,8 @@ namespace ExtraChain::Core {
                 .detail = "No current wallet",
             });
         }
+        if (dag_->mode() == DagMode::Light && consensus_service_)
+            consensus_service_->watch_light_contract(contract_id);
         auto block = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0));
         return contract_manager_->query(contract_id.to_string(),
                                         signer.id().to_string(),
@@ -2127,6 +2174,8 @@ namespace ExtraChain::Core {
 
     ExtraChain::Contracts::ContractCatalogPage ExtraChainNode::list_contracts(
         const ExtraChain::Contracts::ContractCatalogFilter& filter) {
+        if (dag_ != nullptr && dag_->mode() == DagMode::Light && consensus_service_)
+            return consensus_service_->light_contracts(filter);
         return dag_ == nullptr ? ExtraChain::Contracts::ContractCatalogPage {}
                                : dag_->cache().list_contracts(filter);
     }

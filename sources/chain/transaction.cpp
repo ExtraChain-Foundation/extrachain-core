@@ -254,6 +254,10 @@ std::string Transaction::hash() const {
     return this->hash_;
 }
 
+std::string Transaction::request_hash() const {
+    return ExtraChain::Consensus::consensus_transaction_hash(*this);
+}
+
 TokenId Transaction::token() const {
     return this->token_;
 }

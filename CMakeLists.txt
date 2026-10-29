@@ -268,6 +268,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/light_client.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/balance_snapshot.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/light_state.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_service_mining.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/consensus_types.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/consensus/peer_authenticator.cpp

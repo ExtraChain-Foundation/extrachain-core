@@ -59,8 +59,8 @@ namespace {
     };
 } // namespace
 
-bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV1 &snapshot,
-                                   const ExtraChain::Consensus::BalanceSnapshotV1 &newer,
+bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV2 &snapshot,
+                                   const ExtraChain::Consensus::BalanceSnapshotV2 &newer,
                                    const ExtraChain::Consensus::ValidatorSet      &validators) {
     using namespace ExtraChain::Consensus;
     struct Home {

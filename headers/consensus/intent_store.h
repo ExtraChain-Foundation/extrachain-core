@@ -58,6 +58,12 @@ namespace ExtraChain::Consensus {
                                         const std::vector<std::pair<IntentEnvelope, IntentReceipt>>& finalized,
                                         std::optional<AppliedCheckpoint>                             checkpoint = std::nullopt);
         std::expected<std::optional<IntentReceipt>, ConsensusError> receipt(std::string_view intent_hash);
+        // The caller must verify the finalized snapshot and every inclusion proof first.
+        std::expected<void, ConsensusError> apply_verified_light_state(
+            const std::map<ActorId, std::uint64_t>&         nonces,
+            const std::vector<TransactionInclusionProofV1>& receipts);
+        std::expected<std::optional<TransactionInclusionProofV1>, ConsensusError> receipt_proof(
+            std::string_view intent_hash);
 
     private:
         std::filesystem::path        database_path_;

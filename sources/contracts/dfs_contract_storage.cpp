@@ -15,6 +15,7 @@
 #include <filesystem>
 
 #include "chain/dag.h"
+#include "consensus/consensus_service.h"
 #include "contracts/contract_codec.h"
 #include "contracts/contract_hash.h"
 #include "contracts/contract_transaction.h"
@@ -773,9 +774,10 @@ namespace ExtraChain::Contracts {
 
     } // namespace
 
-    DfsContractStorage::DfsContractStorage(DfsService *dfs, Dag *dag)
+    DfsContractStorage::DfsContractStorage(DfsService *dfs, Dag *dag, Consensus::ConsensusService *consensus)
         : dfs_(dfs)
-        , dag_(dag) {
+        , dag_(dag)
+        , consensus_(consensus) {
     }
 
     std::expected<ContractRecord, ContractFailure> DfsContractStorage::load(
@@ -788,6 +790,8 @@ namespace ExtraChain::Contracts {
         if (!contract_id.has_value()) {
             return std::unexpected(failure(ContractError::InvalidArguments, "Contract ID is invalid"));
         }
+        if (dag_ != nullptr && dag_->mode() == DagMode::Light && consensus_ != nullptr)
+            return consensus_->light_contract(contract_id_value);
         if (auto cached = heads_.find(contract_id->to_string()); cached != heads_.end()) {
             return cached->second;
         }
@@ -844,9 +848,18 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ContractError::InvalidArguments, "Contract owner or ID is invalid"));
         }
 
+        const bool light    = dag_ != nullptr && dag_->mode() == DagMode::Light && consensus_ != nullptr;
+        const auto verified = light ? consensus_->light_contract(record.contract_id)
+                                    : std::expected<ContractRecord, ContractFailure>(std::unexpected(
+                                          failure(ContractError::NotFound, "No Light projection")));
         for (const auto &version : record.versions) {
+            if (light && version.version != record.active_version)
+                continue;
+            const bool existing_module = light && verified.has_value()
+                                         && verified.value().active_version == version.version
+                                         && verified.value().versions.back().module_hash == version.module_hash;
             std::string module_file_id = version.module_storage_id;
-            if (module_file_id.empty()) {
+            if (module_file_id.empty() && !existing_module) {
                 auto module_name =
                     fmt::format("contract-module-v{:06}-{}.wasm", version.version, prefix(version.module_hash));
                 auto module_row = store_file(dfs_, *contract_id, *owner_id, version.module, module_name);
@@ -855,7 +868,7 @@ namespace ExtraChain::Contracts {
                 }
                 module_file_id = module_row->file_id;
             }
-            if (module_file_id.empty()) {
+            if (module_file_id.empty() && !existing_module) {
                 return std::unexpected(failure(ContractError::StorageError, "Contract module file is missing"));
             }
             if (version.version == record.active_version) {

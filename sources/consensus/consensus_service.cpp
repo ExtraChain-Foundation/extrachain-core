@@ -188,7 +188,9 @@ namespace ExtraChain::Consensus {
     std::expected<bool, ConsensusError> ConsensusService::activate(const ActorId& network_id) {
         std::lock_guard lock(mutex_);
         if (node_.dag()->mode() == DagMode::Light) {
-            return false;
+            const auto activated = activate_light();
+            return activated.has_value() ? std::expected<bool, ConsensusError>(false)
+                                         : std::unexpected(activated.error());
         }
         if (consensus_) {
             return true;
@@ -350,6 +352,9 @@ namespace ExtraChain::Consensus {
         authenticator_.reset();
         relay_transport_.clear();
         relay_context_.reset();
+        light_snapshot_.reset();
+        light_verifier_.reset();
+        watched_light_contracts_.clear();
         intent_store_.reset();
         intent_pool_ = IntentPool {};
         pending_intents_restored_ = false;
@@ -1214,6 +1219,8 @@ namespace ExtraChain::Consensus {
 
     void ConsensusService::receive_intent(const IntentEnvelope& envelope) {
         std::lock_guard lock(mutex_);
+        if (node_.dag()->mode() == DagMode::Light)
+            return;
         const auto      accepted = accept_intent(envelope, !relay_context_.has_value());
         if (!accepted.has_value() && accepted.error() != ConsensusError::DuplicateIntent) {
             eWarning("[Shadow] Intent {} was rejected with error {}",
@@ -1231,22 +1238,39 @@ namespace ExtraChain::Consensus {
         TransactionIntentV2      intent,
         std::string              metadata,
         const Actor<KeyPrivate>& sender) {
+        const auto submitted = submit_local_intent_envelope(std::move(intent), std::move(metadata), sender);
+        return submitted.has_value()
+                   ? std::expected<std::string, ConsensusError>(hash_intent(submitted.value().intent))
+                   : std::unexpected(submitted.error());
+    }
+
+    std::expected<IntentEnvelope, ConsensusError> ConsensusService::submit_local_intent_envelope(
+        TransactionIntentV2      intent,
+        std::string              metadata,
+        const Actor<KeyPrivate>& sender) {
         std::lock_guard lock(mutex_);
-        if (!consensus_)
+        if (!consensus_ && !light_snapshot_.has_value())
             return std::unexpected(ConsensusError::NotReady);
         const auto nonce = next_local_nonce(sender.id());
         if (!nonce.has_value())
             return std::unexpected(nonce.error());
-        // A request without its own expiry height gets the default window from the current height.
         if (intent.expires_after_height == 0) {
+            const auto height = intent_height();
+            if (height > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())
+                             - LocalIntentLifetimeHeights)
+                return std::unexpected(ConsensusError::InvalidHeight);
             intent.valid_after_height   = 0;
-            intent.expires_after_height = intent_height() + LocalIntentLifetimeHeights;
+            intent.expires_after_height = height + LocalIntentLifetimeHeights;
         }
         intent.account_nonce     = nonce.value();
         const auto signed_intent = make_intent(std::move(intent), metadata, sender);
         if (!signed_intent.has_value())
             return std::unexpected(signed_intent.error());
-        return accept_intent(IntentEnvelope { signed_intent.value(), std::move(metadata) }, true);
+        IntentEnvelope envelope { signed_intent.value(), std::move(metadata) };
+        const auto     accepted = accept_intent(envelope, true);
+        if (!accepted.has_value())
+            return std::unexpected(accepted.error());
+        return envelope;
     }
 
     std::vector<IntentEnvelope> ConsensusService::ready_intents(std::size_t maximum_count,
@@ -1259,9 +1283,31 @@ namespace ExtraChain::Consensus {
     std::expected<std::optional<IntentReceipt>, ConsensusError> ConsensusService::intent_receipt(
         std::string_view intent_hash) {
         std::lock_guard lock(mutex_);
-        return intent_store_ ? intent_store_->receipt(intent_hash)
-                             : std::expected<std::optional<IntentReceipt>, ConsensusError>(
-                                   std::unexpected(ConsensusError::NotReady));
+        if (!intent_store_)
+            return std::unexpected(ConsensusError::NotReady);
+        if (node_.dag()->mode() == DagMode::Light) {
+            const auto proof = intent_store_->receipt_proof(intent_hash);
+            if (!proof.has_value())
+                return std::unexpected(proof.error());
+            if (proof.value().has_value()) {
+                const auto& inclusion = proof.value().value();
+                if (!light_verifier_.has_value() || inclusion.transaction_hash != intent_hash
+                    || inclusion.height > light_verifier_.value().trusted_height()
+                    || !light_verifier_.value().verify_transaction_proof(inclusion))
+                    return std::unexpected(ConsensusError::InvalidProof);
+                return std::optional<IntentReceipt> { IntentReceipt {
+                    .intent_hash      = std::string(intent_hash),
+                    .status           = IntentStatus::Finalized,
+                    .consensus_height = inclusion.height,
+                } };
+            }
+            const auto receipt = intent_store_->receipt(intent_hash);
+            if (receipt.has_value() && receipt.value().has_value()
+                && receipt.value().value().status == IntentStatus::Finalized)
+                return std::unexpected(ConsensusError::InvalidProof);
+            return receipt;
+        }
+        return intent_store_->receipt(intent_hash);
     }
 
     std::expected<void, ConsensusError> ConsensusService::finalize_intents(
@@ -1391,10 +1437,13 @@ namespace ExtraChain::Consensus {
 
     std::expected<std::string, ConsensusError> ConsensusService::accept_intent(const IntentEnvelope& envelope,
                                                                                bool                  broadcast) {
-        if (!consensus_ || !intent_store_
-            || envelope.intent.network_id != consensus_->engine().validators().document().network_id) {
-            return std::unexpected(consensus_ ? ConsensusError::InvalidNetwork : ConsensusError::NotReady);
-        }
+        const bool light = node_.dag()->mode() == DagMode::Light && light_snapshot_.has_value();
+        if ((!consensus_ && !light) || !intent_store_)
+            return std::unexpected(ConsensusError::NotReady);
+        const auto network =
+            consensus_ ? consensus_->engine().validators().document().network_id : node_.network_id();
+        if (envelope.intent.network_id != network)
+            return std::unexpected(ConsensusError::InvalidNetwork);
         const auto restored = restore_pending_intents();
         if (!restored.has_value())
             return std::unexpected(restored.error());
@@ -1426,17 +1475,19 @@ namespace ExtraChain::Consensus {
                                           SendMode::Broadcast,
                                           MessageStatus::NoStatus);
         }
-        if (intent_batch_task_) {
-            intent_batch_task_->schedule_earlier(std::chrono::milliseconds(25));
-        } else {
-            queue_next_checkpoint();
+        if (!light) {
+            if (intent_batch_task_)
+                intent_batch_task_->schedule_earlier(std::chrono::milliseconds(25));
+            else
+                queue_next_checkpoint();
         }
         return hash;
     }
 
     std::uint64_t ConsensusService::intent_height() const noexcept {
         if (!consensus_) {
-            return 0;
+            const auto height = light_verifier_.has_value() ? light_verifier_.value().trusted_height() : 0;
+            return height == std::numeric_limits<std::uint64_t>::max() ? height : height + 1;
         }
         const auto& certificate = consensus_->engine().safety_state().highest_certificate;
         return certificate.has_value() ? certificate.value().height + 1 : 1;
@@ -1677,33 +1728,6 @@ namespace ExtraChain::Consensus {
         return true;
     }
 
-    std::expected<BalanceSnapshotV1, ConsensusError> ConsensusService::balance_snapshot() const {
-        std::lock_guard lock(mutex_);
-        if (!consensus_ || node_.dag()->mode() != DagMode::Full) {
-            return std::unexpected(ConsensusError::NotReady);
-        }
-        const auto height = consensus_->engine().safety_state().finalized_height;
-        if (height == 0) {
-            return std::unexpected(ConsensusError::NotReady);
-        }
-        const auto proofs = consensus_->engine().finality_proofs_after(height - 1, 1);
-        if (!proofs.has_value() || proofs.value().empty()) {
-            return std::unexpected(ConsensusError::DataUnavailable);
-        }
-        const auto& proof = proofs.value().front();
-        if (proof.finalized_proposal.header.height != height) {
-            return std::unexpected(ConsensusError::InvalidHeight);
-        }
-        auto balances =
-            node_.dag()->calculate_actors_balance(node_.actor_index()->read_all_actors_ids(),
-                                                  SectionId(proof.finalized_proposal.header.dag_section));
-        if (balances.size() > MaximumSnapshotBalances
-            || balance_snapshot_root(balances) != proof.finalized_proposal.state.account_state_root) {
-            return std::unexpected(ConsensusError::InvalidRoot);
-        }
-        return BalanceSnapshotV1 { std::move(balances), proof };
-    }
-
     std::expected<LightClientVerifier, ConsensusError> ConsensusService::load_light_verifier() const {
         std::error_code error;
         if (std::filesystem::exists(directory_ / "light-client.msgpack", error)) {
@@ -1735,34 +1759,6 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::InvalidNetwork);
         }
         return LightClientVerifier::create(validators.value());
-    }
-
-    bool ConsensusService::accept_balance_snapshot(const BalanceSnapshotV1& snapshot) {
-        std::lock_guard lock(mutex_);
-        if (node_.dag()->mode() != DagMode::Light
-            || snapshot.proof.finalized_proposal.header.network_id != node_.network_id()) {
-            return false;
-        }
-        if (!light_verifier_.has_value()) {
-            auto loaded = load_light_verifier();
-            if (!loaded.has_value()) {
-                return false;
-            }
-            light_verifier_ = std::move(loaded.value());
-        }
-        const auto trusted = light_verifier_.value().snapshot();
-        if (snapshot.proof.finalized_proposal.header.epoch > trusted.active_validators.epoch
-            && trusted.trust_anchor.has_value()) {
-            request_light_history();
-            return false;
-        }
-        auto candidate = light_verifier_.value();
-        if (!verify_balance_snapshot(snapshot, candidate) || !candidate.advance(snapshot.proof).has_value()
-            || !candidate.save(directory_ / "light-client.msgpack").has_value()) {
-            return false;
-        }
-        light_verifier_ = std::move(candidate);
-        return true;
     }
 
     void ConsensusService::request_light_history() {
@@ -1822,6 +1818,8 @@ namespace ExtraChain::Consensus {
 
     bool ConsensusService::requires_intent_v2() const noexcept {
         std::lock_guard lock(mutex_);
+        if (node_.dag()->mode() == DagMode::Light)
+            return light_snapshot_.has_value();
         if (!consensus_ || consensus_->configuration().mode != ShadowMode::Finality
             || !consensus_->engine().safety_state().highest_certificate.has_value()) {
             return false;
@@ -1889,6 +1887,14 @@ namespace ExtraChain::Consensus {
 
     void ConsensusService::peer_connected(const std::string& identifier) {
         std::lock_guard lock(mutex_);
+        if (node_.dag()->mode() == DagMode::Light) {
+            if (light_snapshot_.has_value() && restore_pending_intents().has_value()) {
+                for (const auto& envelope :
+                     intent_pool_.ready(committed_nonces_, intent_height(), 64, 4 * 1024 * 1024))
+                    send_to_peer(envelope, MessageType::ConsensusIntent, identifier, MessageStatus::NoStatus);
+            }
+            return;
+        }
         if (!authenticator_) {
             return;
         }
@@ -2844,6 +2850,14 @@ namespace ExtraChain::Consensus {
             account_state.emplace(key.first.to_string() + ':' + key.second.to_string(), balance.to_string());
         }
 
+        const auto account_nonces = advance_nonces(committed_nonces_, transactions);
+        if (!account_nonces.has_value())
+            return std::unexpected(account_nonces.error());
+        for (const auto& [actor, nonce] : account_nonces.value()) {
+            if (nonce != 0)
+                account_state.emplace("@nonce:" + actor.to_string(), std::to_string(nonce));
+        }
+
         std::map<std::string, std::string>           contract_state;
         std::map<std::string, std::string>           contract_owners;
         ExtraChain::Contracts::ContractCatalogFilter filter { .limit = 100 };
@@ -3032,8 +3046,11 @@ namespace ExtraChain::Consensus {
 
     std::expected<std::map<ActorId, std::uint64_t>, ConsensusError> ConsensusService::local_nonce_frontier(
         std::string* missing_ancestor) const {
-        if (!consensus_)
+        if (!consensus_) {
+            if (light_snapshot_.has_value())
+                return committed_nonces_;
             return std::unexpected(ConsensusError::NotReady);
+        }
         auto        nonces  = committed_nonces_;
         const auto& highest = consensus_->engine().safety_state().highest_certificate;
         if (consensus_->configuration().mode == ShadowMode::Finality && highest.has_value()
@@ -3065,7 +3082,7 @@ namespace ExtraChain::Consensus {
     std::expected<void, ConsensusError> ConsensusService::restore_pending_intents() {
         if (pending_intents_restored_)
             return { };
-        if (!consensus_ || !intent_store_)
+        if ((!consensus_ && !light_snapshot_.has_value()) || !intent_store_)
             return std::unexpected(ConsensusError::NotReady);
         // Observers can restart with certified headers but no unfinalized payloads.
         // Keep their pending requests on disk until the certified nonce frontier is known.
@@ -3105,8 +3122,18 @@ namespace ExtraChain::Consensus {
 
     std::expected<void, ConsensusError> ConsensusService::expire_pending_intents(
         const std::map<ActorId, std::uint64_t>& nonces) {
-        if (!intent_store_ || !consensus_)
+        if (!intent_store_ || (!consensus_ && !light_snapshot_.has_value()))
             return std::unexpected(ConsensusError::NotReady);
+        if (!consensus_) {
+            const auto expired = intent_pool_.expired_uncommitted(intent_height(), committed_nonces_);
+            if (!expired.empty()) {
+                const auto stored = intent_store_->expire(expired);
+                if (!stored.has_value())
+                    return std::unexpected(stored.error());
+                intent_pool_.erase(expired);
+            }
+            return {};
+        }
         // A certified batch can lose to another one certified at the same height in a later round, and
         // either may be finalized. Expiring a request by the highest certificate freed its nonce for a new
         // request while the other batch, which carried it, was finalized, so the new one was rejected.

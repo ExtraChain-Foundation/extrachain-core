@@ -56,6 +56,11 @@ add_core_test_executable(extrachain-audit-admission audit_admission.cpp)
 add_core_test_executable(extrachain-transaction-results transaction_results.cpp)
 add_core_test_executable(extrachain-history-sync history_sync.cpp)
 add_core_test_executable(extrachain-contract-catalog contract_catalog.cpp)
+add_core_test_executable(extrachain-light-contract-snapshot light_contract_snapshot.cpp)
+add_test(NAME light-contract-snapshot COMMAND extrachain-light-contract-snapshot)
+set_tests_properties(light-contract-snapshot PROPERTIES TIMEOUT 60
+    ENVIRONMENT "ASAN_OPTIONS=detect_leaks=$<IF:$<PLATFORM_ID:Darwin>,0,1>:halt_on_error=1:detect_stack_use_after_return=0")
+
 add_core_test_executable(extrachain-pack-history pack_history.cpp)
 add_core_test_executable(extrachain-dag-history-batch dag_history_batch.cpp)
 add_test(NAME dag-history-batch COMMAND extrachain-dag-history-batch)

@@ -4297,14 +4297,15 @@ void Dag::request_light(const Responder &responder) {
         pending_light_response_ =
             PendingLightResponse { request.message_id(), request.identifiers(), Utils::current_date_ms() };
     }
-    node->network()->send_message(true,
+    node->network()->send_message(node->consensus()->light_snapshot_request(),
                                   MessageType::DagLightData,
                                   SendMode::Focused,
                                   MessageStatus::Request,
                                   request);
 }
 
-void Dag::network_request_light(const Responder &responder) {
+void Dag::network_request_light(const Responder                                     &responder,
+                                const ExtraChain::Consensus::LightSnapshotRequestV1 &request) {
     if (mode_ != DagMode::Full || status_ != DagStatus::Ready || responder.identifiers().size() != 1) {
         return;
     }
@@ -4312,11 +4313,11 @@ void Dag::network_request_light(const Responder &responder) {
     if (!reservation) {
         return;
     }
-    node->post_storage([this, responder, reservation = std::move(reservation)] {
+    node->post_storage([this, responder, request, reservation = std::move(reservation)] {
         if (reservation->stopped() || node->consensus() == nullptr) {
             return;
         }
-        auto snapshot = node->consensus()->balance_snapshot();
+        auto snapshot = node->consensus()->balance_snapshot(request);
         if (!snapshot.has_value()) {
             return;
         }
@@ -4361,7 +4362,7 @@ void Dag::network_response_light(const std::string &serialized, const Responder 
         WireFormat::Scope canonical(WireFormat::Mode::Canonical);
         SectionId         section;
         {
-            const auto snapshot = MessagePack::deserialize<BalanceSnapshotV1>(payload);
+            const auto snapshot = MessagePack::deserialize<BalanceSnapshotV2>(payload);
             if (!snapshot.has_value()) {
                 return;
             }

@@ -83,6 +83,8 @@ namespace ExtraChain::Consensus {
             || !database_->query(std::string(CreateSenderNonceIndex))
             || !database_->query(std::string(CreateExpiryIndex))
             || !database_->query(std::string(CreateReceiptTable))
+            || !database_->query("CREATE TABLE IF NOT EXISTS consensus_light_receipt_proofs (hash TEXT PRIMARY "
+                                 "KEY, payload TEXT NOT NULL)")
             || !database_->query(std::string(CreateNonceTable))
             || !database_->query(std::string(CreateAppliedCheckpointTable))) {
             database_.reset();
@@ -509,6 +511,92 @@ namespace ExtraChain::Consensus {
         return value.has_value()
                    ? std::expected<std::optional<IntentReceipt>, ConsensusError>(std::move(value.value()))
                    : std::unexpected(value.error());
+    }
+
+    std::expected<void, ConsensusError> IntentStore::apply_verified_light_state(
+        const std::map<ActorId, std::uint64_t>&         nonces,
+        const std::vector<TransactionInclusionProofV1>& receipts) {
+        std::lock_guard lock(mutex_);
+        if (!database_ || !database_->is_open())
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        constexpr auto maximum = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+        const auto     old     = database_->select("SELECT sender, nonce FROM consensus_intent_nonces");
+        for (const auto& row : old) {
+            if (!row.contains("sender") || !row.contains("nonce"))
+                return std::unexpected(ConsensusError::StorageFailure);
+            const auto    actor  = ActorId::create(row.at("sender"));
+            std::uint64_t nonce  = 0;
+            const auto&   text   = row.at("nonce");
+            const auto    parsed = std::from_chars(text.data(), text.data() + text.size(), nonce);
+            if (!actor.has_value() || parsed.ec != std::errc {} || parsed.ptr != text.data() + text.size())
+                return std::unexpected(ConsensusError::StorageFailure);
+            const auto found = nonces.find(actor.value());
+            if (nonce > 0 && (found == nonces.end() || found->second < nonce))
+                return std::unexpected(ConsensusError::InvalidNonce);
+        }
+        if (!database_->query("BEGIN IMMEDIATE TRANSACTION"))
+            return std::unexpected(ConsensusError::StorageFailure);
+        const auto fail = [&](ConsensusError error) -> std::expected<void, ConsensusError> {
+            database_->query("ROLLBACK");
+            return std::unexpected(error);
+        };
+        for (const auto& [actor, nonce] : nonces) {
+            if (actor.is_zero() || nonce == 0 || nonce > maximum)
+                return fail(ConsensusError::InvalidNonce);
+            if (!database_->replace("consensus_intent_nonces",
+                                    { { "sender", actor.to_string() }, { "nonce", std::to_string(nonce) } }))
+                return fail(ConsensusError::StorageFailure);
+        }
+        for (const auto& proof : receipts) {
+            const auto& hash    = proof.transaction_hash;
+            const auto  pending = database_->select("SELECT payload FROM consensus_intents WHERE hash = ?",
+                                                   "consensus_intents",
+                                                    { { "hash", hash } });
+            if (pending.empty())
+                continue;
+            if (pending.size() != 1 || !pending.front().contains("payload"))
+                return fail(ConsensusError::StorageFailure);
+            const auto envelope = decode<IntentEnvelope>(pending.front().at("payload"));
+            if (!envelope.has_value())
+                return fail(ConsensusError::StorageFailure);
+            const auto nonce = nonces.find(envelope.value().intent.sender);
+            if (hash_intent(envelope.value().intent) != hash || nonce == nonces.end()
+                || nonce->second < envelope.value().intent.account_nonce)
+                return fail(ConsensusError::InvalidProof);
+            // Inclusion proves finality. DAG coordinates stay unknown without a section-body proof.
+            const IntentReceipt receipt {
+                .intent_hash      = hash,
+                .status           = IntentStatus::Finalized,
+                .consensus_height = proof.height,
+            };
+            if (!database_->replace("consensus_intent_receipts",
+                                    { { "hash", hash }, { "payload", encode(receipt) } })
+                || !database_->replace("consensus_light_receipt_proofs",
+                                       { { "hash", hash }, { "payload", encode(proof) } })
+                || !database_->delete_row("consensus_intents", { { "hash", hash } }))
+                return fail(ConsensusError::StorageFailure);
+        }
+        if (!database_->query("COMMIT"))
+            return fail(ConsensusError::StorageFailure);
+        return {};
+    }
+
+    std::expected<std::optional<TransactionInclusionProofV1>, ConsensusError> IntentStore::receipt_proof(
+        std::string_view intent_hash) {
+        std::lock_guard lock(mutex_);
+        if (!database_ || !database_->is_open())
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        const auto rows = database_->select("SELECT payload FROM consensus_light_receipt_proofs WHERE hash = ?",
+                                            "consensus_light_receipt_proofs",
+                                            { { "hash", std::string(intent_hash) } });
+        if (rows.empty())
+            return std::optional<TransactionInclusionProofV1> {};
+        if (rows.size() != 1 || !rows.front().contains("payload"))
+            return std::unexpected(ConsensusError::StorageFailure);
+        const auto proof = decode<TransactionInclusionProofV1>(rows.front().at("payload"));
+        if (!proof.has_value())
+            return std::unexpected(proof.error());
+        return std::optional<TransactionInclusionProofV1> { proof.value() };
     }
 
 } // namespace ExtraChain::Consensus
