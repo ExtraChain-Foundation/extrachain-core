@@ -13,6 +13,7 @@
 #include "utils/db_connector.h"
 #include "network/network_service.h"
 #include "network/isocket_service.h"
+#include "network/responder.h"
 
 #include <filesystem>
 #include <memory>
@@ -269,6 +270,23 @@ public:
             ++syncs;
         }
     }
+};
+
+class BatchReply final : public ResponseSender {
+public:
+    std::string send_response(const std::string& payload,
+                              MessageType        type,
+                              SendMode           mode,
+                              MessageStatus      status,
+                              const Responder&) override {
+        TEST_REQUIRE(type == MessageType::ConsensusBatchData && mode == SendMode::Focused
+                     && status == MessageStatus::Response);
+        batch = MessagePack::deserialize<ExtraChain::Consensus::SectionBatchData>(payload).value();
+        ++responses;
+        return {};
+    }
+    ExtraChain::Consensus::SectionBatchData batch;
+    std::size_t                             responses = 0;
 };
 
 int main() {
@@ -824,6 +842,28 @@ int main() {
         TEST_REQUIRE(archive.prune_stored_batches(oldest.header.height + 1).has_value());
         TEST_REQUIRE(!archive.batch_for(header).has_value());
         TEST_REQUIRE(!archive.has_batch(header));
+        const auto observer_peer = "public-batch-observer";
+        auto       observer      = std::make_shared<RecoverySocket>(*node->network(), observer_peer);
+        {
+            auto connections = *node->network()->connections();
+            connections->insert(observer);
+        }
+        BatchReply                reply;
+        const SectionBatchRequest request { .network_id = network.id(), .epoch = 1, .header_hash = header };
+        service.receive_batch_request(request, Responder(&reply), observer_peer);
+        TEST_REQUIRE_EQ(reply.responses, 1U);
+        TEST_REQUIRE_EQ(reply.batch.header_hash, header);
+        TEST_REQUIRE_EQ(reply.batch.sections, stored.value().sections);
+        auto wrong_network       = request;
+        wrong_network.network_id = provider.id();
+        service.receive_batch_request(wrong_network, Responder(&reply), observer_peer);
+        TEST_REQUIRE_EQ(reply.responses, 1U);
+        service.receive_batch_request(request, Responder(&reply), "unknown-peer");
+        TEST_REQUIRE_EQ(reply.responses, 1U);
+        {
+            auto connections = *node->network()->connections();
+            connections->erase(observer);
+        }
         const auto rebuilt = ConsensusStateTestFixture::finalized_batch(service, oldest);
         TEST_REQUIRE(rebuilt.has_value());
         TEST_REQUIRE_EQ(hash_batch_manifest(rebuilt.value().manifest), oldest.header.batch_root);

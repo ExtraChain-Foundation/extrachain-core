@@ -805,12 +805,18 @@ namespace ExtraChain::Consensus {
         if (!consensus_ || !authenticator_
             || (!relay_context_.has_value()
                 && (!peer_meta.has_value() || !peer_meta.value().supports_shadow_consensus()))
-            || !authenticated_sender(peer_identifier).has_value() || request.protocol_version != ProtocolVersion
+            || request.protocol_version != ProtocolVersion
             || request.network_id != consensus_->engine().validators().document().network_id
             || request.epoch != consensus_->engine().validators().document().epoch) {
             return;
         }
-        const auto batch = consensus_->engine().batch_for(request.header_hash);
+        // Observers need these public payloads to verify certificates. They have no validator identity.
+        auto batch = consensus_->engine().batch_for(request.header_hash);
+        if (!batch.has_value()) {
+            const auto proposal = consensus_->engine().proposal_for(request.header_hash);
+            if (proposal.has_value())
+                batch = finalized_batch(proposal.value());
+        }
         if (batch.has_value()) {
             eDebug("[Shadow] Serving batch {} to {}", request.header_hash.substr(0, 12), peer_identifier);
             if (relay_context_.has_value()) {
