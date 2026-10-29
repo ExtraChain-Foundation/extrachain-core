@@ -41,6 +41,17 @@ namespace ExtraChain::Consensus {
             return Utils::to_base64(MessagePack::serialize(value));
         }
 
+        std::expected<std::string, ConsensusError> encode_request(const IntentEnvelope& envelope) {
+            auto request = envelope;
+            if (is_contract_operation(request.intent.operation)) {
+                const auto metadata = contract_intent_request_metadata(request.metadata);
+                if (!metadata.has_value())
+                    return std::unexpected(metadata.error());
+                request.metadata = metadata.value();
+            }
+            return encode(request);
+        }
+
         template <typename T>
         std::expected<T, ConsensusError> decode(std::string_view encoded) {
             const auto bytes = Utils::from_base64(std::string(encoded));
@@ -117,7 +128,10 @@ namespace ExtraChain::Consensus {
             database_->query("ROLLBACK");
             return std::unexpected(error);
         };
-        const auto encoded    = encode(envelope);
+        const auto request = encode_request(envelope);
+        if (!request.has_value())
+            return fail(request.error());
+        const auto& encoded    = request.value();
         const auto hash_match = database_->select("SELECT hash, payload FROM consensus_intents WHERE hash = ?",
                                                   "consensus_intents",
                                                   { { "hash", hash } });
@@ -423,6 +437,11 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::StorageFailure);
         }
         for (const auto& [envelope, receipt] : finalized) {
+            const auto request = encode_request(envelope);
+            if (!request.has_value()) {
+                database_->query("ROLLBACK");
+                return std::unexpected(request.error());
+            }
             const auto hash    = hash_intent(envelope.intent);
             const auto pending = database_->select("SELECT payload FROM consensus_intents WHERE hash = ?",
                                                    "consensus_intents",
@@ -443,7 +462,7 @@ namespace ExtraChain::Consensus {
                 || envelope.intent.account_nonce != committed_nonces[envelope.intent.sender] + 1
                 || pending.size() > 1
                 || (!pending.empty()
-                    && (!pending.front().contains("payload") || pending.front().at("payload") != encode(envelope)))
+                    && (!pending.front().contains("payload") || pending.front().at("payload") != request.value()))
                 || !database_->replace("consensus_intent_receipts",
                                        { { "hash", hash }, { "payload", encode(receipt) } })
                 || !database_->replace("consensus_intent_nonces",

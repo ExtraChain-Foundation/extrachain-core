@@ -33,14 +33,16 @@ namespace ExtraChain::Contracts {
 
         [[nodiscard]] std::expected<void, ContractFailure> create(const ContractRecord &record) override;
 
-        [[nodiscard]] std::expected<void, ContractFailure> stage(const ContractRecord &record) override;
+        [[nodiscard]] std::expected<void, ContractFailure> stage(const ContractRecord &record,
+                                                                 bool include_checkpoints = true) override;
 
         [[nodiscard]] std::expected<void, ContractFailure> replace(const ContractRecord &record,
                                                                    std::uint32_t         expected_version,
                                                                    std::string_view expected_state_hash) override;
 
     private:
-        [[nodiscard]] std::expected<void, ContractFailure> stage_artifacts(const ContractRecord &record) const;
+        [[nodiscard]] std::expected<void, ContractFailure> stage_artifacts(const ContractRecord &record,
+                                                                           bool include_checkpoints = true) const;
 
         DfsService                                             *dfs_ = nullptr;
         Dag                                                    *dag_ = nullptr;

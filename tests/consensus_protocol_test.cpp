@@ -9,6 +9,8 @@
 #include "chain/transaction.h"
 #include "consensus/consensus_protocol.h"
 #include "consensus/intent_store.h"
+#include "contracts/contract_transaction.h"
+#include "utils/serialization.h"
 #include "consensus/light_client.h"
 #include "consensus/validator_set.h"
 #include "utils/exc_utils.h"
@@ -286,21 +288,34 @@ int main() {
     contract_call.amount             = "0";
     contract_call.operation          = IntentOperation::ContractCall;
     contract_call.account_nonce      = 1;
-    const auto signed_contract_call  = make_intent(contract_call, "call-a", contract_sender);
+    ContractTransactionData call_input {
+        .kind                = "counter",
+        .language            = "rust",
+        .method              = "add",
+        .arguments_base64    = "AQ",
+        .module_hash         = std::string(64, 'a'),
+        .previous_state_hash = std::string(64, 'b'),
+        .revision            = 2,
+    };
+    const auto call_a                = Json::serialize(call_input);
+    auto       competing_input       = call_input;
+    competing_input.arguments_base64 = "Ag";
+    const auto call_b                = Json::serialize(competing_input);
+    const auto signed_contract_call  = make_intent(contract_call, call_a, contract_sender);
     auto       competing_call        = contract_call;
     competing_call.sender            = competing_sender.id();
-    const auto signed_competing_call = make_intent(competing_call, "call-b", competing_sender);
+    const auto signed_competing_call = make_intent(competing_call, call_b, competing_sender);
     IntentPool contract_pool;
     check("competing contract intents enter the pool",
           signed_contract_call.has_value() && signed_competing_call.has_value()
               && contract_pool
-                     .submit(IntentEnvelope { .intent = signed_contract_call.value(), .metadata = "call-a" },
+                     .submit(IntentEnvelope { .intent = signed_contract_call.value(), .metadata = call_a },
                              Utils::to_base64(contract_sender.key().public_key()),
                              0,
                              10)
                      .has_value()
               && contract_pool
-                     .submit(IntentEnvelope { .intent = signed_competing_call.value(), .metadata = "call-b" },
+                     .submit(IntentEnvelope { .intent = signed_competing_call.value(), .metadata = call_b },
                              Utils::to_base64(competing_sender.key().public_key()),
                              0,
                              10)
@@ -308,13 +323,52 @@ int main() {
     check("one batch selects at most one contract mutation",
           contract_pool.ready({}, 10, 10, 1024 * 1024).size() == 1);
 
+    const auto first_contract = contract_pool.ready({}, 10, 10, 1024 * 1024);
+    const auto deferred_hash  = hash_intent(first_contract.front().intent);
+    const auto other_contract = contract_pool.ready({}, 10, 10, 1024 * 1024, { deferred_hash });
+    check("a contract with missing data does not block another sender",
+          other_contract.size() == 1 && hash_intent(other_contract.front().intent) != deferred_hash);
+    auto computed_call                    = call_input;
+    computed_call.state_hash              = std::string(64, 'c');
+    computed_call.effects_hash            = std::string(64, 'd');
+    computed_call.effects_base64          = "computed-effects";
+    computed_call.checkpoint              = true;
+    computed_call.checkpoint_revision     = 2;
+    computed_call.checkpoint_state_base64 = "computed-state";
+    computed_call.requested_inputs        = call_input.verified_inputs;
+    IntentEnvelope completed_call { .intent   = signed_contract_call.value(),
+                                    .metadata = Json::serialize(computed_call) };
+    check("committee results keep the signed request identity",
+          verify_intent(completed_call, Utils::to_base64(contract_sender.key().public_key()))
+              && hash_intent(completed_call.intent) == hash_intent(signed_contract_call.value()));
+    auto changed_call              = completed_call;
+    computed_call.arguments_base64 = "Aw";
+    changed_call.metadata          = Json::serialize(computed_call);
+    check("a committee cannot change signed contract arguments",
+          !verify_intent(changed_call, Utils::to_base64(contract_sender.key().public_key())));
+    computed_call.arguments_base64    = call_input.arguments_base64;
+    computed_call.previous_state_hash = std::string(64, 'e');
+    changed_call.metadata             = Json::serialize(computed_call);
+    check("a committee cannot change the signed contract parent",
+          !verify_intent(changed_call, Utils::to_base64(contract_sender.key().public_key())));
+    const auto pending_call_tx =
+        materialize_intent(IntentEnvelope { .intent = signed_contract_call.value(), .metadata = call_a },
+                           220,
+                           14,
+                           {});
+    const auto completed_call_tx = materialize_intent(completed_call, 220, 14, {});
+    check("the DAG transaction hash binds the computed result",
+          pending_call_tx.has_value() && completed_call_tx.has_value()
+              && pending_call_tx.value().hash() != completed_call_tx.value().hash()
+              && pending_call_tx.value().request_hash() == completed_call_tx.value().request_hash());
+
     auto transfer_before_call              = first;
     transfer_before_call.sender            = contract_sender.id();
     transfer_before_call.account_nonce     = 1;
     const auto signed_transfer_before_call = make_intent(transfer_before_call, "transfer-first", contract_sender);
     auto       call_after_transfer         = contract_call;
     call_after_transfer.account_nonce      = 2;
-    const auto signed_call_after_transfer  = make_intent(call_after_transfer, "call-second", contract_sender);
+    const auto signed_call_after_transfer  = make_intent(call_after_transfer, call_a, contract_sender);
     IntentPool sender_barrier_pool;
     check("sender transfer and later contract intent enter the pool",
           signed_transfer_before_call.has_value() && signed_call_after_transfer.has_value()
@@ -326,8 +380,7 @@ int main() {
                              10)
                      .has_value()
               && sender_barrier_pool
-                     .submit(IntentEnvelope { .intent   = signed_call_after_transfer.value(),
-                                              .metadata = "call-second" },
+                     .submit(IntentEnvelope { .intent = signed_call_after_transfer.value(), .metadata = call_a },
                              Utils::to_base64(contract_sender.key().public_key()),
                              0,
                              10)
@@ -360,6 +413,24 @@ int main() {
     const auto store_root =
         std::filesystem::temp_directory_path() / ("extrachain-intent-store-" + Utils::generate_random_hex(8));
     const auto store_path = store_root / "intents.sqlite";
+    {
+        IntentStore contract_store(store_root / "contracts.sqlite");
+        check("contract request store opens", contract_store.open().has_value());
+        const IntentEnvelope input { .intent = signed_contract_call.value(), .metadata = call_a };
+        check("contract store accepts input and result as the same request",
+              contract_store.put(input).has_value() && contract_store.put(completed_call).has_value());
+        const auto pending = contract_store.load_pending();
+        check("contract store recovers only signed inputs",
+              pending.has_value() && pending.value().size() == 1 && pending.value().front().metadata == call_a);
+        const IntentReceipt receipt { .intent_hash      = hash_intent(input.intent),
+                                      .status           = IntentStatus::Finalized,
+                                      .consensus_height = 14,
+                                      .dag_section      = 220 };
+        check("contract result finalizes its persisted input request",
+              contract_store
+                  .commit_finalized({ { completed_call, receipt } }, AppliedCheckpoint { 14, "contract-14" })
+                  .has_value());
+    }
     {
         IntentStore store(store_path);
         check("intent store opens with a durable WAL", store.open().has_value());

@@ -37,6 +37,7 @@ namespace ExtraChain::Consensus {
     inline constexpr std::uint64_t MinimumRecoveryDelayMillis = 24ULL * 60ULL * 60ULL * 1'000ULL;
     inline constexpr std::size_t   MaximumBootstrapEntries    = 64;
     inline constexpr std::size_t   MaximumBootstrapBytes      = 4ULL * 1024ULL * 1024ULL;
+    inline constexpr std::size_t   MaximumContractMetadataBytes = 8ULL * 1024ULL * 1024ULL;
 
     [[nodiscard]] constexpr bool valid_committee_size(std::size_t count) noexcept {
         return count >= MinimumCommitteeSize && count <= MaximumCommitteeSize;
@@ -62,6 +63,11 @@ namespace ExtraChain::Consensus {
         Rejected,
         Expired
     };
+
+    [[nodiscard]] constexpr bool is_contract_operation(IntentOperation operation) noexcept {
+        return operation == IntentOperation::ContractDeploy || operation == IntentOperation::ContractCall
+               || operation == IntentOperation::ContractUpgrade;
+    }
 
     struct TransactionIntentV2 {
         std::uint16_t   protocol_version = ProtocolVersion;
@@ -396,7 +402,8 @@ namespace ExtraChain::Consensus {
         [[nodiscard]] std::vector<IntentEnvelope>  ready(const std::map<ActorId, std::uint64_t>& committed_nonces,
                                                          std::uint64_t                           current_height,
                                                          std::size_t                             maximum_count,
-                                                         std::size_t maximum_bytes) const;
+                                                         std::size_t                             maximum_bytes,
+                                                         const std::set<std::string>& excluded = {}) const;
         std::vector<std::string>                   expire(std::uint64_t current_height);
         void                                       erase(const std::vector<std::string>& intent_hashes);
 
@@ -424,7 +431,10 @@ namespace ExtraChain::Consensus {
         std::size_t                    bytes_ = 0;
     };
 
-    EXTRACHAIN_EXPORT std::string intent_metadata_hash(std::string_view metadata);
+    EXTRACHAIN_EXPORT std::expected<std::string, ConsensusError> contract_intent_request_metadata(
+        std::string_view metadata);
+    EXTRACHAIN_EXPORT std::string intent_metadata_hash(std::string_view metadata,
+                                                       IntentOperation  operation = IntentOperation::Transfer);
     EXTRACHAIN_EXPORT std::string intent_signing_payload(const TransactionIntentV2& intent);
     EXTRACHAIN_EXPORT std::string hash_intent(const TransactionIntentV2& intent);
     EXTRACHAIN_EXPORT std::expected<TransactionIntentV2, ConsensusError> make_intent(

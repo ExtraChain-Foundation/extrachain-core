@@ -199,6 +199,131 @@ int main() {
         TEST_REQUIRE(!rejected.has_value() && rejected.error() == ConsensusError::InvalidRoot);
         TEST_REQUIRE_EQ(node->dag()->unprovable_batch_transactions(invalid, {}).size(), 1U);
     }
+    {
+        using namespace ExtraChain::Consensus;
+        WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+        Actor<KeyPrivate> deployed_actor;
+        deployed_actor.create(ActorType::Service);
+        node->account_controller()->create_service({}, deployed_actor);
+        ContractManager temporary;
+        const auto      change = temporary.prepare_deploy(deployed_actor.id().to_string(),
+                                                     owner.id().to_string(),
+                                                     std::string(FungibleTokenKind),
+                                                     token_module.value(),
+                                                     token_arguments.value(),
+                                                     2);
+        TEST_REQUIRE(change.has_value());
+        const auto&             version = change.value().record.versions.back();
+        ContractTransactionData input {
+            .kind             = std::string(FungibleTokenKind),
+            .language         = "rust",
+            .method           = "init",
+            .arguments_base64 = Utils::to_base64(token_arguments.value()),
+            .module_hash      = version.module_hash,
+        };
+        const auto request_metadata = Json::serialize(input);
+        const auto intent           = make_intent(
+            TransactionIntentV2 {
+                          .network_id           = owner.id(),
+                          .sender               = owner.id(),
+                          .receiver             = deployed_actor.id(),
+                          .amount               = "0",
+                          .operation            = IntentOperation::ContractDeploy,
+                          .account_nonce        = 1,
+                          .valid_after_height   = 1,
+                          .expires_after_height = 20,
+            },
+            request_metadata,
+            owner);
+        TEST_REQUIRE(intent.has_value());
+        const IntentEnvelope request { .intent = intent.value(), .metadata = request_metadata };
+        auto                 pending = materialize_intent(request, 2, 1, {});
+        TEST_REQUIRE(pending.has_value());
+        TEST_REQUIRE_EQ(node->complete_contract_intent(pending.value()),
+                        TransactionProveError::ContractDependencyMissing);
+        Actor<KeyPrivate> other;
+        other.create(ActorType::User);
+        const auto transfer = [&](const Actor<KeyPrivate>& sender, std::uint64_t nonce) {
+            const auto signed_request = make_intent(
+                TransactionIntentV2 {
+                    .network_id           = owner.id(),
+                    .sender               = sender.id(),
+                    .receiver             = deployed_actor.id(),
+                    .amount               = "1",
+                    .operation            = IntentOperation::Transfer,
+                    .account_nonce        = nonce,
+                    .valid_after_height   = 1,
+                    .expires_after_height = 20,
+                },
+                {},
+                sender);
+            TEST_REQUIRE(signed_request.has_value());
+            return IntentEnvelope { .intent = signed_request.value() };
+        };
+        std::vector<std::string> rejected;
+        std::vector<std::string> deferred;
+        const auto               batch =
+            node->dag()->build_shadow_intent_batch(SectionId(2),
+                                                   SectionId(2),
+                                                   1,
+                                                   { request, transfer(owner, 2), transfer(other, 1) },
+                                                   16 * 1024 * 1024,
+                                                   {},
+                                                   Json::serialize(Section { .id = SectionId(1) }),
+                                                   std::string(64, 'a'),
+                                                   std::nullopt,
+                                                   &rejected,
+                                                   &deferred);
+        TEST_REQUIRE(batch.has_value() && rejected.empty());
+        TEST_REQUIRE_EQ(deferred, std::vector<std::string> { hash_intent(request.intent) });
+        TEST_REQUIRE_EQ(batch.value().manifest.transaction_hashes.size(), 1U);
+        const auto section = Json::deserialize<Section>(batch.value().sections.front().second);
+        TEST_REQUIRE(section.has_value() && section.value().transactions.size() == 1);
+        TEST_REQUIRE_EQ(section.value().transactions.begin()->sender(), other.id());
+        TEST_REQUIRE_EQ(section.value().transactions.begin()->section(), SectionId(2));
+        TEST_REQUIRE(storage.stage(change.value().record, false).has_value());
+        TEST_REQUIRE_EQ(node->complete_contract_intent(pending.value()), TransactionProveError::NoError);
+        TEST_REQUIRE(pending.value().verify(owner.to_public()));
+        TEST_REQUIRE_EQ(pending.value().request_hash(), hash_intent(intent.value()));
+        const auto output = Json::deserialize<ContractTransactionData>(pending.value().meta().value());
+        TEST_REQUIRE(output.has_value() && output.value().checkpoint_state_base64.has_value());
+        TEST_REQUIRE_EQ(Utils::from_base64<std::vector<std::uint8_t>>(
+                            output.value().checkpoint_state_base64.value())
+                            .value(),
+                        change.value().output.state);
+        const auto checkpoint_name =
+            "contract-checkpoint-v000001-r000000000001-" + output.value().state_hash.substr(0, 12) + ".msgpack";
+        TEST_REQUIRE(!node->dfs()
+                          ->read_file_status(deployed_actor.id(), checkpoint_name, Dfs::Basic::TEMPLATE_CONTRACTS)
+                          .has_value());
+        auto forged              = pending.value();
+        auto forged_output       = output.value();
+        forged_output.state_hash = std::string(64, '0');
+        forged.set_meta(Json::serialize(forged_output));
+        forged.update_hash();
+        TEST_REQUIRE(forged.verify(owner.to_public()));
+        TEST_REQUIRE_EQ(node->validate_contract_transaction(forged, false),
+                        TransactionProveError::InvalidContractPayload);
+        TEST_REQUIRE_EQ(node->validate_contract_transaction(pending.value()), TransactionProveError::NoError);
+        TEST_REQUIRE(node->dag()->save_transaction(pending.value()));
+        node->dag()->set_current_section(SectionId(2));
+        node->finalize_contract_change(pending.value().hash(), true);
+        const auto committed = node->contract_manager()->inspect(deployed_actor.id().to_string());
+        TEST_REQUIRE(committed.has_value());
+        TEST_REQUIRE_EQ(committed.value().versions.back().revisions.back().block, 2U);
+        TEST_REQUIRE(committed.value().versions.back().revisions.back().checkpoint_storage_id.empty());
+        TEST_REQUIRE(!node->dfs()
+                          ->read_file_status(deployed_actor.id(), checkpoint_name, Dfs::Basic::TEMPLATE_CONTRACTS)
+                          .has_value());
+        std::filesystem::remove(std::filesystem::path("contract-heads")
+                                / (deployed_actor.id().to_string() + ".msgpack"));
+        DfsContractStorage recovered(node->dfs(), node->dag());
+        const auto         replayed = recovered.load(deployed_actor.id().to_string());
+        TEST_REQUIRE(replayed.has_value());
+        TEST_REQUIRE_EQ(replayed.value().versions.back().revisions.back().state, change.value().output.state);
+        TEST_REQUIRE_EQ(replayed.value().versions.back().revisions.back().transaction_hash,
+                        pending.value().hash());
+    }
     node->cleanUp();
     node.reset();
     std::filesystem::current_path(original);

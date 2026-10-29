@@ -241,7 +241,7 @@ namespace ExtraChain::Contracts {
         return {};
     }
 
-    std::expected<void, ContractFailure> MemoryContractStorage::stage(const ContractRecord &) {
+    std::expected<void, ContractFailure> MemoryContractStorage::stage(const ContractRecord &, bool) {
         return {};
     }
 
@@ -751,7 +751,8 @@ namespace ExtraChain::Contracts {
         };
     }
 
-    std::expected<void, ContractFailure> ContractManager::stage(const PreparedContractChange &change) {
+    std::expected<void, ContractFailure> ContractManager::stage(const PreparedContractChange &change,
+                                                                bool include_checkpoints) {
         std::shared_lock                            lock(mutex_);
         std::vector<const PreparedContractChange *> changes;
         const auto collect = [&](const auto &self, const PreparedContractChange &current) -> void {
@@ -765,7 +766,7 @@ namespace ExtraChain::Contracts {
             return current->record.contract_id;
         });
         for (const auto *current : changes) {
-            auto staged = storage_->stage(current->record);
+            auto staged = storage_->stage(current->record, include_checkpoints);
             if (!staged.has_value()) {
                 return staged;
             }

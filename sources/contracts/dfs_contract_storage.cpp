@@ -144,7 +144,73 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ContractError::StorageError, "Cannot store contract data in DFS"));
         }
 
+        std::optional<Transaction> find_transaction(Dag             *dag,
+                                                    std::uint64_t    block,
+                                                    std::string_view transaction_hash) {
+            if (dag == nullptr) {
+                return std::nullopt;
+            }
+            auto section = dag->read_section(SectionId(block));
+            if (!section.has_value()) {
+                dag->request_contract_section(SectionId(block));
+                return std::nullopt;
+            }
+            auto transaction = std::ranges::find_if(section->transactions, [&](const Transaction &candidate) {
+                return candidate.hash() == transaction_hash;
+            });
+            if (transaction == section->transactions.end()) {
+                return std::nullopt;
+            }
+            return *transaction;
+        }
+
+        std::expected<std::optional<std::vector<std::uint8_t>>, ContractFailure> inline_checkpoint_state(
+            const Transaction &transaction,
+            const ActorId     &contract_id) {
+            if (!transaction.meta().has_value())
+                return std::unexpected(failure(ContractError::StorageError, "Checkpoint metadata is missing"));
+            const auto metadata = Json::deserialize<ContractTransactionData>(transaction.meta().value());
+            if (!metadata.has_value() || metadata.value().schema != 4)
+                return std::unexpected(failure(ContractError::StorageError, "Checkpoint metadata is invalid"));
+            std::optional<std::string> encoded;
+            std::string                hash;
+            bool                       checkpoint = false;
+            if (transaction.receiver() == contract_id) {
+                encoded    = metadata.value().checkpoint_state_base64;
+                hash       = metadata.value().state_hash;
+                checkpoint = metadata.value().checkpoint;
+            } else {
+                const auto &transitions = metadata.value().transitions;
+                const auto  found =
+                    std::ranges::find(transitions, contract_id.to_string(), &ContractTransitionData::contract_id);
+                if (found == transitions.end()
+                    || std::ranges::count(transitions,
+                                          contract_id.to_string(),
+                                          &ContractTransitionData::contract_id)
+                           != 1)
+                    return std::unexpected(
+                        failure(ContractError::StorageError, "Checkpoint transition is missing"));
+                encoded    = found->checkpoint_state_base64;
+                hash       = found->state_hash;
+                checkpoint = found->checkpoint;
+            }
+            if (!encoded.has_value())
+                return std::optional<std::vector<std::uint8_t>> {};
+            if (!checkpoint || !transaction.consensus_intent().has_value()
+                || encoded.value().size() > 2 * 1024 * 1024)
+                return std::unexpected(failure(ContractError::StorageError, "Inline checkpoint is invalid"));
+            auto verified = transaction;
+            verified.update_hash();
+            const auto bytes = Utils::from_base64<std::vector<std::uint8_t>>(encoded.value());
+            if (verified.hash() != transaction.hash() || !bytes.has_value() || bytes.value().size() > 1024 * 1024
+                || content_hash(bytes.value()) != hash)
+                return std::unexpected(
+                    failure(ContractError::StorageError, "Inline checkpoint content is invalid"));
+            return std::optional<std::vector<std::uint8_t>> { bytes.value() };
+        }
+
         std::expected<ContractRecord, ContractFailure> save_head(DfsService    *dfs,
+                                                                 Dag           *dag,
                                                                  const ActorId &contract_id,
                                                                  ContractRecord record) {
             if (record.active_version == 0 || record.active_version > record.versions.size()) {
@@ -167,7 +233,21 @@ namespace ExtraChain::Contracts {
                 }
             }
             auto &revision = active.revisions.back();
+            bool  inline_checkpoint = false;
             if (revision.checkpoint_storage_id.empty()) {
+                const auto transaction =
+                    find_transaction(dag, revision.checkpoint_block, revision.checkpoint_transaction_hash);
+                if (!transaction.has_value())
+                    return std::unexpected(
+                        failure(ContractError::StorageError, "Checkpoint transaction is unavailable"));
+                const auto state = inline_checkpoint_state(transaction.value(), contract_id);
+                if (!state.has_value())
+                    return std::unexpected(state.error());
+                inline_checkpoint = state.value().has_value();
+                if (inline_checkpoint && content_hash(state.value().value()) != revision.checkpoint_hash)
+                    return std::unexpected(failure(ContractError::StorageError, "Inline checkpoint hash differs"));
+            }
+            if (revision.checkpoint_storage_id.empty() && !inline_checkpoint) {
                 const auto checkpoint_name = fmt::format("contract-checkpoint-v{:06}-r{:012}-{}.msgpack",
                                                          record.active_version,
                                                          revision.checkpoint_revision,
@@ -220,26 +300,6 @@ namespace ExtraChain::Contracts {
             }
             retain_current_contract_state(record);
             return record;
-        }
-
-        std::optional<Transaction> find_transaction(Dag             *dag,
-                                                    std::uint64_t    block,
-                                                    std::string_view transaction_hash) {
-            if (dag == nullptr) {
-                return std::nullopt;
-            }
-            auto section = dag->read_section(SectionId(block));
-            if (!section.has_value()) {
-                dag->request_contract_section(SectionId(block));
-                return std::nullopt;
-            }
-            auto transaction = std::ranges::find_if(section->transactions, [&](const Transaction &candidate) {
-                return candidate.hash() == transaction_hash;
-            });
-            if (transaction == section->transactions.end()) {
-                return std::nullopt;
-            }
-            return *transaction;
         }
 
         std::optional<std::vector<SectionId>> indexed_contract_sections(Dag             *dag,
@@ -312,7 +372,7 @@ namespace ExtraChain::Contracts {
                     || cache.checkpoint.version != cache.active_version || cache.head.revision == 0
                     || cache.head.state_hash != content_hash(cache.state) || cache.head.transaction_hash.empty()
                     || cache.checkpoint.revision == 0 || cache.checkpoint.revision > cache.head.revision
-                    || cache.checkpoint.transaction_hash.empty() || cache.checkpoint.state_file_id.empty()) {
+                    || cache.checkpoint.transaction_hash.empty()) {
                     return std::unexpected(failure(ContractError::StorageError, "Contract head is invalid"));
                 }
                 std::string previous_module_hash;
@@ -397,7 +457,13 @@ namespace ExtraChain::Contracts {
                     return std::unexpected(failure(ContractError::StorageError,
                                                    "Contract checkpoint does not match the approved chain"));
                 }
-                auto checkpoint_state = read_file(dfs, contract_id, cache.checkpoint.state_file_id);
+                const auto embedded = inline_checkpoint_state(checkpoint_transaction.value(), contract_id);
+                if (!embedded.has_value())
+                    return std::unexpected(embedded.error());
+                auto checkpoint_state =
+                    embedded.value().has_value()
+                        ? std::expected<std::vector<std::uint8_t>, ContractFailure>(embedded.value().value())
+                        : read_file(dfs, contract_id, cache.checkpoint.state_file_id);
                 if (!checkpoint_state.has_value()
                     || content_hash(*checkpoint_state) != cache.checkpoint.state_hash) {
                     return std::unexpected(
@@ -714,18 +780,30 @@ namespace ExtraChain::Contracts {
                 }
                 version.module_file_id = row->file_id;
             }
-            const auto checkpoint_name = fmt::format("contract-checkpoint-v{:06}-r{:012}-{}.msgpack",
-                                                     checkpoint->version,
-                                                     checkpoint->revision,
-                                                     prefix(checkpoint->state_hash));
-            auto       checkpoint_row =
-                dfs->read_file_status(contract_id, checkpoint_name, Dfs::Basic::TEMPLATE_CONTRACTS);
-            if (!checkpoint_row.has_value()) {
+            const auto checkpoint_transaction =
+                find_transaction(dag, checkpoint.value().block, checkpoint.value().transaction_hash);
+            if (!checkpoint_transaction.has_value())
                 return std::unexpected(
-                    failure(ContractError::StorageError, "Contract checkpoint is not available"));
+                    failure(ContractError::StorageError, "Checkpoint transaction is unavailable"));
+            const auto embedded = inline_checkpoint_state(checkpoint_transaction.value(), contract_id);
+            if (!embedded.has_value())
+                return std::unexpected(embedded.error());
+            auto state = std::expected<std::vector<std::uint8_t>, ContractFailure>(
+                std::unexpected(failure(ContractError::StorageError, "Checkpoint state is missing")));
+            if (embedded.value().has_value()) {
+                state = embedded.value().value();
+            } else {
+                const auto name = fmt::format("contract-checkpoint-v{:06}-r{:012}-{}.msgpack",
+                                              checkpoint.value().version,
+                                              checkpoint.value().revision,
+                                              prefix(checkpoint.value().state_hash));
+                const auto row  = dfs->read_file_status(contract_id, name, Dfs::Basic::TEMPLATE_CONTRACTS);
+                if (!row.has_value())
+                    return std::unexpected(
+                        failure(ContractError::StorageError, "Contract checkpoint is not available"));
+                checkpoint.value().state_file_id = row.value().file_id;
+                state                            = read_file(dfs, contract_id, checkpoint.value().state_file_id);
             }
-            checkpoint->state_file_id = checkpoint_row->file_id;
-            auto state                = read_file(dfs, contract_id, checkpoint->state_file_id);
             auto module               = read_file(dfs, contract_id, versions.back().module_file_id);
             if (!state.has_value() || content_hash(*state) != checkpoint->state_hash || !module.has_value()
                 || content_hash(*module) != versions.back().module_hash) {
@@ -833,7 +911,7 @@ namespace ExtraChain::Contracts {
         if (!replayed.has_value()) {
             return std::unexpected(replayed.error());
         }
-        auto saved = save_head(dfs_, *contract_id, std::move(*replayed));
+        auto saved = save_head(dfs_, dag_, *contract_id, std::move(*replayed));
         if (!saved.has_value()) {
             return std::unexpected(saved.error());
         }
@@ -841,7 +919,8 @@ namespace ExtraChain::Contracts {
         return saved;
     }
 
-    std::expected<void, ContractFailure> DfsContractStorage::stage_artifacts(const ContractRecord &record) const {
+    std::expected<void, ContractFailure> DfsContractStorage::stage_artifacts(const ContractRecord &record,
+                                                                             bool include_checkpoints) const {
         auto contract_id = ActorId::create(record.contract_id);
         auto owner_id    = ActorId::create(record.owner_id);
         if (!contract_id.has_value() || !owner_id.has_value()) {
@@ -876,7 +955,22 @@ namespace ExtraChain::Contracts {
                     return std::unexpected(failure(ContractError::StorageError, "Active contract has no state"));
                 }
                 const auto &revision = version.revisions.back();
-                if (revision.checkpoint_revision == revision.revision) {
+                if (include_checkpoints && revision.checkpoint_revision == revision.revision) {
+                    if (!revision.transaction_hash.empty()) {
+                        const auto transaction = find_transaction(dag_, revision.block, revision.transaction_hash);
+                        if (transaction.has_value()) {
+                            const auto embedded =
+                                inline_checkpoint_state(transaction.value(), contract_id.value());
+                            if (!embedded.has_value())
+                                return std::unexpected(embedded.error());
+                            if (embedded.value().has_value()) {
+                                if (embedded.value().value() != revision.state)
+                                    return std::unexpected(
+                                        failure(ContractError::StorageError, "Checkpoint state differs"));
+                                continue;
+                            }
+                        }
+                    }
                     auto state_name      = fmt::format("contract-checkpoint-v{:06}-r{:012}-{}.msgpack",
                                                   version.version,
                                                   revision.revision,
@@ -909,7 +1003,7 @@ namespace ExtraChain::Contracts {
         if (!saved.has_value()) {
             return saved;
         }
-        auto head = save_head(dfs_, *contract_id, record);
+        auto head = save_head(dfs_, dag_, *contract_id, record);
         if (!head.has_value()) {
             return std::unexpected(head.error());
         }
@@ -917,9 +1011,10 @@ namespace ExtraChain::Contracts {
         return {};
     }
 
-    std::expected<void, ContractFailure> DfsContractStorage::stage(const ContractRecord &record) {
+    std::expected<void, ContractFailure> DfsContractStorage::stage(const ContractRecord &record,
+                                                                   bool                  include_checkpoints) {
         std::scoped_lock lock(mutex_);
-        return stage_artifacts(record);
+        return stage_artifacts(record, include_checkpoints);
     }
 
     std::expected<void, ContractFailure> DfsContractStorage::replace(const ContractRecord &record,
@@ -948,7 +1043,7 @@ namespace ExtraChain::Contracts {
                 return saved;
             }
         }
-        auto head = save_head(dfs_, *contract_id, record);
+        auto head = save_head(dfs_, dag_, *contract_id, record);
         if (!head.has_value()) {
             return std::unexpected(head.error());
         }

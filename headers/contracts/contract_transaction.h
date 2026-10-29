@@ -62,6 +62,7 @@ struct ContractTransitionData {
     std::uint64_t revision            = 1;
     bool          checkpoint          = false;
     std::uint64_t checkpoint_revision = 0;
+    std::optional<std::string> checkpoint_state_base64;
 };
 BOOST_DESCRIBE_STRUCT(ContractTransitionData,
                       (),
@@ -79,7 +80,8 @@ BOOST_DESCRIBE_STRUCT(ContractTransitionData,
                        version,
                        revision,
                        checkpoint,
-                       checkpoint_revision))
+                       checkpoint_revision,
+                       checkpoint_state_base64))
 
 struct ContractTransactionData {
     std::uint32_t                         schema = 4;
@@ -96,8 +98,10 @@ struct ContractTransactionData {
     std::uint64_t                         revision            = 1;
     bool                                  checkpoint          = false;
     std::uint64_t                         checkpoint_revision = 0;
+    std::optional<std::string>                           checkpoint_state_base64;
     std::vector<ContractTransitionData>   transitions;
     ExtraChain::Contracts::VerifiedInputs verified_inputs;
+    std::optional<ExtraChain::Contracts::VerifiedInputs> requested_inputs;
     std::optional<LegacyTokenMigrationData> legacy_migration;
 };
 BOOST_DESCRIBE_STRUCT(ContractTransactionData,
@@ -116,6 +120,8 @@ BOOST_DESCRIBE_STRUCT(ContractTransactionData,
                        revision,
                        checkpoint,
                        checkpoint_revision,
+                       checkpoint_state_base64,
                        transitions,
                        verified_inputs,
+                       requested_inputs,
                        legacy_migration))

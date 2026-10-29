@@ -2457,7 +2457,9 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
                               std::string                                               header_hash,
                               std::optional<std::string>                                previous_section_bytes,
                               std::string                                               previous_section_root,
-                              std::optional<Transaction>                                settlement) {
+                              std::optional<Transaction>                                settlement,
+                              std::vector<std::string>                                 *rejected_contracts,
+                              std::vector<std::string>                                 *deferred_contracts) {
     using namespace ExtraChain::Consensus;
     constexpr std::size_t MaximumTransactionsPerSection = 256;
     if (first_section < SectionId(0) || last_section < first_section
@@ -2513,10 +2515,14 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
             return std::unexpected(ConsensusError::DataTooLarge);
         encoded_payload_bytes += bytes;
     }
+    std::size_t       included = 0;
+    std::set<ActorId> blocked_senders;
     for (std::size_t index = 0; index < intents.size(); ++index) {
-        const auto position      = index + static_cast<std::size_t>(settlement.has_value());
+        if (blocked_senders.contains(intents[index].intent.sender))
+            continue;
+        const auto position      = included + static_cast<std::size_t>(settlement.has_value());
         const auto section_index = position / MaximumTransactionsPerSection;
-        const auto materialized =
+        auto       materialized =
             materialize_intent(intents[index],
                                static_cast<std::uint64_t>(sections[section_index].id.to_int().value_or(0)),
                                logical_time,
@@ -2524,18 +2530,33 @@ std::expected<ExtraChain::Consensus::SectionBatchData, ExtraChain::Consensus::Co
         if (!materialized.has_value()) {
             return std::unexpected(materialized.error());
         }
+        if (is_contract_operation(intents[index].intent.operation)) {
+            const auto result = node->complete_contract_intent(materialized.value());
+            if (result != TransactionProveError::NoError) {
+                auto *requests = result == TransactionProveError::ContractDependencyMissing ? deferred_contracts
+                                                                                            : rejected_contracts;
+                if (requests == nullptr)
+                    return std::unexpected(result == TransactionProveError::ContractDependencyMissing
+                                               ? ConsensusError::DataUnavailable
+                                               : ConsensusError::InvalidIntent);
+                requests->push_back(hash_intent(intents[index].intent));
+                blocked_senders.insert(intents[index].intent.sender);
+                continue;
+            }
+        }
         auto &transactions = sections[section_index].transactions;
         // Section JSON adds only the transaction and, for a nonempty array, a comma.
         const auto added_bytes =
             Json::serialize(materialized.value()).size() + static_cast<std::size_t>(!transactions.empty());
         if (added_bytes > maximum_payload_bytes - encoded_payload_bytes) {
-            if (index == 0 && !settlement.has_value())
+            if (included == 0 && !settlement.has_value())
                 return std::unexpected(ConsensusError::DataTooLarge);
             break;
         }
         if (!transactions.insert(materialized.value()).second)
             return std::unexpected(ConsensusError::InvalidIntent);
         encoded_payload_bytes += added_bytes;
+        ++included;
         if ((position + 1) % MaximumTransactionsPerSection == 0 && section_index + 1 < sections.size()) {
             previous_hashes = sections[section_index].hashs();
         }
@@ -3170,7 +3191,10 @@ TransactionProveError Dag::prove_transaction_with_facts(const Transaction       
     }
 
     if (is_contract_transaction(tx.type())) {
-        if (tx.amount() != 0 || tx.meta().value_or("").empty() || tx.meta()->size() > 1024 * 1024
+        if (tx.amount() != 0 || tx.meta().value_or("").empty()
+            || tx.meta()->size() > (tx.consensus_intent().has_value()
+                                        ? ExtraChain::Consensus::MaximumContractMetadataBytes
+                                        : 1024 * 1024)
             || targetReceiver.is_zero() || targetSender == targetReceiver || !tx.token().is_zero()) {
             return TransactionProveError::InvalidContractPayload;
         }

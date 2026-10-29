@@ -31,7 +31,8 @@ namespace ExtraChain::Contracts {
 
         [[nodiscard]] virtual std::expected<void, ContractFailure> create(const ContractRecord &record) = 0;
 
-        [[nodiscard]] virtual std::expected<void, ContractFailure> stage(const ContractRecord &record) = 0;
+        [[nodiscard]] virtual std::expected<void, ContractFailure> stage(const ContractRecord &record,
+                                                                         bool include_checkpoints = true) = 0;
 
         [[nodiscard]] virtual std::expected<void, ContractFailure> replace(
             const ContractRecord &record,
@@ -46,7 +47,8 @@ namespace ExtraChain::Contracts {
 
         [[nodiscard]] std::expected<void, ContractFailure> create(const ContractRecord &record) override;
 
-        [[nodiscard]] std::expected<void, ContractFailure> stage(const ContractRecord &record) override;
+        [[nodiscard]] std::expected<void, ContractFailure> stage(const ContractRecord &record,
+                                                                 bool include_checkpoints = true) override;
 
         [[nodiscard]] std::expected<void, ContractFailure> replace(const ContractRecord &record,
                                                                    std::uint32_t         expected_version,
@@ -87,7 +89,8 @@ namespace ExtraChain::Contracts {
             std::span<const std::uint8_t> migration_arguments,
             std::uint64_t                 block);
 
-        [[nodiscard]] std::expected<void, ContractFailure> stage(const PreparedContractChange &change);
+        [[nodiscard]] std::expected<void, ContractFailure> stage(const PreparedContractChange &change,
+                                                                 bool include_checkpoints = true);
 
         [[nodiscard]] std::expected<ContractReceipt, ContractFailure> commit(PreparedContractChange change,
                                                                              std::string transaction_hash = {});

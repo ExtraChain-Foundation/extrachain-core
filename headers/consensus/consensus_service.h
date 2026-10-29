@@ -116,6 +116,7 @@ namespace ExtraChain::Consensus {
             const LightSnapshotRequestV1& request = {}) const;
         bool                                 accept_balance_snapshot(const BalanceSnapshotV2& snapshot);
         [[nodiscard]] LightSnapshotRequestV1 light_snapshot_request() const;
+        [[nodiscard]] std::optional<std::uint64_t> verified_light_section() const;
         bool                                 watch_light_contract(const ActorId& contract);
         std::expected<Contracts::ContractRecord, Contracts::ContractFailure> light_contract(
             std::string_view contract_id) const;
@@ -292,6 +293,7 @@ namespace ExtraChain::Consensus {
         std::unique_ptr<ShadowConsensus>                              consensus_;
         std::unique_ptr<IntentStore>                                  intent_store_;
         IntentPool                                                    intent_pool_;
+        std::map<std::string, std::chrono::steady_clock::time_point>  deferred_contract_intents_;
         bool                                                          pending_intents_restored_ = false;
         std::map<ActorId, std::uint64_t>                              committed_nonces_;
         struct NonceFrontier {

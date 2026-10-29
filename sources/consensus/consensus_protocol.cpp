@@ -19,6 +19,7 @@
 #include <tuple>
 
 #include "chain/transaction.h"
+#include "contracts/contract_transaction.h"
 #include "consensus/validator_set.h"
 #include "core/byte_array.h"
 #include "utils/exc_utils.h"
@@ -215,7 +216,38 @@ namespace ExtraChain::Consensus {
         }
     } // namespace
 
-    std::string intent_metadata_hash(std::string_view metadata) {
+    std::expected<std::string, ConsensusError> contract_intent_request_metadata(std::string_view metadata) {
+        if (metadata.size() > MaximumContractMetadataBytes)
+            return std::unexpected(ConsensusError::DataTooLarge);
+        auto parsed = Json::deserialize<ContractTransactionData>(metadata);
+        if (!parsed.has_value() || parsed.value().schema != 4)
+            return std::unexpected(ConsensusError::InvalidIntent);
+        auto& input = parsed.value();
+        input.state_hash.clear();
+        input.effects_hash.clear();
+        input.effects_base64.clear();
+        input.checkpoint          = false;
+        input.checkpoint_revision = 0;
+        input.checkpoint_state_base64.reset();
+        input.transitions.clear();
+        if (input.requested_inputs.has_value())
+            input.verified_inputs = input.requested_inputs.value();
+        input.requested_inputs.reset();
+        const auto request = Json::serialize(input);
+        if (request.size() > IntentPoolLimits {}.maximum_metadata_bytes)
+            return std::unexpected(ConsensusError::DataTooLarge);
+        return request;
+    }
+
+    std::string intent_metadata_hash(std::string_view metadata, IntentOperation operation) {
+        std::string request;
+        if (is_contract_operation(operation)) {
+            const auto parsed = contract_intent_request_metadata(metadata);
+            if (!parsed.has_value())
+                return {};
+            request  = parsed.value();
+            metadata = request;
+        }
         return Utils::calculate_hash(std::string(IntentMetadataDomain) + std::string(metadata),
                                      Utils::HashAlgorithm::Blake3);
     }
@@ -251,7 +283,9 @@ namespace ExtraChain::Consensus {
             || intent.expires_after_height <= intent.valid_after_height) {
             return std::unexpected(ConsensusError::InvalidIntent);
         }
-        intent.metadata_hash = intent_metadata_hash(metadata);
+        intent.metadata_hash = intent_metadata_hash(metadata, intent.operation);
+        if (intent.metadata_hash.empty())
+            return std::unexpected(ConsensusError::InvalidIntent);
         const auto signature = sign_payload(sender.key(), intent_signing_payload(intent));
         if (!signature.has_value()) {
             return std::unexpected(signature.error());
@@ -269,8 +303,8 @@ namespace ExtraChain::Consensus {
                && (intent.operation != IntentOperation::Transfer || positive_amount(intent.amount))
                && intent.account_nonce != 0 && intent.expires_after_height > intent.valid_after_height
                && intent.account_nonce <= MaximumStoredHeight && intent.valid_after_height <= MaximumStoredHeight
-               && intent.expires_after_height <= MaximumStoredHeight
-               && intent.metadata_hash == intent_metadata_hash(envelope.metadata)
+               && intent.expires_after_height <= MaximumStoredHeight && !intent.metadata_hash.empty()
+               && intent.metadata_hash == intent_metadata_hash(envelope.metadata, intent.operation)
                && verify_payload(std::string(sender_public_key), intent_signing_payload(intent), intent.signature);
     }
 
@@ -447,7 +481,8 @@ namespace ExtraChain::Consensus {
     std::vector<IntentEnvelope> IntentPool::ready(const std::map<ActorId, std::uint64_t>& committed_nonces,
                                                   std::uint64_t                           current_height,
                                                   std::size_t                             maximum_count,
-                                                  std::size_t                             maximum_bytes) const {
+                                                  std::size_t                             maximum_bytes,
+                                                  const std::set<std::string>&            excluded) const {
         using SenderQueue = std::map<std::uint64_t, const Entry*>;
         std::map<ActorId, SenderQueue> by_sender;
         for (const auto& [_, entry] : entries_) {
@@ -492,6 +527,8 @@ namespace ExtraChain::Consensus {
         while (!candidates.empty() && result.size() < maximum_count) {
             auto candidate = candidates.top();
             candidates.pop();
+            if (excluded.contains(candidate.hash))
+                continue;
             if (candidate.entry->bytes > maximum_bytes - std::min(selected_bytes, maximum_bytes)) {
                 continue;
             }

@@ -357,6 +357,7 @@ namespace ExtraChain::Consensus {
         watched_light_contracts_.clear();
         intent_store_.reset();
         intent_pool_ = IntentPool {};
+        deferred_contract_intents_.clear();
         pending_intents_restored_ = false;
         committed_nonces_.clear();
         nonce_frontier_.reset();
@@ -2075,13 +2076,28 @@ namespace ExtraChain::Consensus {
                 return;
             }
             const auto flush_pipeline = has_unfinalized_intents();
+            const auto            now_retry      = std::chrono::steady_clock::now();
+            std::set<std::string> deferred_requests;
+            for (auto iterator = deferred_contract_intents_.begin();
+                 iterator != deferred_contract_intents_.end();) {
+                if (iterator->second <= now_retry) {
+                    iterator = deferred_contract_intents_.erase(iterator);
+                } else {
+                    deferred_requests.insert(iterator->first);
+                    if (intent_batch_task_)
+                        intent_batch_task_->schedule_earlier(
+                            std::chrono::duration_cast<std::chrono::milliseconds>(iterator->second - now_retry));
+                    ++iterator;
+                }
+            }
             const auto intents =
                 flush_pipeline && !consensus_->mining_policy().has_value()
-                    ? std::vector<IntentEnvelope> { }
+                    ? std::vector<IntentEnvelope> {}
                     : intent_pool_.ready(projected_nonces.value(),
                                          intent_height(),
                                          20 * 256 - static_cast<std::size_t>(settlement.value().has_value()),
-                                         consensus_->configuration().maximum_batch_bytes / 2);
+                                         consensus_->configuration().maximum_batch_bytes / 2,
+                                         deferred_requests);
             if (intents.empty() && !flush_pipeline && !mining_pending
                 && !(highest.phase == Phase::Genesis && consensus_->mining_policy().has_value())) {
                 return;
@@ -2131,20 +2147,40 @@ namespace ExtraChain::Consensus {
             // A request takes the time of the block it was collected after: the batch is built before
             // the proposal and may be proposed again in a later round.
             const auto parent_time = highest.phase == Phase::Genesis ? 0 : highest_proposal.value().header.logical_time;
-            auto       batch       = node_.dag()->build_shadow_intent_batch(first,
+            std::vector<std::string> rejected_contracts;
+            std::vector<std::string> deferred_contracts;
+            auto                     batch = node_.dag()->build_shadow_intent_batch(first,
                                                                 SectionId(target),
                                                                 parent_time,
                                                                 intents,
                                                                 consensus_->configuration().maximum_batch_bytes,
-                                                                { },
+                                                                                    {},
                                                                 std::move(previous_section_bytes),
                                                                 std::move(previous_section_root),
-                                                                settlement.value());
+                                                                settlement.value(),
+                                                                &rejected_contracts,
+                                                                &deferred_contracts);
+            if (!rejected_contracts.empty()) {
+                if (!intent_store_
+                    || !intent_store_->reject(rejected_contracts, ConsensusError::InvalidIntent).has_value()) {
+                    pause_voting("a contract rejection receipt could not be stored");
+                    return;
+                }
+                intent_pool_.erase(rejected_contracts);
+            }
+            for (const auto& hash : deferred_contracts)
+                deferred_contract_intents_.insert_or_assign(hash, now_retry + std::chrono::seconds(2));
+            if ((!rejected_contracts.empty() || !deferred_contracts.empty()) && intent_batch_task_)
+                intent_batch_task_->schedule_earlier(std::chrono::milliseconds(25));
             if (!batch.has_value()) {
                 eWarning("[Shadow] Leader could not materialize the next intent batch: {}",
                          std::to_underlying(batch.error()));
                 return;
             }
+            if (batch.value().manifest.transaction_hashes.empty() && !intents.empty() && !flush_pipeline
+                && !mining_pending
+                && !(highest.phase == Phase::Genesis && consensus_->mining_policy().has_value()))
+                return;
             if (batch.value().manifest.payload_bytes > consensus_->configuration().maximum_batch_bytes) {
                 eWarning("[Shadow] Leader intent batch exceeds the configured byte limit");
                 return;
@@ -3378,7 +3414,10 @@ namespace ExtraChain::Consensus {
             if (proposal.header.height < envelope.intent.valid_after_height
                 || proposal.header.height > envelope.intent.expires_after_height)
                 return std::unexpected(ConsensusError::IntentExpired);
-            if (envelope.metadata.size() > IntentPoolLimits { }.maximum_metadata_bytes)
+            const auto maximum_metadata = is_contract_operation(envelope.intent.operation)
+                                              ? MaximumContractMetadataBytes
+                                              : IntentPoolLimits {}.maximum_metadata_bytes;
+            if (envelope.metadata.size() > maximum_metadata)
                 return std::unexpected(ConsensusError::DataTooLarge);
             const auto actor = node_.actor_index()->read_actor(envelope.intent.sender, ActorGetType::NoRequest);
             if (!actor.has_value())

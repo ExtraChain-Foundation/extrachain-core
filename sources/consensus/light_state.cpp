@@ -223,6 +223,13 @@ namespace ExtraChain::Consensus {
         return apply_light_snapshot(snapshot, true);
     }
 
+    std::optional<std::uint64_t> ConsensusService::verified_light_section() const {
+        std::lock_guard lock(mutex_);
+        if (!light_snapshot_.has_value())
+            return std::nullopt;
+        return light_snapshot_.value().proof.finalized_proposal.header.dag_section;
+    }
+
     LightSnapshotRequestV1 ConsensusService::light_snapshot_request() const {
         std::lock_guard        lock(mutex_);
         LightSnapshotRequestV1 request;
