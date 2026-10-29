@@ -184,10 +184,14 @@ bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV
         node->cleanUp();
         peer.reset();
         node.reset();
+        WireFormat::Scope legacy(WireFormat::Mode::Legacy);
         node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, true, 0);
         node->process();
         node->actor_index()->set_network_id(validators.network_id);
         TEST_REQUIRE(node->dag()->mode() == DagMode::Light && !node->dag()->state_projection_ready());
+        const auto activated = node->consensus()->activate(validators.network_id);
+        TEST_REQUIRE(activated.has_value() && !activated.value());
+        TEST_REQUIRE(node->consensus()->requires_intent_v2());
         TEST_REQUIRE(!node->consensus()->accept_balance_snapshot(snapshot));
         TEST_REQUIRE(node->consensus()->accept_balance_snapshot(newer));
         // Verifying a proof alone must not expose the cache before the atomic install.
