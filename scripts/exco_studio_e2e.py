@@ -274,23 +274,34 @@ class Stand:
         return response
 
     def consistent(self, contract, revision=None, timeout=180):
+        next_diagnostic = 0
         def check():
+            nonlocal next_diagnostic
             states = [self.node(i, 'inspect', contract=contract) for i in range(8)]
+            def pending(reason):
+                nonlocal next_diagnostic
+                if time.monotonic() >= next_diagnostic:
+                    next_diagnostic = time.monotonic() + 10
+                    statuses = [self.node(i, 'status') for i in range(8)]
+                    with (self.work / 'contract-diagnostics.jsonl').open('a') as stream:
+                        stream.write(json.dumps(dict(contract=contract, reason=reason,
+                                                     states=states, statuses=statuses)) + '\n')
+                return False
             if not all(x.get('ok') for x in states):
-                return False
-            fields = ('module_hash', 'version', 'state_hash', 'revision', 'transaction_hash', 'state')
+                return pending('missing contract')
+            fields = ('module_hash', 'version', 'state_hash', 'revision', 'transaction_hash', 'state', 'section')
             if any(tuple(s[k] for k in fields) != tuple(states[0][k] for k in fields) for s in states):
-                return False
+                return pending('different full-node states')
             if revision is not None and states[0]['revision'] < revision:
-                return False
+                return pending('revision not reached')
             if self.client.poll() is None:
                 self.ui('refresh')
                 rows = self.ui('snapshot')['catalog']
                 row = next((item for item in rows if item['contractId'] == contract), None)
                 if not row or row['revision'] != states[0]['revision'] or row['stateHash'] != states[0]['state_hash']:
-                    return False
+                    return pending('Light state not reached')
                 if row['moduleHash'] != states[0]['module_hash']:
-                    return False
+                    return pending('different Light module')
             return states[0]
         return self.wait(check, f'contract {contract} convergence', timeout)
 
@@ -298,7 +309,7 @@ class Stand:
         text = state['state']
         encoded = base64.b64decode(text + '=' * (-len(text) % 4), validate=True)
         value = msgpack.unpackb(encoded, raw=False)
-        assert value == [1, state['owner'], expected_value, expected_limit, touches], value
+        assert value == [1, state['owner'], expected_value, expected_limit, touches, state['section']], value
 
     def assert_light_storage(self, language):
         data = self.bridge / 'xdg' / 'ExtraChain Foundation' / 'ExtraChain Client'

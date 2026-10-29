@@ -7,6 +7,46 @@
 #include "contracts/contract_codec.h"
 #include "contracts/contract_manager.h"
 #include "contracts/toolchain_registry.h"
+#include "consensus/consensus_service.h"
+
+namespace ExtraChain::Consensus {
+    class ConsensusStateTestFixture {
+    public:
+        static boost::json::object diagnostics(ConsensusService& service) {
+            std::lock_guard     lock(service.mutex_);
+            boost::json::object result;
+            if (!service.consensus_)
+                return result;
+            const auto& state   = service.consensus_->engine().safety_state();
+            result["finalized"] = state.finalized_height;
+            result["applied"] =
+                service.applied_checkpoint_.has_value() ? service.applied_checkpoint_.value().height : 0;
+            result["voting"]            = service.voting_enabled_;
+            result["paused"]            = service.voting_paused_;
+            result["ancestor_requests"] = service.ancestor_requests_.size();
+            result["rejected_batches"]  = service.rejected_batches_.size();
+            std::string missing;
+            const auto  frontier           = service.local_nonce_frontier(&missing);
+            result["nonce_frontier_ready"] = frontier.has_value();
+            if (!frontier.has_value())
+                result["nonce_frontier_error"] = std::to_underlying(frontier.error());
+            result["missing_ancestor"] = missing;
+            boost::json::array pending;
+            for (const auto& [hash, proposal] : service.pending_proposals_) {
+                if (pending.size() == 32)
+                    break;
+                pending.emplace_back(boost::json::object {
+                    { "hash", hash },
+                    { "height", proposal.header.height },
+                    { "has_batch", service.consensus_->engine().has_batch(hash) },
+                    { "rejected", service.rejected_batches_.contains(hash) },
+                });
+            }
+            result["pending"] = std::move(pending);
+            return result;
+        }
+    };
+} // namespace ExtraChain::Consensus
 
 namespace ExcoStand {
     inline boost::json::object execute(ExtraChain::Core::ExtraChainNode& node,
@@ -23,6 +63,7 @@ namespace ExcoStand {
             return result;
         };
         if (operation == "status") {
+            result["consensus"] = ExtraChain::Consensus::ConsensusStateTestFixture::diagnostics(*node.consensus());
             result["network"]     = node.network_id().to_string();
             result["wallet"]      = node.account_controller()->current_wallet().id().to_string();
             result["section"]     = node.dag()->current_section().to_string();
@@ -62,6 +103,7 @@ namespace ExcoStand {
             result["module_hash"]         = version.module_hash;
             result["state_hash"]          = revision.state_hash;
             result["revision"]            = revision.revision;
+            result["section"]             = revision.block;
             result["transaction_hash"]    = revision.transaction_hash;
             result["checkpoint_revision"] = revision.checkpoint_revision;
             result["state"]               = Utils::to_base64(revision.state);
