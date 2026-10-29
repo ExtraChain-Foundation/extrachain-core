@@ -900,7 +900,8 @@ namespace ExtraChain::Consensus {
                      batch.header_hash,
                      peer_identifier,
                      std::to_underlying(valid.error()));
-            remember_rejected_batch(batch.header_hash, finalized);
+            if (valid.error() != ConsensusError::DataUnavailable)
+                remember_rejected_batch(batch.header_hash, finalized);
             return;
         }
         const auto admitted = admit_batch_intents(proposal->second, batch);

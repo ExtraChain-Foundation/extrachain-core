@@ -2,12 +2,18 @@
 #include <memory>
 
 #include "chain/dag.h"
+#include "chain/actor_index.h"
 #include "contracts/dfs_contract_storage.h"
 #include "contracts/contract_codec.h"
 #include "contracts/standard_token.h"
+#include "contracts/contract_hash.h"
+#include "consensus/consensus_protocol.h"
+#include "dfs/dfs_service.h"
+#include "dfs/dfs_utils.h"
 #include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "test_support.h"
+#include "utils/exc_utils_base64.h"
 #include "../sources/contracts/contract_replay.h"
 
 using namespace ExtraChain::Contracts;
@@ -102,6 +108,95 @@ int main() {
         const auto unavailable = storage.load(contract.value().to_string());
         TEST_REQUIRE(!unavailable.has_value());
         TEST_REQUIRE_EQ(unavailable.error().error, ContractError::StorageError);
+    }
+    {
+        using namespace ExtraChain::Consensus;
+        node->dag()->set_mode(DagMode::Full);
+        Actor<KeyPrivate> deployed_actor;
+        deployed_actor.create(ActorType::Service);
+        TEST_REQUIRE(node->actor_index()->save_actor(deployed_actor.to_public()).has_value());
+        ContractManager temporary;
+        const auto      change = temporary.prepare_deploy(deployed_actor.id().to_string(),
+                                                     owner.id().to_string(),
+                                                     std::string(FungibleTokenKind),
+                                                     token_module.value(),
+                                                     token_arguments.value(),
+                                                     2);
+        TEST_REQUIRE(change.has_value());
+        const auto&             version = change.value().record.versions.back();
+        const auto&             state   = version.revisions.back();
+        ContractTransactionData metadata {
+            .kind                = std::string(FungibleTokenKind),
+            .language            = "rust",
+            .method              = "init",
+            .arguments_base64    = Utils::to_base64(token_arguments.value()),
+            .module_hash         = version.module_hash,
+            .state_hash          = state.state_hash,
+            .effects_hash        = Codec::effect_hash(change.value().output.effects),
+            .effects_base64      = Utils::to_base64(Codec::encode_effects(change.value().output.effects)),
+            .checkpoint          = true,
+            .checkpoint_revision = 1,
+        };
+        Transaction candidate;
+        candidate.set_type(TransactionType::ContractDeploy);
+        candidate.set_sender(owner.id());
+        candidate.set_receiver(deployed_actor.id());
+        candidate.set_amount(BigNumberFloat(0));
+        candidate.set_section(SectionId(2));
+        const auto batch_for = [&](const ContractTransactionData& data) {
+            candidate.set_meta(Json::serialize(data));
+            TEST_REQUIRE(candidate.sign(owner));
+            WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+            SectionBatchData  batch;
+            const auto bytes = Json::serialize(Section { .id = SectionId(2), .transactions = { candidate } });
+            batch.sections.emplace_back(2, bytes);
+            batch.manifest.first_section         = 2;
+            batch.manifest.last_section          = 2;
+            batch.manifest.transaction_hashes    = { candidate.hash() };
+            batch.manifest.transaction_root      = calculate_transaction_root(batch.manifest.transaction_hashes);
+            batch.manifest.data_root             = calculate_data_root(batch.sections);
+            batch.manifest.previous_section_root = std::string(64, 'a');
+            batch.manifest.payload_bytes         = bytes.size();
+            return batch;
+        };
+        const auto validate = [&](const SectionBatchData& batch) {
+            Proposal proposal;
+            proposal.header.dag_section      = 2;
+            proposal.header.section_root     = node->dag()->shadow_batch_section_root(batch).value();
+            proposal.header.transaction_root = batch.manifest.transaction_root;
+            proposal.header.batch_root       = hash_batch_manifest(batch.manifest);
+            proposal.batch                   = batch.manifest;
+            return node->dag()->validate_shadow_batch(proposal, batch, 16 * 1024 * 1024);
+        };
+        const auto pending        = batch_for(metadata);
+        const auto missing_module = validate(pending);
+        TEST_REQUIRE(!missing_module.has_value() && missing_module.error() == ConsensusError::DataUnavailable);
+        TEST_REQUIRE(node->dag()->unprovable_batch_transactions(pending, {}).empty());
+        TEST_REQUIRE(
+            node->dfs()
+                ->store_data_as_file(deployed_actor.id(),
+                                     owner.id(),
+                                     token_module.value(),
+                                     Dfs::Basic::TEMPLATE_CONTRACTS,
+                                     "contract-module-v000001-" + version.module_hash.substr(0, 12) + ".wasm")
+                .has_value());
+        const auto missing_checkpoint = validate(pending);
+        TEST_REQUIRE(!missing_checkpoint.has_value()
+                     && missing_checkpoint.error() == ConsensusError::DataUnavailable);
+        TEST_REQUIRE(node->dfs()
+                         ->store_data_as_file(deployed_actor.id(),
+                                              owner.id(),
+                                              state.state,
+                                              Dfs::Basic::TEMPLATE_CONTRACTS,
+                                              "contract-checkpoint-v000001-r000000000001-"
+                                                  + state.state_hash.substr(0, 12) + ".msgpack")
+                         .has_value());
+        TEST_REQUIRE(validate(pending).has_value());
+        metadata.effects_hash = std::string(64, '0');
+        const auto invalid    = batch_for(metadata);
+        const auto rejected   = validate(invalid);
+        TEST_REQUIRE(!rejected.has_value() && rejected.error() == ConsensusError::InvalidRoot);
+        TEST_REQUIRE_EQ(node->dag()->unprovable_batch_transactions(invalid, {}).size(), 1U);
     }
     node->cleanUp();
     node.reset();

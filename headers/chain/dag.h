@@ -1064,9 +1064,10 @@ private:
         const std::set<Transaction>            &prior = {});
     bool validate_repair_transaction(const Transaction           &transaction,
                                      const std::set<Transaction> &pending,
-                                     bool                         report_failure  = true,
-                                     const Balances              *balances_before = nullptr,
-                                     bool                         historical      = false);
+                                     bool                         report_failure     = true,
+                                     const Balances              *balances_before    = nullptr,
+                                     bool                         historical         = false,
+                                     bool                        *dependency_missing = nullptr);
 
     std::optional<Section> read_section_unlocked(const SectionId &section_id, bool include_packs) const;
 

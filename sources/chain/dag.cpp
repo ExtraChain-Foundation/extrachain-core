@@ -2127,7 +2127,10 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
                                       const std::set<Transaction> &pending,
                                       bool                         report_failure,
                                       const Balances              *balances_before,
-                                      bool                         historical) {
+                                      bool                         historical,
+                                      bool                        *dependency_missing) {
+    if (dependency_missing != nullptr)
+        *dependency_missing = false;
     const auto hash = transaction.hash();
     if (hash != transaction.calculate_hash() && hash != transaction.calculate_hash_hex()) {
         if (report_failure) {
@@ -2215,6 +2218,8 @@ bool Dag::validate_repair_transaction(const Transaction           &transaction,
     }
     const auto prove =
         prove_transaction_with_facts(transaction, empty, &pending, nullptr, &frontier, &facts, false);
+    if (dependency_missing != nullptr)
+        *dependency_missing = prove == TransactionProveError::ContractDependencyMissing;
     if (report_failure && prove != TransactionProveError::NoError) {
         eWarning("[Dag] Repair transaction proof failed: prove={} tx={} sender={} section={} pending={}",
                  std::to_underlying(prove),
@@ -2362,9 +2367,17 @@ std::vector<Transaction> Dag::unprovable_batch_transactions(const ExtraChain::Co
             return {};
         }
         for (const auto &transaction : candidate->transactions) {
-            if (validate_repair_transaction(transaction, accepted_transactions, false)) {
+            bool dependency_missing = false;
+            if (validate_repair_transaction(transaction,
+                                            accepted_transactions,
+                                            false,
+                                            nullptr,
+                                            false,
+                                            &dependency_missing)) {
                 accepted_transactions.insert(transaction);
             } else {
+                if (dependency_missing)
+                    return {};
                 unprovable.push_back(transaction);
             }
         }
@@ -2697,12 +2710,16 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::validate_shadow_
     std::set<Transaction> accepted_transactions = std::move(staged_ancestors);
     for (auto &section : sections) {
         while (!section.transactions.empty()) {
-            const auto transaction = section.transactions.begin();
+            const auto transaction        = section.transactions.begin();
+            bool       dependency_missing = false;
             if (!validate_repair_transaction(*transaction,
                                              accepted_transactions,
                                              true,
-                                             needs_balances ? &balances : nullptr)) {
-                return std::unexpected(ConsensusError::InvalidRoot);
+                                             needs_balances ? &balances : nullptr,
+                                             false,
+                                             &dependency_missing)) {
+                return std::unexpected(dependency_missing ? ConsensusError::DataUnavailable
+                                                          : ConsensusError::InvalidRoot);
             }
             if (needs_balances)
                 cache_.process_transaction(*transaction, balances);
