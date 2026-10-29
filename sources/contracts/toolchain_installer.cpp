@@ -890,9 +890,12 @@ namespace ExtraChain::Contracts {
             return configured == blueprint->parameters.end() ? std::string() : configured->default_value;
         };
         if (blueprint_id == "token") {
-            const auto token_name   = source_string(parameter_value("name"), 64);
-            const auto token_symbol = source_string(parameter_value("symbol"), 12);
-            const auto decimals     = parameter_value("decimals");
+            const auto freeze_last_unit = std::ranges::find(selected, "freeze-last-unit") != selected.end()
+                                              ? QStringLiteral("true")
+                                              : QStringLiteral("false");
+            const auto token_name       = source_string(parameter_value("name"), 64);
+            const auto token_symbol     = source_string(parameter_value("symbol"), 12);
+            const auto decimals         = parameter_value("decimals");
             if (!token_name.has_value() || !token_symbol.has_value() || decimals.empty() || decimals.size() > 2
                 || !std::ranges::all_of(decimals,
                                         [](char character) {
@@ -908,10 +911,10 @@ namespace ExtraChain::Contracts {
                            "@contract({ standard: \"fungible\" })\n"
                            "export class GeneratedContract extends StandardFungibleContract {\n"
                            "  constructor() {\n"
-                           "    super(\"%1\", \"%2\", %3, true);\n"
+                           "    super(\"%1\", \"%2\", %3, %4);\n"
                            "  }\n"
                            "}\n")
-                    .arg(*token_name, *token_symbol, QString::fromStdString(decimals));
+                    .arg(*token_name, *token_symbol, QString::fromStdString(decimals), freeze_last_unit);
             }
             return QString(
                        "#![no_std]\n\n"
@@ -921,10 +924,10 @@ namespace ExtraChain::Contracts {
                        "    name = \"%1\",\n"
                        "    symbol = \"%2\",\n"
                        "    decimals = %3,\n"
-                       "    freeze_last_unit = true,\n"
+                       "    freeze_last_unit = %4,\n"
                        ")]\n"
                        "pub struct GeneratedContract;\n")
-                .arg(*token_name, *token_symbol, QString::fromStdString(decimals));
+                .arg(*token_name, *token_symbol, QString::fromStdString(decimals), freeze_last_unit);
         }
         if (blueprint_id == "nft") {
             const auto collection_name   = source_string(parameter_value("name"), 64);

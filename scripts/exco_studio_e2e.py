@@ -312,10 +312,12 @@ class Stand:
         self.idle('toolchain installation', 'are ready', 600)
         self.ui('click', text='Fungible token')
         self.ui('type', name='projectName', value=f'exco_{language}')
+        self.ui('type', name='parameter-decimals', value='0')
         self.ui('click', text='Freeze last unit')
         self.ui('click', text='Generate Rust' if language == 'rust' else 'Generate AssemblyScript')
         generated = self.ui('snapshot')['source']
         assert generated, 'Source generation returned no source'
+        assert ('freeze_last_unit = false' if language == 'rust' else ', 0, false);') in generated, generated
         built = self.build_offline(language, 'contract build')
         first_module = str(self.work / f'{language}-v1.wasm')
         shutil.copy2(built['module'], first_module)
@@ -341,6 +343,8 @@ class Stand:
         self.ui('click', text='Develop')
         self.ui('click', text='Freeze last unit')
         self.ui('click', text='Generate Rust' if language == 'rust' else 'Generate AssemblyScript')
+        upgraded_source = self.ui('snapshot')['source']
+        assert ('freeze_last_unit = true' if language == 'rust' else ', 0, true);') in upgraded_source, upgraded_source
         built = self.build_offline(language, 'upgrade build')
         assert Path(built['module']).exists(), built
         shutil.copy2(built['module'], self.work / f'{language}-v2.wasm')
