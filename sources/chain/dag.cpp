@@ -2755,6 +2755,7 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     const ExtraChain::Consensus::SectionBatchData &batch,
     std::uint64_t                                  maximum_batch_bytes,
     const std::string                             &proof_hash) {
+    WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
     using ExtraChain::Consensus::ConsensusError;
     const auto contract_committed = [this](const Transaction &transaction) {
         const auto record = node->contract_manager()->inspect(transaction.receiver().to_string());
@@ -2796,7 +2797,6 @@ std::expected<void, ExtraChain::Consensus::ConsensusError> Dag::install_shadow_b
     bool       already_installed =
         last_control.has_value() && last_control.value().control == proposal.header.section_root;
     if (already_installed) {
-        WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
         for (const auto &[section_id, expected] : canonical_sections) {
             auto stored = read_section(section_id);
             if (!stored.has_value()) {

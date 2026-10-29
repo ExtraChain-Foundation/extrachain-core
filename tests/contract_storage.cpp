@@ -374,9 +374,35 @@ int main() {
             const auto result = Json::deserialize<ContractTransactionData>(call.value().meta().value());
             TEST_REQUIRE(result.has_value());
             TEST_REQUIRE_EQ(result.value().checkpoint, next_revision == boundary_revision);
-            TEST_REQUIRE(node->dag()->save_transaction(call.value()));
-            node->dag()->set_current_section(SectionId(next_revision + 1));
-            node->finalize_contract_change(call.value().hash(), true);
+            if (next_revision == 9) {
+                SectionBatchData batch;
+                const auto       bytes = Json::serialize(
+                    Section { .id = SectionId(next_revision + 1), .transactions = { call.value() } });
+                batch.sections.emplace_back(next_revision + 1, bytes);
+                batch.manifest.first_section      = next_revision + 1;
+                batch.manifest.last_section       = next_revision + 1;
+                batch.manifest.transaction_hashes = { call.value().request_hash() };
+                batch.manifest.transaction_root   = calculate_transaction_root(batch.manifest.transaction_hashes);
+                batch.manifest.data_root          = calculate_data_root(batch.sections);
+                batch.manifest.previous_section_root = std::string(64, 'a');
+                batch.manifest.payload_bytes         = bytes.size();
+                Proposal proposal;
+                proposal.header.dag_section      = next_revision + 1;
+                proposal.header.section_root     = node->dag()->shadow_batch_section_root(batch).value();
+                proposal.header.transaction_root = batch.manifest.transaction_root;
+                proposal.header.batch_root       = hash_batch_manifest(batch.manifest);
+                proposal.batch                   = batch.manifest;
+                batch.header_hash                = hash_header(proposal.header);
+                WireFormat::Scope legacy(WireFormat::Mode::Legacy);
+                TEST_REQUIRE(node->dag()->install_shadow_batch(proposal, batch, 16 * 1024 * 1024).has_value());
+            } else {
+                TEST_REQUIRE(node->dag()->save_transaction(call.value()));
+                node->dag()->set_current_section(SectionId(next_revision + 1));
+                node->finalize_contract_change(call.value().hash(), true);
+            }
+            const auto applied = node->contract_manager()->inspect(deployed_actor.id().to_string());
+            TEST_REQUIRE(applied.has_value());
+            TEST_REQUIRE_EQ(applied.value().versions.back().revisions.back().block, next_revision + 1);
             if (next_revision == boundary_revision) {
                 TEST_REQUIRE_EQ(caller.id(), other.id());
                 TEST_REQUIRE(result.value().checkpoint_state_base64.has_value());
