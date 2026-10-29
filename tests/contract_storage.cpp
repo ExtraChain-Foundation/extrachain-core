@@ -159,13 +159,14 @@ int main() {
             batch.manifest.payload_bytes         = bytes.size();
             return batch;
         };
-        const auto validate = [&](const SectionBatchData& batch) {
+        const auto validate = [&](SectionBatchData batch) {
             Proposal proposal;
             proposal.header.dag_section      = 2;
             proposal.header.section_root     = node->dag()->shadow_batch_section_root(batch).value();
             proposal.header.transaction_root = batch.manifest.transaction_root;
             proposal.header.batch_root       = hash_batch_manifest(batch.manifest);
             proposal.batch                   = batch.manifest;
+            batch.header_hash                = hash_header(proposal.header);
             return node->dag()->validate_shadow_batch(proposal, batch, 16 * 1024 * 1024);
         };
         const auto pending        = batch_for(metadata);
