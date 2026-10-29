@@ -7,6 +7,7 @@
 #include "contracts/standard_token.h"
 #include "test_support.h"
 #include "utils/exc_utils_base64.h"
+#include "utils/serialization.h"
 
 using namespace ExtraChain;
 
@@ -18,13 +19,18 @@ namespace {
         const auto&             version = record.versions.at(record.active_version - 1);
         const auto&             state   = version.revisions.back();
         ContractTransactionData metadata {
-            .kind                = record.kind,
-            .language            = record.language,
-            .method              = type == TransactionType::ContractDeploy ? "init" : "migrate",
-            .arguments_base64    = Utils::to_base64(Contracts::Codec::encode_json("[]").value()),
+            .kind             = record.kind,
+            .language         = record.language,
+            .method           = type == TransactionType::ContractDeploy ? "init" : "migrate",
+            .arguments_base64 = Utils::to_base64(
+                Contracts::Codec::encode_json(
+                    type == TransactionType::ContractDeploy ? R"(["Snapshot Token","SNP",0,1000,[]])" : "[]")
+                    .value()),
             .module_hash         = version.module_hash,
             .previous_state_hash = state.previous_hash,
             .state_hash          = state.state_hash,
+            .effects_hash        = Contracts::Codec::effect_hash(change.output.effects),
+            .effects_base64      = Utils::to_base64(Contracts::Codec::encode_effects(change.output.effects)),
             .version             = version.version,
             .revision            = state.revision,
             .checkpoint          = change.checkpoint,
