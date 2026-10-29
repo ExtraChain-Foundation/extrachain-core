@@ -323,6 +323,81 @@ int main() {
         TEST_REQUIRE_EQ(replayed.value().versions.back().revisions.back().state, change.value().output.state);
         TEST_REQUIRE_EQ(replayed.value().versions.back().revisions.back().transaction_hash,
                         pending.value().hash());
+        TEST_REQUIRE(node->actor_index()->store_new_actor(other.to_public()).has_value());
+        std::uint64_t             owner_nonce = 1;
+        std::uint64_t             other_nonce = 0;
+        std::vector<std::uint8_t> checkpoint_state;
+        for (std::uint64_t next_revision = 2; next_revision <= ContractCheckpointInterval; ++next_revision) {
+            const bool  from_owner = next_revision <= 3 || next_revision % 2 == 1;
+            const auto& caller     = from_owner ? owner : other;
+            const auto  recipient  = (from_owner ? other.id() : owner.id()).to_string();
+            const auto  arguments  = Codec::encode_json("[\"" + recipient + "\",1]");
+            TEST_REQUIRE(arguments.has_value());
+            const auto prior = node->contract_manager()->inspect(deployed_actor.id().to_string());
+            TEST_REQUIRE(prior.has_value());
+            const auto&                   prior_version  = prior.value().versions.back();
+            const auto&                   prior_revision = prior_version.revisions.back();
+            const ContractTransactionData call_input {
+                .kind                = std::string(FungibleTokenKind),
+                .language            = "rust",
+                .method              = "transfer",
+                .arguments_base64    = Utils::to_base64(arguments.value()),
+                .module_hash         = prior_version.module_hash,
+                .previous_state_hash = prior_revision.state_hash,
+                .revision            = next_revision,
+            };
+            const auto metadata    = Json::serialize(call_input);
+            const auto signed_call = make_intent(
+                TransactionIntentV2 {
+                    .network_id           = owner.id(),
+                    .sender               = caller.id(),
+                    .receiver             = deployed_actor.id(),
+                    .amount               = "0",
+                    .operation            = IntentOperation::ContractCall,
+                    .account_nonce        = from_owner ? ++owner_nonce : ++other_nonce,
+                    .valid_after_height   = 1,
+                    .expires_after_height = 1000,
+                },
+                metadata,
+                caller);
+            TEST_REQUIRE(signed_call.has_value());
+            auto call = materialize_intent(IntentEnvelope { .intent = signed_call.value(), .metadata = metadata },
+                                           next_revision + 1,
+                                           1,
+                                           {});
+            TEST_REQUIRE(call.has_value());
+            TEST_REQUIRE_EQ(node->complete_contract_intent(call.value()), TransactionProveError::NoError);
+            TEST_REQUIRE_EQ(node->validate_contract_transaction(call.value()), TransactionProveError::NoError);
+            const auto result = Json::deserialize<ContractTransactionData>(call.value().meta().value());
+            TEST_REQUIRE(result.has_value());
+            TEST_REQUIRE_EQ(result.value().checkpoint, next_revision == ContractCheckpointInterval);
+            TEST_REQUIRE(node->dag()->save_transaction(call.value()));
+            node->dag()->set_current_section(SectionId(next_revision + 1));
+            node->finalize_contract_change(call.value().hash(), true);
+            if (next_revision == ContractCheckpointInterval) {
+                TEST_REQUIRE_EQ(caller.id(), other.id());
+                TEST_REQUIRE(result.value().checkpoint_state_base64.has_value());
+                checkpoint_state =
+                    Utils::from_base64<std::vector<std::uint8_t>>(result.value().checkpoint_state_base64.value())
+                        .value();
+                const auto name = "contract-checkpoint-v000001-r000000000256-"
+                                  + result.value().state_hash.substr(0, 12) + ".msgpack";
+                TEST_REQUIRE(!node->dfs()
+                                  ->read_file_status(deployed_actor.id(), name, Dfs::Basic::TEMPLATE_CONTRACTS)
+                                  .has_value());
+            }
+        }
+        std::filesystem::remove(std::filesystem::path("contract-heads")
+                                / (deployed_actor.id().to_string() + ".msgpack"));
+        DfsContractStorage boundary_recovery(node->dfs(), node->dag());
+        const auto         boundary = boundary_recovery.load(deployed_actor.id().to_string());
+        TEST_REQUIRE(boundary.has_value());
+        const auto& checkpoint = boundary.value().versions.back().revisions.back();
+        TEST_REQUIRE_EQ(checkpoint.revision, ContractCheckpointInterval);
+        TEST_REQUIRE_EQ(checkpoint.checkpoint_revision, ContractCheckpointInterval);
+        TEST_REQUIRE_EQ(checkpoint.checkpoint_author_id, other.id().to_string());
+        TEST_REQUIRE(checkpoint.checkpoint_storage_id.empty());
+        TEST_REQUIRE_EQ(checkpoint.state, checkpoint_state);
     }
     node->cleanUp();
     node.reset();
