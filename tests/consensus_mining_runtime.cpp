@@ -24,7 +24,9 @@ namespace ExtraChain::Consensus {
         static void attach(ConsensusService&                service,
                            std::unique_ptr<ShadowConsensus> shadow,
                            std::optional<AppliedCheckpoint> applied = std::nullopt) {
-            service.consensus_          = std::move(shadow);
+            service.consensus_     = std::move(shadow);
+            service.authenticator_ = std::make_unique<PeerAuthenticator>(service.consensus_->engine().validators(),
+                                                                         service.consensus_->engine().identity());
             service.applied_checkpoint_ = applied;
             service.intent_store_       = std::make_unique<IntentStore>(service.directory_ / "intent-pool.sqlite");
             TEST_REQUIRE(service.intent_store_->open().has_value());
