@@ -127,56 +127,20 @@ bool AccountController::rename_wallet(const ActorId     &profileActor,
 }
 
 std::expected<void, LoadError> AccountController::load(const std::string &hash) {
-    if (hash.empty()) {
-        return std::unexpected(LoadError::EmptyHash);
+    auto access = find_profiles(hash);
+    if (!access.has_value()) {
+        return std::unexpected(access.error());
     }
 
-    auto profiles = profiles_list();
-
-    if (profiles.empty()) {
-        return std::unexpected(LoadError::NoProfiles);
-    }
-
-    auto key_result = Cryptography::key_from_password(hash);
-    if (!key_result.has_value()) {
-        return {};
-    }
-
-    int count = 0;
-    for (auto &actor_id : profiles) {
-        auto profile = PrivateProfile::read(actor_id, hash, node, key_result.value());
-        if (profile.has_value()) {
-            count++;
-            if (count > 1) {
-                break;
-            }
-        }
-
-        if (!profile.has_value()) {
-            auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
-            if (try_new.has_value()) {
-                count++;
-            }
-        }
-    }
-
-    if (count > 1) {
+    if (access.value().profiles.size() > 1) {
         eLog("[Accounts] Multiple profiles found for this login and password combination");
         return std::unexpected(LoadError::Multiple);
     }
 
-    if (count == 0) {
-        return std::unexpected(LoadError::NoAuthProfiles);
+    if (!load_profile(*access.value().profiles.begin(), hash, access.value().key)) {
+        return std::unexpected(LoadError::Unknown);
     }
-
-    for (auto &actor_id : profiles) {
-        auto res = this->load_profile(actor_id, hash, key_result.value());
-        if (res) {
-            return {};
-        }
-    }
-
-    return std::unexpected(LoadError::Unknown);
+    return {};
 }
 
 bool AccountController::load_profile(const ActorId                &actor_id,
@@ -233,27 +197,40 @@ bool AccountController::load_profile(const ActorId                &actor_id,
 }
 
 std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) {
-    auto              profiles = profiles_list();
-    std::set<ActorId> multiple_profiles;
+    auto access = find_profiles(hash);
+    if (!access.has_value()) {
+        return {};
+    }
+    return access.value().profiles;
+}
+
+std::expected<ProfileAccess, LoadError> AccountController::find_profiles(const std::string &hash) {
+    if (hash.empty()) {
+        return std::unexpected(LoadError::EmptyHash);
+    }
+
+    const auto profiles = profiles_list();
+    if (profiles.empty()) {
+        return std::unexpected(LoadError::NoProfiles);
+    }
 
     auto key_result = Cryptography::key_from_password(hash);
     if (!key_result.has_value()) {
-        return {};
+        return std::unexpected(LoadError::Unknown);
     }
 
-    for (auto &actor_id : profiles) {
-        auto profile = PrivateProfile::read(actor_id, hash, node, key_result.value());
-        if (profile.has_value()) {
-            multiple_profiles.insert(actor_id);
-        } else {
-            auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
-            if (try_new.has_value()) {
-                multiple_profiles.insert(actor_id);
-            }
+    ProfileAccess access { .hash = hash, .key = key_result.value(), .profiles = {} };
+    for (const auto &actor_id : profiles) {
+        if (PrivateProfile::read(actor_id, hash, node, access.key).has_value()
+            || SeedProfile::load(actor_id.to_string(), access.key).has_value()) {
+            access.profiles.insert(actor_id);
         }
     }
 
-    return multiple_profiles;
+    if (access.profiles.empty()) {
+        return std::unexpected(LoadError::NoAuthProfiles);
+    }
+    return access;
 }
 
 const Actor<KeyPrivate> &AccountController::system_actor() {
