@@ -10,6 +10,7 @@
 #include "consensus/light_client.h"
 #include "contracts/contract_types.h"
 #include "utils/bignumber_float.h"
+#include "utils/exc_msgpack_describe.h"
 
 namespace ExtraChain::Consensus {
     inline constexpr std::size_t MaximumSnapshotBalances      = 100'000;
