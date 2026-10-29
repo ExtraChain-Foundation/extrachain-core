@@ -5,6 +5,7 @@
 #include "contracts/contract_manager.h"
 #include "contracts/contract_transaction.h"
 #include "contracts/standard_token.h"
+#include "network/wire_format.h"
 #include "test_support.h"
 #include "utils/exc_utils_base64.h"
 #include "utils/serialization.h"
@@ -95,6 +96,28 @@ int main() {
         TEST_REQUIRE_EQ(verified.value().versions.back().revisions.back().state, snapshot.state);
         TEST_REQUIRE_EQ(verified.value().versions.back().module, module);
         TEST_REQUIRE_EQ(Consensus::light_contract_summary(snapshot).checkpoint_revision, 1U);
+
+        Consensus::BalanceSnapshotV2 saved {
+            .balances  = { { { owner.id(), ActorId() }, BigNumberFloat(123456789) } },
+            .contracts = { snapshot },
+        };
+        std::string encoded;
+        {
+            WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+            encoded = MessagePack::serialize(saved);
+        }
+        {
+            WireFormat::Scope legacy(WireFormat::Mode::Legacy);
+            const auto        restored = Consensus::decode_balance_snapshot(encoded);
+            TEST_REQUIRE(restored.has_value());
+            TEST_REQUIRE_EQ(restored.value().balances, saved.balances);
+            TEST_REQUIRE_EQ(restored.value().contracts.front().transaction.section(),
+                            snapshot.transaction.section());
+            TEST_REQUIRE(
+                Consensus::verify_contract_snapshot(restored.value().contracts.front(), root).has_value());
+        }
+        TEST_REQUIRE(!Consensus::decode_balance_snapshot({}).has_value());
+        TEST_REQUIRE(!Consensus::decode_balance_snapshot("invalid").has_value());
 
         auto changed = snapshot;
         changed.state.front() ^= 1;

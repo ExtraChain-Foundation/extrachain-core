@@ -9,6 +9,7 @@
 #include "core/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "network/network_service.h"
+#include "network/wire_format.h"
 #include "utils/file_io.h"
 #include "utils/serialization.h"
 
@@ -154,13 +155,14 @@ namespace ExtraChain::Consensus {
         const auto bytes = FileIo::read_all(path);
         if (!bytes.has_value())
             return std::unexpected(ConsensusError::StorageFailure);
-        const auto snapshot = MessagePack::deserialize<BalanceSnapshotV2>(bytes.value());
+        const auto snapshot = decode_balance_snapshot(bytes.value());
         if (!snapshot.has_value() || !apply_light_snapshot(snapshot.value(), false))
             return std::unexpected(ConsensusError::InvalidProof);
         return {};
     }
 
     bool ConsensusService::apply_light_snapshot(const BalanceSnapshotV2& snapshot, bool persist) {
+        WireFormat::Scope canonical(WireFormat::Mode::Canonical);
         if (!light_verifier_.has_value() || !intent_store_
             || !verify_balance_snapshot(snapshot, light_verifier_.value()))
             return false;

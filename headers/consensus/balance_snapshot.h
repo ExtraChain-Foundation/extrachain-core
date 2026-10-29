@@ -72,6 +72,8 @@ namespace ExtraChain::Consensus {
     EXTRACHAIN_EXPORT std::string balance_snapshot_root(
         const std::map<std::pair<ActorId, ActorId>, BigNumberFloat>& balances,
         const std::map<ActorId, std::uint64_t>&                      nonces = {});
+    EXTRACHAIN_EXPORT std::expected<BalanceSnapshotV2, ConsensusError> decode_balance_snapshot(
+        std::string_view bytes);
     EXTRACHAIN_EXPORT std::string contract_snapshot_value(const LightContractSnapshotV1& snapshot);
     EXTRACHAIN_EXPORT std::expected<Contracts::ContractRecord, ConsensusError> verify_contract_snapshot(
         const LightContractSnapshotV1& snapshot,

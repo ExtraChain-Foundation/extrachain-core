@@ -7,8 +7,10 @@
 #include "contracts/contract_hash.h"
 #include "contracts/contract_module.h"
 #include "contracts/contract_transaction.h"
+#include "network/wire_format.h"
 #include "utils/serialization.h"
 #include "utils/exc_utils.h"
+#include "utils/msgpack_limits.h"
 
 namespace ExtraChain::Consensus {
     namespace {
@@ -47,6 +49,17 @@ namespace ExtraChain::Consensus {
             return *found;
         }
     } // namespace
+
+    std::expected<BalanceSnapshotV2, ConsensusError> decode_balance_snapshot(std::string_view bytes) {
+        if (bytes.empty() || bytes.size() > MaximumBalanceSnapshotBytes
+            || !MessagePack::has_bounded_structure(bytes, 1'000'000, MaximumSnapshotBalances, 16))
+            return std::unexpected(ConsensusError::DataTooLarge);
+        WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+        const auto        snapshot = MessagePack::deserialize<BalanceSnapshotV2>(bytes);
+        if (!snapshot.has_value())
+            return std::unexpected(ConsensusError::InvalidProof);
+        return snapshot.value();
+    }
 
     std::string balance_snapshot_root(const std::map<std::pair<ActorId, ActorId>, BigNumberFloat>& balances,
                                       const std::map<ActorId, std::uint64_t>&                      nonces) {

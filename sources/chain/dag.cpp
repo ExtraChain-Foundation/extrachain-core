@@ -4363,7 +4363,7 @@ void Dag::network_response_light(const std::string &serialized, const Responder 
         WireFormat::Scope canonical(WireFormat::Mode::Canonical);
         SectionId         section;
         {
-            const auto snapshot = MessagePack::deserialize<BalanceSnapshotV2>(payload);
+            const auto snapshot = decode_balance_snapshot(payload);
             if (!snapshot.has_value()) {
                 return;
             }
