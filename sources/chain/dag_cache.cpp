@@ -1346,6 +1346,18 @@ ExtraChain::Contracts::ContractCatalogPage DagCache::list_contracts(
         }
     }
 
+    if (dag != nullptr && dag->mode() == DagMode::Full) {
+        const auto first = std::max(dag->first_saved_section(), cached_section_ + SectionId(1));
+        const auto last  = dag->current_section();
+        for (auto id = std::max(first, SectionId(0)); id <= last; id += SectionId(1)) {
+            const auto section = dag->read_section(id);
+            if (!section.has_value())
+                continue;
+            for (const auto& transaction : section.value().transactions)
+                index_contract_transaction(transaction);
+        }
+    }
+
     auto                                                rows = cache_db_->select_all("contract_catalog");
     std::vector<ExtraChain::Contracts::ContractSummary> matches;
     matches.reserve(rows.size());

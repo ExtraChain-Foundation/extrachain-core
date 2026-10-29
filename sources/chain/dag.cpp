@@ -4319,6 +4319,7 @@ void Dag::network_request_light(const Responder                                 
         }
         auto snapshot = node->consensus()->balance_snapshot(request);
         if (!snapshot.has_value()) {
+            eLog("[Dag] Light snapshot is unavailable: {}", std::to_underlying(snapshot.error()));
             return;
         }
         WireFormat::Scope canonical(WireFormat::Mode::Canonical);

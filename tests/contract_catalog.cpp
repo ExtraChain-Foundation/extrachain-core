@@ -6,9 +6,7 @@
 #include "test_support.h"
 #include "utils/db_connector.h"
 
-// The contract catalog follows the balance cache. Sections installed by sync are indexed by
-// the cache pass, and a restart does not scan the history again (it used to, whenever the
-// catalog was empty, i.e. on every node of a network without contracts).
+// The catalog reuses the indexed history and reads the uncached tail, including after restart.
 int main() {
     const auto original = std::filesystem::current_path();
     const auto home =
@@ -95,7 +93,15 @@ int main() {
     advance_cache(80);
     TEST_REQUIRE_EQ(dag->cache().section(), SectionId(60));
     TEST_REQUIRE(listed() == std::set<std::string> { later });
+    const auto tail = deploy(75, "counter");
     store_tip(80);
+    TEST_REQUIRE(listed() == (std::set<std::string> { later, tail }));
+    node->cleanUp();
+    node.reset();
+    node = start();
+    dag  = node->dag();
+    TEST_REQUIRE_EQ(dag->cache().section(), SectionId(60));
+    TEST_REQUIRE(listed() == (std::set<std::string> { later, tail }));
 
     // A catalog that predates the cache-pass indexing is rebuilt once from the history.
     {
@@ -108,7 +114,7 @@ int main() {
     node = start();
     dag  = node->dag();
     dag->set_current_section(SectionId(80));
-    TEST_REQUIRE(listed() == (std::set<std::string> { behind, later }));
+    TEST_REQUIRE(listed() == (std::set<std::string> { behind, later, tail }));
 
     node->cleanUp();
     node.reset();
