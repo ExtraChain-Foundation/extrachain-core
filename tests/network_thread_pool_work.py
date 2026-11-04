@@ -24,6 +24,7 @@ class ThreadPoolWorkTests(unittest.TestCase):
             cpp.write_text(r'''
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <future>
 #include <memory>
 #include <stdexcept>
@@ -113,6 +114,68 @@ int main(int argc, char** argv) {
     pool->join();
 }
 ''', ['post', 'dispatch'])
+
+    def test_shutdown_allows_worker_registry_access_and_joins_owned_pools(self):
+        self.compile_and_run(r'''
+int main(int argc, char** argv) {
+    require(argc == 2);
+    const std::string mode = argv[1];
+    auto pool = ThreadPoolBoost::instance_dfs(1);
+    std::promise<void> started, release;
+    auto released = release.get_future();
+    std::atomic<bool> completed{false};
+    pool->post([&] {
+        started.set_value();
+        released.wait();
+        // A task finishing during shutdown can still acquire another pool
+        ThreadPoolBoost::instance()->post([] {});
+        completed = true;
+    });
+    started.get_future().wait();
+    if (mode == "registry-only") { pool.reset(); }
+    std::atomic<bool> terminated{false};
+    std::thread stopping([&] { ThreadPoolBoost::terminate(); terminated = true; });
+    std::this_thread::sleep_for(1500ms);
+    // Retaining a shared_ptr must not let terminate return before the task exits
+    const bool premature = terminated.load();
+    release.set_value();
+    const auto deadline = std::chrono::steady_clock::now() + 3s;
+    while (!terminated && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(1ms);
+    }
+    if (!terminated) { std::_Exit(42); }
+    stopping.join();
+    require(!premature && completed);
+    ThreadPoolBoost::terminate();
+}
+''', ['registry-only', 'retained-owner'])
+
+    def test_shutdown_rejects_late_work_including_lazy_pools(self):
+        self.compile_and_run(r'''
+int main(int argc, char** argv) {
+    require(argc == 2);
+    const std::string mode = argv[1];
+    std::atomic<int> executed{0};
+    if (mode == "existing") {
+        ThreadPoolBoost::instance_dfs();
+        ThreadPoolBoost::instance();
+        ThreadPoolBoost::instance_dag();
+        ThreadPoolBoost::instance_dag_sync();
+    }
+    ThreadPoolBoost::terminate();
+    std::vector<std::shared_ptr<ThreadPoolBoost>> pools = {
+        ThreadPoolBoost::instance_dfs(), ThreadPoolBoost::instance(),
+        ThreadPoolBoost::instance_dag(), ThreadPoolBoost::instance_dag_sync()
+    };
+    for (const auto& pool : pools) {
+        pool->post([&] { ++executed; });
+        pool->dispatch([&] { ++executed; });
+        pool->join();
+    }
+    ThreadPoolBoost::terminate();
+    require(executed == 0);
+}
+''', ['existing', 'lazy'])
 
 
 if __name__ == '__main__':

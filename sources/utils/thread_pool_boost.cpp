@@ -17,7 +17,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 #include "utils/thread_pool_boost.h"
+#include <array>
 #include <boost/smart_ptr/detail/spinlock.hpp>
+#include <mutex>
 
 //[CDS] Maybe we will need it for future
 // #include <cds/threading/model.h>
@@ -27,6 +29,8 @@ static std::shared_ptr<ThreadPoolBoost> thread_pool_dag;
 static std::shared_ptr<ThreadPoolBoost> thread_pool_dag_sync;
 static std::shared_ptr<ThreadPoolBoost> thread_pool_prove;
 static boost::detail::spinlock          mutex;
+static std::once_flag                  shutdown_once;
+static bool                            shutting_down = false;
 
 ThreadPoolBoost::ThreadPoolBoost(size_t threads_count) {
     if (threads_count == 0)
@@ -35,6 +39,10 @@ ThreadPoolBoost::ThreadPoolBoost(size_t threads_count) {
 
     m_thread_pool = std::make_unique<boost::asio::thread_pool>(threads_count);
     ThreadPoolBoost::initialize(*m_thread_pool, threads_count);
+    // Constructors run under the registry lock, including late lazy lookups
+    if (shutting_down) {
+        m_thread_pool->stop();
+    }
 }
 
 void ThreadPoolBoost::initialize(boost::asio::thread_pool& pool, const size_t threadsCount) {
@@ -99,29 +107,27 @@ std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(size_t threads_count)
 }
 
 void ThreadPoolBoost::terminate() {
-    boost::detail::spinlock::scoped_lock lock(mutex);
+    std::call_once(shutdown_once, [] {
+        std::array<std::shared_ptr<ThreadPoolBoost>, 4> pools;
+        {
+            boost::detail::spinlock::scoped_lock lock(mutex);
+            shutting_down = true;
+            pools = { thread_pool_dfs, thread_pool_dag, thread_pool_dag_sync, thread_pool_prove };
+            for (const auto& pool : pools) {
+                if (pool) {
+                    pool->m_thread_pool->stop();
+                }
+            }
+        }
 
-    if (thread_pool_dfs) {
-        thread_pool_dfs->m_thread_pool->stop();
-        thread_pool_dfs.reset();
-    }
-
-    if (thread_pool_dag) {
-        thread_pool_dag->m_thread_pool->stop();
-        thread_pool_dag.reset();
-    }
-
-    if (thread_pool_dag_sync) {
-        thread_pool_dag_sync->m_thread_pool->stop();
-        thread_pool_dag_sync.reset();
-    }
-
-    if (thread_pool_prove) {
-        thread_pool_prove->m_thread_pool->stop();
-        thread_pool_prove.reset();
-    }
-
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+        // Workers may acquire the registry while finishing, so join without its lock
+        for (const auto& pool : pools) {
+            if (pool) {
+                pool->join();
+            }
+        }
+        // Keep stopped pools registered; late lookups must never restart work
+    });
 }
 
 void ThreadPoolBoost::join() {

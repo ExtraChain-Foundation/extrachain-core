@@ -37,6 +37,7 @@ public:
     static std::shared_ptr<ThreadPoolBoost> instance_dag_sync(size_t threads_count = 8);
     static std::shared_ptr<ThreadPoolBoost> instance(size_t threads_count = 1);
 
+    // Final process shutdown: stop queues and join outside the registry lock
     static void terminate();
 
     template <BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
