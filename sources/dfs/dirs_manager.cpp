@@ -302,7 +302,9 @@ void DirsManager::network_response_dir_rows(
                                                                          Dfs::FileState::Removed);
                 }
 
-                if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Ready) {
+                // Vectors and dictionaries too: the row this node first heard may have come from a peer
+                // that only knew of it, and an existing row never returns from add_dir_rows
+                if (row.type != Dfs::FileType::Folder && row.state == Dfs::FileState::Ready) {
                     if (!file_path->exists()) { // TODO: size
                         // eLog("Not exists: {} {}", owner_id, row.file_id);
                         dir_rows_todo.push_back(row);

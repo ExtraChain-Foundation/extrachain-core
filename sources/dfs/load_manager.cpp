@@ -387,7 +387,7 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
 
         // A row carries its sender's state: a sender that only knows of the file never answers a request for it
         if (dir_row.state != Dfs::FileState::Ready) {
-            if (priority) {
+            if (priority && should_ask_file_state(file_link)) {
                 node->network()->send_message(file_link,
                                               MessageType::DfsFileState,
                                               SendMode::Neighbours,
@@ -682,6 +682,20 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             }
         }
     });
+}
+
+bool LoadManager::should_ask_file_state(const Dfs::FileLink& file_link) {
+    auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(),
+                                                             file_link.owner_id,
+                                                             file_link.file_id);
+    if (row.has_value() && row->state == Dfs::FileState::Ready) {
+        return false;
+    }
+
+    const auto now          = std::chrono::steady_clock::now();
+    auto       asked_locked = *m_file_state_asked;
+    std::erase_if(*asked_locked, [now](const auto& item) { return now - item.second >= FILE_STATE_ASK_INTERVAL; });
+    return asked_locked->try_emplace(file_link, now).second;
 }
 
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
