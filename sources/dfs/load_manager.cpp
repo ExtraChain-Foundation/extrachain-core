@@ -379,10 +379,20 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
             continue;
         }
 
-        bool need_load =
-            is_full
-            || node->dfs()->is_priority(Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id });
-        if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {
+        const auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
+        const bool priority  = node->dfs()->is_priority(file_link);
+        if (!is_full && !priority) {
+            continue;
+        }
+
+        // A row carries its sender's state: a sender that only knows of the file never answers a request for it
+        if (dir_row.state != Dfs::FileState::Ready) {
+            if (priority) {
+                node->network()->send_message(file_link,
+                                              MessageType::DfsFileState,
+                                              SendMode::Neighbours,
+                                              MessageStatus::Request);
+            }
             continue;
         }
 
