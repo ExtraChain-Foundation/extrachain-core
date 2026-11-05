@@ -31,7 +31,16 @@
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 
-DbConnector::DbConnector(const std::string &filePath, DbConnectorType type) {
+DbConnector::DbConnector(const std::string &filePath, DbConnectorType type)
+    : DbConnector(filePath, type, DbConnectorLockScope::Shared)
+{
+}
+
+DbConnector::DbConnector(const std::string &filePath, DbConnectorType type, DbConnectorLockScope lockScope)
+{
+    if (lockScope == DbConnectorLockScope::Connection) {
+        connection_mutex_ = std::make_shared<std::recursive_mutex>();
+    }
     if (filePath.empty()) {
         eFatal("[DbConnector] Empty file name");
     }
@@ -57,6 +66,16 @@ DbConnector::DbConnector(const std::string &filePath, DbConnectorType type) {
     this->m_file = filePath;
 }
 
+DbConnector::DbConnector(const std::string &filePath, DbConnectorType type,
+                         std::shared_ptr<std::recursive_mutex> lockGroup)
+    : DbConnector(filePath, type, DbConnectorLockScope::Shared)
+{
+    if (!lockGroup) {
+        eFatal("[DbConnector] Empty lock group");
+    }
+    connection_mutex_ = std::move(lockGroup);
+}
+
 DbConnector::DbConnector(const std::filesystem::path &filePath, DbConnectorType type)
     : DbConnector(filePath.string(), type) {
 }
@@ -76,7 +95,13 @@ DbConnector::DbConnector(DbConnector &&rhs) {
     this->m_file = std::move(rhs.m_file);
     this->m_open = rhs.m_open;
     this->db     = rhs.db;
+    this->connection_mutex_ = std::move(rhs.connection_mutex_);
     rhs.db       = nullptr;
+}
+
+std::recursive_mutex &DbConnector::operation_mutex()
+{
+    return connection_mutex_ ? *connection_mutex_ : dbmutex;
 }
 
 DbConnector::~DbConnector() {
@@ -93,6 +118,10 @@ QString DbConnector::sqlite_version() {
 }
 
 bool DbConnector::open() {
+    if (connection_mutex_ && sqlite3_threadsafe() == 0) {
+        eWarning("[DbConnector] Independent locking requires a thread-safe SQLite build");
+        return false;
+    }
     if (is_open()) {
         eFatal("[DbConnector] Double open");
         return false;
@@ -111,6 +140,11 @@ bool DbConnector::open() {
             // eFatal("[DbConnector] Open error: {}", m_file);
             return false;
         }
+
+        // Connections with their own lock reach one file side by side, and without a timeout sqlite
+        // answers SQLITE_BUSY the moment another holds the write lock: callers take that as a failure
+        // and the row is gone (0.26-2 stand: 11-24 rows per node). The lock is held briefly
+        sqlite3_busy_timeout(db, 5000);
 
         m_open = true;
         return true;
@@ -156,7 +190,7 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
     }
 
     // dbmutex.lock();
-    std::unique_lock   lock(dbmutex);
+    std::unique_lock   lock(operation_mutex());
     sqlite3_stmt      *stmt;
     std::vector<DbRow> res;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
@@ -237,7 +271,7 @@ std::unique_ptr<DbIterator> DbConnector::select_while(std::string query, std::st
     }
 
     // dbmutex.lock();
-    std::unique_lock   lock(dbmutex);
+    std::unique_lock   lock(operation_mutex());
     sqlite3_stmt      *stmt;
     std::vector<DbRow> res;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
@@ -299,7 +333,7 @@ bool DbConnector::update(const std::string &table_name, const DbRow &set_data, c
     query += where_clause;
 
     // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
+    std::unique_lock lock(operation_mutex());
     sqlite3_stmt    *stmt = NULL;
     int              rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
     // dbmutex.unlock();
@@ -409,7 +443,7 @@ bool DbConnector::delete_row(const std::string &tableName, const DbRow &data) {
     query += where;
 
     // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
+    std::unique_lock lock(operation_mutex());
     sqlite3_stmt    *stmt = NULL;
     int              rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
 
@@ -511,7 +545,7 @@ bool DbConnector::query(std::string query) {
     }
 
     // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
+    std::unique_lock lock(operation_mutex());
     sqlite3_stmt    *stmt;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int res = sqlite3_step(stmt);
@@ -634,7 +668,7 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
     query += fmt::format("({}) VALUES ({})", fields, values);
 
     // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
+    std::unique_lock lock(operation_mutex());
     sqlite3_stmt    *stmt = NULL;
     int              rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
 

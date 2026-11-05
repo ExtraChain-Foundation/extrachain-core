@@ -63,8 +63,12 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     node_enabled.store(false);
     eLog("Set node_enabled to {}", node_enabled);
 
+    // Posted tasks capture node-owned managers and database connections. Stop
+    // and join them while the node is still alive, including synchronous
+    // console nodes which do not have m_thread.
+    ThreadPoolBoost::terminate();
+
     if (m_thread) {
-        ThreadPoolBoost::terminate();
         m_thread->quit();
         m_thread->wait();
         node->deleteLater();
@@ -112,7 +116,7 @@ void ExtraChainNode::process() {
     prepare_folders();
     actor_index_        = new ActorIndex(this);
     account_controller_ = new AccountController(this);
-    luminance_manager_  = new LuminanceManager(this);
+    luminance_manager_  = std::make_unique<LuminanceManager>(this);
     network_manager_    = new NetworkManager(this, ws_port);
     dag_                = new Dag(this);
     dfs_                = new DfsController(this);
@@ -150,6 +154,10 @@ void ExtraChainNode::process() {
 
 ExtraChainNode::~ExtraChainNode() {
     node_enabled.store(false);
+    // Join SQL before cleanup callbacks and owned database teardown
+    if (network_manager_) {
+        network_manager_->stop_receive();
+    }
     eLog("ExtraChainNode::~ExtraChainNode");
     if (cleanup_callback_) {
         cleanup_callback_();
@@ -158,6 +166,10 @@ ExtraChainNode::~ExtraChainNode() {
 }
 
 void ExtraChainNode::cleanUp() {
+    node_enabled.store(false);
+    if (network_manager_) {
+        network_manager_->stop_receive();
+    }
     delete dag_;
     network_manager_->deleteLater();
     dfs_->deleteLater();
@@ -767,6 +779,12 @@ bool ExtraChainNode::is_client_application() const {
     return is_client_application_;
 }
 
+bool ExtraChainNode::syncs_dfs_with(const std::string& ip) const {
+    // The whole directory table is ~1.5 MB: an app takes it from its first node on every connect to it,
+    // a node from every new link
+    return !is_client_application_ || ip == network_manager_->first_node();
+}
+
 Dag* ExtraChainNode::dag() const {
     return dag_;
 }
@@ -776,7 +794,7 @@ NetworkManager* ExtraChainNode::network() const {
 }
 
 LuminanceManager* ExtraChainNode::luminance_manager() const {
-    return luminance_manager_;
+    return luminance_manager_.get();
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(Transaction tx) {
@@ -1138,22 +1156,30 @@ void ExtraChainNode::timer_reward_request() {
 
 void ExtraChainNode::start_mining() {
     dag_->force_full_mode();
-    if (timer_reward_ && !timer_reward_->isActive()) {
-        timer_reward_->start(MINING_TIMER_TICK);
-    }
+    set_reward_timer_active(true);
     eLog("[Mining] Started");
 }
 
 void ExtraChainNode::stop_mining() {
-    if (timer_reward_ && timer_reward_->isActive()) {
-        timer_reward_->stop();
-    }
+    set_reward_timer_active(false);
     dag_->force_light_mode();
     eLog("[Mining] Stopped");
 }
 
+void ExtraChainNode::set_reward_timer_active(bool active) {
+    if (!timer_reward_) {
+        return;
+    }
+
+    if (active && !timer_reward_->isActive()) {
+        timer_reward_->start(MINING_TIMER_TICK);
+    } else if (!active && timer_reward_->isActive()) {
+        timer_reward_->stop();
+    }
+}
+
 void ExtraChainNode::timer_luminance_autoremove() {
-    luminance_manager_->remove_old();
+    network_manager_->queue_luminance_cleanup();
 }
 
 void ExtraChainNode::timer_info_print() {
@@ -1330,18 +1356,23 @@ void ExtraChainNode::connect_signals() {
                 dag_->start_check();
 #endif
 
-                dfs_->sync(identifier);
+                if (syncs_dfs_with(ip)) {
+                    dfs_->sync(identifier);
+                }
             });
 
-    connect(network_manager_, &NetworkManager::newSocketActivated, [this]() {
-        dfs_->sendSizeRequestMsg(account_controller_->system_actor().id());
-    });
+    connect(network_manager_, &NetworkManager::newSocketActivatedWithParams, this,
+            [this](const std::string &, const std::string &identifier) {
+                dfs_->sendSizeRequestMsg(account_controller_->system_actor().id(), identifier);
+            });
 
     connect(actor_index_, &ActorIndex::firstSyncEnded, [this]() {
         dag_->start_check();
 
         for (const auto& [ip, identifier] : identifiers_after_actors_sync_) {
-            dfs_->sync(identifier);
+            if (syncs_dfs_with(ip)) {
+                dfs_->sync(identifier);
+            }
         }
     });
 

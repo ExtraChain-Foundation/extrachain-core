@@ -18,6 +18,7 @@
  */
 
 #include "network/websocket_service.h"
+#include <QPointer>
 
 WebSocketService::WebSocketService(QWebSocket     *ws,
                                    ExtraChainNode *node,
@@ -177,6 +178,7 @@ void WebSocketService::closeSocket() {
         normal_queue_.swap(empty2);
         low_queue_.swap(empty3);
         m_messageCache.swap(empty4);
+        dequeue_pending_ = false;
         locker.unlock();
     }
 
@@ -345,7 +347,7 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
     }
 
     if (!waiting_buffer_space_) {
-        emit needToTryDequeue();
+        scheduleDequeue();
     }
 }
 
@@ -361,7 +363,23 @@ bool WebSocketService::canSendMore() const {
     return m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
 }
 
+void WebSocketService::scheduleDequeue() {
+    {
+        QMutexLocker locker(&queue_mutex_);
+        if (closed_ || dequeue_pending_
+            || (high_queue_.empty() && normal_queue_.empty() && low_queue_.empty())) {
+            return;
+        }
+        dequeue_pending_ = true;
+    }
+    emit needToTryDequeue();
+}
+
 void WebSocketService::tryDequeueMessage() {
+    {
+        QMutexLocker locker(&queue_mutex_);
+        dequeue_pending_ = false;
+    }
     if (closed_) {
         return;
     }
@@ -389,10 +407,11 @@ void WebSocketService::tryDequeueMessage() {
     locker.unlock();
 
     if (!data.isEmpty()) {
+        QPointer<WebSocketService> guard(this);
         emit sendMessageInternal(data);
-
-        if (!high_queue_.empty() || !normal_queue_.empty() || !low_queue_.empty()) {
-            emit needToTryDequeue();
+        if (guard) {
+            // The queued write precedes the next coalesced dequeue wake
+            scheduleDequeue();
         }
     }
 }
@@ -402,15 +421,31 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
         return;
     }
 
+    // Each of these used to return silently. A message dropped here is gone with no
+    // trace anywhere: it left the send queue, so the sender counts it as sent, and it
+    // never reached the wire, so no peer can answer. For a locally created transaction
+    // that is a permanent loss — it waits in sended_transactions_ for an approval that
+    // cannot come.
     auto prepared = prepareSendMessage(data);
     if (prepared.isEmpty()) {
+        eWarning("[WS] {} Dropping message to {}: could not prepare ({} bytes in)",
+                 direction_,
+                 ip_.toStdString(),
+                 data.size());
         return;
     }
 
     if (m_ws == nullptr) {
+        eWarning("[WS] {} Dropping message to {}: socket is gone", direction_, ip_.toStdString());
         return;
     }
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !activated_) {
+    if (!m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !activated_) {
+        eWarning("[WS] {} Dropping message to {}: valid={}, state={}, activated={}",
+                 direction_,
+                 ip_.toStdString(),
+                 m_ws->isValid(),
+                 static_cast<int>(m_ws->state()),
+                 activated_);
         return;
     }
 
@@ -466,7 +501,7 @@ void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
     connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
         if (waiting_buffer_space_) {
-            emit needToTryDequeue();
+            scheduleDequeue();
         }
     });
 }

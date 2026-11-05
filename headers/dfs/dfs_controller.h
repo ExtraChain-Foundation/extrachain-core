@@ -40,6 +40,7 @@
 #include "dfs/load_manager.h"
 #include "dfs/historical_collection.h"
 #include "dfs/dfs_vector.h"
+#include "utils/safeptr.h"
 
 class ExtraChainNode;
 class DirsManager;
@@ -204,7 +205,7 @@ public:
         Utils::write_settings(settings);
     }
 
-    std::set<Dfs::FileLink> forces_files_;
+    SafePtr<std::set<Dfs::FileLink>> forces_files_;
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
@@ -553,6 +554,7 @@ private:
 
 public:
     void  sendSizeRequestMsg(const ActorId &actorId) const;
+    void  sendSizeRequestMsg(const ActorId &actorId, const std::string &identifier) const;
     void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder); // TODO: const
     float percentVerified(std::vector<DfsP::VerifyFileMessage> &fileList);
 

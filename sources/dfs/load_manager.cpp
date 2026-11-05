@@ -233,8 +233,6 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const std::string& identifier,
                                const bool         notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
-    bool is_forced = node->dfs()->forces_files_.contains(file_link);
-
     bool is_priority = node->dfs()->is_priority(file_link);
 
     if (!node_enabled.load()) {
@@ -245,10 +243,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         return;
     }
 
+    const bool is_forced = node->dfs()->forces_files_->erase(file_link) != 0;
     bool is_full = node->dfs()->mode() == DfsMode::Full;
-
-    if (is_forced)
-        node->dfs()->forces_files_.erase(file_link);
 
     if (is_priority) {
         if (m_active_downloads_priority->contains(file_link)) {
@@ -316,7 +312,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                             }
                         }
                         auto hash_size = dfs_vector.data_hash_size();
-                        if (dir_row.hash == hash_size->first) {
+                        if (hash_size.has_value() && dir_row.hash == hash_size->first) {
                             return;
                         }
                     }
@@ -383,10 +379,20 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
             continue;
         }
 
-        bool need_load =
-            is_full
-            || node->dfs()->is_priority(Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id });
-        if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {
+        const auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
+        const bool priority  = node->dfs()->is_priority(file_link);
+        if (!is_full && !priority) {
+            continue;
+        }
+
+        // A row carries its sender's state: a sender that only knows of the file never answers a request for it
+        if (dir_row.state != Dfs::FileState::Ready) {
+            if (priority && should_ask_file_state(file_link)) {
+                node->network()->send_message(file_link,
+                                              MessageType::DfsFileState,
+                                              SendMode::Neighbours,
+                                              MessageStatus::Request);
+            }
             continue;
         }
 
@@ -676,6 +682,20 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             }
         }
     });
+}
+
+bool LoadManager::should_ask_file_state(const Dfs::FileLink& file_link) {
+    auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(),
+                                                             file_link.owner_id,
+                                                             file_link.file_id);
+    if (row.has_value() && row->state == Dfs::FileState::Ready) {
+        return false;
+    }
+
+    const auto now          = std::chrono::steady_clock::now();
+    auto       asked_locked = *m_file_state_asked;
+    std::erase_if(*asked_locked, [now](const auto& item) { return now - item.second >= FILE_STATE_ASK_INTERVAL; });
+    return asked_locked->try_emplace(file_link, now).second;
 }
 
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {

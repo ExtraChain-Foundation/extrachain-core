@@ -19,7 +19,8 @@ endif()
 # c++ settings
 message("Compiler: ${CMAKE_CXX_COMPILER_ID} | front: ${CMAKE_CXX_COMPILER_FRONTEND_VARIANT} | build: ${CMAKE_BUILD_TYPE}")
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if ((CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    AND NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpedantic -Werror=return-type -Werror=implicit-fallthrough")
     if (UNIX)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
@@ -83,6 +84,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_receive_queue.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_receive_metrics.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/network_status.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/message_body.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/isocket_service.h
@@ -143,6 +146,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/janus_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_receive_queue.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
@@ -227,3 +231,29 @@ endif()
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+option(EXTRACHAIN_BUILD_DB_TESTS "Build focused DbConnector concurrency tests" OFF)
+if(EXTRACHAIN_BUILD_DB_TESTS)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    enable_testing()
+    add_executable(extrachain-db-tests "${CMAKE_CURRENT_LIST_DIR}/tests/db_connector_concurrency.cpp")
+    set_target_properties(extrachain-db-tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_link_libraries(extrachain-db-tests PRIVATE extrachain Qt6::Test)
+    add_test(NAME extrachain-db-concurrency COMMAND extrachain-db-tests)
+    set_tests_properties(extrachain-db-concurrency PROPERTIES TIMEOUT 30)
+    add_executable(extrachain-receive-tests "${CMAKE_CURRENT_LIST_DIR}/tests/network_receive_queue.cpp")
+    set_target_properties(extrachain-receive-tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_link_libraries(extrachain-receive-tests PRIVATE extrachain Qt6::Test)
+    add_test(NAME extrachain-receive-queue COMMAND extrachain-receive-tests)
+    set_tests_properties(extrachain-receive-queue PROPERTIES TIMEOUT 45)
+    add_executable(extrachain-actor-filter-tests "${CMAKE_CURRENT_LIST_DIR}/tests/actor_filter_cache.cpp")
+    set_target_properties(extrachain-actor-filter-tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_link_libraries(extrachain-actor-filter-tests PRIVATE extrachain Qt6::Test)
+    add_test(NAME extrachain-actor-filter-cache COMMAND extrachain-actor-filter-tests)
+    set_tests_properties(extrachain-actor-filter-cache PROPERTIES TIMEOUT 30)
+    add_executable(extrachain-websocket-tests "${CMAKE_CURRENT_LIST_DIR}/tests/websocket_send_queue.cpp")
+    set_target_properties(extrachain-websocket-tests PROPERTIES WIN32_EXECUTABLE OFF)
+    target_link_libraries(extrachain-websocket-tests PRIVATE extrachain Qt6::Test)
+    add_test(NAME extrachain-websocket-send-queue COMMAND extrachain-websocket-tests)
+    set_tests_properties(extrachain-websocket-send-queue PROPERTIES TIMEOUT 30)
+endif()

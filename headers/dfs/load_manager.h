@@ -133,5 +133,11 @@ private:
     SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;
     std::mutex                                              m_write_file_mutex;
 
+    // When neighbours were last asked who holds a file, so a sync on every new link does not ask again
+    SafePtr<std::unordered_map<Dfs::FileLink, std::chrono::steady_clock::time_point>> m_file_state_asked;
+    static constexpr auto FILE_STATE_ASK_INTERVAL = std::chrono::seconds(60);
+
+    bool should_ask_file_state(const Dfs::FileLink& file_link);
+
     QTimer* m_timer;
 };

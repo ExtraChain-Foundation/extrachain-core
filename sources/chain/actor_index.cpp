@@ -20,10 +20,17 @@
 #include "chain/actor_index.h"
 
 #include <QDir>
+#include <QScopeGuard>
+#include <QTemporaryFile>
 #include <QThread>
+#include <sqlite3.h>
 
 #include "network/network_manager.h"
 #include "utils/thread_pool_boost.h"
+
+namespace {
+const auto actorDatabaseLock = std::make_shared<std::recursive_mutex>();
+}
 
 ActorId ActorIndex::network_id() {
     /*
@@ -49,7 +56,7 @@ ActorId ActorIndex::network_id() {
 ActorIndex::ActorIndex(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
-    DbConnector db(folder_path_ + "actors");
+    DbConnector db(folder_path_ + "actors", DbConnectorType::Regular, actorDatabaseLock);
     bool        isDbOpen   = db.open();
     bool        isDbCreate = db.create_table(Config::DataStorage::actorsTableCreate);
 
@@ -151,18 +158,17 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
         // eLog("[ActorIndex] ---> {} {}", synch_count, actors_todo_map_.size());
         if (synch_count_
             <= std::max(actors_todo_map_.size() + std::size_t(records_), actors_todo_map_.size()) + 15) {
+            if (!this->save_actors().has_value()) {
+                eWarning("[ActorIndex] Initial actor persistence failed");
+                return;
+            }
             sync_first_done_ = true;
-            this->save_actors();
             node->account_controller()->dogenerate();
             emit this->firstSyncEnded();
         }
     } else {
-        for (const auto &actor : actors) {
-            this->save_actor(actor);
-
-            if (!node_enabled.load()) {
-                return;
-            }
+        if (node_enabled.load() && !this->save_actors(actors).has_value()) {
+            eWarning("[ActorIndex] Actor response persistence failed");
         }
     }
 }
@@ -204,7 +210,12 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
 
     eLog("[ActorIndex] Diff size: {}, need: {}, local: {}", actor_ids.size(), count, records_);
 
-    if (records_ + 1 >= count) {
+    // A peer may count more actors than it serves, so the first sync can also end here: what is
+    // already received is stored first, and only then is the sync done
+    if (records_ + 1 >= count && !sync_first_done_ && !actors_todo_map_.empty() && !save_actors().has_value()) {
+        eWarning("[ActorIndex] Received actors not stored; the first sync waits");
+    }
+    if (records_ + 1 >= count && actors_todo_map_.empty()) {
         if (!sync_first_done_) {
             emit this->firstSyncEnded();
         }
@@ -214,7 +225,7 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
     }
 
     auto r = responder;
-    ThreadPoolBoost::instance()->post([this, responder = r, actor_ids] {
+    ThreadPoolBoost::instance()->post([this, responder = r, actor_ids = std::move(actor_ids)] {
         std::vector<Actor<KeyPublic>> actors;
         auto                          min_size = actor_ids.size() > 100 ? 100 : actor_ids.size();
         actors.reserve(min_size);
@@ -298,22 +309,28 @@ std::size_t ActorIndex::records() const {
 
 std::expected<void, ActorSaveError> ActorIndex::add(const ActorId &id, const QByteArray &data) {
     QString path = build_file_path(id);
-    QFile   file(path);
 
-    if (file.exists()) {
-        // eLog("[ActorIndex] Can't save file {}: already exist", path);
+    if (QFile::exists(path)) {
         return std::unexpected(ActorSaveError::AlreadyExists);
     }
 
-    if (!file.open(QIODevice::WriteOnly)) {
+    QTemporaryFile file(path + ".XXXXXX");
+    if (!file.open()) {
         eLog("[ActorIndex] Can't save file {}: not opened", path);
         return std::unexpected(ActorSaveError::NotOpened);
     }
 
-    // eLog("[ActorIndex] Saving the file: {}", path);
-    file.write(data);
-    file.flush();
+    if (file.write(data) != data.size() || !file.flush()) {
+        return std::unexpected(ActorSaveError::Undefined);
+    }
     file.close();
+    // A temporary file is owner-only; actor files are public data and kept the usual 0644 before
+    const auto mode =
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup | QFileDevice::ReadOther;
+    if (file.error() != QFileDevice::NoError || !file.setPermissions(mode) || !file.rename(path)) {
+        return std::unexpected(ActorSaveError::Undefined);
+    }
+    file.setAutoRemove(false);
     return {};
 }
 
@@ -372,88 +389,135 @@ std::expected<void, ActorSaveError> ActorIndex::network_store_new_actor(const Ac
 }
 
 std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic> &actor) {
-    auto result = this->add(actor.id(), actor.toJson());
-
+    auto result = save_actor_batch({ &actor });
     if (!result.has_value()) {
         return std::unexpected(result.error());
     }
-
-    bool res = save_actor_index(actor);
-    if (!res) {
-        return std::unexpected(ActorSaveError::Undefined);
+    if (result->empty()) {
+        return std::unexpected(ActorSaveError::AlreadyExists);
     }
-
-    synch_.apply_received_ids({ actor.id() });
     emit actorSaved(actor.id());
     return {};
 }
 
-std::expected<void, ActorSaveError> ActorIndex::save_actors() {
-    DbConnector db(folder_path_ + "actors");
-    if (!db.open()) {
-        return std::unexpected(ActorSaveError::NotOpened);
+std::expected<void, ActorSaveError> ActorIndex::save_actors(const std::vector<Actor<KeyPublic>> &actors) {
+    std::vector<const Actor<KeyPublic> *> batch;
+    batch.reserve(actors.size());
+    for (const auto &actor : actors) {
+        batch.push_back(&actor);
     }
-
-    db.query("BEGIN TRANSACTION");
-
-    // QElapsedTimer timer;
-    // timer.start();
-    int i          = 0;
-    int to_records = 0;
-    for (const auto &[id, actor] : actors_todo_map_) {
-        auto result = this->add(actor.id(), actor.toJson());
-        if (!result.has_value()) {
-            // eWarning("[ActorIndex] Saving actor {} error: {}", actor.id(), result.error());
-            continue;
-        }
-
-        if (i++ % 100) {
-            emit this->firstSyncProgress(i, synch_count_);
-        }
-
-        bool dbInsert =
-            db.insert(Config::DataStorage::actorsTable,
-                      { { "id", actor.id().to_string() }, { "type", std::to_string(int(actor.type())) } });
-
-        synch_.apply_received_ids({ actor.id() }); // TODO
-        to_records++;
+    auto result = save_actor_batch(batch);
+    if (!result.has_value()) {
+        return std::unexpected(result.error());
     }
-
-    // if (!dbInsert) {
-    //     eCritical("db actor insert error");
-    //     return false;
-    // }
-    db.query("COMMIT");
-    // eLog("Actors timer: {} ms", timer.elapsed());
-
-    records_ += to_records;
-    actors_todo_map_.clear();
-
+    for (const auto &id : *result) {
+        emit actorSaved(id);
+    }
     return {};
 }
 
-bool ActorIndex::save_actor_index(const Actor<KeyPublic> &actor) {
-    this->records_++;
+std::expected<void, ActorSaveError> ActorIndex::save_actors() {
+    std::vector<const Actor<KeyPublic> *> batch;
+    batch.reserve(actors_todo_map_.size());
+    for (const auto &[id, actor] : actors_todo_map_) {
+        batch.push_back(&actor);
+    }
+    auto result = save_actor_batch(batch);
+    if (!result.has_value()) {
+        return std::unexpected(result.error());
+    }
+    actors_todo_map_.clear();
+    emit firstSyncProgress(int(result->size()), int(synch_count_));
+    return {};
+}
 
-    DbConnector db(folder_path_ + "actors");
+std::expected<std::vector<ActorId>, ActorSaveError>
+ActorIndex::save_actor_batch(const std::vector<const Actor<KeyPublic> *> &actors) {
+    std::vector<ActorId> added;
+    if (actors.empty()) {
+        return added;
+    }
+    added.reserve(actors.size());
+    std::vector<QString> created;
+    created.reserve(actors.size());
+    // Hold the actor lock across the transaction, not just each individual query
+    std::unique_lock lock(*actorDatabaseLock);
+    DbConnector db(folder_path_ + "actors", DbConnectorType::Regular, actorDatabaseLock);
     if (!db.open()) {
-        return false;
+        return std::unexpected(ActorSaveError::NotOpened);
     }
-
-    bool dbInsert = db.insert(Config::DataStorage::actorsTable,
-                              { { "id", actor.id().to_string() }, { "type", std::to_string(int(actor.type())) } });
-    if (!dbInsert) {
-        eCritical("db actor insert error");
-        return false;
+    if (!db.query("BEGIN IMMEDIATE")) {
+        return std::unexpected(ActorSaveError::Undefined);
     }
-
-    return true;
+    bool committed = false;
+    const auto rollback = qScopeGuard([&] {
+        if (committed) {
+            return;
+        }
+        if (!sqlite3_get_autocommit(db.getDb()) && !db.query("ROLLBACK")) {
+            eCritical("[ActorIndex] Rollback failed; retaining actor files");
+            return;
+        }
+        for (const auto &path : created) {
+            if (!QFile::remove(path)) {
+                eCritical("[ActorIndex] Failed to remove an uncommitted actor file");
+            }
+        }
+    });
+    // One actor that cannot be stored is left for a later sync and the rest still commit: failing the
+    // whole batch kept the first sync from ever ending. A lone actor still reports why it failed
+    const bool batch = actors.size() > 1;
+    for (const auto *actor : actors) {
+        const auto path = QString::fromStdString(build_actor_path(actor->id()));
+        bool orphan = false;
+        if (auto result = add(actor->id(), actor->toJson()); !result.has_value()) {
+            if (result.error() != ActorSaveError::AlreadyExists) {
+                if (!batch) {
+                    return std::unexpected(result.error());
+                }
+                eWarning("[ActorIndex] Actor {} not stored, left for a later sync", actor->id());
+                continue;
+            }
+            // A file left by an interrupted save has no row; it is indexed now rather than skipped forever
+            orphan = db.select("SELECT id FROM " + Config::DataStorage::actorsTable + " WHERE id = ?",
+                               Config::DataStorage::actorsTable, { { "id", actor->id().to_string() } })
+                         .empty();
+            if (!orphan) {
+                continue;
+            }
+        } else {
+            created.push_back(path);
+        }
+        if (!db.insert(Config::DataStorage::actorsTable,
+                       { { "id", actor->id().to_string() }, { "type", std::to_string(int(actor->type())) } })) {
+            // Without autocommit the transaction survived this one statement
+            if (!batch || sqlite3_get_autocommit(db.getDb())) {
+                return std::unexpected(ActorSaveError::Undefined);
+            }
+            eWarning("[ActorIndex] Actor {} not indexed, left for a later sync", actor->id());
+            if (!orphan) {
+                created.pop_back();
+                if (!QFile::remove(path)) {
+                    eCritical("[ActorIndex] Failed to remove an unindexed actor file");
+                }
+            }
+            continue;
+        }
+        added.push_back(actor->id());
+    }
+    if (!db.query("COMMIT")) {
+        return std::unexpected(ActorSaveError::Undefined);
+    }
+    committed = true;
+    records_ += added.size();
+    synch_.apply_received_ids(added);
+    return added;
 }
 
 std::vector<ActorId> ActorIndex::read_all_actors_ids() {
     std::vector<ActorId> result;
 
-    DbConnector db(folder_path_ + "actors");
+    DbConnector db(folder_path_ + "actors", DbConnectorType::Regular, actorDatabaseLock);
     db.open();
     auto actors = db.select("SELECT id FROM Actors ORDER by id");
     for (auto &actor : actors) {

@@ -29,6 +29,7 @@ class QThread;
 #include <QCoreApplication>
 #include <QMap>
 #include <QObject>
+#include <QPointer>
 #include <QTimer>
 
 #include "chain/actor_index.h"
@@ -119,8 +120,8 @@ private:
     DfsController*     dfs_                = nullptr;
     ActorIndex*        actor_index_        = nullptr;
     Dag*               dag_                = nullptr;
-    LuminanceManager*  luminance_manager_  = nullptr;
-    NetworkManager*    network_manager_    = nullptr;
+    std::unique_ptr<LuminanceManager> luminance_manager_;
+    QPointer<NetworkManager> network_manager_;
     AccountController* account_controller_ = nullptr;
     DataMiningManager* dmm_                = nullptr;
     TokenManager*      token_manager_      = nullptr;
@@ -178,6 +179,8 @@ public:
     bool create_subscription_vector(const std::string& file_name);
     void start();
     bool is_client_application() const;
+    // Whether a new link to this address takes the full DFS directory sync
+    bool syncs_dfs_with(const std::string& ip) const;
 
     std::pair<QString, QString> init_public_ip_and_country() const;
 
@@ -191,6 +194,8 @@ public:
 
     void start_mining();
     void stop_mining();
+    // Node thread only; the mode switch itself may run elsewhere
+    void set_reward_timer_active(bool active);
 
     std::expected<void, LoadError> login(const std::string& login, const std::string& password);
     std::expected<void, LoadError> login(const std::string& hash);
