@@ -23,8 +23,10 @@
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 #include <fmt/color.h>
+#include <algorithm>
 #include <string_view>
 #include <chrono>
+#include <vector>
 #include <ctime>
 #include <mutex>
 #include <thread>
@@ -79,6 +81,10 @@ class Logger {
     const std::string logs_directory         = "logs";
     std::thread::id   main_thread_id;
     std::string       file_name;
+    // A node can run for months; one endless file grows into gigabytes nobody can read back
+    std::uintmax_t    max_file_bytes     = 128ull * 1024 * 1024;
+    std::uintmax_t    max_total_bytes    = 2ull * 1024 * 1024 * 1024;
+    std::uintmax_t    current_file_bytes = 0;
 
     FileFilter file_filter;
     bool       filter_enabled = false;
@@ -130,21 +136,71 @@ class Logger {
                 std::filesystem::remove(entry.path(), file_ec);
             }
         }
+
+        // Then the oldest go until the whole folder fits the budget
+        struct Kept {
+            std::filesystem::path           path;
+            std::filesystem::file_time_type time;
+            std::uintmax_t                  size;
+        };
+        std::vector<Kept> kept;
+        std::uintmax_t    total = 0;
+        for (const auto &entry : std::filesystem::directory_iterator(logs_directory, ec)) {
+            std::error_code file_ec;
+            if (!entry.is_regular_file(file_ec) || entry.path().extension() != ".log")
+                continue;
+            const auto size = entry.file_size(file_ec);
+            if (file_ec)
+                continue;
+            total += size;
+            if (log_file.is_open() && entry.path() == std::filesystem::path(current_log_filename))
+                continue;
+            const auto time = entry.last_write_time(file_ec);
+            if (!file_ec)
+                kept.push_back({ entry.path(), time, size });
+        }
+        std::sort(kept.begin(), kept.end(), [](const Kept &a, const Kept &b) { return a.time < b.time; });
+        for (const auto &file : kept) {
+            if (total <= max_total_bytes)
+                break;
+            std::error_code file_ec;
+            if (std::filesystem::remove(file.path, file_ec))
+                total -= file.size;
+        }
     }
 
-    void open_log_file() {
+    void open_log_file(bool rotating = false) {
         if (!file_output_enabled)
             return;
         ensure_logs_directory();
         cleanup_old_logs();
-        current_log_filename = logs_directory + "/" + create_log_filename();
+        const auto base      = logs_directory + "/" + create_log_filename();
+        current_log_filename = base;
+        // A rotation always starts a file of its own, even within the same second as the last one
+        for (int n = 1; rotating && std::filesystem::exists(current_log_filename); ++n)
+            current_log_filename = base.substr(0, base.size() - 4) + "-" + std::to_string(n) + ".log";
         log_file.open(current_log_filename, std::ios::out | std::ios::app);
+        std::error_code ec;
+        const auto      size = std::filesystem::file_size(current_log_filename, ec);
+        current_file_bytes   = ec ? 0 : size;
+    }
+
+    void rotate_log_file() {
+        log_file.close();
+        open_log_file(true);
     }
 
 public:
     void cleanup_logs() {
         std::lock_guard lock(file_mutex);
         cleanup_old_logs();
+    }
+
+    // For tests and small devices; takes effect from the next write
+    void set_rotation_limits(std::uintmax_t file_bytes, std::uintmax_t total_bytes) {
+        std::lock_guard lock(file_mutex);
+        max_file_bytes  = file_bytes;
+        max_total_bytes = total_bytes;
     }
 
 private:
@@ -272,7 +328,11 @@ public:
             return false;
         log_file.write(message.data(), message.size());
         log_file.flush();
-        return static_cast<bool>(log_file);
+        const bool written = static_cast<bool>(log_file);
+        current_file_bytes += message.size();
+        if (current_file_bytes >= max_file_bytes)
+            rotate_log_file();
+        return written;
     }
 
     bool write_to_file(const std::string& message) {

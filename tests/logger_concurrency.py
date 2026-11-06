@@ -25,8 +25,10 @@ class LoggerTests(unittest.TestCase):
         cpp = cls.folder / 'fixture.cpp'
         cls.binary = cls.folder / ('fixture.exe' if os.name == 'nt' else 'fixture')
         cpp.write_text(r'''
+#include <algorithm>
 #include <atomic>
 #include <barrier>
+#include <cstdint>
 #include <chrono>
 #include <ctime>
 #include <filesystem>
@@ -121,6 +123,31 @@ void cleanup() {
     std::ifstream stream("logs/synthetic.log");
     require(std::string(std::istreambuf_iterator<char>(stream), {}) == "first\nsecond\n");
 }
+void rotation() {
+    Logger::instance().set_rotation_limits(4096, 4096 * 5);
+    Logger::start_file("synthetic");
+    for (int i = 0; i < 2000; ++i) { require(Logger::instance().write_to_file(row(0, i, 40))); }
+    Logger::stop_file();
+    std::uintmax_t total = 0;
+    int files = 0;
+    std::set<int> rows;
+    for (const auto& entry : std::filesystem::directory_iterator("logs")) {
+        ++files;
+        total += entry.file_size();
+        require(entry.file_size() < 4096 + 64);
+        std::ifstream input(entry.path());
+        std::string line;
+        while (std::getline(input, line)) {
+            const auto first = line.find(':');
+            const auto index = std::stoi(line.substr(first + 1, line.find(':', first + 1) - first - 1));
+            require(rows.insert(index).second);
+        }
+    }
+    // Rotated more than once, the budget held, and what is left is the newest rows without a gap
+    require(files >= 3 && total <= 4096 * 6);
+    require(!rows.empty() && *rows.rbegin() == 1999);
+    require(static_cast<int>(rows.size()) == 1999 - *rows.begin() + 1);
+}
 void config() {
     std::barrier start(5);
     std::vector<std::thread> threads;
@@ -185,6 +212,7 @@ int main(int argc, char** argv) {
         else if (mode == "long-records") { writers(8, 1000, 1024, false); }
         else if (mode == "start-stop") { writers(8, 2000, 80, true); }
         else if (mode == "cleanup") { cleanup(); }
+        else if (mode == "rotation") { rotation(); }
         else if (mode == "config") { config(); }
         else if (mode == "time") { time_snapshots(); }
         else if (mode == "no-logging-dependency") {
@@ -223,7 +251,7 @@ int main(int argc, char** argv) {
             raise AssertionError(result.stdout + result.stderr)
 
     def test_file_lifecycle_config_and_time(self):
-        for mode in ('single', 'concurrent', 'long-records', 'start-stop', 'cleanup', 'config', 'time',
+        for mode in ('single', 'concurrent', 'long-records', 'start-stop', 'cleanup', 'rotation', 'config', 'time',
                      'no-logging-dependency', 'directory-failure', 'disabled'):
             with self.subTest(mode=mode):
                 work = self.folder / mode
