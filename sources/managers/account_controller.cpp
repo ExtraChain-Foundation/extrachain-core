@@ -104,6 +104,16 @@ Actor<KeyPrivate> AccountController::create_service(const ActorId               
     return actor;
 }
 
+Actor<KeyPrivate> AccountController::derive_local_actor(const std::string &seed_label, ActorType type) {
+    Actor<KeyPrivate> actor;
+    if (profile_type_ == ProfileType::Old) {
+        return actor;
+    }
+
+    actor.generate_from_seed(profile_seed.seed(), seed_label, type);
+    return actor;
+}
+
 void AccountController::import_old_profile(const ImportedUser &imported_profile, const std::string &hash) {
     auto              profile = PrivateProfile::import(imported_profile, hash, node);
     Actor<KeyPrivate> actor   = profile.system();

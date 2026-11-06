@@ -254,6 +254,29 @@ std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_from_seed(const Master
     return { private_key, public_key };
 }
 
+std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_from_seed(const MasterSeed&  master_seed,
+                                                                    const std::string& label) {
+    std::array<std::uint8_t, 32> derived_seed;
+
+    std::vector<std::uint8_t> derivation_data;
+    derivation_data.reserve(master_seed.size() + label.size());
+    derivation_data.insert(derivation_data.end(), master_seed.begin(), master_seed.end());
+    derivation_data.insert(derivation_data.end(), label.begin(), label.end());
+
+    crypto_generichash(derived_seed.data(),
+                       derived_seed.size(),
+                       derivation_data.data(),
+                       derivation_data.size(),
+                       nullptr,
+                       0);
+
+    PrivateKey private_key;
+    PublicKey  public_key;
+    crypto_sign_seed_keypair(public_key.data(), private_key.data(), derived_seed.data());
+
+    return { private_key, public_key };
+}
+
 PublicKey Cryptography::get_public_from_private(const PrivateKey& private_key) {
     PublicKey public_key;
     std::copy(private_key.begin() + 32, private_key.end(), public_key.begin());

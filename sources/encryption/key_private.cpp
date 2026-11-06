@@ -50,6 +50,12 @@ void KeyPrivate::generate_seed(const MasterSeed &seed, int index) {
     public_key_                   = public_key;
 }
 
+void KeyPrivate::generate_seed(const MasterSeed &seed, const std::string &label) {
+    auto [secret_key, public_key] = Cryptography::asymmetric_from_seed(seed, label);
+    secret_key_                   = secret_key;
+    public_key_                   = public_key;
+}
+
 Cryptography::CryptoResult KeyPrivate::encrypt(const Bytes &data, const PublicKey &receiver_public_key) const {
     return Cryptography::asymmetric_encrypt(data, secret_key_, receiver_public_key);
 }

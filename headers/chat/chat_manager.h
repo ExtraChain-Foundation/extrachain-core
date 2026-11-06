@@ -56,6 +56,8 @@ public:
     bool                                 set_channel_name(const Chat::Chat &chat, const std::string &name);
 
     std::expected<std::vector<Chat::Chat>, ChatError>    read_chats();
+    // Last chat list produced by read_chats() (empty before the first read).
+    const std::vector<Chat::Chat>& chats() const { return chats_; }
     std::expected<std::vector<Chat::Message>, ChatError> read_chat_messages(const ActorId     &owner_id,
                                                                             const std::string &file_id,
                                                                             bool               quick = false);
