@@ -85,6 +85,9 @@ class Logger {
     std::uintmax_t    max_file_bytes     = 128ull * 1024 * 1024;
     std::uintmax_t    max_total_bytes    = 2ull * 1024 * 1024 * 1024;
     std::uintmax_t    current_file_bytes = 0;
+    // The run is the file a start opened; its pieces are named after their own time and numbered
+    std::string       run_log_filename;
+    int               run_part = 1;
 
     FileFilter file_filter;
     bool       filter_enabled = false;
@@ -169,25 +172,66 @@ class Logger {
         }
     }
 
-    void open_log_file(bool rotating = false) {
+    static std::string file_part(const std::string &path) {
+        return std::filesystem::path(path).filename().string();
+    }
+
+    // name-<time>.partN.log; a rotation always starts a file of its own, even within one second
+    std::string next_piece_filename() const {
+        const auto base = logs_directory + "/" + create_log_filename();
+        const auto stem = base.substr(0, base.size() - 4) + ".part" + std::to_string(run_part + 1);
+        auto       name = stem + ".log";
+        std::error_code ec;
+        for (int n = 1; std::filesystem::exists(name, ec); ++n)
+            name = stem + "-" + std::to_string(n) + ".log";
+        return name;
+    }
+
+    // A line of the logger itself, in the same shape as the others
+    void write_marker(std::string_view text) {
+        auto    now   = std::chrono::system_clock::now();
+        auto    timer = std::chrono::system_clock::to_time_t(now);
+        std::tm bt    = detail::local_time_snapshot(timer);
+        auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+        const auto line = fmt::format("{:04d}.{:02d}.{:02d} {:02d}:{:02d}:{:02d}.{:03d} [Info] {}\n",
+                                      bt.tm_year + 1900,
+                                      bt.tm_mon + 1,
+                                      bt.tm_mday,
+                                      bt.tm_hour,
+                                      bt.tm_min,
+                                      bt.tm_sec,
+                                      ms.count(),
+                                      text);
+        log_file.write(line.data(), line.size());
+        log_file.flush();
+        current_file_bytes += line.size();
+    }
+
+    void open_log_file(const std::string &piece = {}) {
         if (!file_output_enabled)
             return;
         ensure_logs_directory();
         cleanup_old_logs();
-        const auto base      = logs_directory + "/" + create_log_filename();
-        current_log_filename = base;
-        // A rotation always starts a file of its own, even within the same second as the last one
-        for (int n = 1; rotating && std::filesystem::exists(current_log_filename); ++n)
-            current_log_filename = base.substr(0, base.size() - 4) + "-" + std::to_string(n) + ".log";
+        current_log_filename = piece.empty() ? logs_directory + "/" + create_log_filename() : piece;
         log_file.open(current_log_filename, std::ios::out | std::ios::app);
         std::error_code ec;
         const auto      size = std::filesystem::file_size(current_log_filename, ec);
         current_file_bytes   = ec ? 0 : size;
+        if (piece.empty()) {
+            run_log_filename = file_part(current_log_filename);
+            run_part         = 1;
+        } else if (log_file.is_open()) {
+            // Even with the run's first file gone to the cleanup, a piece still says where it belongs
+            write_marker(fmt::format("part {}, continues {}", ++run_part, run_log_filename));
+        }
     }
 
     void rotate_log_file() {
+        const auto next = next_piece_filename();
+        write_marker("continued in " + file_part(next));
         log_file.close();
-        open_log_file(true);
+        open_log_file(next);
     }
 
 public:

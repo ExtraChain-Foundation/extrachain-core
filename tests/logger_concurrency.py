@@ -40,6 +40,7 @@ class LoggerTests(unittest.TestCase):
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 #include "utils/exc_logs_filter.h"
@@ -48,6 +49,21 @@ class LoggerTests(unittest.TestCase):
 #endif
 namespace fmt {
 template<class... T> std::string format(std::string_view, const std::string& name, T&&...) { return name + ".log"; }
+template<class V> std::string text(const V& value) {
+    if constexpr (std::is_arithmetic_v<V>) { return std::to_string(value); } else { return std::string(value); }
+}
+template<class First, class... T> requires(!std::is_convertible_v<First, const std::string&>)
+std::string format(std::string_view pattern, First&& first, T&&... rest) {
+    const std::vector<std::string> values{text(first), text(rest)...};
+    std::string out;
+    std::size_t next = 0;
+    for (std::size_t i = 0; i < pattern.size(); ++i) {
+        if (pattern[i] != '{') { out += pattern[i]; continue; }
+        i = pattern.find('}', i);
+        if (next < values.size()) { out += values[next++]; }
+    }
+    return out;
+}
 template<class... T> void println(std::string_view, T&&...) {}
 }
 enum class PathError { None };
@@ -131,13 +147,34 @@ void rotation() {
     std::uintmax_t total = 0;
     int files = 0;
     std::set<int> rows;
+    std::set<std::string> names;
+    std::vector<std::pair<std::string, std::string>> links;
+    const auto part_of = [](const std::string& name) {
+        const auto dot = name.find(".part");
+        return dot == std::string::npos ? 1 : std::stoi(name.substr(dot + 5));
+    };
     for (const auto& entry : std::filesystem::directory_iterator("logs")) {
         ++files;
         total += entry.file_size();
-        require(entry.file_size() < 4096 + 64);
+        require(entry.file_size() < 4096 + 192);
+        const auto name = entry.path().filename().string();
+        const int part = part_of(name);
+        names.insert(name);
         std::ifstream input(entry.path());
         std::string line;
+        bool opening = true;
         while (std::getline(input, line)) {
+            // A piece opens with its number and its run, and every file but the newest names the next
+            if (line.find(" [Info] ") != std::string::npos) {
+                const auto next = line.find("continued in ");
+                const auto run = "part " + std::to_string(part) + ", continues synthetic.log";
+                require((opening && part > 1 && line.ends_with(run)) || next != std::string::npos);
+                if (next != std::string::npos) { links.emplace_back(name, line.substr(next + 13)); }
+                opening = false;
+                continue;
+            }
+            require(!(opening && part > 1));
+            opening = false;
             const auto first = line.find(':');
             const auto index = std::stoi(line.substr(first + 1, line.find(':', first + 1) - first - 1));
             require(rows.insert(index).second);
@@ -145,6 +182,8 @@ void rotation() {
     }
     // Rotated more than once, the budget held, and what is left is the newest rows without a gap
     require(files >= 3 && total <= 4096 * 6);
+    require(links.size() == names.size() - 1);
+    for (const auto& [name, next] : links) { require(names.count(next) && part_of(next) == part_of(name) + 1); }
     require(!rows.empty() && *rows.rbegin() == 1999);
     require(static_cast<int>(rows.size()) == 1999 - *rows.begin() + 1);
 }
