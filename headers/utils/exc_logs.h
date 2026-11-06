@@ -123,14 +123,16 @@ class Logger {
         std::error_code ec;
         auto            now = std::filesystem::file_time_type::clock::now();
 
-        for (const auto &entry : std::filesystem::directory_iterator(logs_directory, ec)) {
-            if (!entry.is_regular_file() || entry.path().extension() != ".log")
+        // This runs inside a write now, so nothing here may throw into the caller's code
+        for (std::filesystem::directory_iterator it(logs_directory, ec), end; !ec && it != end; it.increment(ec)) {
+            const auto     &entry = *it;
+            std::error_code file_ec;
+            if (!entry.is_regular_file(file_ec) || entry.path().extension() != ".log")
                 continue;
             if (log_file.is_open() && entry.path() == std::filesystem::path(current_log_filename))
                 continue;
 
-            std::error_code file_ec;
-            auto            age = now - entry.last_write_time(file_ec);
+            auto age = now - entry.last_write_time(file_ec);
             if (file_ec)
                 continue;
 
@@ -148,7 +150,8 @@ class Logger {
         };
         std::vector<Kept> kept;
         std::uintmax_t    total = 0;
-        for (const auto &entry : std::filesystem::directory_iterator(logs_directory, ec)) {
+        for (std::filesystem::directory_iterator it(logs_directory, ec), end; !ec && it != end; it.increment(ec)) {
+            const auto     &entry = *it;
             std::error_code file_ec;
             if (!entry.is_regular_file(file_ec) || entry.path().extension() != ".log")
                 continue;
@@ -208,30 +211,37 @@ class Logger {
         current_file_bytes += line.size();
     }
 
-    void open_log_file(const std::string &piece = {}) {
+    void open_log_file() {
         if (!file_output_enabled)
             return;
         ensure_logs_directory();
         cleanup_old_logs();
-        current_log_filename = piece.empty() ? logs_directory + "/" + create_log_filename() : piece;
+        current_log_filename = logs_directory + "/" + create_log_filename();
         log_file.open(current_log_filename, std::ios::out | std::ios::app);
         std::error_code ec;
         const auto      size = std::filesystem::file_size(current_log_filename, ec);
         current_file_bytes   = ec ? 0 : size;
-        if (piece.empty()) {
-            run_log_filename = file_part(current_log_filename);
-            run_part         = 1;
-        } else if (log_file.is_open()) {
-            // Even with the run's first file gone to the cleanup, a piece still says where it belongs
-            write_marker(fmt::format("part {}, continues {}", ++run_part, run_log_filename));
-        }
+        run_log_filename     = file_part(current_log_filename);
+        run_part             = 1;
     }
 
     void rotate_log_file() {
-        const auto next = next_piece_filename();
+        const auto    next = next_piece_filename();
+        std::ofstream piece(next, std::ios::out | std::ios::app);
+        if (!piece.is_open()) {
+            // Stay in this file and try again a megabyte on: a closed log would lose every line after
+            current_file_bytes = max_file_bytes - std::min<std::uintmax_t>(max_file_bytes / 2, 1024 * 1024);
+            return;
+        }
         write_marker("continued in " + file_part(next));
         log_file.close();
-        open_log_file(next);
+        log_file             = std::move(piece);
+        current_log_filename = next;
+        current_file_bytes   = 0;
+        // Even with the run's first file gone to the cleanup, a piece still says where it belongs
+        write_marker(fmt::format("part {}, continues {}", ++run_part, run_log_filename));
+        // Only now, with the new piece open and so spared
+        cleanup_old_logs();
     }
 
 public:

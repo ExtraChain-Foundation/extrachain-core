@@ -187,6 +187,34 @@ void rotation() {
     require(!rows.empty() && *rows.rbegin() == 1999);
     require(static_cast<int>(rows.size()) == 1999 - *rows.begin() + 1);
 }
+// A piece that cannot open leaves the log where it was, and the next try after the folder heals succeeds
+void rotation_failure() {
+#ifndef _WIN32
+    namespace fs = std::filesystem;
+    Logger::instance().set_rotation_limits(4096, std::uintmax_t(1) << 30);
+    Logger::start_file("synthetic");
+    fs::permissions("logs", fs::perms::owner_write, fs::perm_options::remove);
+    const bool locked = !std::ofstream("logs/probe.log").is_open();
+    for (int i = 0; i < 400; ++i) { require(Logger::instance().write_to_file(row(0, i, 40))); }
+    fs::permissions("logs", fs::perms::owner_write, fs::perm_options::add);
+    for (int i = 400; i < 800; ++i) { require(Logger::instance().write_to_file(row(0, i, 40))); }
+    Logger::stop_file();
+    std::set<int> rows;
+    for (const auto& entry : fs::directory_iterator("logs")) {
+        if (entry.path().filename() == "probe.log") { continue; }
+        std::ifstream input(entry.path());
+        std::string line;
+        while (std::getline(input, line)) {
+            if (line.find(" [Info] ") != std::string::npos) { continue; }
+            const auto first = line.find(':');
+            require(rows.insert(std::stoi(line.substr(first + 1, line.find(':', first + 1) - first - 1))).second);
+        }
+    }
+    require(rows.size() == 800);
+    // Privileged runs keep the folder writable; then there was nothing to survive
+    if (locked) { require(fs::file_size("logs/synthetic.log") > 400 * 40 && fs::exists("logs/synthetic.part2.log")); }
+#endif
+}
 void config() {
     std::barrier start(5);
     std::vector<std::thread> threads;
@@ -252,6 +280,7 @@ int main(int argc, char** argv) {
         else if (mode == "start-stop") { writers(8, 2000, 80, true); }
         else if (mode == "cleanup") { cleanup(); }
         else if (mode == "rotation") { rotation(); }
+        else if (mode == "rotation-failure") { rotation_failure(); }
         else if (mode == "config") { config(); }
         else if (mode == "time") { time_snapshots(); }
         else if (mode == "no-logging-dependency") {
@@ -290,8 +319,8 @@ int main(int argc, char** argv) {
             raise AssertionError(result.stdout + result.stderr)
 
     def test_file_lifecycle_config_and_time(self):
-        for mode in ('single', 'concurrent', 'long-records', 'start-stop', 'cleanup', 'rotation', 'config', 'time',
-                     'no-logging-dependency', 'directory-failure', 'disabled'):
+        for mode in ('single', 'concurrent', 'long-records', 'start-stop', 'cleanup', 'rotation', 'rotation-failure',
+                     'config', 'time', 'no-logging-dependency', 'directory-failure', 'disabled'):
             with self.subTest(mode=mode):
                 work = self.folder / mode
                 work.mkdir()
