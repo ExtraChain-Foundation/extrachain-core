@@ -25,8 +25,10 @@ class LoggerTests(unittest.TestCase):
         cpp = cls.folder / 'fixture.cpp'
         cls.binary = cls.folder / ('fixture.exe' if os.name == 'nt' else 'fixture')
         cpp.write_text(r'''
+#include <algorithm>
 #include <atomic>
 #include <barrier>
+#include <cstdint>
 #include <chrono>
 #include <ctime>
 #include <filesystem>
@@ -38,6 +40,7 @@ class LoggerTests(unittest.TestCase):
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 #include "utils/exc_logs_filter.h"
@@ -46,6 +49,21 @@ class LoggerTests(unittest.TestCase):
 #endif
 namespace fmt {
 template<class... T> std::string format(std::string_view, const std::string& name, T&&...) { return name + ".log"; }
+template<class V> std::string text(const V& value) {
+    if constexpr (std::is_arithmetic_v<V>) { return std::to_string(value); } else { return std::string(value); }
+}
+template<class First, class... T> requires(!std::is_convertible_v<First, const std::string&>)
+std::string format(std::string_view pattern, First&& first, T&&... rest) {
+    const std::vector<std::string> values{text(first), text(rest)...};
+    std::string out;
+    std::size_t next = 0;
+    for (std::size_t i = 0; i < pattern.size(); ++i) {
+        if (pattern[i] != '{') { out += pattern[i]; continue; }
+        i = pattern.find('}', i);
+        if (next < values.size()) { out += values[next++]; }
+    }
+    return out;
+}
 template<class... T> void println(std::string_view, T&&...) {}
 }
 enum class PathError { None };
@@ -121,6 +139,82 @@ void cleanup() {
     std::ifstream stream("logs/synthetic.log");
     require(std::string(std::istreambuf_iterator<char>(stream), {}) == "first\nsecond\n");
 }
+void rotation() {
+    Logger::instance().set_rotation_limits(4096, 4096 * 5);
+    Logger::start_file("synthetic");
+    for (int i = 0; i < 2000; ++i) { require(Logger::instance().write_to_file(row(0, i, 40))); }
+    Logger::stop_file();
+    std::uintmax_t total = 0;
+    int files = 0;
+    std::set<int> rows;
+    std::set<std::string> names;
+    std::vector<std::pair<std::string, std::string>> links;
+    const auto part_of = [](const std::string& name) {
+        const auto dot = name.find(".part");
+        return dot == std::string::npos ? 1 : std::stoi(name.substr(dot + 5));
+    };
+    for (const auto& entry : std::filesystem::directory_iterator("logs")) {
+        ++files;
+        total += entry.file_size();
+        require(entry.file_size() < 4096 + 192);
+        const auto name = entry.path().filename().string();
+        const int part = part_of(name);
+        names.insert(name);
+        std::ifstream input(entry.path());
+        std::string line;
+        bool opening = true;
+        while (std::getline(input, line)) {
+            // A piece opens with its number and its run, and every file but the newest names the next
+            if (line.find(" [Info] ") != std::string::npos) {
+                const auto next = line.find("continued in ");
+                const auto run = "part " + std::to_string(part) + ", continues synthetic.log";
+                require((opening && part > 1 && line.ends_with(run)) || next != std::string::npos);
+                if (next != std::string::npos) { links.emplace_back(name, line.substr(next + 13)); }
+                opening = false;
+                continue;
+            }
+            require(!(opening && part > 1));
+            opening = false;
+            const auto first = line.find(':');
+            const auto index = std::stoi(line.substr(first + 1, line.find(':', first + 1) - first - 1));
+            require(rows.insert(index).second);
+        }
+    }
+    // Rotated more than once, the budget held, and what is left is the newest rows without a gap
+    require(files >= 3 && total <= 4096 * 6);
+    require(links.size() == names.size() - 1);
+    for (const auto& [name, next] : links) { require(names.count(next) && part_of(next) == part_of(name) + 1); }
+    require(!rows.empty() && *rows.rbegin() == 1999);
+    require(static_cast<int>(rows.size()) == 1999 - *rows.begin() + 1);
+}
+// A piece that cannot open leaves the log where it was, and the next try after the folder heals succeeds
+void rotation_failure() {
+#ifndef _WIN32
+    namespace fs = std::filesystem;
+    Logger::instance().set_rotation_limits(4096, std::uintmax_t(1) << 30);
+    Logger::start_file("synthetic");
+    fs::permissions("logs", fs::perms::owner_write, fs::perm_options::remove);
+    const bool locked = !std::ofstream("logs/probe.log").is_open();
+    for (int i = 0; i < 400; ++i) { require(Logger::instance().write_to_file(row(0, i, 40))); }
+    fs::permissions("logs", fs::perms::owner_write, fs::perm_options::add);
+    for (int i = 400; i < 800; ++i) { require(Logger::instance().write_to_file(row(0, i, 40))); }
+    Logger::stop_file();
+    std::set<int> rows;
+    for (const auto& entry : fs::directory_iterator("logs")) {
+        if (entry.path().filename() == "probe.log") { continue; }
+        std::ifstream input(entry.path());
+        std::string line;
+        while (std::getline(input, line)) {
+            if (line.find(" [Info] ") != std::string::npos) { continue; }
+            const auto first = line.find(':');
+            require(rows.insert(std::stoi(line.substr(first + 1, line.find(':', first + 1) - first - 1))).second);
+        }
+    }
+    require(rows.size() == 800);
+    // Privileged runs keep the folder writable; then there was nothing to survive
+    if (locked) { require(fs::file_size("logs/synthetic.log") > 400 * 40 && fs::exists("logs/synthetic.part2.log")); }
+#endif
+}
 void config() {
     std::barrier start(5);
     std::vector<std::thread> threads;
@@ -185,6 +279,8 @@ int main(int argc, char** argv) {
         else if (mode == "long-records") { writers(8, 1000, 1024, false); }
         else if (mode == "start-stop") { writers(8, 2000, 80, true); }
         else if (mode == "cleanup") { cleanup(); }
+        else if (mode == "rotation") { rotation(); }
+        else if (mode == "rotation-failure") { rotation_failure(); }
         else if (mode == "config") { config(); }
         else if (mode == "time") { time_snapshots(); }
         else if (mode == "no-logging-dependency") {
@@ -223,8 +319,8 @@ int main(int argc, char** argv) {
             raise AssertionError(result.stdout + result.stderr)
 
     def test_file_lifecycle_config_and_time(self):
-        for mode in ('single', 'concurrent', 'long-records', 'start-stop', 'cleanup', 'config', 'time',
-                     'no-logging-dependency', 'directory-failure', 'disabled'):
+        for mode in ('single', 'concurrent', 'long-records', 'start-stop', 'cleanup', 'rotation', 'rotation-failure',
+                     'config', 'time', 'no-logging-dependency', 'directory-failure', 'disabled'):
             with self.subTest(mode=mode):
                 work = self.folder / mode
                 work.mkdir()
