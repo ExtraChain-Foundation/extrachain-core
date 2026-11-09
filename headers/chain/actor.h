@@ -92,6 +92,21 @@ public:
             eFatal("[Actor] Create: error size of hash");
     }
 
+    void generate_from_seed(const MasterSeed &seed, const std::string &label, ActorType type) {
+        static_assert(std::is_same<T, KeyPrivate>::value,
+                      "Cannot be created with a public key. Only private is supported");
+
+        this->type_ = type;
+        this->key_.generate_seed(seed, label);
+        auto public_key = this->key_.public_key();
+        auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Blake3);
+
+        if (hash.size() >= ChainConst::ACTOR_SIZE)
+            id_ = hash.substr(0, ChainConst::ACTOR_SIZE);
+        else
+            eFatal("[Actor] Create: error size of hash");
+    }
+
     bool empty() const {
         if (key_.empty())
             return true;

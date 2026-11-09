@@ -147,6 +147,15 @@ bool DbConnector::open() {
         sqlite3_busy_timeout(db, 5000);
 
         m_open = true;
+        // Speed pragmas: WAL lets readers and the writer coexist without
+        // blocking; NORMAL sync is safe under WAL. This does not change any
+        // stored bytes or query results — only journal/fsync behaviour —
+        // so hashes and sync semantics are identical, just faster.
+        sqlite3_exec(db,
+                     "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY;",
+                     nullptr,
+                     nullptr,
+                     nullptr);
         return true;
     }
 }
