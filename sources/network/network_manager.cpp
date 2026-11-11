@@ -2253,11 +2253,6 @@ void NetworkManager::local_inizialization() {
             break;
         case NetworkStatus::Status::Offline: {
             eInfo("Warning: World network is offline");
-#ifdef Q_OS_ANDROID
-            // Android's reachability says offline for minutes while the network works, notably after a virtual
-            // interface comes or goes; a network really lost fails the sockets by itself, so nothing is dropped here
-            break;
-#endif
             std::set<SocketService *> copied;
             {
                 auto connectionsLocked = *connections_;

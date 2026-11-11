@@ -21,8 +21,54 @@
 
 #include "utils/exc_logs.h"
 
+#ifdef Q_OS_ANDROID
+    #include <QJniEnvironment>
+    #include <QJniObject>
+    #include <QtCore/qcoreapplication_platform.h>
+#endif
+
 namespace {
 constexpr int kOfflineDelayMs = 2000;
+
+#ifdef Q_OS_ANDROID
+// Whether Android has a network that carries internet at all. An answer it cannot give counts as yes: dropping
+// every connection on a guess costs more than keeping one that died
+bool androidHasNetwork() {
+    QJniEnvironment env;
+    QJniObject      context = QNativeInterface::QAndroidApplication::context();
+    if (!context.isValid()) {
+        return true;
+    }
+    QJniObject name = QJniObject::getStaticObjectField("android/content/Context", "CONNECTIVITY_SERVICE",
+                                                       "Ljava/lang/String;");
+    QJniObject manager =
+        context.callObjectMethod("getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;", name.object<jstring>());
+    if (env.checkAndClearExceptions() || !manager.isValid()) {
+        return true;
+    }
+    QJniObject network = manager.callObjectMethod("getActiveNetwork", "()Landroid/net/Network;");
+    if (env.checkAndClearExceptions()) {
+        return true;
+    }
+    if (!network.isValid()) {
+        return false;
+    }
+    QJniObject capabilities = manager.callObjectMethod(
+        "getNetworkCapabilities", "(Landroid/net/Network;)Landroid/net/NetworkCapabilities;", network.object());
+    if (env.checkAndClearExceptions()) {
+        return true;
+    }
+    if (!capabilities.isValid()) {
+        return false;
+    }
+    constexpr jint kNetCapabilityInternet = 12;
+    const bool     internet = capabilities.callMethod<jboolean>("hasCapability", "(I)Z", kNetCapabilityInternet);
+    if (env.checkAndClearExceptions()) {
+        return true;
+    }
+    return internet;
+}
+#endif
 }
 
 NetworkStatus::NetworkStatus(QObject *parent)
@@ -32,6 +78,20 @@ NetworkStatus::NetworkStatus(QObject *parent)
     connect(&m_offlineDelay, &QTimer::timeout, this, [this] {
         setNetworkStatus(Status::Offline);
     });
+#ifdef Q_OS_ANDROID
+    m_androidPoll.setInterval(kOfflineDelayMs / 2);
+    connect(&m_androidPoll, &QTimer::timeout, this, [this] {
+        if (androidHasNetwork()) {
+            m_androidMisses = 0;
+            setNetworkStatus(Status::Online);
+        } else if (++m_androidMisses >= 2) {
+            setNetworkStatus(Status::Offline);
+        }
+    });
+    setNetworkStatus(androidHasNetwork() ? Status::Online : Status::Offline);
+    m_androidPoll.start();
+    return;
+#endif
     auto networkInfo = QNetworkInformation::instance();
     if (networkInfo == nullptr) {
         eLog("[NetworkStatus] Can't detect network status");

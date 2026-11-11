@@ -50,4 +50,10 @@ private:
     // Offline is believed only once it lasts: the system reports it for a moment whenever a virtual
     // interface comes or goes, and acting on that would drop every peer connection for nothing
     QTimer m_offlineDelay;
+#ifdef Q_OS_ANDROID
+    // Android asks its ConnectivityManager instead: Qt's reachability there reads offline for minutes while the
+    // network works. Offline once it has had no network for two polls in a row
+    QTimer m_androidPoll;
+    int    m_androidMisses = 0;
+#endif
 };
