@@ -21,8 +21,17 @@
 
 #include "utils/exc_logs.h"
 
+namespace {
+constexpr int kOfflineDelayMs = 2000;
+}
+
 NetworkStatus::NetworkStatus(QObject *parent)
     : QObject(parent) {
+    m_offlineDelay.setSingleShot(true);
+    m_offlineDelay.setInterval(kOfflineDelayMs);
+    connect(&m_offlineDelay, &QTimer::timeout, this, [this] {
+        setNetworkStatus(Status::Offline);
+    });
     auto networkInfo = QNetworkInformation::instance();
     if (networkInfo == nullptr) {
         eLog("[NetworkStatus] Can't detect network status");
@@ -43,9 +52,15 @@ void NetworkStatus::onReachabilityChanged(QNetworkInformation::Reachability reac
     case QNetworkInformation::Reachability::Disconnected:
     case QNetworkInformation::Reachability::Local:
     case QNetworkInformation::Reachability::Site:
-        setNetworkStatus(Status::Offline);
+        // Already offline (the start-up state) needs no wait; online waits to see whether it lasts
+        if (m_networkStatus != Status::Online) {
+            setNetworkStatus(Status::Offline);
+        } else if (!m_offlineDelay.isActive()) {
+            m_offlineDelay.start();
+        }
         break;
     case QNetworkInformation::Reachability::Online:
+        m_offlineDelay.stop();
         setNetworkStatus(Status::Online);
         break;
     }

@@ -20,6 +20,7 @@
 #pragma once
 
 #include <QObject>
+#include <QTimer>
 #include <QtNetwork/QNetworkInformation>
 
 class NetworkStatus : public QObject {
@@ -46,4 +47,7 @@ signals:
 private:
     void   setNetworkStatus(Status status);
     Status m_networkStatus = Status::Offline;
+    // Offline is believed only once it lasts: the system reports it for a moment whenever a virtual
+    // interface comes or goes, and acting on that would drop every peer connection for nothing
+    QTimer m_offlineDelay;
 };
