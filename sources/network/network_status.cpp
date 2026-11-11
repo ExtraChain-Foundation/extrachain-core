@@ -31,8 +31,9 @@ namespace {
 constexpr int kOfflineDelayMs = 2000;
 
 #ifdef Q_OS_ANDROID
-// Whether Android has a network that carries internet at all. An answer it cannot give counts as yes: dropping
-// every connection on a guess costs more than keeping one that died
+// Whether Android has a network with working internet: a physical one Android itself checked (VALIDATED), so a
+// Wi-Fi with no uplink counts as none and an overlay network an app lays on top neither helps nor hurts.
+// An answer it cannot give counts as yes: dropping every connection on a guess costs more than keeping a dead one
 bool androidHasNetwork() {
     QJniEnvironment env;
     QJniObject      context = QNativeInterface::QAndroidApplication::context();
@@ -46,27 +47,32 @@ bool androidHasNetwork() {
     if (env.checkAndClearExceptions() || !manager.isValid()) {
         return true;
     }
-    QJniObject network = manager.callObjectMethod("getActiveNetwork", "()Landroid/net/Network;");
-    if (env.checkAndClearExceptions()) {
+    QJniObject networks = manager.callObjectMethod("getAllNetworks", "()[Landroid/net/Network;");
+    if (env.checkAndClearExceptions() || !networks.isValid()) {
         return true;
     }
-    if (!network.isValid()) {
-        return false;
-    }
-    QJniObject capabilities = manager.callObjectMethod(
-        "getNetworkCapabilities", "(Landroid/net/Network;)Landroid/net/NetworkCapabilities;", network.object());
-    if (env.checkAndClearExceptions()) {
-        return true;
-    }
-    if (!capabilities.isValid()) {
-        return false;
-    }
+    constexpr jint kTransportAppOverlay    = 4;
     constexpr jint kNetCapabilityInternet = 12;
-    const bool     internet = capabilities.callMethod<jboolean>("hasCapability", "(I)Z", kNetCapabilityInternet);
-    if (env.checkAndClearExceptions()) {
-        return true;
+    constexpr jint kNetCapabilityValidated = 16;
+    const auto     array = networks.object<jobjectArray>();
+    const jsize    count = env->GetArrayLength(array);
+    for (jsize i = 0; i < count; ++i) {
+        QJniObject network      = QJniObject::fromLocalRef(env->GetObjectArrayElement(array, i));
+        QJniObject capabilities = manager.callObjectMethod(
+            "getNetworkCapabilities", "(Landroid/net/Network;)Landroid/net/NetworkCapabilities;", network.object());
+        if (env.checkAndClearExceptions()) {
+            return true;
+        }
+        if (!capabilities.isValid() || capabilities.callMethod<jboolean>("hasTransport", "(I)Z", kTransportAppOverlay)) {
+            continue;
+        }
+        if (capabilities.callMethod<jboolean>("hasCapability", "(I)Z", kNetCapabilityInternet)
+            && capabilities.callMethod<jboolean>("hasCapability", "(I)Z", kNetCapabilityValidated)) {
+            return true;
+        }
     }
-    return internet;
+    env.checkAndClearExceptions();
+    return false;
 }
 #endif
 }

@@ -2250,6 +2250,8 @@ void NetworkManager::local_inizialization() {
         switch (status) {
         case NetworkStatus::Status::Online:
             eInfo("World network is online");
+            // Back from offline: dial now rather than on the next tick of the reconnect timer
+            QMetaObject::invokeMethod(this, &NetworkManager::reconnection, Qt::QueuedConnection);
             break;
         case NetworkStatus::Status::Offline: {
             eInfo("Warning: World network is offline");
