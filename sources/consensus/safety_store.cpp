@@ -10,6 +10,8 @@
 
 #include "consensus/safety_store.h"
 
+#include <algorithm>
+
 #include <fmt/format.h>
 
 #include "utils/db_connector.h"
@@ -58,6 +60,10 @@ namespace ExtraChain::Consensus {
         constexpr std::string_view CreateFinalitySectionIndex =
             "CREATE INDEX IF NOT EXISTS consensus_finality_proofs_sections "
             "ON consensus_finality_proofs(first_section, last_section)";
+        constexpr std::string_view CreateFinalizedTransactionTable =
+            "CREATE TABLE IF NOT EXISTS consensus_finalized_transactions (transaction_hash TEXT PRIMARY KEY, "
+            "height INTEGER NOT NULL)";
+        constexpr std::string_view FinalizedTransactionIndexSlot = "finalized_transactions";
 
         template <typename T>
         std::expected<T, ConsensusError> decode(const std::string& encoded) {
@@ -134,6 +140,46 @@ namespace ExtraChain::Consensus {
                 .decision_certificate = std::move(certificate.value()),
             };
         }
+
+        bool index_finalized_transactions(DbConnector& database, const Proposal& finalized) {
+            const auto height = std::to_string(finalized.header.height);
+            return std::ranges::all_of(finalized.batch.transaction_hashes, [&](const std::string& hash) {
+                return database.replace("consensus_finalized_transactions",
+                                        { { "transaction_hash", hash }, { "height", height } });
+            });
+        }
+
+        // Stores written before the transaction index existed are indexed once from their finality proofs.
+        bool backfill_finalized_transactions(DbConnector& database) {
+            const auto marker = database.select(
+                fmt::format("SELECT slot FROM safety_state WHERE slot = '{}'", FinalizedTransactionIndexSlot));
+            if (!marker.empty())
+                return true;
+            if (!database.query("BEGIN IMMEDIATE TRANSACTION"))
+                return false;
+            bool       indexed = true;
+            const auto rows    = database.select("SELECT finalized_hash FROM consensus_finality_proofs");
+            for (const auto& row : rows) {
+                const auto hash = row.find("finalized_hash");
+                if (hash == row.end()) {
+                    indexed = false;
+                    break;
+                }
+                const auto finalized = load_hashed_payload<Proposal>(database, "consensus_proposals", hash->second);
+                if (!finalized.has_value() || !index_finalized_transactions(database, finalized.value())) {
+                    indexed = false;
+                    break;
+                }
+            }
+            if (!indexed
+                || !database.replace("safety_state",
+                                     { { "slot", std::string(FinalizedTransactionIndexSlot) }, { "payload", "1" } })
+                || !database.query("COMMIT")) {
+                database.query("ROLLBACK");
+                return false;
+            }
+            return true;
+        }
     } // namespace
 
     SafetyStore::SafetyStore(std::filesystem::path database_path)
@@ -179,7 +225,8 @@ namespace ExtraChain::Consensus {
             || !database_->query(std::string(CreateBatchHeightIndex))
             || !database_->query(std::string(CreateCertificateHeightIndex))
             || !database_->query(std::string(CreateTimeoutCertificateHeightIndex))
-            || !database_->query(std::string(CreateFinalitySectionIndex))) {
+            || !database_->query(std::string(CreateFinalitySectionIndex))
+            || !database_->query(std::string(CreateFinalizedTransactionTable))) {
             database_.reset();
             return std::unexpected(ConsensusError::StorageUnavailable);
         }
@@ -189,7 +236,8 @@ namespace ExtraChain::Consensus {
             return std::unexpected(ConsensusError::StorageFailure);
         }
         const auto status = integrity.front().find("quick_check");
-        if (status == integrity.front().end() || status->second != "ok") {
+        if (status == integrity.front().end() || status->second != "ok"
+            || !backfill_finalized_transactions(*database_)) {
             database_.reset();
             return std::unexpected(ConsensusError::StorageFailure);
         }
@@ -477,7 +525,8 @@ namespace ExtraChain::Consensus {
                                 { "finalized_hash", hash_header(value.finalized_proposal.header) },
                                 { "child_hash", hash_header(value.child_proposal.header) },
                                 { "grandchild_hash", hash_header(value.grandchild_proposal.header) },
-                                { "decision_certificate_hash", hash_certificate(value.decision_certificate) } });
+                                { "decision_certificate_hash", hash_certificate(value.decision_certificate) } })
+                && index_finalized_transactions(*database_, value.finalized_proposal);
         }
         const auto state_stored =
             certificate_stored && proof_stored
@@ -709,6 +758,37 @@ namespace ExtraChain::Consensus {
                         section));
         if (rows.empty()) {
             return std::optional<FinalityProof> {};
+        }
+        auto proof = load_finality_proof(*database_, rows.front());
+        if (!proof.has_value()) {
+            return std::unexpected(proof.error());
+        }
+        return std::optional<FinalityProof>(std::move(proof.value()));
+    }
+
+    std::expected<std::optional<FinalityProof>, ConsensusError> SafetyStore::load_finality_proof_for_transaction(
+        std::string_view transaction_hash) {
+        std::lock_guard lock(mutex_);
+        if (!database_ || !database_->is_open()) {
+            return std::unexpected(ConsensusError::StorageUnavailable);
+        }
+        const auto heights =
+            database_->select("SELECT height FROM consensus_finalized_transactions WHERE transaction_hash = ?",
+                              "consensus_finalized_transactions",
+                              { { "transaction_hash", std::string(transaction_hash) } });
+        if (heights.empty()) {
+            return std::optional<FinalityProof> {};
+        }
+        const auto height = heights.front().find("height");
+        if (height == heights.front().end()) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        const auto rows = database_->select(
+            fmt::format("SELECT finalized_hash, child_hash, grandchild_hash, decision_certificate_hash "
+                        "FROM consensus_finality_proofs WHERE height = {}",
+                        height->second));
+        if (rows.size() != 1) {
+            return std::unexpected(ConsensusError::StorageFailure);
         }
         auto proof = load_finality_proof(*database_, rows.front());
         if (!proof.has_value()) {

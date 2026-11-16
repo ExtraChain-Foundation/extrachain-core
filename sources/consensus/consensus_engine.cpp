@@ -994,41 +994,37 @@ namespace ExtraChain::Consensus {
         if (transaction_hash.empty()) {
             return std::unexpected(ConsensusError::InvalidProof);
         }
-        std::uint64_t cursor = 0;
-        while (true) {
-            const auto stored = store_->load_finality_proofs_after(cursor, MaximumShadowSyncProofs);
-            if (!stored.has_value()) {
-                return std::unexpected(stored.error());
-            }
-            for (const auto& finality_proof : stored.value()) {
-                if (!verify_finality_proof(finality_proof)) {
-                    return std::unexpected(ConsensusError::StorageFailure);
-                }
-                const auto& hashes = finality_proof.finalized_proposal.batch.transaction_hashes;
-                const auto  found  = std::ranges::find(hashes, transaction_hash);
-                if (found != hashes.end()) {
-                    const auto index = static_cast<std::size_t>(std::distance(hashes.begin(), found));
-                    const auto proof = make_merkle_proof(hashes, index);
-                    if (!proof.has_value()) {
-                        return std::unexpected(proof.error());
-                    }
-                    return TransactionInclusionProofV1 {
-                        .protocol_version = ProtocolVersion,
-                        .network_id       = validators_.document().network_id,
-                        .epoch            = validators_.document().epoch,
-                        .height           = finality_proof.finalized_proposal.header.height,
-                        .transaction_hash = std::string(transaction_hash),
-                        .merkle_proof     = proof.value(),
-                        .finality_proof   = finality_proof,
-                    };
-                }
-                cursor = finality_proof.finalized_proposal.header.height;
-            }
-            if (stored.value().size() < MaximumShadowSyncProofs) {
-                break;
-            }
+        // Light peers ask for unfinalized hashes too: a lookup costs one indexed read, not a history scan.
+        const auto stored = store_->load_finality_proof_for_transaction(transaction_hash);
+        if (!stored.has_value()) {
+            return std::unexpected(stored.error());
         }
-        return std::optional<TransactionInclusionProofV1> {};
+        if (!stored.value().has_value()) {
+            return std::optional<TransactionInclusionProofV1> {};
+        }
+        const auto& finality_proof = stored.value().value();
+        if (!verify_finality_proof(finality_proof)) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        const auto& hashes = finality_proof.finalized_proposal.batch.transaction_hashes;
+        const auto  found  = std::ranges::find(hashes, transaction_hash);
+        if (found == hashes.end()) {
+            return std::unexpected(ConsensusError::StorageFailure);
+        }
+        const auto index = static_cast<std::size_t>(std::distance(hashes.begin(), found));
+        const auto proof = make_merkle_proof(hashes, index);
+        if (!proof.has_value()) {
+            return std::unexpected(proof.error());
+        }
+        return TransactionInclusionProofV1 {
+            .protocol_version = ProtocolVersion,
+            .network_id       = validators_.document().network_id,
+            .epoch            = validators_.document().epoch,
+            .height           = finality_proof.finalized_proposal.header.height,
+            .transaction_hash = std::string(transaction_hash),
+            .merkle_proof     = proof.value(),
+            .finality_proof   = finality_proof,
+        };
     }
 
     bool ConsensusEngine::verify_transaction_inclusion_proof(const TransactionInclusionProofV1& proof) const {

@@ -7,6 +7,7 @@
 #include "consensus/consensus_engine.h"
 #include "consensus/peer_authenticator.h"
 #include "consensus/shadow_consensus.h"
+#include "utils/db_connector.h"
 #include "utils/exc_utils.h"
 #include "utils/exc_utils_base64.h"
 
@@ -533,6 +534,30 @@ int main() {
               !engines.front()->verify_transaction_inclusion_proof(changed_inclusion));
     } else {
         check("changed transaction inclusion proof is rejected", false);
+    }
+    const auto missing = engines.front()->transaction_inclusion_proof(std::string(64, 'a'));
+    check("an unknown transaction has no inclusion proof", missing.has_value() && !missing.value().has_value());
+    {
+        const auto  store_path = root / "validator-0.sqlite";
+        DbConnector database(store_path);
+        check("the validator store opens directly", database.open(false));
+        check("the transaction index can be cleared", database.query("DELETE FROM consensus_finalized_transactions"));
+        const auto unindexed = engines.front()->transaction_inclusion_proof("transaction-1");
+        check("an inclusion lookup reads the transaction index instead of the proof history",
+              unindexed.has_value() && !unindexed.value().has_value());
+        check("the index marker can be cleared",
+              database.query("DELETE FROM safety_state WHERE slot = 'finalized_transactions'"));
+        SafetyStore reopened(store_path);
+        check("a store without a transaction index opens", reopened.open().has_value());
+        const auto backfilled = reopened.load_finality_proof_for_transaction("transaction-1");
+        check("opening backfills the transaction index from finality proofs",
+              backfilled.has_value() && backfilled.value().has_value() && inclusion.has_value()
+                  && inclusion.value().has_value()
+                  && backfilled.value().value().finalized_proposal.header.height == inclusion.value().value().height);
+        const auto restored = engines.front()->transaction_inclusion_proof("transaction-1");
+        check("the backfilled index serves inclusion proofs",
+              restored.has_value() && restored.value().has_value()
+                  && engines.front()->verify_transaction_inclusion_proof(restored.value().value()));
     }
     if (proofs.has_value() && !proofs.value().empty()) {
         auto changed_proof                             = proofs.value().front();

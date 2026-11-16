@@ -16,6 +16,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 #include "consensus/consensus_types.h"
@@ -73,6 +74,8 @@ namespace ExtraChain::Consensus {
                                                                                              std::size_t   limit);
         std::expected<std::optional<FinalityProof>, ConsensusError> load_finality_proof_for_section(
             std::uint64_t section);
+        std::expected<std::optional<FinalityProof>, ConsensusError> load_finality_proof_for_transaction(
+            std::string_view transaction_hash);
 
     private:
         [[nodiscard]] static std::string    vote_key(const Vote& vote);
