@@ -23,9 +23,12 @@
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 #include <fmt/color.h>
+#include <algorithm>
 #include <string_view>
 #include <chrono>
+#include <mutex>
 #include <thread>
+#include <vector>
 #include <source_location>
 #include <fstream>
 #include <filesystem>
@@ -61,6 +64,14 @@ class Logger {
     const std::string logs_directory         = "logs";
     std::thread::id   main_thread_id;
     std::string       file_name;
+    // Runtime threads write concurrently; one stream must not interleave or rotate under a writer.
+    std::mutex        file_mutex;
+    // A node runs for months: pieces of max_file_bytes, the oldest removed past max_total_bytes.
+    std::uintmax_t    max_file_bytes     = 128ull * 1024 * 1024;
+    std::uintmax_t    max_total_bytes    = 2ull * 1024 * 1024 * 1024;
+    std::uintmax_t    current_file_bytes = 0;
+    std::string       run_log_base;
+    int               run_part = 1;
 
     FileFilter file_filter;
     bool       filter_enabled = false;
@@ -106,23 +117,44 @@ class Logger {
         }
     }
 
+    // Runs inside a write after a rotation, so nothing here may throw into the caller.
     void cleanup_old_logs(int max_age_days = 7) {
-        std::error_code ec;
-        auto            now = std::filesystem::file_time_type::clock::now();
-
-        for (const auto& entry : std::filesystem::directory_iterator(logs_directory, ec)) {
-            if (!entry.is_regular_file() || entry.path().extension() != ".log")
-                continue;
-
+        struct Kept {
+            std::filesystem::path           path;
+            std::filesystem::file_time_type time;
+            std::uintmax_t                  size;
+        };
+        std::error_code   ec;
+        const auto        now     = std::filesystem::file_time_type::clock::now();
+        const auto        current = std::filesystem::path(current_log_filename);
+        std::vector<Kept> kept;
+        std::uintmax_t    total = 0;
+        for (std::filesystem::directory_iterator it(logs_directory, ec), end; !ec && it != end; it.increment(ec)) {
+            const auto&     entry = *it;
             std::error_code file_ec;
-            auto            age = now - entry.last_write_time(file_ec);
+            if (!entry.is_regular_file(file_ec) || entry.path().extension() != ".log")
+                continue;
+            const auto time = entry.last_write_time(file_ec);
+            const auto size = file_ec ? 0 : entry.file_size(file_ec);
             if (file_ec)
                 continue;
-
-            auto days = std::chrono::duration_cast<std::chrono::hours>(age).count() / 24;
-            if (days >= max_age_days) {
+            const bool active = log_file.is_open() && entry.path() == current;
+            const auto days   = std::chrono::duration_cast<std::chrono::hours>(now - time).count() / 24;
+            if (!active && days >= max_age_days) {
                 std::filesystem::remove(entry.path(), file_ec);
+                continue;
             }
+            total += size;
+            if (!active)
+                kept.push_back({ entry.path(), time, size });
+        }
+        std::sort(kept.begin(), kept.end(), [](const Kept& a, const Kept& b) { return a.time < b.time; });
+        for (const auto& file : kept) {
+            if (total <= max_total_bytes)
+                break;
+            std::error_code file_ec;
+            if (std::filesystem::remove(file.path, file_ec))
+                total -= file.size;
         }
     }
 
@@ -133,15 +165,50 @@ class Logger {
         cleanup_old_logs();
         current_log_filename = logs_directory + "/" + create_log_filename();
         log_file.open(current_log_filename, std::ios::out | std::ios::app);
+        std::error_code ec;
+        const auto      size = std::filesystem::file_size(current_log_filename, ec);
+        current_file_bytes   = ec ? 0 : size;
+        run_log_base         = current_log_filename.substr(0, current_log_filename.size() - 4);
+        run_part             = 1;
+    }
+
+    // name-<time>.partN.log continues the run in a new file; the full piece stays as it is.
+    void rotate_log_file() {
+        const auto      stem = run_log_base + ".part" + std::to_string(run_part + 1);
+        std::error_code ec;
+        auto            next = stem + ".log";
+        for (int suffix = 1; std::filesystem::exists(next, ec); ++suffix)
+            next = stem + "-" + std::to_string(suffix) + ".log";
+        std::ofstream piece(next, std::ios::out | std::ios::app);
+        if (!piece.is_open()) {
+            // Keep writing here and try again one megabyte later: a closed log loses every later line.
+            current_file_bytes = max_file_bytes - std::min<std::uintmax_t>(max_file_bytes / 2, 1024 * 1024);
+            return;
+        }
+        log_file.close();
+        log_file             = std::move(piece);
+        current_log_filename = next;
+        current_file_bytes   = 0;
+        ++run_part;
+        cleanup_old_logs();
     }
 
 public:
     void cleanup_logs() {
+        std::lock_guard lock(file_mutex);
         cleanup_old_logs();
+    }
+
+    // Tests rotate with small pieces; nodes keep the defaults.
+    void set_rotation_limits(std::uintmax_t file_bytes, std::uintmax_t total_bytes) {
+        std::lock_guard lock(file_mutex);
+        max_file_bytes  = std::max<std::uintmax_t>(file_bytes, 1);
+        max_total_bytes = total_bytes;
     }
 
 private:
     void start_file_logging() {
+        std::lock_guard lock(file_mutex);
         if (!file_output_enabled) {
             file_output_enabled = true;
             open_log_file();
@@ -149,6 +216,7 @@ private:
     }
 
     void stop_file_logging() {
+        std::lock_guard lock(file_mutex);
         if (file_output_enabled) {
             if (log_file.is_open()) {
                 log_file.close();
@@ -244,10 +312,14 @@ public:
     }
 
     bool write_to_file(std::string_view message) {
+        std::lock_guard lock(file_mutex);
         if (!file_output_enabled || !log_file.is_open())
             return false;
         log_file.write(message.data(), message.size());
         log_file.flush();
+        current_file_bytes += message.size();
+        if (current_file_bytes >= max_file_bytes)
+            rotate_log_file();
         return true;
     }
 
