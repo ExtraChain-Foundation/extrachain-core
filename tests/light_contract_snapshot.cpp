@@ -97,6 +97,22 @@ int main() {
         TEST_REQUIRE_EQ(verified.value().versions.back().module, module);
         TEST_REQUIRE_EQ(Consensus::light_contract_summary(snapshot).checkpoint_revision, 1U);
 
+        // A deployment signed before framed contract hashing keeps the legacy hex hash.
+        auto       legacy = snapshot;
+        auto       json   = Json::serialize(legacy.transaction);
+        const auto framed = legacy.transaction.hash();
+        const auto hex    = legacy.transaction.calculate_hash_hex();
+        TEST_REQUIRE(framed != hex);
+        TEST_REQUIRE(json.find(framed) != std::string::npos);
+        json.replace(json.find(framed), framed.size(), hex);
+        legacy.transaction = Json::deserialize<Transaction>(json).value();
+        TEST_REQUIRE_EQ(legacy.transaction.hash(), hex);
+        legacy.transaction_hash = hex;
+        const auto legacy_root  = attach_proof(legacy);
+        TEST_REQUIRE(Consensus::verify_contract_snapshot(legacy, legacy_root).has_value());
+        legacy.transaction.set_amount(BigNumberFloat(1));
+        TEST_REQUIRE(!Consensus::verify_contract_snapshot(legacy, legacy_root).has_value());
+
         Consensus::BalanceSnapshotV2 saved {
             .balances  = { { { owner.id(), ActorId() }, BigNumberFloat(123456789) } },
             .contracts = { snapshot },

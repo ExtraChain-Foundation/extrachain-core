@@ -109,9 +109,12 @@ namespace ExtraChain::Consensus {
         const auto language = Contracts::module_language(snapshot.module);
         if (!language.has_value() || language.value() != snapshot.language)
             return std::unexpected(ConsensusError::InvalidProof);
-        auto transaction = snapshot.transaction;
-        transaction.update_hash();
-        if (transaction.hash() != snapshot.transaction_hash || !is_contract_transaction(transaction.type())
+        // Contract transactions signed before framed contract hashing keep their legacy hex hash.
+        const auto& transaction  = snapshot.transaction;
+        const bool  hash_matches = transaction.calculate_hash() == snapshot.transaction_hash
+                                  || (!transaction.consensus_intent().has_value()
+                                      && transaction.calculate_hash_hex() == snapshot.transaction_hash);
+        if (!hash_matches || !is_contract_transaction(transaction.type())
             || transaction.section().to_int().value_or(0) != snapshot.section)
             return std::unexpected(ConsensusError::InvalidProof);
         const auto transition = contract_transition(snapshot);
