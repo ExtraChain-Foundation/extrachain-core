@@ -196,10 +196,40 @@ bool test_balance_snapshot_runtime(const ExtraChain::Consensus::BalanceSnapshotV
         TEST_REQUIRE(activated.has_value() && !activated.value());
         TEST_REQUIRE(node->network_id() == validators.network_id);
         TEST_REQUIRE(node->consensus()->requires_intent_v2());
+        const TransactionIntentV2 transfer {
+            .network_id = validators.network_id,
+            .sender     = account.id(),
+            .receiver   = validators.network_id,
+            .token      = ActorId { },
+            .amount     = "1",
+            .operation  = IntentOperation::Transfer,
+        };
+        // The restored snapshot may be hours old, so its height cannot date a new request.
+        const auto stale = node->consensus()->submit_local_intent(transfer, "", account);
+        TEST_REQUIRE(!stale.has_value() && stale.error() == ConsensusError::NotReady);
         TEST_REQUIRE(!node->consensus()->accept_balance_snapshot(snapshot));
         TEST_REQUIRE(node->consensus()->accept_balance_snapshot(newer));
+        const auto fresh = node->consensus()->submit_local_intent(transfer, "", account);
+        TEST_REQUIRE(fresh.has_value() || fresh.error() != ConsensusError::NotReady);
         // Verifying a proof alone must not expose the cache before the atomic install.
         TEST_REQUIRE(!node->dag()->state_projection_ready());
+        node->cleanUp();
+        node.reset();
+        // A light client upgraded across a protocol change restarts from the installed documents.
+        {
+            WireFormat::Scope stored_format(WireFormat::Mode::Canonical);
+            auto              state = MessagePack::deserialize<LightClientStateV1>(
+                             FileIo::read_all("consensus/light-client.msgpack").value())
+                             .value();
+            state.protocol_version = ProtocolVersion - 1;
+            TEST_REQUIRE(
+                FileIo::write_atomic("consensus/light-client.msgpack", MessagePack::serialize(state)).has_value());
+        }
+        node = std::make_unique<ExtraChain::Core::ExtraChainNode>(false, true, 0);
+        node->process();
+        const auto upgraded = node->consensus()->activate(validators.network_id);
+        TEST_REQUIRE(upgraded.has_value() && !upgraded.value());
+        TEST_REQUIRE(node->consensus()->accept_balance_snapshot(newer));
         node->cleanUp();
         node.reset();
         return true;

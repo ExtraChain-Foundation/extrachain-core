@@ -174,6 +174,9 @@ namespace ExtraChain::Consensus {
         // A local request without its own window stays valid for this many heights: hours under load,
         // and an idle network does not advance heights at all.
         constexpr std::uint64_t LocalIntentLifetimeHeights = 10'000;
+
+        // A light client asks for a snapshot every few seconds; one older than this may predate the window.
+        constexpr std::chrono::minutes LightIntentSnapshotAge { 10 };
     } // namespace
 
     ConsensusService::ConsensusService(Core::ExtraChainNode& node, std::filesystem::path directory)
@@ -353,6 +356,7 @@ namespace ExtraChain::Consensus {
         relay_transport_.clear();
         relay_context_.reset();
         light_snapshot_.reset();
+        light_snapshot_received_.reset();
         light_verifier_.reset();
         watched_light_contracts_.clear();
         intent_store_.reset();
@@ -1267,7 +1271,11 @@ namespace ExtraChain::Consensus {
         std::string              metadata,
         const Actor<KeyPrivate>& sender) {
         std::lock_guard lock(mutex_);
-        if (!consensus_ && !light_snapshot_.has_value())
+        // A light request expires relative to the trusted height, and a snapshot restored from disk can be
+        // hours old. Sign only after a recent snapshot from a peer.
+        if (!consensus_
+            && (!light_snapshot_.has_value() || !light_snapshot_received_.has_value()
+                || std::chrono::steady_clock::now() - light_snapshot_received_.value() > LightIntentSnapshotAge))
             return std::unexpected(ConsensusError::NotReady);
         const auto nonce = next_local_nonce(sender.id());
         if (!nonce.has_value())
@@ -1753,7 +1761,17 @@ namespace ExtraChain::Consensus {
             if (loaded.has_value() && !node_.network_id().is_zero()
                 && loaded.value().snapshot().active_validators.network_id != node_.network_id())
                 return std::unexpected(ConsensusError::InvalidNetwork);
-            return loaded;
+            if (loaded.has_value())
+                return loaded;
+            // State saved by another protocol version cannot advance; start again from the installed documents.
+            const auto bytes = FileIo::read_all(directory_ / "light-client.msgpack");
+            if (!bytes.has_value())
+                return loaded;
+            const auto stored = MessagePack::deserialize<LightClientStateV1>(bytes.value());
+            if (!stored.has_value() || stored.value().protocol_version == ProtocolVersion)
+                return loaded;
+            eLog("[Shadow] Light client state uses protocol {}; restarting from the trust anchor",
+                 stored.value().protocol_version);
         }
         if (error) {
             return std::unexpected(ConsensusError::StorageUnavailable);

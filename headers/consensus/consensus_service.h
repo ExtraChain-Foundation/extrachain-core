@@ -288,6 +288,7 @@ namespace ExtraChain::Consensus {
         Core::ExtraChainNode&                                         node_;
         std::optional<LightClientVerifier>                            light_verifier_;
         std::optional<BalanceSnapshotV2>                              light_snapshot_;
+        std::optional<std::chrono::steady_clock::time_point>          light_snapshot_received_;
         std::set<ActorId>                                             watched_light_contracts_;
         std::filesystem::path                                         directory_;
         std::unique_ptr<ShadowConsensus>                              consensus_;

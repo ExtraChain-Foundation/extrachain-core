@@ -162,8 +162,9 @@ namespace ExtraChain::Consensus {
         if (!bytes.has_value())
             return std::unexpected(ConsensusError::StorageFailure);
         const auto snapshot = decode_balance_snapshot(bytes.value());
+        // The stored snapshot only caches the last peer answer; without it the client waits for the next one.
         if (!snapshot.has_value() || !apply_light_snapshot(snapshot.value(), false))
-            return std::unexpected(ConsensusError::InvalidProof);
+            eLog("[Shadow] Stored light snapshot cannot be applied; waiting for a peer snapshot");
         return {};
     }
 
@@ -192,6 +193,8 @@ namespace ExtraChain::Consensus {
         committed_nonces_         = snapshot.nonces;
         light_verifier_           = std::move(verifier);
         light_snapshot_           = snapshot;
+        if (persist)
+            light_snapshot_received_ = std::chrono::steady_clock::now();
         pending_intents_restored_ = false;
         intent_pool_.discard_committed(committed_nonces_);
         if (advanced && restore_pending_intents().has_value()) {
