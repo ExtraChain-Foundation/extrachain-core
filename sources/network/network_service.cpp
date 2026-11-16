@@ -44,6 +44,7 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/ip/address.hpp>
+#include <boost/asio/post.hpp>
 
 namespace {
     thread_local std::optional<SocketService::Priority> priority_override;
@@ -52,6 +53,8 @@ namespace {
     constexpr std::size_t  LIVE_DAG_BATCH_MAX_TRANSACTIONS = 64;
     constexpr std::size_t  LIVE_DAG_BATCH_MAX_BYTES        = 128 * 1024;
     constexpr int          LIVE_DAG_BATCH_DELAY_MS         = 5;
+    // A virtual interface coming or going reports offline for a moment; connections close only if it lasts.
+    constexpr std::chrono::seconds OFFLINE_CLOSE_DELAY { 2 };
 
     bool is_migration_protocol_transaction(std::string_view payload) {
         const auto decode = [&](WireFormat::Mode mode) -> std::optional<Transaction> {
@@ -339,6 +342,12 @@ NetworkService::NetworkService(ExtraChain::Core::ExtraChainNode *node,
         first_node_ = first_nodes_.front();
     }
 
+    offline_close_timer_ = ExtraChain::Core::DeadlineTask::create(serial_executor_, [this] {
+        if (!stopping_.load(std::memory_order_acquire)
+            && network_status_.status() == ExtraChain::Core::NetworkStatus::Status::Offline) {
+            close_connections_offline();
+        }
+    });
     local_inizialization();
     initialize_first_node();
 
@@ -791,6 +800,7 @@ void NetworkService::prepare_shutdown() {
     // Messages still being handled re-armed the two-minute cache cleanup after a plain cancel,
     // which kept the runtime from stopping for up to two minutes.
     reconnect_timer_->stop();
+    offline_close_timer_->stop();
     clear_network_caches_timer_->stop();
     live_dag_batch_timer_->stop();
     network_runtime_->stop_listening();
@@ -3144,6 +3154,18 @@ void NetworkService::socket_error(Network::SocketServiceError error,
     schedule_reconnection(5000);
 }
 
+void NetworkService::close_connections_offline() {
+    std::set<SocketService::Ptr> copied;
+    {
+        auto connectionsLocked = *connections_;
+        copied                 = **connections_;
+    }
+    for (const auto &connection : copied) {
+        connection->flush();
+        connection->close_connection();
+    }
+}
+
 void NetworkService::local_inizialization() {
     eLog("Doesn't find service. Start find local service");
     using NetworkStatus        = ExtraChain::Core::NetworkStatus;
@@ -3151,21 +3173,23 @@ void NetworkService::local_inizialization() {
         switch (status) {
         case NetworkStatus::Status::Online:
             eInfo("World network is online");
+            offline_close_timer_->cancel();
+            // Peers failed while the link was down: dial them now instead of after a grown backoff.
+            boost::asio::post(serial_executor_, [this] {
+                if (stopping_.load(std::memory_order_acquire)) {
+                    return;
+                }
+                for (auto &[endpoint, entry] : reconn_) {
+                    entry.attempts        = 0;
+                    entry.next_attempt_ms = 0;
+                }
+                schedule_reconnection(0);
+            });
             break;
-        case NetworkStatus::Status::Offline: {
+        case NetworkStatus::Status::Offline:
             eInfo("Warning: World network is offline");
-            std::set<SocketService::Ptr> copied;
-            {
-                auto connectionsLocked = *connections_;
-                copied                 = **connections_;
-            }
-
-            for (const auto &connection : copied) {
-                connection->flush();
-                connection->close_connection();
-            }
+            offline_close_timer_->schedule_earlier(OFFLINE_CLOSE_DELAY);
             break;
-        }
         case NetworkStatus::Status::Local:
             eInfo("Warning: Local network only");
             break;

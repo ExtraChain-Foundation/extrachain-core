@@ -165,6 +165,7 @@ private:
 
     SafePtr<std::map<std::string, std::pair<std::string, CacheTime>>>           messages_;
     std::shared_ptr<ExtraChain::Core::DeadlineTask>                             reconnect_timer_;
+    std::shared_ptr<ExtraChain::Core::DeadlineTask>                             offline_close_timer_;
     std::atomic_bool                                                            offline_ { false };
     std::atomic_bool                                                            first_node_probe_active_ { false };
     std::shared_ptr<ExtraChain::Core::DeadlineTask>                             clear_network_caches_timer_;
@@ -326,6 +327,7 @@ public:
     void go_offline();
     void process();
     void reconnection();
+    void close_connections_offline();
 
 private:
     void check_port(std::string ip, Network::Protocol protocol, bool request, bool is_constant, bool is_light);
