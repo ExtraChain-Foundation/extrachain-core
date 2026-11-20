@@ -3135,6 +3135,21 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
 
     // Otherwise the Selective filter in network_response_dir_rows would drop the response to this
     // request.
+    // The catalogue fetched at login usually carried these actors' rows already: the Selective
+    // filter dropped them because MyChats, which names them, had not been read yet. Taking
+    // them from there saves a second full catalogue and its cooldown (~10 s after an import).
+    const auto served = dirs_manager_.apply_filtered_dir_rows({ uniqueActors.begin(), uniqueActors.end() });
+    if (!served.empty()) {
+        std::lock_guard lock(requested_sync_actors_mutex_);
+        for (const auto &actor : served) {
+            requested_sync_actors_.insert(actor);
+            uniqueActors.erase(actor);
+        }
+    }
+    if (uniqueActors.empty()) {
+        return true;
+    }
+
     // An actor asked for before and still without a single dir row: its rows were filtered
     // out or the fallback never ran, and asking only for new actors left it so for good.
     std::vector<ActorId> actors_without_dirs;

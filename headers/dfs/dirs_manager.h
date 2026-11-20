@@ -19,8 +19,12 @@
 
 #pragma once
 
-#include <string>
+#include <chrono>
 #include <expected>
+#include <map>
+#include <mutex>
+#include <string>
+#include <vector>
 
 #include <QObject>
 #include "chain/actor_id.h"
@@ -65,12 +69,30 @@ public:
 
     std::shared_ptr<DbConnector> get_db_instance();
 
+    // Applies the rows the Selective filter dropped from a recent catalogue for these actors.
+    // Returns the actors that were served from it.
+    std::vector<ActorId> apply_filtered_dir_rows(const std::vector<ActorId>& actors);
+
 signals:
     void convertion_started();
     void convertion_finished();
 
 private:
     void old_dfs_to_new_dfs_converter();
+    void apply_dir_rows(std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
+                        const Responder&                                          responder);
+
+    // Rows of actors the Selective filter dropped, kept briefly: the actors a client needs next
+    // (chat owners named in MyChats) become known only after the catalogue that carried their
+    // rows was already filtered, and fetching the whole catalogue again costs seconds.
+    struct FilteredDirRows {
+        std::vector<Dfs::DirRow>              rows;
+        std::string                           identifier;
+        std::chrono::steady_clock::time_point received;
+    };
+    static constexpr auto              FILTERED_DIR_ROWS_TTL = std::chrono::minutes(2);
+    std::mutex                         filtered_dir_rows_mutex_;
+    std::map<ActorId, FilteredDirRows> filtered_dir_rows_;
 
     std::shared_ptr<DbConnector> db_;
     ExtraChainNode*              node;

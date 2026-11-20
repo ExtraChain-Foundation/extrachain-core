@@ -276,9 +276,26 @@ void DirsManager::network_response_dir_rows(
         const auto startup_actors = node->dfs()->startup_sync_actors();
         const std::set<ActorId> allowed_actors(startup_actors.begin(), startup_actors.end());
         const auto received_actor_count = response_data.size();
-        std::erase_if(response_data, [&allowed_actors](const auto& actor_rows) {
-            return !allowed_actors.contains(actor_rows.first);
-        });
+        const auto dropped = std::stable_partition(response_data.begin(), response_data.end(),
+                                                   [&allowed_actors](const auto& actor_rows) {
+                                                       return allowed_actors.contains(actor_rows.first);
+                                                   });
+
+        if (dropped != response_data.end()) {
+            const auto     now        = std::chrono::steady_clock::now();
+            const auto     identifier = responder.identifiers().empty() ? std::string()
+                                                                         : *responder.identifiers().begin();
+            std::lock_guard lock(filtered_dir_rows_mutex_);
+            std::erase_if(filtered_dir_rows_, [&now](const auto& entry) {
+                return now - entry.second.received > FILTERED_DIR_ROWS_TTL;
+            });
+            for (auto it = dropped; it != response_data.end(); ++it) {
+                filtered_dir_rows_[it->first] = FilteredDirRows {
+                    .rows = std::move(it->second), .identifier = identifier, .received = now
+                };
+            }
+        }
+        response_data.erase(dropped, response_data.end());
 
         if (response_data.size() != received_actor_count) {
             eLog("[Dfs] Light startup response filtered: received={}, retained={}",
@@ -287,6 +304,57 @@ void DirsManager::network_response_dir_rows(
         }
     }
 
+    apply_dir_rows(std::move(response_data), responder);
+}
+
+std::vector<ActorId> DirsManager::apply_filtered_dir_rows(const std::vector<ActorId>& actors) {
+    std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
+    std::string                                               identifier;
+    {
+        const auto      now = std::chrono::steady_clock::now();
+        std::lock_guard lock(filtered_dir_rows_mutex_);
+        std::erase_if(filtered_dir_rows_, [&now](const auto& entry) {
+            return now - entry.second.received > FILTERED_DIR_ROWS_TTL;
+        });
+        for (const auto& actor : actors) {
+            auto it = filtered_dir_rows_.find(actor);
+            if (it == filtered_dir_rows_.end()) {
+                continue;
+            }
+            identifier = it->second.identifier;
+            response_data.emplace_back(actor, std::move(it->second.rows));
+            filtered_dir_rows_.erase(it);
+        }
+    }
+
+    if (response_data.empty()) {
+        return {};
+    }
+
+    // Downloads are queued against this peer; take a live one if the catalogue's is gone.
+    const auto active = node->network()->active_connection_identifiers();
+    if (active.empty()) {
+        return {};
+    }
+    if (std::ranges::find(active, identifier) == active.end()) {
+        identifier = active.front();
+    }
+
+    std::vector<ActorId> served;
+    served.reserve(response_data.size());
+    for (const auto& [actor, rows] : response_data) {
+        served.push_back(actor);
+    }
+
+    eLog("[Dfs] Dir rows of {} actors taken from the filtered catalogue", served.size());
+    Responder responder(nullptr);
+    responder.add_identifier(identifier);
+    apply_dir_rows(std::move(response_data), responder);
+    return served;
+}
+
+void DirsManager::apply_dir_rows(std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
+                                 const Responder&                                          responder) {
     std::stable_sort(response_data.begin(), response_data.end(), [this](const auto& lhs, const auto& rhs) {
         return node->dfs()->is_priority(lhs.first) && !node->dfs()->is_priority(rhs.first);
     });
