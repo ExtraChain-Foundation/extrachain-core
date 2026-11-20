@@ -61,7 +61,7 @@ def find_caps_words(line: str) -> bool:
     words = re.findall(r'\b[A-Z]{2,}\b', content)
     
     allowed = {'ID', 'URL', 'URI', 'IP', 'TCP', 'UDP', 'HTTP', 'HTTPS', 'SSH', 'SSL', 'TLS', 'API', 
-               'WS', 'PASS', 'FAIL', 'UPNP', 'TEST', 'JSON', 'VPN'}
+               'WS', 'PASS', 'FAIL', 'UPNP', 'TEST', 'JSON'}
     return any(word not in allowed for word in words)
 
 def process_file(file_path: str) -> List[Issue]:

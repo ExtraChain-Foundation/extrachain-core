@@ -1454,7 +1454,7 @@ void DfsController::request_file(const ActorId &owner_id, const std::string &fil
     request_file_times_[file_link] = now;
 
     eLog("[Dfs] Request file: {} / {}", owner_id, file_id);
-    forces_files_.insert(file_link);
+    forces_files_->insert(file_link);
 
     this->node->network()->send_message(file_link,
                                         MessageType::DfsFileState,
@@ -1585,6 +1585,10 @@ void DfsController::network_response_historical_collection(
     const ActorId                              &owner_id,
     const std::string                          &file_id,
     const std::vector<HistoricalCollectionRow> &historical_rows) {
+    if (historical_rows.empty()) {
+        return;
+    }
+
     auto dir_row =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
     if (!dir_row.has_value()) {
@@ -2081,30 +2085,54 @@ void DfsController::retry_pending_vector_rows(const std::optional<ActorId>      
 void DfsController::network_request_file_state(const ActorId     &owner_id,
                                                const std::string &file_id,
                                                const Responder   &responder) {
-    auto dir_row =
-        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
-
-    if (!dir_row.has_value()) {
-        auto file_state =
-            Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = Dfs::FileState::Unknown };
-        responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
+    if (!node_enabled.load()) {
         return;
     }
 
-    auto available_state = dir_row->state;
-    if (available_state == Dfs::FileState::Ready
-        && !is_file_already_downloaded(owner_id, file_id, dir_row->hash)) {
-        // Metadata can arrive before content. Do not advertise such a row as
-        // a usable source: the requester would otherwise retry a peer that
-        // cannot serve the file.
-        available_state = Dfs::FileState::Known;
-    }
+    // Own reply routing across the metadata wait; the DFS pool joins before node destruction
+    ThreadPoolBoost::instance_dfs()->post([this, owner_id, file_id, responder] {
+        if (!node_enabled.load()) {
+            return;
+        }
+        try {
+            auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
+                                                                        owner_id,
+                                                                        file_id);
+            if (!node_enabled.load()) {
+                return;
+            }
+            if (!dir_row.has_value()) {
+                auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
+                                                            .file_id  = file_id,
+                                                            .state    = Dfs::FileState::Unknown };
+                responder.send_response(file_state,
+                                        MessageType::DfsFileState,
+                                        SendMode::Focused,
+                                        MessageStatus::Response);
+                return;
+            }
 
-    auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
-                                                .file_id  = file_id,
-                                                .state    = available_state,
-                                                .hash     = dir_row->hash };
-    responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
+            auto available_state = dir_row->state;
+            if (available_state == Dfs::FileState::Ready
+                && !is_file_already_downloaded(owner_id, file_id, dir_row->hash)) {
+                // Metadata can arrive before content. Do not advertise such a row as
+                // a usable source: the requester would otherwise retry a peer that
+                // cannot serve the file.
+                available_state = Dfs::FileState::Known;
+            }
+
+            auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
+                                                        .file_id  = file_id,
+                                                        .state    = available_state,
+                                                        .hash     = dir_row->hash };
+            responder.send_response(file_state,
+                                    MessageType::DfsFileState,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
+        } catch (const std::exception &) {
+            eWarning("[Dfs] File-state request processing failed");
+        }
+    });
 }
 
 void DfsController::network_request_file_existance(const Dfs::FileLink &file_link, const Responder &responder) {
@@ -2124,24 +2152,32 @@ void DfsController::network_request_file_existance(const Dfs::FileLink &file_lin
 }
 
 void DfsController::network_response_file_state(const Dfs::Packets::FileState &data, const Responder &responder) {
-    auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
-                                                                  data.owner_id,
-                                                                  data.file_id);
-
     eLog("[Dfs] File state response: {}/{} state={}", data.owner_id, data.file_id, data.state);
-
-    if (!dir_row.has_value()) {
+    if (data.state != Dfs::FileState::Ready || responder.identifiers().empty() || !node_enabled.load()) {
         return;
     }
 
-    if (data.state == Dfs::FileState::Ready) {
-        dir_row->state = data.state;
-        dir_row->hash  = data.hash;
-        load_manager_.add_to_queue(data.owner_id,
-                                   dir_row.value(),
-                                   *responder.identifiers().begin(),
-                                   data.notify_neighbours);
-    }
+    const auto identifier = *responder.identifiers().begin();
+    // Metadata reads and download preparation can block; own the request across dispatch.
+    ThreadPoolBoost::instance_dfs()->post([this, data, identifier] {
+        if (!node_enabled.load()) {
+            return;
+        }
+        try {
+            auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
+                                                                        data.owner_id,
+                                                                        data.file_id);
+            if (!dir_row.has_value() || !node_enabled.load()) {
+                return;
+            }
+
+            dir_row->state = data.state;
+            dir_row->hash  = data.hash;
+            load_manager_.add_to_queue(data.owner_id, dir_row.value(), identifier, data.notify_neighbours);
+        } catch (const std::exception &) {
+            eWarning("[Dfs] File-state response processing failed");
+        }
+    });
 }
 
 void DfsController::network_file_exist_notification(const Dfs::Packets::FileState &data,
@@ -3079,6 +3115,16 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
 void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
     DfsP::RequestDfsSize msg { .actorId = actorId };
     node->network()->send_message(msg, MessageType::RequestDfsSize, SendMode::Neighbours, MessageStatus::Request);
+}
+
+void DfsController::sendSizeRequestMsg(const ActorId &actorId, const std::string &identifier) const {
+    Responder responder(node->network());
+    if (!responder.add_identifier(identifier)) {
+        return;
+    }
+    DfsP::RequestDfsSize msg { .actorId = actorId };
+    node->network()->send_message(msg, MessageType::RequestDfsSize, SendMode::Focused,
+                                 MessageStatus::Request, responder);
 }
 
 void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg, const Responder &responder) {

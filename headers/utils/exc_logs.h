@@ -23,8 +23,12 @@
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 #include <fmt/color.h>
+#include <algorithm>
 #include <string_view>
 #include <chrono>
+#include <vector>
+#include <ctime>
+#include <mutex>
 #include <thread>
 #include <source_location>
 #include <fstream>
@@ -45,6 +49,18 @@
 #include "utils/exc_logs_filter.h"
 #include "utils/fs_path.h"
 
+namespace detail {
+    inline std::tm local_time_snapshot(std::time_t timer) {
+        std::tm result {};
+#ifdef _WIN32
+        localtime_s(&result, &timer);
+#else
+        localtime_r(&timer, &result);
+#endif
+        return result;
+    }
+}
+
 enum class LogLevel {
     Debug,
     Info,
@@ -55,6 +71,8 @@ enum class LogLevel {
 };
 
 class Logger {
+    mutable std::mutex file_mutex;
+    mutable std::mutex config_mutex;
     std::ofstream     log_file;
     std::string       current_log_filename;
     bool              debug_enabled          = false;
@@ -63,6 +81,13 @@ class Logger {
     const std::string logs_directory         = "logs";
     std::thread::id   main_thread_id;
     std::string       file_name;
+    // A node can run for months; one endless file grows into gigabytes nobody can read back
+    std::uintmax_t    max_file_bytes     = 128ull * 1024 * 1024;
+    std::uintmax_t    max_total_bytes    = 2ull * 1024 * 1024 * 1024;
+    std::uintmax_t    current_file_bytes = 0;
+    // The run is the file a start opened; its pieces are named after their own time and numbered
+    std::string       run_log_filename;
+    int               run_part = 1;
 
     FileFilter file_filter;
     bool       filter_enabled = false;
@@ -71,7 +96,7 @@ class Logger {
     static std::string create_log_filename() {
         auto    now   = std::chrono::system_clock::now();
         auto    timer = std::chrono::system_clock::to_time_t(now);
-        std::tm bt    = *std::localtime(&timer);
+        std::tm bt    = detail::local_time_snapshot(timer);
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
         return fmt::format("{}-{:04d}.{:02d}.{:02d}_{:02d}-{:02d}-{:02d}.log",
@@ -86,18 +111,9 @@ class Logger {
     }
 
     void ensure_logs_directory() {
-        auto path = FsPath::create(logs_directory);
-        if (!path) {
-            fmt::println("Failed to create logs files: {}", std::to_underlying(path.error()));
-            return;
-        }
-
-        if (path->exists()) {
-            return;
-        }
-
+        // Path helpers that log errors would re-enter this logger under file_mutex
         std::error_code ec;
-        std::filesystem::create_directory(path->native(), ec);
+        std::filesystem::create_directory(logs_directory, ec);
         if (ec) {
             fmt::println("Failed to create logs directory: {}", ec.message());
         }
@@ -107,12 +123,16 @@ class Logger {
         std::error_code ec;
         auto            now = std::filesystem::file_time_type::clock::now();
 
-        for (const auto &entry : std::filesystem::directory_iterator(logs_directory, ec)) {
-            if (!entry.is_regular_file() || entry.path().extension() != ".log")
+        // This runs inside a write now, so nothing here may throw into the caller's code
+        for (std::filesystem::directory_iterator it(logs_directory, ec), end; !ec && it != end; it.increment(ec)) {
+            const auto     &entry = *it;
+            std::error_code file_ec;
+            if (!entry.is_regular_file(file_ec) || entry.path().extension() != ".log")
+                continue;
+            if (log_file.is_open() && entry.path() == std::filesystem::path(current_log_filename))
                 continue;
 
-            std::error_code file_ec;
-            auto            age = now - entry.last_write_time(file_ec);
+            auto age = now - entry.last_write_time(file_ec);
             if (file_ec)
                 continue;
 
@@ -121,6 +141,74 @@ class Logger {
                 std::filesystem::remove(entry.path(), file_ec);
             }
         }
+
+        // Then the oldest go until the whole folder fits the budget
+        struct Kept {
+            std::filesystem::path           path;
+            std::filesystem::file_time_type time;
+            std::uintmax_t                  size;
+        };
+        std::vector<Kept> kept;
+        std::uintmax_t    total = 0;
+        for (std::filesystem::directory_iterator it(logs_directory, ec), end; !ec && it != end; it.increment(ec)) {
+            const auto     &entry = *it;
+            std::error_code file_ec;
+            if (!entry.is_regular_file(file_ec) || entry.path().extension() != ".log")
+                continue;
+            const auto size = entry.file_size(file_ec);
+            if (file_ec)
+                continue;
+            total += size;
+            if (log_file.is_open() && entry.path() == std::filesystem::path(current_log_filename))
+                continue;
+            const auto time = entry.last_write_time(file_ec);
+            if (!file_ec)
+                kept.push_back({ entry.path(), time, size });
+        }
+        std::sort(kept.begin(), kept.end(), [](const Kept &a, const Kept &b) { return a.time < b.time; });
+        for (const auto &file : kept) {
+            if (total <= max_total_bytes)
+                break;
+            std::error_code file_ec;
+            if (std::filesystem::remove(file.path, file_ec))
+                total -= file.size;
+        }
+    }
+
+    static std::string file_part(const std::string &path) {
+        return std::filesystem::path(path).filename().string();
+    }
+
+    // name-<time>.partN.log; a rotation always starts a file of its own, even within one second
+    std::string next_piece_filename() const {
+        const auto base = logs_directory + "/" + create_log_filename();
+        const auto stem = base.substr(0, base.size() - 4) + ".part" + std::to_string(run_part + 1);
+        auto       name = stem + ".log";
+        std::error_code ec;
+        for (int n = 1; std::filesystem::exists(name, ec); ++n)
+            name = stem + "-" + std::to_string(n) + ".log";
+        return name;
+    }
+
+    // A line of the logger itself, in the same shape as the others
+    void write_marker(std::string_view text) {
+        auto    now   = std::chrono::system_clock::now();
+        auto    timer = std::chrono::system_clock::to_time_t(now);
+        std::tm bt    = detail::local_time_snapshot(timer);
+        auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+        const auto line = fmt::format("{:04d}.{:02d}.{:02d} {:02d}:{:02d}:{:02d}.{:03d} [Info] {}\n",
+                                      bt.tm_year + 1900,
+                                      bt.tm_mon + 1,
+                                      bt.tm_mday,
+                                      bt.tm_hour,
+                                      bt.tm_min,
+                                      bt.tm_sec,
+                                      ms.count(),
+                                      text);
+        log_file.write(line.data(), line.size());
+        log_file.flush();
+        current_file_bytes += line.size();
     }
 
     void open_log_file() {
@@ -130,22 +218,57 @@ class Logger {
         cleanup_old_logs();
         current_log_filename = logs_directory + "/" + create_log_filename();
         log_file.open(current_log_filename, std::ios::out | std::ios::app);
+        std::error_code ec;
+        const auto      size = std::filesystem::file_size(current_log_filename, ec);
+        current_file_bytes   = ec ? 0 : size;
+        run_log_filename     = file_part(current_log_filename);
+        run_part             = 1;
+    }
+
+    void rotate_log_file() {
+        const auto    next = next_piece_filename();
+        std::ofstream piece(next, std::ios::out | std::ios::app);
+        if (!piece.is_open()) {
+            // Stay in this file and try again a megabyte on: a closed log would lose every line after
+            current_file_bytes = max_file_bytes - std::min<std::uintmax_t>(max_file_bytes / 2, 1024 * 1024);
+            return;
+        }
+        write_marker("continued in " + file_part(next));
+        log_file.close();
+        log_file             = std::move(piece);
+        current_log_filename = next;
+        current_file_bytes   = 0;
+        // Even with the run's first file gone to the cleanup, a piece still says where it belongs
+        write_marker(fmt::format("part {}, continues {}", ++run_part, run_log_filename));
+        // Only now, with the new piece open and so spared
+        cleanup_old_logs();
     }
 
 public:
     void cleanup_logs() {
+        std::lock_guard lock(file_mutex);
         cleanup_old_logs();
     }
 
+    // For tests and small devices; takes effect from the next write
+    void set_rotation_limits(std::uintmax_t file_bytes, std::uintmax_t total_bytes) {
+        std::lock_guard lock(file_mutex);
+        max_file_bytes  = file_bytes;
+        max_total_bytes = total_bytes;
+    }
+
 private:
-    void start_file_logging() {
+    void start_file_logging(const std::string& name) {
+        std::lock_guard lock(file_mutex);
         if (!file_output_enabled) {
+            file_name = name;
             file_output_enabled = true;
             open_log_file();
         }
     }
 
     void stop_file_logging() {
+        std::lock_guard lock(file_mutex);
         if (file_output_enabled) {
             if (log_file.is_open()) {
                 log_file.close();
@@ -163,59 +286,71 @@ public:
     }
 
     ~Logger() {
-        if (log_file.is_open())
-            log_file.close();
+        stop_file_logging();
     }
 
     void set_debug(bool enabled) {
+        std::lock_guard lock(config_mutex);
         debug_enabled = enabled;
     }
 
     bool is_debug() const {
+        std::lock_guard lock(config_mutex);
         return debug_enabled;
     }
 
     void set_compact_console(bool enabled) {
+        std::lock_guard lock(config_mutex);
         compact_console_output = enabled;
     }
 
     bool is_compact_console() const {
+        std::lock_guard lock(config_mutex);
         return compact_console_output;
     }
 
     void enable_filter(bool enable = true) {
+        std::lock_guard lock(config_mutex);
         filter_enabled = enable;
     }
 
     void setInverseMode(bool inverse) {
+        std::lock_guard lock(config_mutex);
         file_filter.setInverseMode(inverse);
     }
 
     void set_active_modules(LogModule modules) {
+        std::lock_guard lock(config_mutex);
         active_modules = modules;
     }
 
     void add_active_module(LogModule module) {
+        std::lock_guard lock(config_mutex);
         active_modules = active_modules | module;
     }
 
     void addExcludePattern(std::string_view pattern) {
+        std::lock_guard lock(config_mutex);
         file_filter.addExcludePattern(pattern);
     }
 
     void clearExcludePatterns() {
+        std::lock_guard lock(config_mutex);
         file_filter.clearExcludePatterns();
     }
 
     void addCustomPattern(std::string_view pattern) {
+        std::lock_guard lock(config_mutex);
         file_filter.addCustomPattern(pattern);
     }
 
     void clearCustomPatterns() {
+        std::lock_guard lock(config_mutex);
         file_filter.clearCustomPatterns();
     }
 
     bool should_log(std::string_view file) const {
+        std::lock_guard lock(config_mutex);
         if (!filter_enabled)
             return true;
 
@@ -237,15 +372,21 @@ public:
     }
 
     bool is_file_output() const {
+        std::lock_guard lock(file_mutex);
         return file_output_enabled;
     }
 
     bool write_to_file(std::string_view message) {
+        std::lock_guard lock(file_mutex);
         if (!file_output_enabled || !log_file.is_open())
             return false;
         log_file.write(message.data(), message.size());
         log_file.flush();
-        return true;
+        const bool written = static_cast<bool>(log_file);
+        current_file_bytes += message.size();
+        if (current_file_bytes >= max_file_bytes)
+            rotate_log_file();
+        return written;
     }
 
     bool write_to_file(const std::string& message) {
@@ -257,8 +398,7 @@ public:
     }
 
     static void start_file(const std::string& file_name = "extrachain") {
-        instance().file_name = file_name;
-        instance().start_file_logging();
+        instance().start_file_logging(file_name);
     }
 
     static void stop_file() {
@@ -293,7 +433,7 @@ namespace detail {
         auto    now   = std::chrono::system_clock::now();
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
         auto    timer = std::chrono::system_clock::to_time_t(now);
-        std::tm bt    = *std::localtime(&timer);
+        std::tm bt    = local_time_snapshot(timer);
 
         return fmt::format("{:02d}:{:02d}:{:02d}.{:03d}", bt.tm_hour, bt.tm_min, bt.tm_sec, ms.count());
     }
@@ -302,7 +442,7 @@ namespace detail {
         auto    now   = std::chrono::system_clock::now();
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
         auto    timer = std::chrono::system_clock::to_time_t(now);
-        std::tm bt    = *std::localtime(&timer);
+        std::tm bt    = local_time_snapshot(timer);
 
         return fmt::format("{:04d}.{:02d}.{:02d} {:02d}:{:02d}:{:02d}.{:03d}",
                            bt.tm_year + 1900,
@@ -318,7 +458,7 @@ namespace detail {
         auto    now   = std::chrono::system_clock::now();
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
         auto    timer = std::chrono::system_clock::to_time_t(now);
-        std::tm bt    = *std::localtime(&timer);
+        std::tm bt    = local_time_snapshot(timer);
 
         return fmt::format("{:04d}.{:02d}.{:02d}", bt.tm_year + 1900, bt.tm_mon + 1, bt.tm_mday);
     }

@@ -1,0 +1,735 @@
+#include "precompiled.h"
+#include "chain/actor.h"
+#include "network/network_receive_queue.h"
+#include "utils/db_connector.h"
+#include "managers/luminance_manager.h"
+
+#include <QDir>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QTemporaryDir>
+#include <QTimer>
+#include <QtTest/QtTest>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <stdexcept>
+#include <thread>
+
+using namespace std::chrono_literals;
+
+namespace {
+struct MetaCallCounter : QObject {
+    int count = 0;
+
+    bool eventFilter(QObject *, QEvent *event) override {
+        if (event->type() == QEvent::MetaCall) {
+            ++count;
+        }
+        return false;
+    }
+};
+
+struct Gate {
+    std::mutex mutex;
+    std::condition_variable condition;
+    std::atomic<bool> entered = false;
+    bool released = false;
+
+    void wait() {
+        std::unique_lock lock(mutex);
+        entered = true;
+        if (!condition.wait_for(lock, 5s, [this] { return released; })) {
+            throw std::runtime_error("Test gate timed out");
+        }
+    }
+    void release() {
+        std::lock_guard lock(mutex);
+        released = true;
+        condition.notify_one();
+    }
+};
+
+NodeId identity() {
+    Actor<KeyPrivate> actor;
+    actor.create(ActorType::User);
+    return { actor.id(), "test-receive-node" };
+}
+}
+
+class NetworkReceiveQueueTest : public QObject {
+    Q_OBJECT
+private slots:
+    void aggregateMetricsDoNotRetainPayloadsAndOutliveQueue() {
+        std::shared_ptr<const NetworkReceiveMetrics> metrics;
+        {
+            NetworkReceiveQueue queue(nullptr, [](const auto &) {}, {}, { 2, 256 });
+            metrics = queue.metrics();
+            QVERIFY(queue.enqueue("private-message-one", "private-ip", "private-peer"));
+            QVERIFY(queue.enqueue("private-message-two", "private-ip", "private-peer"));
+            QVERIFY(!queue.enqueue("overflow", {}, {}));
+            auto state = metrics->snapshot();
+            QCOMPARE(state["accepted"].toInt(), 2);
+            QCOMPARE(state["rejected"].toInt(), 1);
+            QCOMPARE(state["pending"].toInt(), 2);
+            QCOMPARE(state["peakPending"].toInt(), 2);
+            QVERIFY(!QJsonDocument(state).toJson().contains("private-"));
+            QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+            QVERIFY(queue.enqueue_maintenance());
+            QVERIFY(queue.enqueue_maintenance());
+            QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+            state = metrics->snapshot();
+            QCOMPARE(state["accepted"].toInt(), 3);
+            QCOMPARE(state["started"].toInt(), 3);
+            QCOMPARE(state["completed"].toInt(), 3);
+            QCOMPARE(state["pendingBytes"].toInt(), 0);
+            QVERIFY(state["peakBytes"].toInt() > 0);
+            QVERIFY(!state["stopped"].toBool());
+        }
+        const auto state = metrics->snapshot();
+        QVERIFY(state["stopped"].toBool());
+        QCOMPARE(state["pending"].toInt(), 0);
+        QCOMPARE(state["completed"].toInt(), 3);
+    }
+
+    void metricsSeparateWorkerExecutionAndOwnerDeliveryWait() {
+        Gate gate;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            queue->defer([&] { gate.wait(); }, [] {});
+        });
+        const auto release = qScopeGuard([&] { gate.release(); });
+        const auto metrics = queue->metrics();
+        auto timing = [&metrics](const char *name) {
+            const auto values = metrics->snapshot()["timings"].toArray();
+            for (const auto &value : values) {
+                const auto row = value.toObject();
+                if (row["stage"].toString() == name) {
+                    return row;
+                }
+            }
+            return QJsonObject {};
+        };
+        QVERIFY(queue->enqueue("one", {}, {}));
+        QVERIFY(queue->enqueue("two", {}, {}));
+        QTRY_VERIFY(gate.entered.load());
+        std::this_thread::sleep_for(15ms);
+        gate.release();
+        const auto deadline = std::chrono::steady_clock::now() + 5s;
+        while (timing("worker-run")["count"].toInt() == 0 && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(1ms);
+        }
+        QCOMPARE(timing("worker-run")["count"].toInt(), 1);
+        std::this_thread::sleep_for(15ms);
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        for (const auto *name : { "pending", "worker-wait", "worker-run", "delivery", "active" }) {
+            QCOMPARE(timing(name)["count"].toInt(), 2);
+        }
+        QCOMPARE(timing("owner")["count"].toInt(), 4);
+        for (const auto *name : { "pending", "worker-run", "delivery", "active" }) {
+            QVERIFY(timing(name)["maxUs"].toDouble() >= 10000);
+        }
+    }
+
+    void metricsCanBeReadConcurrentlyThroughQueueDestruction() {
+        auto queue = std::make_unique<NetworkReceiveQueue>(nullptr, [](const auto &) {});
+        const auto metrics = queue->metrics();
+        std::atomic<bool> valid = true;
+        std::jthread reader([&](std::stop_token stop) {
+            while (!stop.stop_requested()) {
+                const auto state = metrics->snapshot();
+                if (state["version"].toInt() != 1 || state["timings"].toArray().size() != 6) {
+                    valid = false;
+                }
+                std::this_thread::yield();
+            }
+        });
+        for (int i = 0; i < 100; ++i) {
+            QVERIFY(queue->enqueue("message", {}, {}));
+        }
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        queue.reset();
+        QVERIFY(metrics->snapshot()["stopped"].toBool());
+        reader.request_stop();
+        reader.join();
+        QVERIFY(valid.load());
+    }
+
+    void readyPacketsShareWakeupsAndYieldToOtherEvents() {
+        MetaCallCounter calls;
+        std::vector<std::string> seen;
+        NetworkReceiveQueue queue(nullptr, [&](const auto &packet) { seen.push_back(packet.message); });
+        queue.installEventFilter(&calls);
+        constexpr int count = 256;
+        for (int i = 0; i < count; ++i) {
+            QVERIFY(queue.enqueue(std::to_string(i), {}, {}));
+        }
+        QObject witness;
+        std::size_t atWitness = 0;
+        QMetaObject::invokeMethod(&witness, [&] { atWitness = seen.size(); }, Qt::QueuedConnection);
+        QVERIFY(seen.empty());
+        QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+        QVERIFY(atWitness > 0 && atWitness <= 64);
+        QVERIFY(calls.count < count);
+        for (int i = 0; i < count; ++i) {
+            QCOMPARE(seen.at(i), std::to_string(i));
+        }
+    }
+
+    void reentrantProducerCannotKeepOneWakeupRunningForever() {
+        MetaCallCounter calls;
+        int seen = 0;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            if (++seen < 200) {
+                QVERIFY(queue->enqueue("next", {}, {}));
+            }
+        });
+        queue->installEventFilter(&calls);
+        QVERIFY(queue->enqueue("first", {}, {}));
+        QObject witness;
+        int atWitness = 0;
+        QMetaObject::invokeMethod(&witness, [&] { atWitness = seen; }, Qt::QueuedConnection);
+        QTRY_COMPARE(seen, 200);
+        QVERIFY(atWitness > 0 && atWitness <= 64);
+        QVERIFY(calls.count < 200);
+        QCOMPARE(queue->pending_count(), std::size_t(0));
+    }
+
+    void slowReadyPacketYieldsBeforeDispatchingAnother() {
+        int seen = 0;
+        NetworkReceiveQueue queue(nullptr, [&](const auto &) {
+            ++seen;
+            if (seen == 1) {
+                std::this_thread::sleep_for(5ms);
+            }
+        });
+        QVERIFY(queue.enqueue("slow", {}, {}));
+        QVERIFY(queue.enqueue("next", {}, {}));
+        QObject witness;
+        int atWitness = 0;
+        QMetaObject::invokeMethod(&witness, [&] { atWitness = seen; }, Qt::QueuedConnection);
+        QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+        QCOMPARE(atWitness, 1);
+        QCOMPARE(seen, 2);
+    }
+
+    void copiesPacketsAndDispatchesFifo() {
+        std::vector<std::string> seen;
+        NetworkReceiveQueue queue(nullptr, [&](const auto &packet) { seen.push_back(packet.message); });
+        std::string first = "first";
+        QVERIFY(queue.enqueue(first, "test-ip", "test-peer"));
+        first = "changed";
+        QVERIFY(queue.enqueue("second", {}, {}));
+        QCOMPARE(seen.size(), std::size_t(0));
+        QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+        QVERIFY(seen == std::vector<std::string>({ "first", "second" }));
+        QCOMPARE(queue.pending_bytes(), std::size_t(0));
+    }
+
+    void capacityIncludesActivePacketAndMetadata() {
+        Gate gate;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            queue->defer([&] { gate.wait(); }, [] {});
+        }, NetworkReceiveQueue::ErrorHandler {}, NetworkReceiveQueue::Limits { 1, 5 });
+        QVERIFY(!queue->enqueue("12345", "x", {}));
+        QCOMPARE(queue->pending_bytes(), std::size_t(0));
+        QVERIFY(queue->enqueue("123", "x", "y"));
+        QTRY_VERIFY(gate.entered.load());
+        QVERIFY(!queue->enqueue("x", {}, {}));
+        QCOMPARE(queue->pending_bytes(), std::size_t(5));
+        gate.release();
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        QCOMPARE(queue->pending_bytes(), std::size_t(0));
+    }
+
+    void blockedWorkLeavesOwnerEventLoopRunning() {
+        Gate gate;
+        int ticks = 0;
+        int completed = 0;
+        QTimer timer;
+        connect(&timer, &QTimer::timeout, [&] { ++ticks; });
+        timer.start(1);
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            queue->defer([&] { gate.wait(); }, [&] { ++completed; });
+        });
+        QVERIFY(queue->enqueue("packet", {}, {}));
+        QTRY_VERIFY(gate.entered.load());
+        QTest::qWait(30);
+        QVERIFY(ticks > 0);
+        QCOMPARE(completed, 0);
+        gate.release();
+        QTRY_COMPARE(completed, 1);
+    }
+
+    void reputationCacheInvalidatesWritesAndDoesNotCacheMissingRows() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto peer = identity();
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), -1);
+        QVERIFY(!storage.cached_luminance(peer));
+        storage.write_luminance(peer, 7);
+        QCOMPARE(storage.read_luminance(peer), 7);
+        QCOMPARE(storage.cached_luminance(peer), std::optional<int>(7));
+        storage.increment(peer);
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), 8);
+        storage.decrement(peer);
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), 7);
+        storage.write_luminance(peer, -10);
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), 0);
+        storage.reset_db();
+        QVERIFY(!storage.cached_luminance(peer));
+        QVERIFY(storage.init_db());
+        QCOMPARE(storage.read_luminance(peer), 0);
+    }
+
+    void reputationCacheInvalidatesFailedWriteAndExpiry() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto peer = identity();
+        storage.write_luminance(peer, 7);
+        QCOMPARE(storage.read_luminance(peer), 7);
+        DbConnector control(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
+        QVERIFY(control.open());
+        QVERIFY(control.query("CREATE TRIGGER reject_update BEFORE UPDATE ON luminance "
+                              "BEGIN SELECT RAISE(FAIL, 'synthetic rejected write'); END"));
+        storage.increment(peer);
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), 7);
+        QVERIFY(control.query("DROP TRIGGER reject_update"));
+        QVERIFY(control.query("UPDATE luminance SET timestamp = 0"));
+        storage.remove_old();
+        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.read_luminance(peer), -1);
+    }
+
+    void reputationCacheIsBoundedAndPreservesOtherPeers() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto first = identity();
+        const auto second = identity();
+        storage.write_luminance(first, 1);
+        storage.write_luminance(second, 2);
+        QCOMPARE(storage.read_luminance(first), 1);
+        QCOMPARE(storage.read_luminance(second), 2);
+        storage.increment(second);
+        QCOMPARE(storage.cached_luminance(first), std::optional<int>(1));
+        QVERIFY(!storage.cached_luminance(second));
+        DbConnector control(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
+        QVERIFY(control.open());
+        QVERIFY(control.query("BEGIN TRANSACTION"));
+        for (int i = 0; i < 1100; ++i) {
+            const auto key = fmt::format("{}_synthetic-{}", first.actor_id, i);
+            QVERIFY(control.query(fmt::format("INSERT INTO luminance VALUES ('{}', 3, 0)", key)));
+        }
+        const auto longPeer = NodeId { first.actor_id, std::string(257, 'x') };
+        QVERIFY(control.query(fmt::format("INSERT INTO luminance VALUES ('{}_{}', 4, 0)",
+                                          longPeer.actor_id, longPeer.node_identifier)));
+        QVERIFY(control.query("COMMIT"));
+        for (int i = 0; i < 1100; ++i) {
+            QCOMPARE(storage.read_luminance({ first.actor_id, fmt::format("synthetic-{}", i) }), 3);
+        }
+        QVERIFY(!storage.cached_luminance(first));
+        QCOMPARE(storage.read_luminance(first), 1);
+        QCOMPARE(storage.read_luminance(longPeer), 4);
+        QVERIFY(!storage.cached_luminance(longPeer));
+    }
+
+    void ownerCacheLookupsStayCoherentWithWorkerWrites() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto peer = identity();
+        storage.write_luminance(peer, 0);
+        QCOMPARE(storage.read_luminance(peer), 0);
+        std::atomic<int> committed = 0;
+        std::atomic<bool> done = false, failed = false;
+        Gate start;
+        std::thread worker([&] {
+            try {
+                start.wait();
+                for (int value = 1; value <= 100; ++value) {
+                    storage.write_luminance(peer, value);
+                    if (storage.read_luminance(peer) != value) {
+                        failed = true;
+                    }
+                    committed = value;
+                }
+            } catch (...) {
+                failed = true;
+            }
+            done = true;
+        });
+        const auto join = qScopeGuard([&] { worker.join(); });
+        int ticks = 0;
+        bool stale = false;
+        QTimer timer;
+        connect(&timer, &QTimer::timeout, [&] {
+            ++ticks;
+            start.release();
+            const auto before = committed.load();
+            if (const auto value = storage.cached_luminance(peer)) {
+                stale |= *value < before;
+            }
+        });
+        timer.start(1);
+        QTRY_VERIFY_WITH_TIMEOUT(done.load(), 10000);
+        QVERIFY(!failed.load());
+        QVERIFY(!stale);
+        QVERIFY(ticks > 0);
+        QCOMPARE(storage.cached_luminance(peer), std::optional<int>(100));
+    }
+
+    void realReputationReadCommitDispatchOrder() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto peer = identity();
+        storage.write_luminance(peer, 7);
+        std::vector<int> dispatches;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &packet) {
+            if (packet.message == "custom") {
+                dispatches.push_back(-1);
+                return;
+            }
+            auto before = std::make_shared<int>(-1);
+            queue->defer([&, before] { *before = storage.read_luminance(peer); }, [&, before] {
+                queue->defer([&] { storage.increment(peer); }, [&, before] {
+                    dispatches.push_back(*before);
+                    QCOMPARE(storage.read_luminance(peer), *before + 1);
+                });
+            });
+        });
+        QVERIFY(queue->enqueue("broadcast-a", {}, {}));
+        QVERIFY(queue->enqueue("custom", {}, {}));
+        QVERIFY(queue->enqueue("broadcast-b", {}, {}));
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        QVERIFY(dispatches == std::vector<int>({ 7, -1, 8 }));
+        QCOMPARE(storage.read_luminance(peer), 9);
+    }
+
+    void nestedHandlerEventLoopCannotAdvanceActivePacket() {
+        MetaCallCounter calls;
+        std::vector<std::string> seen;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &packet) {
+            if (packet.message == "second") {
+                seen.push_back("second");
+                return;
+            }
+            seen.push_back("handler-start");
+            const auto before = calls.count;
+            queue->defer([] {}, [&] { seen.push_back("continuation"); });
+            QTRY_VERIFY(calls.count > before);
+            seen.push_back("handler-end");
+        });
+        queue->installEventFilter(&calls);
+        QVERIFY(queue->enqueue("first", {}, {}));
+        QVERIFY(queue->enqueue("second", {}, {}));
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        QVERIFY(seen == std::vector<std::string>({ "handler-start", "handler-end", "continuation", "second" }));
+    }
+
+    void nestedContinuationEventLoopCannotAdvanceActivePacket() {
+        MetaCallCounter calls;
+        std::vector<std::string> seen;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &packet) {
+            if (packet.message == "second") {
+                seen.push_back("second");
+                return;
+            }
+            queue->defer([] {}, [&] {
+                seen.push_back("stage-start");
+                const auto before = calls.count;
+                queue->defer([] {}, [&] { seen.push_back("final"); });
+                QTRY_VERIFY(calls.count > before);
+                seen.push_back("stage-end");
+            });
+        });
+        queue->installEventFilter(&calls);
+        QVERIFY(queue->enqueue("first", {}, {}));
+        QVERIFY(queue->enqueue("second", {}, {}));
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        QVERIFY(seen == std::vector<std::string>({ "stage-start", "stage-end", "final", "second" }));
+    }
+
+    void maintenanceIsOrderedCoalescedAndHasReservedCapacity() {
+        Gate gate;
+        std::vector<std::string> seen;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &packet) {
+            if (packet.maintenance) {
+                seen.push_back("maintenance");
+                return;
+            }
+            queue->defer([&] { gate.wait(); }, [&] { seen.push_back("packet"); });
+        }, NetworkReceiveQueue::ErrorHandler {}, NetworkReceiveQueue::Limits { 1, 10 });
+        QVERIFY(queue->enqueue("packet", {}, {}));
+        QTRY_VERIFY(gate.entered.load());
+        QVERIFY(queue->enqueue_maintenance());
+        QVERIFY(queue->enqueue_maintenance());
+        QCOMPARE(queue->pending_count(), std::size_t(2));
+        QVERIFY(!queue->enqueue("next", {}, {}));
+        gate.release();
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        QVERIFY(seen == std::vector<std::string>({ "packet", "maintenance" }));
+        QVERIFY(queue->enqueue_maintenance());
+        QTRY_COMPARE(seen.size(), std::size_t(3));
+    }
+
+    void stopWaitsForAcceptedWriteWithoutDispatchingBacklog() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        LuminanceManager storage(nullptr);
+        const auto peer = identity();
+        storage.write_luminance(peer, 1);
+        Gate gate;
+        int begins = 0;
+        int continuations = 0;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            ++begins;
+            queue->defer([&] { gate.wait(); storage.increment(peer); }, [&] { ++continuations; });
+        });
+        QVERIFY(queue->enqueue("accepted", {}, {}));
+        QVERIFY(queue->enqueue("not-yet-dispatched", {}, {}));
+        QTRY_VERIFY(gate.entered.load());
+        std::jthread releaser([&] { std::this_thread::sleep_for(30ms); gate.release(); });
+        queue->stop();
+        QCOMPARE(storage.read_luminance(peer), 2);
+        QCoreApplication::processEvents();
+        QCOMPARE(begins, 1);
+        QCOMPARE(continuations, 0);
+        QCOMPARE(queue->pending_count(), std::size_t(0));
+        QVERIFY(!queue->enqueue("after-stop", {}, {}));
+        QVERIFY(!queue->enqueue_maintenance());
+        queue->stop();
+    }
+
+    void workerFailureDoesNotDispatchAndQueueRecovers() {
+        int errors = 0;
+        std::vector<std::string> seen;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &packet) {
+            if (packet.message == "bad") {
+                queue->defer([] { throw std::runtime_error("synthetic failure"); }, [&] { seen.push_back("wrong"); });
+            } else {
+                seen.push_back(packet.message);
+            }
+        }, [&](auto) { ++errors; });
+        QVERIFY(queue->enqueue("bad", {}, {}));
+        QVERIFY(queue->enqueue("good", {}, {}));
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        QCOMPARE(errors, 1);
+        QVERIFY(seen == std::vector<std::string>({ "good" }));
+    }
+
+    void reentrantStopRetainsBorrowedPacketAndDropsPendingCompletion() {
+        MetaCallCounter calls;
+        const std::string payload(8192, 'p');
+        int begins = 0;
+        int continuations = 0;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &packet) {
+            ++begins;
+            const auto before = calls.count;
+            queue->defer([] {}, [&] { ++continuations; });
+            QTRY_VERIFY(calls.count > before);
+            queue->stop();
+            QVERIFY(packet.message == payload);
+            QCOMPARE(queue->pending_count(), std::size_t(0));
+            QCOMPARE(queue->pending_bytes(), std::size_t(0));
+        });
+        queue->installEventFilter(&calls);
+        QVERIFY(queue->enqueue(payload, {}, {}));
+        QVERIFY(queue->enqueue("backlog", {}, {}));
+        QTRY_COMPARE(begins, 1);
+        QCoreApplication::processEvents();
+        QCOMPARE(continuations, 0);
+        QCOMPARE(queue->pending_count(), std::size_t(0));
+        QCOMPARE(queue->pending_bytes(), std::size_t(0));
+    }
+
+    void exceptionAfterDeferralSuppressesContinuation() {
+        int errors = 0;
+        int continuations = 0;
+        std::atomic<int> writes = 0;
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            queue->defer([&] { ++writes; }, [&] { ++continuations; });
+            throw std::runtime_error("failure after accepting work");
+        }, [&](auto) { ++errors; throw std::runtime_error("reporting failure"); });
+        QVERIFY(queue->enqueue("packet", {}, {}));
+        QTRY_COMPARE(queue->pending_count(), std::size_t(0));
+        QCOMPARE(writes.load(), 1);
+        QCOMPARE(continuations, 0);
+        QCOMPARE(errors, 1);
+    }
+
+    void handlerCanDestroyOwner() {
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) { queue.reset(); });
+        QVERIFY(queue->enqueue("packet", {}, {}));
+        QTRY_VERIFY(!queue);
+    }
+
+    void continuationCanDestroyOwner() {
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            queue->defer([] {}, [&] { queue.reset(); });
+        });
+        QVERIFY(queue->enqueue("packet", {}, {}));
+        QTRY_VERIFY(!queue);
+    }
+
+    void errorHandlerCanDestroyOwner() {
+        std::unique_ptr<NetworkReceiveQueue> queue;
+        queue = std::make_unique<NetworkReceiveQueue>(nullptr, [&](const auto &) {
+            queue->defer([] { throw std::runtime_error("synthetic failure"); }, [] {});
+        }, [&](auto) { queue.reset(); });
+        QVERIFY(queue->enqueue("packet", {}, {}));
+        QTRY_VERIFY(!queue);
+    }
+
+    void concurrentEnqueueStillHonorsOnePacketLimit() {
+        int dispatched = 0;
+        std::atomic<int> accepted = 0;
+        NetworkReceiveQueue queue(nullptr, [&](const auto &) { ++dispatched; }, {}, { 1, 32 });
+        std::vector<std::jthread> writers;
+        // Distinct packets: an identical copy of a waiting one is coalesced and takes no room
+        for (int i = 0; i < 8; ++i) {
+            writers.emplace_back([&, i] { accepted += int(queue.enqueue("packet" + std::to_string(i), {}, {})); });
+        }
+        writers.clear();
+        QCOMPARE(accepted.load(), 1);
+        QCOMPARE(queue.pending_count(), std::size_t(1));
+        QTRY_COMPARE(dispatched, 1);
+    }
+
+    void fullQueueTakesCopiesOfAWaitingPacket() {
+        std::vector<std::string> seen;
+        NetworkReceiveQueue queue(
+            nullptr, [&](const auto &packet) { seen.push_back(packet.message); }, {}, { 2, 1024 });
+        // With room every copy is delivered, so per-peer accounting sees each of them
+        QVERIFY(queue.enqueue("broadcast", {}, "first-neighbour"));
+        QVERIFY(queue.enqueue("broadcast", {}, "second-neighbour"));
+        QVERIFY(queue.enqueue("broadcast", {}, "third-neighbour"));
+        QCOMPARE(queue.pending_count(), std::size_t(2));
+        QVERIFY(!queue.enqueue("other", {}, "third-neighbour"));
+        QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+        QCOMPARE(seen, (std::vector<std::string> { "broadcast", "broadcast" }));
+        // Once dispatched, the same bytes are no longer waiting and need room again
+        QVERIFY(queue.enqueue("one", {}, {}));
+        QVERIFY(queue.enqueue("two", {}, {}));
+        QVERIFY(!queue.enqueue("broadcast", {}, {}));
+        QTRY_COMPARE(seen.size(), std::size_t(4));
+    }
+
+    void floodsNamesOnlyThePeerFillingTheQueue() {
+        NetworkReceiveQueue queue(nullptr, [](const auto &) {}, {}, { 4, 1024 });
+        QVERIFY(queue.enqueue("one", {}, "flooder"));
+        QVERIFY(queue.enqueue("two", {}, "flooder"));
+        QVERIFY(queue.enqueue("three", {}, "flooder"));
+        QVERIFY(queue.enqueue("quiet-one", {}, "quiet"));
+        QVERIFY(!queue.enqueue("quiet-two", {}, "quiet"));
+        QVERIFY(!queue.floods("quiet"));
+        QVERIFY(queue.floods("flooder"));
+        QVERIFY(!queue.floods("stranger"));
+        QTRY_COMPARE(queue.pending_count(), std::size_t(0));
+        QVERIFY(!queue.floods("flooder"));
+    }
+
+    void parentShutdownJoinsBeforeOwnedStorageDestruction() {
+        struct Storage : LuminanceManager {
+            Storage() : LuminanceManager(nullptr) {}
+            std::function<void()> onDestroy;
+            ~Storage() { onDestroy(); }
+        };
+        struct Owner : QObject {
+            std::unique_ptr<Storage> storage;
+            QPointer<NetworkReceiveQueue> queue;
+            ~Owner() override {
+                if (queue) {
+                    queue->stop();
+                }
+            }
+        };
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        const auto peer = identity();
+        Gate gate;
+        std::atomic<bool> finished = false;
+        bool storageDestroyedAfterJoin = false;
+        int continuations = 0;
+        auto owner = std::make_unique<Owner>();
+        owner->storage = std::make_unique<Storage>();
+        auto *storage = owner->storage.get();
+        storage->write_luminance(peer, 7);
+        storage->onDestroy = [&] { storageDestroyedAfterJoin = finished.load(); };
+        owner->queue = new NetworkReceiveQueue(owner.get(), [&](const auto &) {
+            owner->queue->defer([&] {
+                gate.wait();
+                storage->increment(peer);
+                finished = true;
+            }, [&] { ++continuations; });
+        });
+        QVERIFY(owner->queue->enqueue("packet", {}, {}));
+        QTRY_VERIFY(gate.entered.load());
+        std::jthread release([&] { std::this_thread::sleep_for(20ms); gate.release(); });
+        owner.reset();
+        release.join();
+        QCoreApplication::processEvents();
+        QVERIFY(storageDestroyedAfterJoin);
+        QCOMPARE(continuations, 0);
+        LuminanceManager reopened(nullptr);
+        QCOMPARE(reopened.read_luminance(peer), 8);
+        auto second = std::make_unique<Owner>();
+        second->queue = new NetworkReceiveQueue(second.get(), [](const auto &) {});
+        delete second->queue.data();
+        QVERIFY(second->queue.isNull());
+        second.reset();
+    }
+
+    void immediateIdleShutdownDoesNotLoseWakeup() {
+        for (int i = 0; i < 100; ++i) {
+            NetworkReceiveQueue queue(nullptr, [](const auto &) {});
+            queue.stop();
+        }
+    }
+};
+
+QTEST_GUILESS_MAIN(NetworkReceiveQueueTest)
+#include "network_receive_queue.moc"

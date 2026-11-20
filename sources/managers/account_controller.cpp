@@ -218,56 +218,20 @@ bool AccountController::rename_wallet(const ActorId     &profileActor,
 }
 
 std::expected<void, LoadError> AccountController::load(const std::string &hash) {
-    if (hash.empty()) {
-        return std::unexpected(LoadError::EmptyHash);
+    auto access = find_profiles(hash);
+    if (!access.has_value()) {
+        return std::unexpected(access.error());
     }
 
-    auto profiles = profiles_list();
-
-    if (profiles.empty()) {
-        return std::unexpected(LoadError::NoProfiles);
-    }
-
-    auto key_result = Cryptography::key_from_password(hash);
-    if (!key_result.has_value()) {
-        return {};
-    }
-
-    int count = 0;
-    for (auto &actor_id : profiles) {
-        auto profile = PrivateProfile::read(actor_id, hash, node, key_result.value());
-        if (profile.has_value()) {
-            count++;
-            if (count > 1) {
-                break;
-            }
-        }
-
-        if (!profile.has_value()) {
-            auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
-            if (try_new.has_value()) {
-                count++;
-            }
-        }
-    }
-
-    if (count > 1) {
+    if (access.value().profiles.size() > 1) {
         eLog("[Accounts] Multiple profiles found for this login and password combination");
         return std::unexpected(LoadError::Multiple);
     }
 
-    if (count == 0) {
-        return std::unexpected(LoadError::NoAuthProfiles);
+    if (!load_profile(*access.value().profiles.begin(), hash, access.value().key)) {
+        return std::unexpected(LoadError::Unknown);
     }
-
-    for (auto &actor_id : profiles) {
-        auto res = this->load_profile(actor_id, hash, key_result.value());
-        if (res) {
-            return {};
-        }
-    }
-
-    return std::unexpected(LoadError::Unknown);
+    return {};
 }
 
 bool AccountController::load_profile(const ActorId                &actor_id,
@@ -334,27 +298,40 @@ bool AccountController::load_profile(const ActorId                &actor_id,
 }
 
 std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) {
-    auto              profiles = profiles_list();
-    std::set<ActorId> multiple_profiles;
+    auto access = find_profiles(hash);
+    if (!access.has_value()) {
+        return {};
+    }
+    return access.value().profiles;
+}
+
+std::expected<ProfileAccess, LoadError> AccountController::find_profiles(const std::string &hash) {
+    if (hash.empty()) {
+        return std::unexpected(LoadError::EmptyHash);
+    }
+
+    const auto profiles = profiles_list();
+    if (profiles.empty()) {
+        return std::unexpected(LoadError::NoProfiles);
+    }
 
     auto key_result = Cryptography::key_from_password(hash);
     if (!key_result.has_value()) {
-        return {};
+        return std::unexpected(LoadError::Unknown);
     }
 
-    for (auto &actor_id : profiles) {
-        auto profile = PrivateProfile::read(actor_id, hash, node, key_result.value());
-        if (profile.has_value()) {
-            multiple_profiles.insert(actor_id);
-        } else {
-            auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
-            if (try_new.has_value()) {
-                multiple_profiles.insert(actor_id);
-            }
+    ProfileAccess access { .hash = hash, .key = key_result.value(), .profiles = {} };
+    for (const auto &actor_id : profiles) {
+        if (PrivateProfile::read(actor_id, hash, node, access.key).has_value()
+            || SeedProfile::load(actor_id.to_string(), access.key).has_value()) {
+            access.profiles.insert(actor_id);
         }
     }
 
-    return multiple_profiles;
+    if (access.profiles.empty()) {
+        return std::unexpected(LoadError::NoAuthProfiles);
+    }
+    return access;
 }
 
 const Actor<KeyPrivate> &AccountController::system_actor() {
@@ -374,6 +351,18 @@ PrivateProfile &AccountController::profile(const ActorId &actorId) {
 
     eFatal("getProfile: Can't find actor");
     return profiles_.front();
+}
+
+bool AccountController::has_current_profile() const {
+    if (current_profile_.is_zero()) {
+        return false;
+    }
+    for (auto &profile : profiles_) {
+        if (current_profile_ == profile.system().id()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 const PrivateProfile &AccountController::current_profile() const {
@@ -552,6 +541,81 @@ bool AccountController::import_seed(const std::string &login,
 
     insert_to_profile_set(seed_profile.actors().front().id());
     return res.has_value();
+}
+
+bool AccountController::change_credentials(const std::string &old_login,
+                                          const std::string &old_password,
+                                          const std::string &new_login,
+                                          const std::string &new_password) {
+    if (!has_current_profile()) {
+        eWarning("[Account] No profile to change credentials for");
+        return false;
+    }
+
+    const auto old_hash = Utils::calculate_hash(old_login + old_password);
+    if (old_hash != current_profile().hash()) {
+        eWarning("[Account] Current credentials do not match");
+        return false;
+    }
+
+    const auto new_hash = Utils::calculate_hash(new_login + new_password);
+    if (new_hash == old_hash) {
+        return true;
+    }
+
+    if (profile_type_ == ProfileType::New) {
+        auto res = profile_seed.save(new_hash);
+        if (!res.has_value()) {
+            eWarning("[Account] Could not save the seed under the new credentials");
+            return false;
+        }
+
+        profile(current_profile_).set_hash(new_hash);
+    } else {
+        profile(current_profile_).reencrypt(new_hash);
+    }
+
+    eLog("[Account] Credentials changed");
+    return true;
+}
+
+bool AccountController::delete_current_profile() {
+    if (!has_current_profile()) {
+        eWarning("[Account] No profile to delete");
+        return false;
+    }
+
+    const auto victim = current_profile_;
+
+    // File first: a stale list entry is recoverable, a file off the list is not
+    const auto file_name =
+        Profiles::folder + Utils::platformDelimeter() + victim.to_string() + Profiles::format;
+    std::error_code ec;
+    std::filesystem::remove(file_name, ec);
+    if (ec) {
+        eWarning("[Account] Could not remove the profile file: {}", ec.message());
+        return false;
+    }
+
+    auto profiles = profiles_list();
+    profiles.erase(victim);
+    QJsonArray array;
+    for (const auto &id : profiles) {
+        array.push_back(id.toQString());
+    }
+
+    const QString list_path =
+        QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles);
+    QFile list(list_path);
+    if (!list.open(QFile::WriteOnly)) {
+        eWarning("[Account] Could not rewrite the profiles list: {}", list.errorString());
+        return false;
+    }
+    list.write(QJsonDocument(array).toJson(QJsonDocument::Compact));
+    list.close();
+
+    eLog("[Account] Deleted profile {}", victim.to_string());
+    return true;
 }
 
 void AccountController::dogenerate() {

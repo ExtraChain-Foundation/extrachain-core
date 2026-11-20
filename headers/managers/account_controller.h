@@ -44,6 +44,12 @@ enum class ProfileType {
     New
 };
 
+struct ProfileAccess {
+    std::string       hash;
+    KeyPass           key;
+    std::set<ActorId> profiles;
+};
+
 /**
  * @brief The AccountController class
  * One client can have several accounts, so AccountController is storing this accounts
@@ -85,6 +91,8 @@ public:
     std::expected<void, LoadError> load(const std::string &hash);
     bool load_profile(const ActorId &actor_id, const std::string &hash, const std::optional<KeyPass> &key);
     std::set<ActorId> multiple_profiles(const std::string &hash);
+    // Password hashing is the slow part: the key is derived once here and load_profile takes it back
+    std::expected<ProfileAccess, LoadError> find_profiles(const std::string &hash);
 
     // TODO: expected?
     const Actor<KeyPrivate> &system_actor();
@@ -95,6 +103,9 @@ public:
      * @return actor
      */
     const PrivateProfile &current_profile() const;
+
+    // True once a profile is loaded and selected; current_profile() is fatal before that
+    bool has_current_profile() const;
 
     int  count() const;
     bool empty() const;
@@ -131,6 +142,19 @@ public:
     bool import_seed_phrase(const std::string &login, const std::string &password, const std::string &phrase);
     bool import_seed_hex(const std::string &login, const std::string &password, const std::string &seed_hex);
     bool import_seed(const std::string &login, const std::string &password, const MasterSeed &seed);
+
+    // Re-encrypts the current profile under a new login/password pair. Neither the
+    // seed nor any profile data changes — only the key they are stored under, which
+    // is why an exported phrase keeps working and an exported hex does not.
+    // The old pair is required: it is the only proof the caller may do this
+    bool change_credentials(const std::string &old_login,
+                            const std::string &old_password,
+                            const std::string &new_login,
+                            const std::string &new_password);
+
+    // Removes this profile's file and its list entry; other profiles, the dag,
+    // the dfs and the actors stay untouched
+    bool delete_current_profile();
 
     void dogenerate();
 

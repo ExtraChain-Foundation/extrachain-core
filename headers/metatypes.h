@@ -36,7 +36,7 @@ Q_DECLARE_METATYPE(Network::Protocol)
 Q_DECLARE_METATYPE(Network::SocketServiceError)
 Q_DECLARE_METATYPE(Responder)
 
-void registerMetaTypes() {
+inline void registerMetaTypes() {
     qRegisterMetaType<BigNumber>();
     qRegisterMetaType<QHostAddress>();
     qRegisterMetaType<ActorId>();

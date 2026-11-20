@@ -24,6 +24,7 @@
 #include "managers/extrachain_node.h"
 #include "managers/luminance_manager.h"
 #include "network/upnpconnection.h"
+#include "network/network_receive_queue.h"
 #include "network/upnpconnector.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
@@ -31,12 +32,49 @@
 #include "dfs/dirs_manager.h"
 #include "utils/thread_pool_boost.h"
 
+#include <chrono>
 #include <filesystem>
+#include <exception>
 #include <fstream>
 #include <algorithm>
 #include <vector>
 
 #include <QJsonObject>
+#include <QThread>
+
+namespace {
+using ReceiveClock = std::chrono::steady_clock;
+
+class ReceiveStageTimer {
+public:
+    explicit ReceiveStageTimer(const char *stage, int type = -1)
+        : stage_(stage), type_(type), started_(ReceiveClock::now()) {
+    }
+    ReceiveStageTimer(const ReceiveStageTimer &) = delete;
+    ReceiveStageTimer &operator=(const ReceiveStageTimer &) = delete;
+
+    void set_type(int type) { type_ = type; }
+
+    ~ReceiveStageTimer() noexcept {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            ReceiveClock::now() - started_).count();
+        if (elapsed < 100) {
+            return;
+        }
+        try {
+            eWarning("[NetworkManager] Slow receive stage: stage={} type={} elapsed_ms={}",
+                     stage_, type_, elapsed);
+        } catch (...) {
+            // Diagnostics must not change dispatch or worker failure handling
+        }
+    }
+
+private:
+    const char *stage_;
+    int type_;
+    ReceiveClock::time_point started_;
+};
+}
 
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
@@ -82,6 +120,10 @@ CalculateTraffic *NetworkManager::calculate_traffic() const {
     return calculate_traffic_;
 }
 
+std::shared_ptr<const NetworkReceiveMetrics> NetworkManager::receive_metrics() const {
+    return receive_queue_ ? receive_queue_->metrics() : nullptr;
+}
+
 std::string NetworkManager::public_ip() const {
     return public_ip_;
 }
@@ -111,6 +153,17 @@ NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
     : QObject(node)
     , node(node)
     , ws_port(port) {
+    receive_queue_ = std::make_unique<NetworkReceiveQueue>(this,
+        [this](const NetworkReceivedMessage &incoming) { prepare_received(incoming); },
+        [](std::exception_ptr error) {
+            try {
+                std::rethrow_exception(error);
+            } catch (const std::exception &exception) {
+                eWarning("[NetworkManager] Receive stage failed: {}", exception.what());
+            } catch (...) {
+                eWarning("[NetworkManager] Receive stage failed");
+            }
+        });
     if (!first_nodes_.empty()) {
         first_node_ = first_nodes_.front();
     }
@@ -300,6 +353,7 @@ void NetworkManager::reconnection() {
     for (auto &[ip, entry] : reconn_) {
         if (!need_reconnect.contains(ip)) continue;
         if (this->failed_ips_.contains(ip)) continue;
+        if (is_avoided_peer(ip)) continue;
         if (now < entry.next_attempt_ms) continue;
 
         eLog("[Network] Reconnect to node: {} (attempt {})", ip, entry.attempts + 1);
@@ -340,6 +394,11 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
             return;
 
         auto service = qobject_cast<SocketService *>(senderObj);
+        if (is_avoided_peer(service->ip().toStdString())) {
+            eLog("[Network] Dropping the link to {}: it is kept away", service->ip());
+            emit service->close();
+            return;
+        }
 
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
@@ -384,15 +443,19 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     }
                 }
 
-                // TEST STAND ONLY (do not commit): EXC_ALLOW_LOOPBACK_SHARE lets
-                // auto-discovery accept 127.0.0.x so a single-host mesh can grow to
-                // a realistic degree. In production loopback is always skipped.
-                static const bool allow_loopback_share =
-                    qEnvironmentVariableIsSet("EXC_ALLOW_LOOPBACK_SHARE");
+#ifdef IS_APP_UI_CLIENT
+                // A client keeps a handful of links: every peer of a shared list would be opened
+                // at once and dropped after its handshake by the limit
+                int free_slots = Network::maxConnections - open_connections_count() - pending_port_checks_;
+#endif
+
                 for (const auto &[ip, identifier] : connections) {
-                    const bool is_plain_loopback = (ip == "127.0.0.1");
-                    if (this->failed_ips_.contains(ip)
-                        || (is_plain_loopback && !allow_loopback_share)) {
+#ifdef IS_APP_UI_CLIENT
+                    if (free_slots <= 0) {
+                        break;
+                    }
+#endif
+                    if (this->failed_ips_.contains(ip) || ip == "127.0.0.1") {
                         continue;
                     }
 
@@ -424,6 +487,9 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     }
 
                     if (can_connect) {
+#ifdef IS_APP_UI_CLIENT
+                        free_slots--;
+#endif
                         emit connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
                     }
                 }
@@ -433,10 +499,16 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 void NetworkManager::remove_connection(const QString &identifier) {
     if (identifier.isEmpty())
         eFatal("Try remove with empty identifier");
-    auto connectionsLocked = *connections_;
-    for (const auto &connection : *connectionsLocked) {
-        if (connection->identifier() == identifier)
-            emit connection->close();
+    std::set<SocketService *> matched;
+    {
+        auto connectionsLocked = *connections_;
+        for (const auto &connection : *connectionsLocked) {
+            if (connection->identifier() == identifier)
+                matched.insert(connection);
+        }
+    }
+    for (const auto &connection : matched) {
+        emit connection->close();
     }
 }
 
@@ -471,6 +543,9 @@ void NetworkManager::check_port(const QString     ip,
     auto *socket = new QTcpSocket(this);
     auto *timer  = new QTimer(this);
     timer->setSingleShot(true);
+
+    pending_port_checks_++;
+    connect(socket, &QObject::destroyed, this, [this]() { pending_port_checks_--; });
 
     connect(socket,
             &QTcpSocket::connected,
@@ -528,6 +603,8 @@ bool NetworkManager::check_port_sync(const QString    &ip,
 }
 
 NetworkManager::~NetworkManager() {
+    // Finish the accepted SQL stage before any receive callback loses its owner
+    receive_queue_.reset();
     eLog("[NetworkManager] Finish him with {} connections", connections_->size());
 
     std::set<SocketService *> copied;
@@ -540,6 +617,10 @@ NetworkManager::~NetworkManager() {
         connection->flush();
         emit connection->close();
     }
+}
+
+void NetworkManager::stop_receive() {
+    receive_queue_->stop();
 }
 
 void NetworkManager::check_connections_status() {
@@ -617,8 +698,20 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
         }
     }
 
+#ifdef IS_APP_UI_CLIENT
+    // Sockets still opening count too: otherwise each one completes a handshake only to be dropped
+    if (!isConstant && open_connections_count() >= Network::maxConnections) {
+        eLog("[NetworkManager] Skip {}: {} connections already open", ip, open_connections_count());
+        return;
+    }
+#endif
+
     if (ip.isEmpty()) {
         // eLog("Ip is empty");
+        return;
+    }
+    if (is_avoided_peer(ip.toStdString())) {
+        eLog("[NetworkManager] Skip {}: it is kept away", ip);
         return;
     }
 
@@ -742,6 +835,40 @@ bool NetworkManager::send_message_checker(MessageType      type,
     return true;
 }
 
+void NetworkManager::set_avoided_peers(const std::set<std::string> &ips) {
+    {
+        std::lock_guard lock(avoided_peers_mutex_);
+        avoided_peers_ = ips;
+    }
+    if (ips.empty()) {
+        return;
+    }
+    QMetaObject::invokeMethod(this, [this] {
+        std::vector<QString> avoided;
+        {
+            auto connections_locked = *connections_;
+            for (auto *service : *connections_locked) {
+                if (!service->is_closed() && !service->identifier().isEmpty()
+                    && is_avoided_peer(service->ip().toStdString())) {
+                    avoided.push_back(service->identifier());
+                }
+            }
+        }
+        for (const auto &identifier : avoided) {
+            remove_connection(identifier);
+        }
+    }, Qt::QueuedConnection);
+}
+
+bool NetworkManager::is_avoided_peer(const std::string &ip) const {
+    // The first nodes are the way back into the network, whoever asked to keep away from them
+    if (Utils::vector_contains(first_nodes_, ip) || ip == first_node_) {
+        return false;
+    }
+    std::lock_guard lock(avoided_peers_mutex_);
+    return avoided_peers_.contains(ip);
+}
+
 std::string NetworkManager::send_message_send(const std::string &data_serialized,
                                               MessageType        type,
                                               SendMode           send_mode,
@@ -819,6 +946,21 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               const std::string &receiver_identifier,
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
+    if (QThread::currentThread() != thread()) {
+        // Socket state and routing must be inspected on their owning event loop.
+        QMetaObject::invokeMethod(this,
+                                  [this, serialized_message, non_serialized_message, send_mode,
+                                   receiver_identifier, message_type, status_info]() {
+            try {
+                send_message_connections(serialized_message, non_serialized_message, send_mode,
+                                         receiver_identifier, message_type, status_info);
+            } catch (const std::exception &) {
+                eWarning("[Network] Deferred message dispatch failed");
+            }
+        }, Qt::QueuedConnection);
+        return;
+    }
+
     if (!is_active_connection_exists()) {
         // eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         save_to_cache(serialized_message, send_mode, receiver_identifier);
@@ -837,12 +979,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         case SendMode::Neighbours:
             return true;
         case SendMode::Broadcast: {
-            bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
-
-            if (res) {
-                // eTemp("[Network] Broadcast further to socket: {}", socket_identifier);
-            }
-            return res;
+            return !package.nodes_identifiers_to_ignore.contains(socket_identifier);
         }
         default:
             return false;
@@ -1075,6 +1212,17 @@ bool NetworkManager::is_active_connection_exists() {
     return false;
 }
 
+int NetworkManager::open_connections_count() {
+    auto connectionsLocked = *connections_;
+    int  count             = 0;
+    for (const auto &el : *connectionsLocked) {
+        if (el && !el->is_closed()) {
+            count++;
+        }
+    }
+    return count;
+}
+
 int NetworkManager::active_connections_count() {
     auto connectionsLocked = *connections_;
     if (connectionsLocked->empty()) {
@@ -1132,6 +1280,19 @@ bool NetworkManager::check_message_count(const std::string &msg) {
     return flag_result;
 }
 
+struct NetworkManager::PendingReceive {
+    PendingReceive(const MessageBody &body, const std::string &identifier, const std::string &signature)
+        : package(body, identifier, signature) {
+    }
+
+    NetworkPackageStorage package;
+    Responder responder;
+    std::size_t received_bytes = 0;
+    bool is_luminance = false;
+    bool is_node = false;
+    int luminance = -1;
+};
+
 void NetworkManager::message_received(const std::string &message,
                                       const std::string &ip,
                                       const std::string &identifier) {
@@ -1139,6 +1300,48 @@ void NetworkManager::message_received(const std::string &message,
     if (!node_enabled.load()) {
         return;
     }
+
+    if (message.size() <= 64) {
+        eWarning("[NetworkManager] Signed message has no body or a truncated signature");
+        return;
+    }
+
+    if (!receive_queue_->enqueue(message, ip, identifier)) {
+        // Only the peer filling the queue is cut off; anyone else's packet is dropped, as a slow link would
+        const bool flooding = !identifier.empty() && receive_queue_->floods(identifier);
+        eWarning("[NetworkManager] Receive queue capacity exceeded; rejecting packet: "
+                 "pending_count={} pending_bytes={} incoming_bytes={} flooding_peer={}",
+                 receive_queue_->pending_count(), receive_queue_->pending_bytes(), message.size(), flooding);
+        if (flooding) {
+            QMetaObject::invokeMethod(this, [this, identifier] {
+                remove_connection(QString::fromStdString(identifier));
+            }, Qt::AutoConnection);
+        }
+    }
+}
+
+void NetworkManager::queue_luminance_cleanup() {
+    if (node_enabled.load()) {
+        receive_queue_->enqueue_maintenance();
+    }
+}
+
+void NetworkManager::prepare_received(const NetworkReceivedMessage &incoming) {
+    ReceiveStageTimer timing("prepare");
+    if (!node_enabled.load()) {
+        return;
+    }
+    if (incoming.maintenance) {
+        auto *storage = node->luminance_manager();
+        receive_queue_->defer([storage] {
+            const ReceiveStageTimer timing("reputation-expire");
+            storage->remove_old();
+        }, [] {});
+        return;
+    }
+    const auto &message = incoming.message;
+    const auto &ip = incoming.ip;
+    const auto &identifier = incoming.identifier;
 
     if (!check_message_count(message)) {
         eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
@@ -1189,10 +1392,9 @@ void NetworkManager::message_received(const std::string &message,
       }
       */
 
-    SendMode      send_type  = message_body.send_type;
     MessageType   type       = message_body.message_type;
+    timing.set_type(static_cast<int>(type));
     MessageStatus status     = message_body.status;
-    std::string   serialized = message_body.data;
     std::string   mess_id    = message_body.message_id;
     std::string   message_id(mess_id.begin(), mess_id.end());
     bool          is_luminance = node_id.actor_id == node->network_id();
@@ -1242,44 +1444,98 @@ void NetworkManager::message_received(const std::string &message,
         }
     }
 
-    const NetworkPackageStorage package_data(message_body, identifier, std::string(sign));
-    bool                        is_node = ip == first_node_;
+    auto pending = std::make_shared<PendingReceive>(message_body, identifier, std::string(sign));
+    pending->responder = Responder(this);
+    pending->responder.set_message_id(message_id);
+    pending->responder.add_identifier(identifier);
+    pending->responder.set_message_type(type);
+    pending->responder.set_node_id(node_id);
+    pending->responder.set_ip(ip);
+    pending->received_bytes = message.size();
+    pending->is_luminance = is_luminance;
+    pending->is_node = ip == first_node_;
 
-    Responder responder(this);
-    responder.set_message_id(message_id);
-    responder.add_identifier(identifier);
-    responder.set_message_type(type);
-    responder.set_node_id(node_id);
-    responder.set_ip(ip);
+    // These handlers do not consume reputation; broadcast accounting still runs below.
+    const bool unused_luminance = type == MessageType::Custom || type == MessageType::NewActor
+        || type == MessageType::Actor || type == MessageType::Actors || type == MessageType::ActorsHash
+        || type == MessageType::RequestDfsSize || type == MessageType::ResponseDfsSize;
+    if (unused_luminance) {
+        resume_received(pending);
+        return;
+    }
+    auto *storage = node->luminance_manager();
+    if (const auto cached = storage->cached_luminance(pending->responder.node_id())) {
+        pending->luminance = *cached;
+        resume_received(pending);
+        return;
+    }
+    receive_queue_->defer([storage, pending] {
+        const ReceiveStageTimer timing("reputation-read",
+                                       static_cast<int>(pending->package.msg_body.message_type));
+        pending->luminance = storage->read_luminance(pending->responder.node_id());
+    }, [this, pending] { resume_received(pending); });
+}
 
-    int luminance = node->luminance_manager()->read_luminance(node_id);
-    responder.set_luminance(luminance == -1 ? 1 : luminance);
-
-    if (is_luminance) {
-        responder.set_luminance(responder.luminance() * 10); //
+void NetworkManager::resume_received(const std::shared_ptr<PendingReceive> &pending) {
+    if (!node_enabled.load()) {
+        return;
+    }
+    const auto &body = pending->package.msg_body;
+    const auto type = body.message_type;
+    if (type != MessageType::Custom) {
+        pending->responder.set_luminance(pending->luminance == -1 ? 1 : pending->luminance);
+        if (pending->is_luminance) {
+            pending->responder.set_luminance(pending->responder.luminance() * 10);
+        }
     }
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
+        const auto &serialized = body.data;
         msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
         msgpack::object        deserialized = oh.get();
         eLog("[Network Message] Received: type {}, status {}, id {}, body: {}",
              type,
-             status,
-             mess_id,
+             body.status,
+             body.message_id,
              (std::stringstream() << deserialized).str());
     }
 #endif
 
-    calculate_traffic_->add_bytes_received(ip, message.size());
+    calculate_traffic_->add_bytes_received(pending->responder.ip(), pending->received_bytes);
 
     // QElapsedTimer timer;
     // timer.start();
 
     // TODO: not global
-    if (send_type == SendMode::Broadcast && type != MessageType::Custom) {
-        node->luminance_manager()->increment(node_id);
+    if (body.send_type == SendMode::Broadcast && type != MessageType::Custom) {
+        auto *storage = node->luminance_manager();
+        receive_queue_->defer([storage, pending] {
+            const ReceiveStageTimer timing("reputation-increment",
+                                           static_cast<int>(pending->package.msg_body.message_type));
+            storage->increment(pending->responder.node_id());
+        }, [this, pending] {
+            if (node_enabled.load()) {
+                dispatch_received(*pending);
+            }
+        });
+        return;
     }
+    dispatch_received(*pending);
+}
+
+void NetworkManager::dispatch_received(const PendingReceive &pending) {
+    const auto &package_data = pending.package;
+    const auto &message_body = package_data.msg_body;
+    const auto &identifier = package_data.prev_identifier;
+    const auto &responder = pending.responder;
+    const auto type = message_body.message_type;
+    const ReceiveStageTimer timing("dispatch", static_cast<int>(type));
+    const auto status = message_body.status;
+    const auto &serialized = message_body.data;
+    const auto &message_id = message_body.message_id;
+    const bool is_luminance = pending.is_luminance;
+    const bool is_node = pending.is_node;
 
     // try {
     switch (type) {

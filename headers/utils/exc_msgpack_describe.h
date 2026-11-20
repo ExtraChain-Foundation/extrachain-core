@@ -44,7 +44,7 @@ namespace msgpack_describe {
         using members =
             boost::describe::describe_members<T, boost::describe::mod_any_access | boost::describe::mod_inherited>;
         constexpr size_t N = boost::mp11::mp_size<members>::value;
-        if (obj.type != msgpack::type::ARRAY || obj.via.array.size != N) {
+        if (obj.type != msgpack::type::ARRAY || obj.via.array.size < N) {
             throw msgpack::type_error();
         }
         size_t idx = 0;

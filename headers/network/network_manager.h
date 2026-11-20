@@ -26,6 +26,8 @@
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
+#include <mutex>
+#include <set>
 #include <string>
 #include <shared_mutex>
 #include <vector>
@@ -43,6 +45,9 @@ class SocketService;
 class WebSocketService;
 class UPNPConnection;
 class UPnPConnector;
+class NetworkReceiveQueue;
+class NetworkReceiveMetrics;
+struct NetworkReceivedMessage;
 
 class CalculateTraffic {
 private:
@@ -250,12 +255,15 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
 private:
     bool                            active_ = false;
     std::set<std::string>           failed_ips_;
+    // Port probes in flight: each one turns into a socket, so they count against the limit
+    int                             pending_port_checks_ = 0;
     std::unique_ptr<UPNPConnection> upnp_dis_;
     std::unique_ptr<UPNPConnection> upnp_net_;
     std::unique_ptr<UPnPConnector>  upnp_connector_;
     QMap<std::string, std::pair<int, qint64>> msg_hash_list_ = {};
 
     ExtraChainNode*                       node;
+    std::unique_ptr<NetworkReceiveQueue> receive_queue_;
     std::shared_ptr<QNetworkAddressEntry> local_;
     QWebSocketServer*                     ws_server_ = nullptr;
 
@@ -268,6 +276,8 @@ private:
         qint64   next_attempt_ms = 0;
     };
     std::map<std::string, ReconnEntry> reconn_;
+    mutable std::mutex                 avoided_peers_mutex_;
+    std::set<std::string>              avoided_peers_;
 
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           messages_;
     std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;
@@ -308,6 +318,10 @@ public:
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
+    struct PendingReceive;
+    void prepare_received(const NetworkReceivedMessage& incoming);
+    void resume_received(const std::shared_ptr<PendingReceive>& pending);
+    void dispatch_received(const PendingReceive& pending);
 
     void send_message_connections(const std::string& serialized_message,
                                   const MessageBody& non_serialized_message,
@@ -412,8 +426,13 @@ public:
     bool is_active_connection_exists();
     int  active_connections_count();
     std::vector<std::string> active_connection_identifiers() const;
+    // Sockets not closed yet, handshaken or still opening
+    int  open_connections_count();
 
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
+    void queue_luminance_cleanup();
+    void stop_receive();
+    std::shared_ptr<const NetworkReceiveMetrics> receive_metrics() const;
 
     QString found_current_identifier(QString ip, quint16 port);
 
@@ -448,6 +467,11 @@ public:
         auto message_id = send_message(data, type, SendMode::Broadcast, status);
         return message_id;
     }
+
+    // Addresses this node keeps away from: no dial or reconnection goes there and a link to one is dropped;
+    // the first nodes never are
+    void set_avoided_peers(const std::set<std::string>& ips);
+    bool is_avoided_peer(const std::string& ip) const;
 
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 

@@ -86,6 +86,10 @@ bool LoadManager::compute_vectors_waiting() {
 }
 
 void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
+    if (!node_enabled.load()) {
+        return;
+    }
+
     {
         auto amount_file_fragments_requests_locked = *m_amount_file_fragments_requests;
         auto now                                   = std::chrono::system_clock::now();
@@ -259,7 +263,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     if (!node->network()->is_connection_exists(identifier.first)) {
                         // eCritical(
                         //     "LoadManager::timer_runner, connection with identifier ({}) not exist for file_link:
-                        //     {}.", identifier.first, it.first);
+                        //     {}.", identifier.first, it->first);
                         continue;
                     }
 
@@ -329,7 +333,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
                            // eLog("LoadManager::timer_runner, try to send request once more with identifier ({}),
                            // attempt: {} for file_link: {} and fragments: {}.", identifier.first,
-                           // identifier.second.counter, it.first, output.fragment_numbers);
+                           // identifier.second.counter, it->first, output.fragment_numbers);
                             is_requested = true;
                             break;
                         }
@@ -368,6 +372,8 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     load_info.identifier_list.clear();
                     load_info.identifier_storage_checker.clear();
                 }
+
+                ++it;
             }
             return true;
         }
@@ -430,7 +436,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const std::string& identifier,
                                const bool         notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
-    bool is_forced = node->dfs()->forces_files_.contains(file_link);
+    bool is_forced = node->dfs()->forces_files_->contains(file_link);
 
     bool is_priority = node->dfs()->is_priority(file_link) || is_forced;
 
@@ -465,7 +471,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     // discarding its source selection, retry counters and partial progress.
     if (update_existing(m_active_downloads_priority) || update_existing(m_active_downloads)) {
         if (is_forced) {
-            node->dfs()->forces_files_.erase(file_link);
+            node->dfs()->forces_files_->erase(file_link);
             QMetaObject::invokeMethod(this,
                                       [this, file_link]() {
                                           timer_runner(file_link);
@@ -476,7 +482,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     }
 
     if (is_forced) {
-        node->dfs()->forces_files_.erase(file_link);
+        node->dfs()->forces_files_->erase(file_link);
     }
 
     bool need_load = is_full || node->dfs()->is_priority(file_link) || is_forced;
@@ -546,7 +552,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                             }
                         }
                         auto hash_size = dfs_vector.data_hash_size();
-                        if (dir_row.hash == hash_size->first) {
+                        if (hash_size.has_value() && dir_row.hash == hash_size->first) {
                             return;
                         }
                     }
@@ -665,9 +671,19 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
         // from another user after a from-scratch import) — the newly arrived dir_row is
         // itself the signal it's now downloadable. Otherwise the file would wait for
         // another request_file (30s throttle plus another UI request).
-        bool need_load = is_full || node->dfs()->is_priority(file_link)
-                         || node->dfs()->forces_files_.contains(file_link);
-        if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {
+        const bool priority = node->dfs()->is_priority(file_link) || node->dfs()->forces_files_->contains(file_link);
+        if (!is_full && !priority) {
+            continue;
+        }
+
+        // A row carries its sender's state: a sender that only knows of the file never answers a request for it
+        if (dir_row.state != Dfs::FileState::Ready) {
+            if (priority && should_ask_file_state(file_link)) {
+                node->network()->send_message(file_link,
+                                              MessageType::DfsFileState,
+                                              SendMode::Neighbours,
+                                              MessageStatus::Request);
+            }
             continue;
         }
 
@@ -1032,6 +1048,20 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             }
         }
     });
+}
+
+bool LoadManager::should_ask_file_state(const Dfs::FileLink& file_link) {
+    auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(),
+                                                             file_link.owner_id,
+                                                             file_link.file_id);
+    if (row.has_value() && row->state == Dfs::FileState::Ready) {
+        return false;
+    }
+
+    const auto now          = std::chrono::steady_clock::now();
+    auto       asked_locked = *m_file_state_asked;
+    std::erase_if(*asked_locked, [now](const auto& item) { return now - item.second >= FILE_STATE_ASK_INTERVAL; });
+    return asked_locked->try_emplace(file_link, now).second;
 }
 
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {

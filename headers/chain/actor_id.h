@@ -20,6 +20,7 @@
 #pragma once
 
 #include <expected>
+#include <stdexcept>
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"
@@ -41,6 +42,16 @@ MSGPACK_ADD_ENUM(ActorType)
 enum class ActorError {
     IncorrectSize,
     IncorrectFormat
+};
+
+// Thrown when a malformed id reaches ActorId. Deserialization tries a packet
+// against every known type, so a foreign packet lands here routinely: it must
+// unwind into the caller's catch instead of taking the process down
+class ActorIdException final : public std::runtime_error {
+public:
+    explicit ActorIdException(const std::string &message)
+        : std::runtime_error(message) {
+    }
 };
 
 class EXTRACHAIN_EXPORT ActorId final {

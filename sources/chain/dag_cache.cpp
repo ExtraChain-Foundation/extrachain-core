@@ -23,6 +23,9 @@
 #include "network/network_manager.h"
 #include "utils/db_connector.h"
 
+#include <QDir>
+#include <QFile>
+
 #include "utils/thread_pool_boost.h"
 
 DagCache::DagCache(ExtraChainNode* node, Dag* dag)

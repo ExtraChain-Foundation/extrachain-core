@@ -19,6 +19,12 @@
 
 #include "chain/dag.h"
 
+#include <QDir>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QProcess>
+#include <QStringList>
+
 #include "dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
@@ -716,6 +722,23 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
 
 void Dag::timer_tick() {
     eLog("[Dag] Timer tick");
+
+    // a long removal blocks the event loop, so a tick can land late on a healthy
+    // search — rearm and leave it alone instead of resetting sync under it
+    if (search_control_) {
+        const auto elapsed = control_search_elapsed();
+
+        if (elapsed < CONTROL_SEARCH_TIMEOUT_MS) {
+            eLog("[Dag] Timer tick while control search runs, {} ms elapsed", elapsed);
+            emit node->dagTimerStart(static_cast<int>(CONTROL_SEARCH_TIMEOUT_MS - elapsed));
+            return;
+        }
+
+        // without this the latch survives the tick and blocks every later sync
+        eLog("[Dag] Timer tick clears a stuck control search");
+        this->clear_control_search();
+    }
+
     this->timer_sync_->stop(); // no need emit?
     this->set_status(DagStatus::Timered);
     this->sync_status_ = DagSyncStatus::None;
@@ -2089,7 +2112,8 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    if (hash_interval.to > current_section_) {
+    // Reject a peer interval before it can start a disk-backed control search.
+    if (hash_interval.to <= SectionId(0) || hash_interval.to > current_section_) {
         eLog("[Dag] Hash interval check: ignore #2");
         return;
     }
@@ -2439,6 +2463,22 @@ void Dag::clear_dag_folder() {
         }).detach();
     }
 
+    #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    // Sections clear_dag() renamed for deletion but the app was killed before they were gone
+    QDir        dag_dir(dag_path);
+    QStringList leftovers;
+    for (const QString &name : dag_dir.entryList({ "*_del_*" }, QDir::Dirs | QDir::NoDotAndDotDot)) {
+        leftovers << dag_dir.filePath(name);
+    }
+    if (!leftovers.isEmpty()) {
+        std::thread([leftovers]() {
+            for (const QString &path : leftovers) {
+                QDir(path).removeRecursively();
+            }
+        }).detach();
+    }
+    #endif
+
     // One-time migration: if dag exists and not yet migrated
     if (QDir(dag_path).exists() && !QFile::exists(migrated_path)) {
         (void)QFile(migrated_path).open(QFile::WriteOnly);
@@ -2465,12 +2505,30 @@ void Dag::clear_dag() {
     QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
 
     #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    // No QProcess here, and deleting a full chain inline holds the node thread for minutes
+    QStringList to_delete;
+    QDir        parent_dir(QString::fromStdString(ChainConst::DAG_FOLDER));
+    auto        suffix = QString::fromStdString(Utils::generate_random_hex(4));
+
     for (SectionId i = SectionId(0); i <= max_section; ++i) {
-        QString path = QString::fromStdString(ChainConst::DAG_FOLDER + "/" + i.to_string());
-        QDir    dir(path);
-        if (dir.exists()) {
-            dir.removeRecursively();
+        QString old_name = QString::fromStdString(i.to_string());
+        if (!parent_dir.exists(old_name)) {
+            continue;
         }
+        QString new_name = old_name + "_del_" + suffix;
+        if (parent_dir.rename(old_name, new_name)) {
+            to_delete << parent_dir.filePath(new_name);
+        } else {
+            QDir(parent_dir.filePath(old_name)).removeRecursively();
+        }
+    }
+
+    if (!to_delete.isEmpty()) {
+        std::thread([to_delete]() {
+            for (const QString &path : to_delete) {
+                QDir(path).removeRecursively();
+            }
+        }).detach();
     }
     #else
     QStringList to_delete;
@@ -2930,8 +2988,9 @@ BigNumberFloat Dag::sum_all_rewards() {
 }
 
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
-    int j  = 0;
-    int jj = 0;
+    constexpr int max_sections_checked     = 1000;
+    int           sections_checked         = 0;
+    int           sections_without_control = 0;
     // eTemp("[Dag] find_last_control: search from {}, current section: {}",
     //       from < 0 ? current_section_ : from,
     //       current_section_);
@@ -2947,6 +3006,10 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
     }
 
     for (SectionId i = from < 0 /*|| from > current_section_*/ ? current_section_ : from; i >= SectionId(0); i--) {
+        if (++sections_checked > max_sections_checked) {
+            break;
+        }
+
         if (i < first_saved_section_) {
             eCritical("[Dag] Try to find section < current first");
             break;
@@ -2954,10 +3017,8 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
 
         auto section = this->read_section(i);
         if (!section.has_value()) {
-            if (i % CONTROL_INTERVAL_MOD == 0) {
-                eLog("[Dag] No section: {}", i);
-                j = 0;
-                // jj++;
+            if (!disable_break && ++sections_without_control > 37) {
+                break;
             }
             continue;
         }
@@ -2971,8 +3032,8 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
             return DagControl { .section_id = i, .control = section->control.value() };
         }
 
-        j += 1;
-        if (!disable_break && (j > 37 || jj > 10)) {
+        sections_without_control += 1;
+        if (!disable_break && sections_without_control > 37) {
             break;
         }
     }
@@ -3288,10 +3349,34 @@ void Dag::clear_controls_async(const SectionId &from) {
     }
 }
 
+std::uint64_t Dag::control_search_elapsed() const {
+    // a zero stamp means the latch outlived its request — treat it as expired
+    if (!search_control_ || timestamp_control_search_start_ == 0) {
+        return CONTROL_SEARCH_TIMEOUT_MS;
+    }
+
+    return Utils::current_date_ms() - timestamp_control_search_start_;
+}
+
+void Dag::clear_control_search() {
+    search_control_                 = false;
+    timestamp_control_search_start_ = 0;
+    emit node->dagTimerStop(); // the watchdog outlives its search otherwise
+    emit node->dagSearchControlEnded();
+}
+
 void Dag::request_control_section(const SectionId &from_top, const Responder &responder) {
     if (search_control_) {
-        eTemp("[Dag] No need request control search");
-        return;
+        const auto elapsed = control_search_elapsed();
+
+        if (elapsed < CONTROL_SEARCH_TIMEOUT_MS) {
+            eLog("[Dag] Control search already in progress, {} ms elapsed", elapsed);
+            return;
+        }
+
+        // no response came back — drop the latch instead of blocking sync forever
+        eLog("[Dag] Control search timed out after {} ms, restarting", elapsed);
+        this->clear_control_search();
     }
 
     SectionId hi = align_down20(from_top < current_section_ ? from_top : current_section_);
@@ -3306,7 +3391,8 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
         lo = SectionId(0);
     }
 
-    search_control_ = true;
+    search_control_                 = true;
+    timestamp_control_search_start_ = Utils::current_date_ms();
     emit node->dagSearchControlStarted();
     emit node->dagSyncStart(current_section_, current_section_);
 
@@ -3316,6 +3402,9 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
                                   responder.empty() ? SendMode::Neighbours : SendMode::Focused,
                                   MessageStatus::Request,
                                   responder.with_new_message_id());
+
+    // the tick is the only way back if the response never arrives
+    emit node->dagTimerStart(static_cast<int>(CONTROL_SEARCH_TIMEOUT_MS));
 }
 
 void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
@@ -3372,12 +3461,13 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         eLog("[Dag] network_request_control_section Can't read control from {} to {}",
              control_response.to,
              control_response.from);
-        search_control_ = false;
-        emit node->dagSearchControlEnded();
+        this->clear_control_search();
         return;
     }
 
+    // the latch stays set here on purpose; the timeout is what retries
     if (responder.luminance() < 2) {
+        eLog("[Dag] Control response discarded, luminance: {}", responder.luminance());
         return;
     }
 
@@ -3424,8 +3514,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         // eFatal("[Dag] Sync complete!");
 
         if (sync_last_index_ <= current_section_) {
-            search_control_ = false;
-            emit node->dagSearchControlEnded();
+            this->clear_control_search();
             this->process_cached_transactions();
             return;
         } else {
@@ -3451,6 +3540,11 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
                                           SendMode::Neighbours,
                                           MessageStatus::Request,
                                           responder.with_new_message_id());
+
+            // the search walks down one round trip at a time; the watchdog measures
+            // silence, not the whole walk, so every answered step restarts its budget
+            timestamp_control_search_start_ = Utils::current_date_ms();
+            emit node->dagTimerStart(static_cast<int>(CONTROL_SEARCH_TIMEOUT_MS));
         }
 
         return;
@@ -3463,11 +3557,14 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         // sync_last_index_ = std::max(current_section_, sync_end);
 
         auto correct_from = std::max(SectionId(0), sync_from - 50);
+
+        // the search is over; disarm it first or its watchdog fires during the
+        // removal below, which can block the event loop for minutes
+        this->clear_control_search();
+
         this->remove_sections(correct_from);
         check_status_ = DagSyncStatus::None;
         emit node->dagSyncStart(correct_from, sync_last_index_);
-        search_control_ = false;
-        emit node->dagSearchControlEnded();
         this->request_file_sections(correct_from,
                                     std::min(sync_from + SYNC_SECTIONS_BATCH, sync_last_index_),
                                     responder.with_new_message_id());

@@ -81,10 +81,12 @@ private:
     void send_public_key();
     void handshake();
     bool canSendMore() const;
+    void scheduleDequeue();
     void processMessage(const QByteArray &message);
     void processCachedMessages();
 
     QWebSocket *m_ws = nullptr;
+    bool dequeue_pending_ = false;
 
     QTimer                *m_pingTimer   = nullptr;
     int                    m_failedPongs = 0;

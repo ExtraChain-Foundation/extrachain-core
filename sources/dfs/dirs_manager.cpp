@@ -351,7 +351,9 @@ void DirsManager::network_response_dir_rows(
                                                                          Dfs::FileState::Removed);
                 }
 
-                if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Ready) {
+                // Vectors and dictionaries too: the row this node first heard may have come from a peer
+                // that only knew of it, and an existing row never returns from add_dir_rows
+                if (row.type != Dfs::FileType::Folder && row.state == Dfs::FileState::Ready) {
                     if (!file_path->exists()) { // TODO: size
                         // eLog("Not exists: {} {}", owner_id, row.file_id);
                         dir_rows_todo.push_back(row);
@@ -430,59 +432,83 @@ void DirsManager::temp_sync_actors(const std::string& identifier, const std::vec
 
 void DirsManager::network_request_all(const Responder& responder, const std::vector<ActorId>& requested_actors) {
     ThreadPoolBoost::instance_dfs()->post([this, responder, requested_actors] {
-        std::vector<ActorId> actors;
-
-        auto network_id = node->actor_index()->network_id();
-        auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
-
-        if (requested_actors.empty()) {
-            if (node->dfs()->mode() == DfsMode::Selective) {
-                actors = node->dfs()->startup_sync_actors();
-                eLog("[Dfs] Legacy startup sync limited for selective node: actors={}", actors.size());
-            } else {
-                actors = node->actor_index()->read_all_actors_ids();
-                std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
-                    return actor == network_id || actor == raccoon_id;
-                });
-
-                actors.insert(actors.begin(), network_id);
-                actors.insert(actors.begin(), raccoon_id);
-                eLog("[Dfs] Full startup sync request: actors={}", actors.size());
-            }
-        } else {
-            std::set<ActorId> unique_actors;
-            unique_actors.insert(network_id);
-            unique_actors.insert(raccoon_id);
-
-            for (const auto& actor : requested_actors) {
-                if (!actor.is_zero()) {
-                    unique_actors.insert(actor);
-                }
-            }
-
-            actors.assign(unique_actors.begin(), unique_actors.end());
-            eLog("[Dfs] Staged startup sync request: requested={}, actors={}",
-                 requested_actors.size(),
-                 actors.size());
-        }
-
         std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
-        response_data.reserve(actors.size());
-        std::size_t rows_count = 0;
+        std::size_t                                               rows_count = 0;
 
-        for (const auto& actor : actors) {
-            auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, actor, 0);
-
-            if (!dir_rows.has_value() || dir_rows->empty())
-                continue;
-
-            rows_count += dir_rows->size();
-            response_data.emplace_back(actor, dir_rows.value());
-
-            // QThread::msleep(3);
-
-            if (!node_enabled.load()) {
+        if (node->is_client_application()) {
+            // An app holds a copy of the nodes' table and answers with what only it can add: its own dirs and
+            // the rows it wrote anywhere, an invite in a peer's dir among them. The whole table cost ~1.5 MB
+            auto* accounts = node->account_controller();
+            if (!accounts->has_current_profile()) {
                 return;
+            }
+            const auto&          profile = accounts->current_profile();
+            std::vector<ActorId> actors  = { profile.system().id() };
+            for (const auto& actor : profile.actors()) {
+                actors.push_back(actor.id());
+            }
+
+            auto rows = Dfs::Tables::DirsFile::ActorSpace::get_rows_of_actors(db_, actors);
+            if (!rows.has_value()) {
+                return;
+            }
+            std::map<ActorId, std::vector<Dfs::DirRow>> by_owner;
+            for (auto& row : rows.value()) {
+                by_owner[row.owner_id].push_back(std::move(row));
+                ++rows_count;
+            }
+            response_data.assign(std::make_move_iterator(by_owner.begin()), std::make_move_iterator(by_owner.end()));
+        } else {
+            std::vector<ActorId> actors;
+
+            auto network_id = node->actor_index()->network_id();
+            auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
+
+            if (requested_actors.empty()) {
+                if (node->dfs()->mode() == DfsMode::Selective) {
+                    actors = node->dfs()->startup_sync_actors();
+                    eLog("[Dfs] Legacy startup sync limited for selective node: actors={}", actors.size());
+                } else {
+                    actors = node->actor_index()->read_all_actors_ids();
+                    std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
+                        return actor == network_id || actor == raccoon_id;
+                    });
+
+                    actors.insert(actors.begin(), network_id);
+                    actors.insert(actors.begin(), raccoon_id);
+                    eLog("[Dfs] Full startup sync request: actors={}", actors.size());
+                }
+            } else {
+                std::set<ActorId> unique_actors;
+                unique_actors.insert(network_id);
+                unique_actors.insert(raccoon_id);
+
+                for (const auto& actor : requested_actors) {
+                    if (!actor.is_zero()) {
+                        unique_actors.insert(actor);
+                    }
+                }
+
+                actors.assign(unique_actors.begin(), unique_actors.end());
+                eLog("[Dfs] Staged startup sync request: requested={}, actors={}",
+                     requested_actors.size(),
+                     actors.size());
+            }
+
+            response_data.reserve(actors.size());
+
+            for (const auto& actor : actors) {
+                auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, actor, 0);
+
+                if (!dir_rows.has_value() || dir_rows->empty())
+                    continue;
+
+                rows_count += dir_rows->size();
+                response_data.emplace_back(actor, dir_rows.value());
+
+                if (!node_enabled.load()) {
+                    return;
+                }
             }
         }
 

@@ -20,6 +20,8 @@
 #pragma once
 
 #include <algorithm>
+#include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -151,6 +153,11 @@ enum class DbConnectorType {
 };
 // FORMAT_ENUM(DbConnectorType)
 
+enum class DbConnectorLockScope
+{
+    Shared,
+    Connection
+};
 // TODO: while select, open check in query, std::vector<DBColumn>
 
 class EXTRACHAIN_EXPORT DbConnector {
@@ -160,8 +167,15 @@ protected:
     sqlite3        *db     = nullptr;
     DbConnectorType m_type = DbConnectorType::Regular;
 
+    // Independent owners use one mutex; cooperating connectors share an explicit group
+    std::shared_ptr<std::recursive_mutex> connection_mutex_;
+    std::recursive_mutex &operation_mutex();
+
 public:
     explicit DbConnector(const std::string &filePath, DbConnectorType type = DbConnectorType::Regular);
+    DbConnector(const std::string &filePath, DbConnectorType type, DbConnectorLockScope lockScope);
+    DbConnector(const std::string &filePath, DbConnectorType type,
+                std::shared_ptr<std::recursive_mutex> lockGroup);
     explicit DbConnector(const std::filesystem::path &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(const FsPath &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(const char *filePath, DbConnectorType type = DbConnectorType::Regular);

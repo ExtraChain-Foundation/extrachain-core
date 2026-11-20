@@ -101,6 +101,16 @@ public:
     bool               loaded();
     const std::string &hash() const;
 
+    // Re-encrypts the profile file under a new hash. The contents are untouched:
+    // only the key guarding them changes
+    void reencrypt(const std::string &new_hash);
+
+    // Follows a hash change that did not go through this file: a new profile keeps
+    // its data in the seed, but seed_hex() and export still read the hash from here
+    void set_hash(const std::string &new_hash) {
+        hash_ = new_hash;
+    }
+
     std::unordered_map<ActorId, std::string> wallet_names() const;
 
     std::uint64_t creation_date() const {
