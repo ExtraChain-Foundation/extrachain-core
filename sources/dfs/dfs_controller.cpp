@@ -83,10 +83,11 @@ DfsController::DfsController(ExtraChainNode *node)
     });
 
 #ifdef IS_APP_UI_CLIENT
-    // Light, not Selective: a client keeps the full catalogue and fetches payloads on
-    // demand. Narrowing the catalogue itself is opt-in (Selective) and must not be the
-    // default — a node that never learns a vector exists cannot repair itself.
-    set_mode(DfsMode::Light);
+    // Light by default: a client keeps the full catalogue and fetches payloads on demand.
+    // Narrowing the catalogue itself (Selective) is opt-in through
+    // ExtraChainNode::set_client_dfs_mode — a node that never learns a vector exists
+    // cannot repair itself, but a phone may prefer the smaller sync.
+    set_mode(node->client_dfs_mode());
 #endif
 
     QTimer::singleShot(0, this, [this]() {

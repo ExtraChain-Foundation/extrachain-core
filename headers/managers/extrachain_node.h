@@ -134,6 +134,7 @@ private:
 
     bool                        started_               = false;
     bool                        is_client_application_ = false;
+    DfsMode                     client_dfs_mode_       = DfsMode::Light;
     std::vector<BigNumber>      resive_counts_;
     std::pair<QString, QString> init_public_ip_and_country_;
     std::function<void()>       cleanup_callback_      = nullptr;
@@ -179,6 +180,15 @@ public:
     bool create_subscription_vector(const std::string& file_name);
     void start();
     bool is_client_application() const;
+    // DFS mode a client application starts in. The controller is created on the node thread
+    // inside process(), so this is the only way to choose it before the first sync: call
+    // before ExtraChainNodeWrapper::init().
+    void set_client_dfs_mode(DfsMode mode) {
+        client_dfs_mode_ = mode;
+    }
+    DfsMode client_dfs_mode() const {
+        return client_dfs_mode_;
+    }
     // Whether a new link to this address takes the full DFS directory sync
     bool syncs_dfs_with(const std::string& ip) const;
 
