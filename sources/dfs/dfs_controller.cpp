@@ -3046,7 +3046,33 @@ bool DfsController::request_full_sync_fallback(const std::string &identifier, co
         }
     }
 
-    eLog("[Dfs] {} fallback skipped: full sync cooldown is active", source);
+    // Run it when the cooldown ends rather than drop it: the actors asked for right after a
+    // login (chat owners found in MyChats) were filtered out of the very full sync that set
+    // the cooldown, and nothing asked for them again — their chats never got any content.
+    bool expected = false;
+    if (!full_sync_fallback_deferred_.compare_exchange_strong(expected, true)) {
+        eLog("[Dfs] {} fallback skipped: one is already deferred", source);
+        return false;
+    }
+
+    const auto        wait_ms = static_cast<int>(std::max<std::int64_t>(next_allowed - now, 0) + 200);
+    const std::string reason  = source;
+    QMetaObject::invokeMethod(
+        node,
+        [this, wait_ms, reason]() {
+            QTimer::singleShot(wait_ms, node, [this, reason]() {
+                ThreadPoolBoost::instance_dfs()->post([this, reason]() {
+                    full_sync_fallback_deferred_.store(false);
+                    for (const auto &identifier : node->network()->active_connection_identifiers()) {
+                        if (request_full_sync_fallback(identifier, reason.c_str())) {
+                            break;
+                        }
+                    }
+                });
+            });
+        },
+        Qt::QueuedConnection);
+    eLog("[Dfs] {} fallback deferred {} ms: full sync cooldown is active", source, wait_ms);
     return false;
 }
 
@@ -3109,11 +3135,34 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
 
     // Otherwise the Selective filter in network_response_dir_rows would drop the response to this
     // request.
-    bool has_new_actors = false;
+    // An actor asked for before and still without a single dir row: its rows were filtered
+    // out or the fallback never ran, and asking only for new actors left it so for good.
+    std::vector<ActorId> actors_without_dirs;
+    {
+        auto db = dirs_manager_.get_db_instance();
+        for (const auto &actor : uniqueActors) {
+            if (db->count(Dfs::Tables::DirsFile::TableNameActorsFiles,
+                          fmt::format("owner_id = '{}'", actor.to_string()))
+                == 0) {
+                actors_without_dirs.push_back(actor);
+            }
+        }
+    }
+
+    bool has_new_actors          = false;
+    bool has_actors_without_dirs = false;
     {
         std::lock_guard lock(requested_sync_actors_mutex_);
         for (const auto &actor : uniqueActors) {
             has_new_actors = requested_sync_actors_.insert(actor).second || has_new_actors;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        for (const auto &actor : actors_without_dirs) {
+            auto [it, inserted] = missing_dirs_fallback_at_.try_emplace(actor, now);
+            if (inserted || now - it->second >= std::chrono::minutes(1)) {
+                it->second              = now;
+                has_actors_without_dirs = true;
+            }
         }
     }
 
@@ -3130,9 +3179,9 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
     // Prod nodes without staged support ignore the targeted request (same as in sync()).
     // If no staged response arrives within 3s, request a full sync: network_response_dir_rows
     // will filter the response, and the requested actors are already in allowed.
-    // Only for new actors: periodic refreshes (raccoon from ClientController) without new
-    // actors shouldn't have to pull the full ~600-actor dump every time.
-    if (has_new_actors) {
+    // Only for new actors or actors still without dir rows: periodic refreshes (raccoon from
+    // ClientController) for known actors shouldn't have to pull the full ~600-actor dump every time.
+    if (has_new_actors || has_actors_without_dirs) {
         constexpr auto stagedFallbackDelayMs = 3000;
         QTimer::singleShot(stagedFallbackDelayMs, node, [this, responses_before]() {
             ThreadPoolBoost::instance_dfs()->post([this, responses_before]() {

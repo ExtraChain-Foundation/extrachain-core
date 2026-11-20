@@ -122,6 +122,11 @@ private:
 
     std::atomic_uint64_t staged_startup_response_count_ { 0 };
     std::atomic_int64_t  full_sync_fallback_next_allowed_ms_ { 0 };
+    // A fallback refused by the cooldown runs once the cooldown ends instead of being dropped.
+    std::atomic_bool     full_sync_fallback_deferred_ { false };
+    // Requested actors that still have no dir row: when each last got a fallback.
+    // Guarded by requested_sync_actors_mutex_.
+    std::map<ActorId, std::chrono::steady_clock::time_point> missing_dirs_fallback_at_;
     std::mutex           pending_vector_rows_mutex_;
 
     bool request_full_sync_fallback(const std::string &identifier, const char *source);
