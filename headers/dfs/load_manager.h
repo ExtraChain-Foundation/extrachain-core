@@ -107,6 +107,11 @@ public:
     // A new link to a peer: downloads parked in a cooldown (queued while no socket was up,
     // e.g. right after a return from the background) go now instead of sitting it out.
     void connection_available();
+    // The file is in the download pools (queued or in progress)
+    bool is_active(const Dfs::FileLink& file_link);
+    // A peer just reported the file Ready: ask now, skipping the retry timeout left by an
+    // earlier request that peer could not serve yet.
+    void proceed_now(const Dfs::FileLink& file_link);
 
     void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier);
 

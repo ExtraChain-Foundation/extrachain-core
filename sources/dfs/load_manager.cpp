@@ -75,6 +75,32 @@ void LoadManager::connection_available() {
     kick();
 }
 
+bool LoadManager::is_active(const Dfs::FileLink& file_link) {
+    {
+        auto locked = *m_active_downloads_priority;
+        if (locked->contains(file_link)) {
+            return true;
+        }
+    }
+    auto locked = *m_active_downloads;
+    return locked->contains(file_link);
+}
+
+void LoadManager::proceed_now(const Dfs::FileLink& file_link) {
+    QMetaObject::invokeMethod(
+        this,
+        [this, file_link] {
+            // Requests sent before the peer had the content got no answer, but they still hold
+            // their in-flight slots until the 4 s purge, and a held slot reads as "already asked"
+            {
+                auto requests = *m_amount_file_fragments_requests;
+                std::erase_if(*requests, [&](const auto& item) { return item.first.file_link == file_link; });
+            }
+            timer_runner(file_link);
+        },
+        Qt::QueuedConnection);
+}
+
 bool LoadManager::compute_vectors_waiting() {
     const auto now = std::chrono::system_clock::now();
     // Copy under a short lock: holding m_completed_once over the pool locks deadlocks — finish_him takes them in reverse order.
@@ -347,6 +373,11 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                             // must not age the source towards the dead-peer limit.
                             identifier.second.counter++;
                             identifier.second.last_attempt = std::chrono::system_clock::now();
+                            eLog("[Load] REQUEST {} fragments={} attempt={}{}",
+                                 file_link,
+                                 output.fragment_numbers.size(),
+                                 identifier.second.counter,
+                                 ignore_timeout ? " now" : "");
                             this->node->network()->send_message(output,
                                                                 MessageType::DfsFileRequest,
                                                                 SendMode::Focused,

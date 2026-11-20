@@ -282,6 +282,8 @@ public:
     }
 
     SafePtr<std::set<Dfs::FileLink>> forces_files_;
+    // Re-asks of a wanted file a peer reported as Known (row without content yet)
+    SafePtr<std::unordered_map<Dfs::FileLink, int>> known_state_reasks_;
 
     // Throttle for request_file: read paths (read_template, avatars, chat vectors)
     // re-request a missing file on EVERY failed read; without this the client spams

@@ -2200,8 +2200,55 @@ void DfsController::network_request_file_existance(const Dfs::FileLink &file_lin
 
 void DfsController::network_response_file_state(const Dfs::Packets::FileState &data, const Responder &responder) {
     eLog("[Dfs] File state response: {}/{} state={}", data.owner_id, data.file_id, data.state);
-    if (data.state != Dfs::FileState::Ready || responder.identifiers().empty() || !node_enabled.load()) {
+    if (responder.identifiers().empty() || !node_enabled.load()) {
         return;
+    }
+    const auto file_link = Dfs::FileLink { .owner_id = data.owner_id, .file_id = data.file_id };
+    if (data.state == Dfs::FileState::Known) {
+        // The peer has the row but not the content yet: the uploader is still sending it. A file
+        // we wait for is asked again shortly; otherwise the next try came with the next download
+        // round, 4 s or more later, and a 544-byte chat invite took ~5 s to arrive.
+        if (!load_manager_.is_active(file_link)) {
+            return;
+        }
+        {
+            auto  reasks = *known_state_reasks_;
+            int  &count  = (*reasks)[file_link];
+            if (count >= 6) {
+                return;
+            }
+            ++count;
+        }
+        const auto identifier = *responder.identifiers().begin();
+        QMetaObject::invokeMethod(
+            this,
+            [this, file_link, identifier] {
+                QTimer::singleShot(700, this, [this, file_link, identifier] {
+                    if (!node_enabled.load()) {
+                        return;
+                    }
+                    eLog("[Dfs] Re-asking state of {}/{}", file_link.owner_id, file_link.file_id);
+                    Responder focused(nullptr);
+                    focused.add_identifier(identifier);
+                    node->network()->send_message(file_link,
+                                                  MessageType::DfsFileState,
+                                                  SendMode::Focused,
+                                                  MessageStatus::Request,
+                                                  focused);
+                });
+            },
+            Qt::QueuedConnection);
+        return;
+    }
+    if (data.state != Dfs::FileState::Ready) {
+        return;
+    }
+    known_state_reasks_->erase(file_link);
+    // Already downloading: an earlier request sent before the peer had the content left a 4 s
+    // retry timeout on it, and a 544-byte invite waited that out after Ready had come. Ask
+    // right away, not after the dfs pool below gets to it (it can be busy for seconds).
+    if (load_manager_.is_active(file_link)) {
+        load_manager_.proceed_now(file_link);
     }
 
     const auto identifier = *responder.identifiers().begin();
