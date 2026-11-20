@@ -42,6 +42,20 @@
 
 namespace {
 constexpr std::string_view THOTH_DATABASE = "ThothDevicesV2";
+
+std::optional<std::string> push_platform(std::string_view os) {
+    if (os == "Android") {
+        return "android";
+    }
+    if (os == "iOS") {
+        return "ios";
+    }
+    return std::nullopt;
+}
+
+QUrl push_service_url() {
+    return QUrl(qEnvironmentVariable("EXTRACHAIN_PUSH_SERVICE_URL", "http://127.0.0.1:5425/send"));
+}
 }
 
 ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
@@ -407,7 +421,7 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
         }
 
         auto username = this->read_username(actor_id);
-        this->send_to_service(el, username);
+        this->send_to_service(el, username, owner_id, file_id);
     }
 }
 
@@ -502,28 +516,53 @@ void ThothManager::remove_thoth_info(const std::string& id) {
     }
 }
 
-bool ThothManager::send_to_service(const ThothInfo& info, const std::string& username) {
-    QUrl            url("http://localhost:5425/send");
+bool ThothManager::send_to_service(const ThothInfo&   info,
+                                   const std::string& username,
+                                   const ActorId&     chat_owner_id,
+                                   const std::string& chat_file_id) {
+    auto platform = push_platform(info.os);
+    if (!platform.has_value()) {
+        eWarning("[Thoth] skip push for unsupported platform: {}", info.os);
+        return false;
+    }
+
+    QUrl            url = push_service_url();
+    if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https")) {
+        eWarning("[Thoth] invalid push service URL");
+        return false;
+    }
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setTransferTimeout(10000);
 
-    auto service_message =
-        ThothServiceMessage { .device_token = info.token,
+    const std::string owner_id = chat_owner_id.to_string();
+    auto service_message      =
+        ThothServiceMessage { .version      = 1,
+                              .platform     = platform.value(),
+                              .device_token = info.token,
                               .title        = "Messenger",
                               .body         = username.empty() ? "Raccoon brings word from the shadows"
-                                                               : fmt::format("Message from @{}", username) };
+                                                               : fmt::format("Message from @{}", username),
+                              .data          = { { "openChatOwnerId", owner_id },
+                                                 { "openChatFileId", chat_file_id } },
+                              .collapse_key = chat_file_id };
 
     QByteArray     data  = QByteArray::fromStdString(Json::serialize(service_message));
-    eLog("Thoth local push POST {} token={} body={}", url.toString().toStdString(), info.token, service_message.body);
+    eLog("[Thoth] push request platform={} endpoint={}", platform.value(), url.toString().toStdString());
     QNetworkReply* reply = m_networkManager->post(request, data);
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        if (reply->error() == QNetworkReply::NoError) {
+        auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (reply->error() == QNetworkReply::NoError && status >= 200 && status < 300) {
             QByteArray response = reply->readAll();
 
             emit sendSuccess(QString::fromUtf8(response));
         } else {
-            emit sendFailed(reply->errorString());
+            eWarning("[Thoth] push request failed: network_error={} http_status={}",
+                     static_cast<int>(reply->error()), status);
+            emit sendFailed(QString("Push request failed: HTTP %1, network error %2")
+                                .arg(status)
+                                .arg(static_cast<int>(reply->error())));
         }
         reply->deleteLater();
     });
@@ -1090,32 +1129,36 @@ std::string ThothManager::read_username(const ActorId& actor_id) {
     }
 
     const auto usernames_actor = ActorId(CHAT_SERVICE_ACTOR);
-    if (usernames_file_id_.empty()) {
-        auto search_result =
-            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
-                                                                              usernames_actor,
-                                                                              Dfs::Basic::TEMPLATE_VECTOR,
-                                                                              "Usernames");
-
-        if (!search_result.has_value()) {
-            return "";
-        }
-
-        if (search_result->state == Dfs::FileState::Ready) {
-            this->usernames_file_id_ = search_result->file_id;
-        } else {
-            return "";
-        }
-    }
-
-    auto row = node->dfs()->read_vector_row(usernames_actor, usernames_file_id_, actor_id.to_string());
-    if (!row.has_value()) {
+    const auto vectors = Dfs::Tables::DirsFile::ActorSpace::search_files_by_folder_and_name(
+        node->dfs()->get_db_instance(),
+        usernames_actor,
+        Dfs::Basic::TEMPLATE_VECTOR,
+        "Usernames");
+    if (!vectors.has_value()) {
         return "";
     }
 
-    if (row->find("name") == row->end()) {
-        return "";
-    }
+    std::string latestName;
+    std::uint64_t latestTimestamp = 0;
+    for (const auto &vector : vectors.value()) {
+        if (vector.state != Dfs::FileState::Ready) {
+            continue;
+        }
+        const auto row = node->dfs()->read_vector_row(usernames_actor, vector.file_id, actor_id.to_string());
+        if (!row.has_value() || !row->contains("name") || !row->contains("timestamp")
+            || !row->contains("status") || row->at("status") != "1") {
+            continue;
+        }
 
-    return row->at("name").c_str();
+        try {
+            const auto timestamp = std::stoull(row->at("timestamp"));
+            if (latestName.empty() || timestamp > latestTimestamp) {
+                latestTimestamp = timestamp;
+                latestName = row->at("name");
+            }
+        } catch (const std::exception &) {
+            continue;
+        }
+    }
+    return latestName;
 }

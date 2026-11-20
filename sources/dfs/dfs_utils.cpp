@@ -246,7 +246,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::sea
     const std::string                 &folder,
     const std::string                 &name) {
     std::string query_folder = folder.empty() ? "" : fmt::format("folder = '{}' AND", folder);
-    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND {} name = '{}' AND state != '{}';",
+    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND {} name = '{}' AND state != '{}' "
+                                    "ORDER BY last_modified DESC, file_id ASC LIMIT 1;",
                                     TableNameActorsFiles,
                                     owner_id.to_string(),
                                     query_folder,
