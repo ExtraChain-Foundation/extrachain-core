@@ -1236,7 +1236,7 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
             || dir_row->type == Dfs::FileType::Dictionary) {
             auto [collection_hash, collection_size] =
                 Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(owner_id, file_id);
-            if (collection_hash == hash) {
+            if (!collection_hash.empty() && collection_hash == hash) {
                 return true;
             }
         }
@@ -1712,39 +1712,110 @@ void DfsController::network_response_content_vector(
         load_manager_.remove_active_download(file_link_fragment);
 
         load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
+
+        // Rows that arrived before this vector existed here can be stored now.
+        if (res_handle) {
+            apply_pending_vector_adds(file_link_fragment.file_link);
+        }
     });
 }
 
 void DfsController::network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
-    auto res = make_vector(owner_id, file_id);
-    if (!res.has_value()) {
+    std::lock_guard lock(pending_vector_adds_mutex_);
+    if (apply_network_vector_add(owner_id, file_id, row)) {
         return;
     }
 
+    // Not stored: most often the vector's creation package is still being handled on the
+    // DFS pool. Hold the row until it is, instead of losing it.
+    const auto now = std::chrono::steady_clock::now();
+    std::size_t total = 0;
+    for (auto it = pending_vector_adds_.begin(); it != pending_vector_adds_.end();) {
+        auto &rows = it->second;
+        std::erase_if(rows, [&now](const PendingVectorAdd &pending) {
+            return now - pending.received > PENDING_VECTOR_ADD_TTL;
+        });
+        total += rows.size();
+        it = rows.empty() ? pending_vector_adds_.erase(it) : std::next(it);
+    }
+    if (total >= PENDING_VECTOR_ADD_LIMIT) {
+        eWarning("[Dfs] Vector row dropped, pending rows are full: {} / {}", owner_id, file_id);
+        return;
+    }
+
+    pending_vector_adds_[Dfs::FileLink { .owner_id = owner_id, .file_id = file_id }].push_back(
+        PendingVectorAdd { .row = row, .received = now });
+    eLog("[Dfs] Vector row held until the vector is ready: {} / {}", owner_id, file_id);
+}
+
+bool DfsController::apply_network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
+    auto res = make_vector(owner_id, file_id);
+    if (!res.has_value()) {
+        return false;
+    }
+
     auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.local_add(row, true);
-    // load_manager_.finish_him(owner_id, dir_row);
+    if (!dfs_vector.local_add(row, true)) {
+        // The metadata used to be bumped here anyway: the node then advertised the row's
+        // timestamp with the hash of what it actually holds, so a vector that never got
+        // the row looked newest and was never fetched again.
+        return false;
+    }
 
     auto hash_size = dfs_vector.data_hash_size();
     if (hash_size.has_value()) {
-        dir_row.hash          = hash_size.value().first;
-        dir_row.size          = hash_size.value().second;
-        dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+        dir_row.hash = hash_size.value().first;
+        dir_row.size = hash_size.value().second;
+        try {
+            dir_row.last_modified = std::stoull(row.at("timestamp"));
+        } catch (const std::exception &) {
+        }
         Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
                                                                 owner_id,
                                                                 dir_row,
                                                                 false);
     }
 
-    if (operation_res) {
-        // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
-        if (row.at("status") == "1") {
-            emit vectorRowAdded(owner_id, dir_row, row);
-        } else {
-            emit vectorRowRemoved(owner_id, dir_row, row);
-        }
-        node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
+    if (row.at("status") == "1") {
+        emit vectorRowAdded(owner_id, dir_row, row);
+    } else {
+        emit vectorRowRemoved(owner_id, dir_row, row);
     }
+    node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
+    return true;
+}
+
+void DfsController::apply_pending_vector_adds(const Dfs::FileLink &file_link) {
+    std::lock_guard lock(pending_vector_adds_mutex_);
+    auto            it = pending_vector_adds_.find(file_link);
+    if (it == pending_vector_adds_.end()) {
+        return;
+    }
+
+    auto rows = std::move(it->second);
+    pending_vector_adds_.erase(it);
+
+    const auto                    now    = std::chrono::steady_clock::now();
+    std::size_t                   stored = 0;
+    std::vector<PendingVectorAdd> still_pending;
+    for (auto &pending : rows) {
+        if (now - pending.received > PENDING_VECTOR_ADD_TTL) {
+            continue;
+        }
+        if (apply_network_vector_add(file_link.owner_id, file_link.file_id, pending.row)) {
+            ++stored;
+        } else {
+            still_pending.push_back(std::move(pending));
+        }
+    }
+    if (!still_pending.empty()) {
+        pending_vector_adds_[file_link] = std::move(still_pending);
+    }
+    eLog("[Dfs] Held vector rows applied: {} / {} stored {} of {}",
+         file_link.owner_id,
+         file_link.file_id,
+         stored,
+         rows.size());
 }
 
 void DfsController::network_request_file_state(const ActorId     &owner_id,

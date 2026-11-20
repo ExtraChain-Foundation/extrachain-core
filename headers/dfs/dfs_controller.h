@@ -21,6 +21,9 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <chrono>
+#include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -446,6 +449,25 @@ public:
     void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
     void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
     void network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+
+    // A row for a vector this node has not finished creating yet. The creation package is
+    // handled on the DFS pool while the row arrives on the dispatch thread, often within
+    // milliseconds: without holding it the row was lost and the node kept an empty vector.
+    struct PendingVectorAdd {
+        DbRow                                 row;
+        std::chrono::steady_clock::time_point received;
+    };
+
+private:
+    bool apply_network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+    void apply_pending_vector_adds(const Dfs::FileLink &file_link);
+
+    std::recursive_mutex                                       pending_vector_adds_mutex_;
+    std::map<Dfs::FileLink, std::vector<PendingVectorAdd>>     pending_vector_adds_;
+    static constexpr auto                                      PENDING_VECTOR_ADD_TTL   = std::chrono::minutes(2);
+    static constexpr std::size_t                               PENDING_VECTOR_ADD_LIMIT = 2000;
+
+public:
 
     void network_request_file_state(const ActorId     &owner_id,
                                     const std::string &file_id,
