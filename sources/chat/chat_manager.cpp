@@ -1573,6 +1573,15 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
 
     auto encrypted = Dfs::Tables::DirsFile::ActorSpace::get_file_content(owner_id, dir_row.file_id);
     if (!encrypted.has_value()) {
+        // The caller may hold a stale row: a handled invite has its content removed and its row
+        // cleared, and fetching it again from that old copy repeated every 30 s for every invite
+        // ever received (the peer still has the file, so it came back and was handled again).
+        auto current = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(),
+                                                                     owner_id,
+                                                                     dir_row.file_id);
+        if (!current.has_value() || current->folder != CHAT_DAPP_INVITE_FOLDER || current->hash.empty()) {
+            return false;
+        }
         eWarning("[Chat] parse_invite {}: no file content", dir_row.file_id);
         // The dir row is known but the file never arrived (interrupted first sync);
         // re-request it, `downloaded` will re-run parse_invite on arrival.
