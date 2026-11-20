@@ -64,7 +64,9 @@ ChatManager::ChatManager(ExtraChainNode* node)
                 }
             }
             retry_pending_invites();
-            retry_received_invites();
+            // Not inline: every saved actor would re-read every invite row from disk, and a
+            // startup sync saves hundreds of actors (7700 parses of one missing invite in 5 s).
+            schedule_retry_received_invites();
         }
     });
 
@@ -1437,6 +1439,16 @@ bool ChatManager::reconcile_peer_join(Chat::Chat& chat) {
 
     return std::any_of(messages->cbegin(), messages->cend(), [this, &chat](const auto& message) {
         return accept_peer_join(chat, message);
+    });
+}
+
+void ChatManager::schedule_retry_received_invites() {
+    if (received_invites_retry_scheduled_.exchange(true)) {
+        return;
+    }
+    QTimer::singleShot(1000, node, [this]() {
+        received_invites_retry_scheduled_ = false;
+        retry_received_invites();
     });
 }
 

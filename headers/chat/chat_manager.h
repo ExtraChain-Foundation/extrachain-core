@@ -156,6 +156,8 @@ private:
     void                                      schedule_pending_invite_retry();
     void                                      retry_pending_invites();
     void                                      retry_received_invites();
+    // Coalesces retry_received_invites for bursts of actorSaved (startup sync saves hundreds).
+    void                                      schedule_retry_received_invites();
     bool                                      accept_peer_join(Chat::Chat &chat, const Chat::Message &message);
     bool                                      reconcile_peer_join(Chat::Chat &chat);
     bool                                      ensure_chat_join(Chat::Chat &chat);
@@ -169,6 +171,7 @@ private:
     std::set<ActorId>   dirs_refreshed_actors_;
     std::unordered_map<std::string, std::int64_t> pending_invite_retry_ms_;
     std::atomic_bool    pending_invite_retry_scheduled_ { false };
+    std::atomic_bool    received_invites_retry_scheduled_ { false };
     std::atomic_int64_t reconnect_recovery_last_ms_ { 0 };
     ChatMode            mode_      = ChatMode::Enabled;
     bool                activated_ = false;
