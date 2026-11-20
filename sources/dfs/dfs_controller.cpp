@@ -32,6 +32,13 @@
 
 #include "utils/thread_pool_boost.h"
 
+#include <QTimer>
+
+namespace {
+// BLAKE3 of no data: what a node advertised for a vector database that has no table.
+constexpr std::string_view EMPTY_DATA_HASH = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+} // namespace
+
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
     , node(node)
@@ -62,6 +69,20 @@ DfsController::DfsController(ExtraChainNode *node)
 #ifdef IS_APP_UI_CLIENT
     set_mode(DfsMode::Light);
 #endif
+
+    // Damaged vectors are asked for again with backoff until a peer repairs them.
+    auto damaged_timer = new QTimer(this);
+    damaged_timer->setInterval(std::chrono::duration_cast<std::chrono::milliseconds>(DAMAGED_ASK_PERIOD));
+    connect(damaged_timer, &QTimer::timeout, this, [this]() {
+        ThreadPoolBoost::instance_dfs()->post([this]() {
+            if (!node_enabled.load()) {
+                return;
+            }
+            check_held_vector_rows();
+            ask_for_damaged_vectors({});
+        });
+    });
+    damaged_timer->start();
 
     // #ifdef IS_RC
     //     set_mode(DfsMode::Light);
@@ -1617,6 +1638,11 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
     }
     auto dirRow = dirRowExp.value();
 
+    const auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
+    if (is_vector_damaged(file_link)) {
+        return;
+    }
+
     auto main_actor = node->account_controller()->current_profile().main()->get();
     auto encryption = dirRow.encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
     auto dfs_vector = DfsVector::load(node,
@@ -1628,6 +1654,9 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
                                       dirRow.type);
 
     if (!dfs_vector.has_value()) {
+        if (dirRow.state == Dfs::FileState::Ready && !vector_storage_usable(owner_id, file_id)) {
+            mark_vector_damaged(file_link);
+        }
         return;
     }
 
@@ -1635,6 +1664,9 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
         dfs_vector->generate_content_package();
     if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
+        if (dirRow.state == Dfs::FileState::Ready && !vector_storage_usable(owner_id, file_id)) {
+            mark_vector_damaged(file_link);
+        }
         return;
     }
     if (!rows.has_value()) {
@@ -1711,12 +1743,42 @@ void DfsController::network_response_content_vector(
         file_link_fragment.fragment_numbers.emplace(1);
         load_manager_.remove_active_download(file_link_fragment);
 
+        const auto &file_link = file_link_fragment.file_link;
+        if (!res_handle || !vector_storage_usable(file_link.owner_id, file_link.file_id)) {
+            // It used to be marked Ready anyway, and a vector without a table then looked
+            // complete for good. Leave the state alone and ask peers for it again.
+            eWarning("[Dfs] Vector content was not stored: {} / {}", file_link.owner_id, file_link.file_id);
+            mark_vector_damaged(file_link);
+            return;
+        }
+
+        const bool was_damaged = clear_vector_damaged(file_link);
+        if (was_damaged || dir_row.hash == EMPTY_DATA_HASH) {
+            // The dir row still describes the damaged copy: advertise what is held now.
+            // Computed from a fully loaded vector, as its template decides the row order.
+            auto loaded = make_vector(file_link.owner_id, file_link.file_id);
+            if (loaded.has_value()) {
+                auto hash_size = loaded->second.data_hash_size();
+                if (hash_size.has_value()) {
+                    dir_row.hash = hash_size->first;
+                    dir_row.size = hash_size->second;
+                    Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
+                                                                            file_link.owner_id,
+                                                                            dir_row,
+                                                                            false);
+                }
+            }
+            eInfo("[Dfs] Damaged vector repaired: {} / {}, hash {}, size {}",
+                  file_link.owner_id,
+                  file_link.file_id,
+                  dir_row.hash,
+                  dir_row.size);
+        }
+
         load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
 
         // Rows that arrived before this vector existed here can be stored now.
-        if (res_handle) {
-            apply_pending_vector_adds(file_link_fragment.file_link);
-        }
+        apply_pending_vector_adds(file_link);
     });
 }
 
@@ -1845,9 +1907,25 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
                 return;
             }
 
+            auto state = dir_row->state;
+            if (state == Dfs::FileState::Ready
+                && (dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary)) {
+                const auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
+                bool       damaged   = is_vector_damaged(file_link);
+                if (!damaged && (dir_row->size == 0 || dir_row->hash == EMPTY_DATA_HASH)
+                    && !vector_storage_usable(owner_id, file_id)) {
+                    mark_vector_damaged(file_link);
+                    damaged = true;
+                }
+                if (damaged) {
+                    // Answering Ready sent the requester to a copy that cannot be served.
+                    state = Dfs::FileState::Known;
+                }
+            }
+
             auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
                                                        .file_id = file_id,
-                                                       .state = dir_row->state,
+                                                       .state = state,
                                                        .hash = dir_row->hash };
             responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused,
                                     MessageStatus::Response);
@@ -1887,6 +1965,11 @@ void DfsController::network_response_file_state(const Dfs::Packets::FileState &d
                                                                         data.owner_id,
                                                                         data.file_id);
             if (!dir_row.has_value() || !node_enabled.load()) {
+                return;
+            }
+            if (data.hash == EMPTY_DATA_HASH
+                && (dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary)) {
+                // A damaged copy on an older node: it cannot serve the vector it advertises.
                 return;
             }
 
@@ -2662,8 +2745,169 @@ void DfsController::sync(const std::string &identifier) {
         std::call_once(check_flag, [this, &identifier]() {
             check_all_files(identifier);
         });
+        // The first link starts the one-time scan; every link is then asked about whatever
+        // is still damaged: the peer may be the one device that holds a good copy.
+        if (!damaged_scan_started_.exchange(true)) {
+            scan_damaged_vectors();
+        }
+        ask_for_damaged_vectors(identifier);
         dirs_manager_.temp_sync_all(identifier);
     });
+}
+
+bool DfsController::vector_storage_usable(const ActorId &owner_id, const std::string &file_id) const {
+    const auto path = Dfs::Path::file_path(owner_id, file_id);
+    if (!path.has_value() || !path->exists()) {
+        return false;
+    }
+
+    DbConnector db(path->native());
+    if (!db.open()) {
+        return false;
+    }
+    const bool usable = !db.table_names().empty();
+    db.close();
+    return usable;
+}
+
+bool DfsController::is_vector_damaged(const Dfs::FileLink &file_link) {
+    std::lock_guard lock(damaged_vectors_mutex_);
+    return damaged_vectors_.contains(file_link);
+}
+
+void DfsController::mark_vector_damaged(const Dfs::FileLink &file_link) {
+    std::lock_guard lock(damaged_vectors_mutex_);
+    auto [it, inserted] = damaged_vectors_.try_emplace(file_link);
+    if (inserted) {
+        // Due at once: the next neighbours round asks for it.
+        it->second.next_ask = std::chrono::steady_clock::now();
+        eWarning("[Dfs] Damaged vector, will ask peers for it: {} / {}", file_link.owner_id, file_link.file_id);
+    }
+}
+
+bool DfsController::clear_vector_damaged(const Dfs::FileLink &file_link) {
+    std::lock_guard lock(damaged_vectors_mutex_);
+    return damaged_vectors_.erase(file_link) != 0;
+}
+
+void DfsController::scan_damaged_vectors() {
+    const auto started = std::chrono::steady_clock::now();
+    auto       db      = dirs_manager_.get_db_instance();
+    const auto rows    = db->select(fmt::format("SELECT owner_id, file_id FROM {} WHERE type IN ({}, {}) AND state = {}",
+                                             Dfs::Tables::DirsFile::TableNameActorsFiles,
+                                             static_cast<int>(Dfs::FileType::Vector),
+                                             static_cast<int>(Dfs::FileType::Dictionary),
+                                             static_cast<int>(Dfs::FileState::Ready)));
+
+    std::size_t damaged = 0;
+    for (const auto &row : rows) {
+        if (!node_enabled.load()) {
+            return;
+        }
+        const auto owner = row.find("owner_id");
+        const auto file  = row.find("file_id");
+        if (owner == row.end() || file == row.end()) {
+            continue;
+        }
+        const ActorId owner_id(owner->second);
+        if (!vector_storage_usable(owner_id, file->second)) {
+            mark_vector_damaged(Dfs::FileLink { .owner_id = owner_id, .file_id = file->second });
+            ++damaged;
+        }
+    }
+
+    const auto took =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+    eLog("[Dfs] Damaged vector scan: {} of {} ready vectors damaged, {} ms", damaged, rows.size(), took);
+}
+
+void DfsController::check_held_vector_rows() {
+    // A row held for a while whose vector the dir row calls Ready cannot be a creation
+    // still in flight: the stored copy is damaged and only a peer can repair it.
+    std::vector<Dfs::FileLink> links;
+    {
+        std::lock_guard lock(pending_vector_adds_mutex_);
+        const auto      now = std::chrono::steady_clock::now();
+        for (const auto &[file_link, rows] : pending_vector_adds_) {
+            if (!rows.empty() && now - rows.front().received >= HELD_ROW_DAMAGE_AGE) {
+                links.push_back(file_link);
+            }
+        }
+    }
+
+    for (const auto &file_link : links) {
+        if (is_vector_damaged(file_link)) {
+            continue;
+        }
+        auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
+                                                                      file_link.owner_id,
+                                                                      file_link.file_id);
+        if (dir_row.has_value() && dir_row->state == Dfs::FileState::Ready
+            && !vector_storage_usable(file_link.owner_id, file_link.file_id)) {
+            mark_vector_damaged(file_link);
+        }
+    }
+}
+
+void DfsController::ask_for_damaged_vectors(const std::string &identifier) {
+    std::vector<Dfs::FileLink> links;
+    {
+        std::lock_guard lock(damaged_vectors_mutex_);
+        if (damaged_vectors_.empty()) {
+            return;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (identifier.empty()) {
+            // Neighbours round: only what is due, each with its own backoff.
+            for (auto &[file_link, damaged] : damaged_vectors_) {
+                if (links.size() >= DAMAGED_ASK_LIMIT) {
+                    break;
+                }
+                if (now < damaged.next_ask) {
+                    continue;
+                }
+                const auto delay = std::min<std::chrono::steady_clock::duration>(
+                    DAMAGED_ASK_PERIOD * (1u << std::min(damaged.asks, 5u)), DAMAGED_ASK_BACKOFF_MAX);
+                damaged.next_ask = now + delay;
+                ++damaged.asks;
+                links.push_back(file_link);
+            }
+        } else {
+            // A new peer: ask about everything, a rotating window of it if the set is large.
+            const auto count = std::min(DAMAGED_ASK_LIMIT, damaged_vectors_.size());
+            auto       it    = damaged_vectors_.begin();
+            std::advance(it, damaged_ask_cursor_ % damaged_vectors_.size());
+            for (std::size_t i = 0; i < count; ++i) {
+                links.push_back(it->first);
+                if (++it == damaged_vectors_.end()) {
+                    it = damaged_vectors_.begin();
+                }
+            }
+            damaged_ask_cursor_ += count;
+        }
+    }
+
+    for (const auto &file_link : links) {
+        if (identifier.empty()) {
+            node->network()->send_message(file_link,
+                                          MessageType::DfsFileState,
+                                          SendMode::Neighbours,
+                                          MessageStatus::Request);
+        } else {
+            Responder responder(nullptr);
+            responder.add_identifier(identifier);
+            node->network()->send_message(file_link,
+                                          MessageType::DfsFileState,
+                                          SendMode::Focused,
+                                          MessageStatus::Request,
+                                          responder);
+        }
+    }
+
+    if (!links.empty()) {
+        eLog("[Dfs] Asked {} for {} damaged vectors", identifier.empty() ? "neighbours" : identifier, links.size());
+    }
 }
 
 // TODO: use dfs size

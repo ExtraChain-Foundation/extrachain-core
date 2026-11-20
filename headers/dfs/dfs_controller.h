@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdlib>
 #include <filesystem>
 #include <chrono>
@@ -466,6 +467,32 @@ private:
     std::map<Dfs::FileLink, std::vector<PendingVectorAdd>>     pending_vector_adds_;
     static constexpr auto                                      PENDING_VECTOR_ADD_TTL   = std::chrono::minutes(2);
     static constexpr std::size_t                               PENDING_VECTOR_ADD_LIMIT = 2000;
+
+    // Damaged vectors: the dir row says Ready, but the local database cannot serve the
+    // vector (file missing or no table). Nothing used to notice them: the node kept
+    // advertising them and never fetched them again. They are now asked for from every
+    // new peer and, with backoff, from the neighbours until a peer's copy repairs them.
+    struct DamagedVector {
+        std::chrono::steady_clock::time_point next_ask;
+        unsigned                              asks = 0;
+    };
+
+    bool vector_storage_usable(const ActorId &owner_id, const std::string &file_id) const;
+    bool is_vector_damaged(const Dfs::FileLink &file_link);
+    void mark_vector_damaged(const Dfs::FileLink &file_link);
+    bool clear_vector_damaged(const Dfs::FileLink &file_link);
+    void scan_damaged_vectors();
+    void check_held_vector_rows();
+    void ask_for_damaged_vectors(const std::string &identifier);
+
+    std::mutex                                                 damaged_vectors_mutex_;
+    std::map<Dfs::FileLink, DamagedVector>                     damaged_vectors_;
+    std::size_t                                                damaged_ask_cursor_ = 0;
+    std::atomic<bool>                                          damaged_scan_started_ { false };
+    static constexpr std::size_t                               DAMAGED_ASK_LIMIT   = 64;
+    static constexpr auto                                      DAMAGED_ASK_PERIOD  = std::chrono::seconds(60);
+    static constexpr auto                                      DAMAGED_ASK_BACKOFF_MAX = std::chrono::minutes(30);
+    static constexpr auto                                      HELD_ROW_DAMAGE_AGE = std::chrono::seconds(30);
 
 public:
 
