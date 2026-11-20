@@ -124,6 +124,8 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
         return *vectors_waiting_cache;
     };
 
+    std::vector<Dfs::FileLink> reprobe;
+
     auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) -> bool {
         if (!active_downloads->empty()) {
             auto active_downloads_locked = *active_downloads;
@@ -191,7 +193,9 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     // Re-probe the network for the content: a peer that only knew the
                     // row (state=Known) when we first asked may have become Ready since.
                     // request_file re-broadcasts DfsFileState (throttled to 30s/file).
-                    node->dfs()->request_file(file_link.owner_id, file_link.file_id);
+                    // Deferred until the pools are unlocked: request_file reaches the
+                    // dirs database and add_to_queue, which takes both pool locks.
+                    reprobe.push_back(file_link);
                 }
 
                 // Files stay paused while vectors are downloading. Forced files (explicit
@@ -380,8 +384,19 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
         return true;
     };
 
-    if (process_func(m_active_downloads_priority))
+    if (process_func(m_active_downloads_priority)) {
+        // Lock order across the two pools is priority -> regular. The regular pass reaches
+        // the priority pool while holding its own lock (the vectors gate scans both pools),
+        // and the priority pass takes them the other way round, so two runners at once —
+        // the node timer and a DFS pool thread on a fragment arrival — deadlocked every
+        // download and the messages behind them after a profile import.
+        auto priority_first = *m_active_downloads_priority;
         process_func(m_active_downloads);
+    }
+
+    for (const auto& file_link : reprobe) {
+        node->dfs()->request_file(file_link.owner_id, file_link.file_id);
+    }
 
     // Idle: nothing queued in either pool — stop the periodic tick so an idle
     // messenger does not wake the CPU every 5 seconds (battery on phones).
