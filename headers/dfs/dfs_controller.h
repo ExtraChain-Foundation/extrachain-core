@@ -286,6 +286,15 @@ public:
     // window and blocked the state-response -> add_to_queue path.
     std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> request_vector_times_;
 
+    // When this client broadcast a vector's creation. A node handles the creation package on
+    // its DFS pool, and a row broadcast milliseconds later raced it: the row was dropped
+    // ("no such table" / "database is locked") and the node kept an empty vector that it then
+    // served as the newest version. Rows of a fresh vector are therefore broadcast a little later.
+    std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> created_vectors_;
+    std::mutex                                                     created_vectors_mutex_;
+    void note_vector_created(const ActorId &owner_id, const std::string &file_id);
+    void broadcast_vector_row(const Dfs::Packets::VectorRowAdd &package);
+
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
         const ActorId               &author_id,

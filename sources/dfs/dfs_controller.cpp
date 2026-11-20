@@ -869,6 +869,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector_impl(
             Dfs::Packets::DfsVectorContentPackage empty_package;
             empty_package.owner_id = owner_id;
             empty_package.file_id  = file_id;
+            note_vector_created(owner_id, file_id);
             node->network()->send_broadcast(empty_package, MessageType::DfsVectorCreation);
             return dir_row;
         }
@@ -876,9 +877,47 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector_impl(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
+    note_vector_created(owner_id, file_id);
     node->network()->send_broadcast(rows.value(), MessageType::DfsVectorCreation);
 
     return dir_row;
+}
+
+void DfsController::note_vector_created(const ActorId &owner_id, const std::string &file_id) {
+    std::lock_guard lock(created_vectors_mutex_);
+    const auto      now = std::chrono::steady_clock::now();
+    std::erase_if(created_vectors_, [&now](const auto &item) {
+        return now - item.second > std::chrono::seconds(30);
+    });
+    created_vectors_[Dfs::FileLink { .owner_id = owner_id, .file_id = file_id }] = now;
+}
+
+void DfsController::broadcast_vector_row(const Dfs::Packets::VectorRowAdd &package) {
+    constexpr auto            hold = std::chrono::milliseconds(2000);
+    std::chrono::milliseconds wait { 0 };
+    {
+        std::lock_guard lock(created_vectors_mutex_);
+        auto it = created_vectors_.find(Dfs::FileLink { .owner_id = package.owner_id, .file_id = package.file_id });
+        if (it != created_vectors_.end()) {
+            const auto elapsed = std::chrono::steady_clock::now() - it->second;
+            if (elapsed < hold) {
+                wait = std::chrono::duration_cast<std::chrono::milliseconds>(hold - elapsed);
+            }
+        }
+    }
+
+    if (wait.count() <= 0) {
+        node->network()->send_broadcast(package, MessageType::DfsVectorAdd);
+        return;
+    }
+
+    eLog("[Dfs] Vector row broadcast held {} ms after creation: {} / {}",
+         wait.count(),
+         package.owner_id,
+         package.file_id);
+    QTimer::singleShot(wait, this, [this, package]() {
+        node->network()->send_broadcast(package, MessageType::DfsVectorAdd);
+    });
 }
 
 bool DfsController::add_vector_row(const ActorId               &owner_id,
@@ -921,7 +960,7 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
 
     auto package =
         Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row, .thothed = thothed };
-    node->network()->send_broadcast(package, MessageType::DfsVectorAdd);
+    broadcast_vector_row(package);
 
     return operation_res;
 }
@@ -1014,7 +1053,7 @@ bool DfsController::remove_vector_row(const ActorId     &owner_id,
     }
 
     auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row.value() };
-    node->network()->send_broadcast(package, MessageType::DfsVectorAdd);
+    broadcast_vector_row(package);
 
     // emit vectorRowRemoved(owner_id, dir_row, row);
 
