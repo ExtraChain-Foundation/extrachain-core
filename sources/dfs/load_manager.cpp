@@ -57,6 +57,24 @@ void LoadManager::kick() {
         Qt::QueuedConnection);
 }
 
+void LoadManager::connection_available() {
+    const auto now  = std::chrono::system_clock::now();
+    auto       wake = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& pool) {
+        auto locked = *pool;
+        for (auto& [link, info] : *locked) {
+            if (info.cooldown_until > now) {
+                // Elapsed rather than cleared: timer_runner then drops the stale sources and
+                // re-probes the network for the file, as after a cooldown that ran out.
+                info.cooldown_until  = now - std::chrono::milliseconds(1);
+                info.cooldown_rounds = 0;
+            }
+        }
+    };
+    wake(m_active_downloads_priority);
+    wake(m_active_downloads);
+    kick();
+}
+
 bool LoadManager::compute_vectors_waiting() {
     const auto now = std::chrono::system_clock::now();
     // Copy under a short lock: holding m_completed_once over the pool locks deadlocks — finish_him takes them in reverse order.

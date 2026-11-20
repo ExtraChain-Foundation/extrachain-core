@@ -104,6 +104,9 @@ public:
 
     void share_stored_file(const Dfs::FileLinkFragment& file_link_fragment, const Responder& responder);
     void broadcast_file_exist(const ActorId& owner_id, const std::string& file_id);
+    // A new link to a peer: downloads parked in a cooldown (queued while no socket was up,
+    // e.g. right after a return from the background) go now instead of sitting it out.
+    void connection_available();
 
     void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier);
 

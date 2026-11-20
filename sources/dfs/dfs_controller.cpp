@@ -67,6 +67,13 @@ DfsController::DfsController(ExtraChainNode *node)
         }
     });
 
+    // Without this a download queued while the socket was dead (a return from the background,
+    // the network coming back) waited out a 30 or 60 s "no connections" cooldown even though
+    // a peer was reachable again a few seconds later: chats caught up only after that.
+    connect(node->network(), &NetworkManager::newSocketActivated, this, [this] {
+        load_manager_.connection_available();
+    });
+
     connect(this, &DfsController::downloaded, [this](const ActorId &owner_id, const Dfs::DirRow &dir_row) {
         retry_pending_vector_rows(std::nullopt,
                                   Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id });
