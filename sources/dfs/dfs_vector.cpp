@@ -558,6 +558,12 @@ std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
         return std::nullopt;
     }
 
+    // A database with no table holds no version at all: its hash is the hash of nothing
+    // (af1349b9…), and advertising it made a vector whose creation failed look complete.
+    if (db.table_names().empty()) {
+        return std::nullopt;
+    }
+
     auto hash_size =
         db.hash_size(collection_template_.primary.has_value() ? collection_template_.primary->name() : "actor");
     return hash_size;

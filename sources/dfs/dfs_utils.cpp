@@ -603,7 +603,14 @@ std::pair<std::string, uint64_t> Dfs::Tables::DirsFile::ActorSpace::calculate_co
     const std::string &sort_field) {
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id);
     DbConnector db(dfs_path->native());
-    db.open();
+    if (!db.open()) {
+        return {};
+    }
+    // No table, no version: an empty hash never matches a dir row, so the file is fetched again.
+    if (db.table_names().empty()) {
+        db.close();
+        return {};
+    }
     auto res = db.hash_size(sort_field);
     db.close();
     return res;
