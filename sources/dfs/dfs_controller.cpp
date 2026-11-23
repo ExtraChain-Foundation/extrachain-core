@@ -1500,6 +1500,21 @@ void DfsController::request_vector_content(const ActorId &owner_id, const std::s
                                   MessageStatus::NoStatus);
 }
 
+bool DfsController::vector_on_device(const ActorId &owner_id, const std::string &file_id) {
+    auto path = Dfs::Path::file_path(owner_id, file_id);
+    if (!path.has_value() || !path->exists()) {
+        return false;
+    }
+    DbConnector db(path.value());
+    db.open(/*create_if_missing*/ false);
+    if (!db.is_open()) {
+        return false;
+    }
+    const bool has_table = db.table_exists("Vector");
+    db.close();
+    return has_table;
+}
+
 void DfsController::request_file(const ActorId &owner_id, const std::string &file_id) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
 

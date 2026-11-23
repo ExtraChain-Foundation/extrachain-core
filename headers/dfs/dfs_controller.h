@@ -610,6 +610,9 @@ public:
     void add_to_waiting_file(const ActorId &owner_id, const std::string &file_id);
     void download_waiting_files();
     void request_file(const ActorId &owner_id, const std::string &file_id);
+    // True when the vector's database is on this device with its Vector table, that is when
+    // it can be written to. False for a vector known only from the dirs and not downloaded
+    bool vector_on_device(const ActorId &owner_id, const std::string &file_id);
 
 private:
     DirsManager dirs_manager_;

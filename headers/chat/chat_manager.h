@@ -57,6 +57,8 @@ public:
 
     std::expected<Chat::Chat, ChatError> create_chat(bool encryption = true);
     std::expected<Chat::Chat, ChatError> create_myself();
+    // False while MyChats is known from the dirs but not downloaded: no chat may be created then
+    bool my_chats_ready_for_write();
     std::expected<Chat::Chat, ChatError> create_dialogue(ActorId with);
     std::expected<Chat::Chat, ChatError> invite(const Chat::Chat &chat);
 

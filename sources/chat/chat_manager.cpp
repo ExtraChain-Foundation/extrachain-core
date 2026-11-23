@@ -309,7 +309,28 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     return chat;
 }
 
+// The chat vector is created before the chat is entered into MyChats. When MyChats is known from the
+// dirs but not downloaded yet, the entry cannot be written, and what was created before is left in
+// the network with nothing pointing at it. So nothing is created until MyChats is on this device
+bool ChatManager::my_chats_ready_for_write() {
+    auto my_chats = this->read_my_chats_row();
+    if (!my_chats.has_value()) {
+        return true; // there is none yet: create_mychats makes it
+    }
+    if (node->dfs()->vector_on_device(my_chats->actor_id, my_chats->file_id)) {
+        return true;
+    }
+    eWarning("[Chat] MyChats {} / {} is not on this device yet, asking for it and not creating the chat",
+             my_chats->actor_id,
+             my_chats->file_id);
+    node->dfs()->request_file(my_chats->actor_id, my_chats->file_id);
+    return false;
+}
+
 std::expected<Chat::Chat, ChatError> ChatManager::create_myself() {
+    if (!my_chats_ready_for_write()) {
+        return std::unexpected(ChatError::StorageUnavailable);
+    }
     auto chat = create_chat();
 
     if (!chat.has_value()) {
@@ -331,6 +352,10 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_myself() {
 std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) {
     if (with.is_zero()) {
         return std::unexpected(ChatError::InvalidPeer);
+    }
+
+    if (!my_chats_ready_for_write()) {
+        return std::unexpected(ChatError::StorageUnavailable);
     }
 
     auto chat = create_chat();
