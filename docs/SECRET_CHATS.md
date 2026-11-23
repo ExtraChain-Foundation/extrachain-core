@@ -128,6 +128,33 @@ Presence and delivery state:
 Abuse control in v1 is by size and rate only: a hard cap on the envelope, and the existing
 relay rate limits. Nothing is stored on nodes, so storage cannot be filled.
 
+## Messages above the session: receipts and reactions
+
+`secret_payload.h` defines what the encrypted body carries. Everything the person does is a
+typed payload with a fixed layout and strict decoding (valid UTF-8, bounded sizes, no trailing
+bytes):
+
+- **Text**: message id, optional reply-to id, sender timestamp, text up to 3900 bytes.
+- **Reaction**: its own id, the id of the message reacted to, an emoji of at most 32 bytes or a
+  removal flag. Setting and taking back are both messages.
+- **Receipt**: delivered or read, up to 32 message ids. Delivered is one tick, read is two.
+- **Hello**: "I am here".
+
+Text and reactions are tracked: they have an id and stay in the sender's queue until a delivery
+receipt names them. Receipts and hello are sent once. The recipient acknowledges every tracked
+message, and acknowledges again when the same message is sent again, because the first
+acknowledgement may have been lost; the repeated message is not shown twice.
+
+`secret_engine.h` is that logic without a network, clock or storage: envelopes come in as calls,
+time as an argument, and everything else goes out through callbacks (transport, events, saving a
+chat). Resends send the same bytes, never a re-encrypted copy. A message that used up its
+attempts is reported once as failed and is still tried every 15 minutes, so delivery does not
+depend on the peer announcing itself.
+
+A lost message whose successors arrived is still accepted when it is sent again: the mailbox
+ids of passed-over messages stay in the list the recipient watches. The tests with 30% loss and
+reordering found this; without it a message lost once was ignored forever.
+
 ## Later: mailbox for offline recipients
 
 Not part of v1. Decisions taken in discussion, to be revisited:

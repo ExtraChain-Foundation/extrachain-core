@@ -18,6 +18,7 @@
  */
 
 #include "chat/secret_session.h"
+#include "secret_util.h"
 
 #include <sodium.h>
 
@@ -28,6 +29,8 @@
 #include <string_view>
 
 namespace SecretChat {
+
+using namespace detail;
 
 namespace {
 
@@ -59,62 +62,6 @@ template <typename T>
 void wipe(T &value) {
     sodium_memzero(value.data(), value.size());
 }
-
-void put_u32(Bytes &out, std::uint32_t v) {
-    for (int i = 0; i < 4; ++i)
-        out.push_back(static_cast<std::uint8_t>(v >> (8 * i)));
-}
-
-void put_u64(Bytes &out, std::uint64_t v) {
-    for (int i = 0; i < 8; ++i)
-        out.push_back(static_cast<std::uint8_t>(v >> (8 * i)));
-}
-
-void put_bytes(Bytes &out, std::span<const std::uint8_t> data) {
-    out.insert(out.end(), data.begin(), data.end());
-}
-
-class Reader {
-public:
-    explicit Reader(std::span<const std::uint8_t> data) : data_(data) {}
-
-    bool take(std::uint8_t *dst, std::size_t n) {
-        if (data_.size() - pos_ < n)
-            return false;
-        std::memcpy(dst, data_.data() + pos_, n);
-        pos_ += n;
-        return true;
-    }
-    template <std::size_t N>
-    bool take(std::array<std::uint8_t, N> &dst) {
-        return take(dst.data(), N);
-    }
-    bool u8(std::uint8_t &v) { return take(&v, 1); }
-    bool u32(std::uint32_t &v) {
-        std::array<std::uint8_t, 4> b {};
-        if (!take(b))
-            return false;
-        v = 0;
-        for (int i = 0; i < 4; ++i)
-            v |= static_cast<std::uint32_t>(b[i]) << (8 * i);
-        return true;
-    }
-    bool u64(std::uint64_t &v) {
-        std::array<std::uint8_t, 8> b {};
-        if (!take(b))
-            return false;
-        v = 0;
-        for (int i = 0; i < 8; ++i)
-            v |= static_cast<std::uint64_t>(b[i]) << (8 * i);
-        return true;
-    }
-    std::size_t remaining() const { return data_.size() - pos_; }
-    std::span<const std::uint8_t> rest() const { return data_.subspan(pos_); }
-
-private:
-    std::span<const std::uint8_t> data_;
-    std::size_t                   pos_ = 0;
-};
 
 std::expected<Key32, Error> dh(const Key32 &secret, const Key32 &public_key) {
     Key32 out {};
@@ -536,6 +483,8 @@ struct SessionState {
         Key32         hk {};
         std::uint32_t n = 0;
         Key32         mk {};
+        // Position among all messages the sender made: the mailbox id of the message is derived from it
+        std::uint64_t t = 0;
     };
     std::vector<Skipped> skipped;
 
@@ -599,7 +548,10 @@ std::expected<void, Error> dh_ratchet(SessionState &s, const Header &h) {
     return {};
 }
 
-std::expected<void, Error> skip_message_keys(SessionState &s, std::uint32_t until) {
+// Keeps the keys of messages that were passed over. `until` is the number of the message that is
+// about to be read in the chain being skipped and `t_until` its position among all messages of the
+// sender; the position of a passed message follows from them because both count one by one.
+std::expected<void, Error> skip_message_keys(SessionState &s, std::uint32_t until, std::uint64_t t_until) {
     if (static_cast<std::uint64_t>(s.nr) + MaxSkip < until)
         return std::unexpected(Error::TooManySkipped);
     if (!s.has_ckr)
@@ -607,7 +559,8 @@ std::expected<void, Error> skip_message_keys(SessionState &s, std::uint32_t unti
     while (s.nr < until) {
         Key32 mk {};
         kdf_ck(s.ckr, mk);
-        s.skipped.push_back({ s.hkr, s.nr, mk });
+        const std::uint64_t behind = until - s.nr;
+        s.skipped.push_back({ s.hkr, s.nr, mk, t_until >= behind ? t_until - behind : 0 });
         wipe(mk);
         ++s.nr;
         if (s.skipped.size() > MaxStoredSkipped) {
@@ -702,7 +655,9 @@ std::expected<Bytes, Error> ratchet_decrypt(SessionState &state, std::span<const
         return std::unexpected(Error::AuthFailed);
 
     if (new_chain) {
-        if (auto r = skip_message_keys(s, header->pn); !r.has_value())
+        // The first message of the new chain stands at position t - n; the old chain ended just before it
+        const std::uint64_t chain_start = header->t >= header->n ? header->t - header->n : 0;
+        if (auto r = skip_message_keys(s, header->pn, chain_start); !r.has_value())
             return std::unexpected(r.error());
         if (auto r = dh_ratchet(s, *header); !r.has_value())
             return std::unexpected(r.error());
@@ -710,7 +665,7 @@ std::expected<Bytes, Error> ratchet_decrypt(SessionState &state, std::span<const
         // Already consumed: a replay, or a late message whose key was dropped
         return std::unexpected(Error::AuthFailed);
     }
-    if (auto r = skip_message_keys(s, header->n); !r.has_value())
+    if (auto r = skip_message_keys(s, header->n, header->t); !r.has_value())
         return std::unexpected(r.error());
     if (!s.has_ckr)
         return std::unexpected(Error::AuthFailed);
@@ -735,7 +690,7 @@ std::expected<Bytes, Error> ratchet_decrypt(SessionState &state, std::span<const
 }
 
 Bytes serialize_state(const SessionState &s) {
-    Bytes out { 'S', 'C', 'S', 1 };
+    Bytes out { 'S', 'C', 'S', 2 };
     put_bytes(out, s.ad);
     put_bytes(out, s.self_identity);
     put_bytes(out, s.peer_identity);
@@ -764,6 +719,7 @@ Bytes serialize_state(const SessionState &s) {
         put_bytes(out, entry.hk);
         put_u32(out, entry.n);
         put_bytes(out, entry.mk);
+        put_u64(out, entry.t);
     }
     return out;
 }
@@ -779,7 +735,7 @@ bool flag(Reader &r, bool &out) {
 std::optional<SessionState> parse_state(std::span<const std::uint8_t> data) {
     Reader                     r(data);
     std::array<std::uint8_t, 4> magic {};
-    if (!r.take(magic) || magic != std::array<std::uint8_t, 4> { 'S', 'C', 'S', 1 })
+    if (!r.take(magic) || magic != std::array<std::uint8_t, 4> { 'S', 'C', 'S', 2 })
         return std::nullopt;
     SessionState s;
     std::uint32_t count = 0;
@@ -793,7 +749,7 @@ std::optional<SessionState> parse_state(std::span<const std::uint8_t> data) {
         return std::nullopt;
     for (std::uint32_t i = 0; i < count; ++i) {
         SessionState::Skipped entry;
-        if (!r.take(entry.hk) || !r.u32(entry.n) || !r.take(entry.mk))
+        if (!r.take(entry.hk) || !r.u32(entry.n) || !r.take(entry.mk) || !r.u64(entry.t))
             return std::nullopt;
         s.skipped.push_back(entry);
     }
@@ -831,7 +787,10 @@ std::optional<MailboxId> Session::next_send_mailbox_id() const {
 
 std::vector<MailboxId> Session::expected_receive_mailbox_ids() const {
     std::vector<MailboxId> ids;
-    ids.reserve(MailboxWindow * 2);
+    ids.reserve(MailboxWindow * 2 + state_->skipped.size());
+    // Messages that were passed over may still arrive late or be sent again
+    for (const auto &entry : state_->skipped)
+        ids.push_back(mailbox_id(entry.hk, entry.t));
     for (std::size_t i = 0; i < MailboxWindow; ++i) {
         if (state_->has_hkr)
             ids.push_back(mailbox_id(state_->hkr, state_->tr + i));

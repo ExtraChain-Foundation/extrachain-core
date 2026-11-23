@@ -289,6 +289,63 @@ void test_mailbox_ids() {
     CHECK(s1.wire != s2.wire);
 }
 
+// A message that was lost, while later ones got through, must still be accepted when it is sent
+// again: its mailbox id has to stay among the ones the recipient watches.
+void test_lost_message_can_still_arrive() {
+    auto p = connect();
+    roundtrip(p.b, p.a, "ready");
+    std::vector<MailboxId> ids;
+    std::vector<Bytes>     wires;
+    for (int i = 0; i < 4; ++i) {
+        ids.push_back(p.a.next_send_mailbox_id().value());
+        wires.push_back(p.a.encrypt(text("m" + std::to_string(i))).value());
+    }
+    auto watched = [&](const MailboxId &id) {
+        for (const auto &e : p.b.expected_receive_mailbox_ids())
+            if (e == id)
+                return true;
+        return false;
+    };
+    // Only the last one arrives
+    CHECK(p.b.decrypt(wires[3]).has_value());
+    CHECK(watched(ids[0]) && watched(ids[1]) && watched(ids[2]));
+    CHECK(!watched(ids[3])); // consumed
+    CHECK(str(p.b.decrypt(wires[1]).value()) == "m1");
+    CHECK(!watched(ids[1]));
+    CHECK(watched(ids[0]) && watched(ids[2]));
+
+    // The same across a turn of the ratchet: messages of the old chain are lost, the new chain arrives
+    std::vector<MailboxId> old_ids;
+    std::vector<Bytes>     old_wires;
+    for (int i = 0; i < 3; ++i) {
+        old_ids.push_back(p.a.next_send_mailbox_id().value());
+        old_wires.push_back(p.a.encrypt(text("old" + std::to_string(i))).value());
+    }
+    roundtrip(p.b, p.a, "turn");
+    auto fresh_id = p.a.next_send_mailbox_id().value();
+    auto fresh    = p.a.encrypt(text("fresh")).value();
+    bool fresh_watched = false;
+    for (const auto &e : p.b.expected_receive_mailbox_ids())
+        if (e == fresh_id)
+            fresh_watched = true;
+    CHECK(fresh_watched);
+    CHECK(p.b.decrypt(fresh).has_value());
+    for (const auto &id : old_ids)
+        CHECK(watched(id));
+    CHECK(watched(ids[0]) && watched(ids[2]));
+    for (int i = 2; i >= 0; --i)
+        CHECK(str(p.b.decrypt(old_wires[i]).value()) == "old" + std::to_string(i));
+    CHECK(str(p.b.decrypt(wires[0]).value()) == "m0");
+    CHECK(str(p.b.decrypt(wires[2]).value()) == "m2");
+    // Once read, nothing is watched for them any more
+    for (const auto &id : old_ids)
+        CHECK(!watched(id));
+    // and the lists survive a restart
+    (void)p.a.encrypt(text("x")).value();
+    auto restored = Session::deserialize(p.b.serialize()).value();
+    CHECK(restored.expected_receive_mailbox_ids().size() == p.b.expected_receive_mailbox_ids().size());
+}
+
 void test_wire_is_unlinkable() {
     auto p = connect();
     roundtrip(p.b, p.a, "ready");
@@ -415,6 +472,7 @@ int main() {
     test_serialization();
     test_padding_and_limits();
     test_mailbox_ids();
+    test_lost_message_can_still_arrive();
     test_wire_is_unlinkable();
     test_other_session_cannot_read();
     test_handshake_failures();

@@ -115,6 +115,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_folders.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/secret_session.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chat/secret_payload.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chat/secret_engine.h
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chat/secret_util.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
@@ -172,6 +175,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/secret_session.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chat/secret_payload.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chat/secret_engine.cpp
     )
 
 # C FFI bindings (optional)

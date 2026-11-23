@@ -53,6 +53,8 @@ enum class Error {
     CryptoFailure,
     // The side that answers cannot send before it has received the first message
     NotReady,
+    UnknownChat,
+    InvalidArgument,
 };
 
 // Largest plaintext of one message. The padded plaintext is one of a few fixed sizes.

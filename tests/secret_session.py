@@ -9,7 +9,9 @@ import unittest
 
 
 class SecretSessionTests(unittest.TestCase):
-    def build_and_run(self, test):
+    SOURCES = ('secret_session', 'secret_payload', 'secret_engine')
+
+    def build_and_run(self, test, sources=('secret_session',)):
         compiler = shutil.which(os.environ.get('RACCOON_TEST_CXX', 'c++'))
         prefix = os.environ.get('RACCOON_TEST_SODIUM')
         if not compiler or not prefix:
@@ -21,7 +23,9 @@ class SecretSessionTests(unittest.TestCase):
             build = subprocess.run(
                 [compiler, '-std=c++23', '-Wall', '-Wextra', '-O1',
                  '-I', str(root / 'headers'), '-I', str(prefix / 'include'),
-                 str(root / 'sources/chat/secret_session.cpp'), str(root / 'tests' / (test + '.cpp')),
+                 '-I', str(root / 'sources/chat'),
+                 *[str(root / 'sources/chat' / (name + '.cpp')) for name in sources],
+                 str(root / 'tests' / (test + '.cpp')),
                  str(prefix / 'lib/libsodium.a'), '-o', str(binary)],
                 capture_output=True, text=True)
             self.assertEqual(build.returncode, 0, build.stderr)
@@ -33,6 +37,9 @@ class SecretSessionTests(unittest.TestCase):
 
     def test_older_readers_refuse_the_envelope(self):
         self.build_and_run('secret_custom_compat')
+
+    def test_engine(self):
+        self.build_and_run('secret_engine', self.SOURCES)
 
 
 if __name__ == '__main__':
