@@ -2072,6 +2072,12 @@ void DfsController::store_pending_vector_row(const ActorId     &owner_id,
 
 void DfsController::retry_pending_vector_rows(const std::optional<ActorId>       &actor_id,
                                               const std::optional<Dfs::FileLink> &file_link) {
+    // Applying a row signs with the current profile, which is fatal to ask for before a sign-in.
+    // The rows stay in the table: the retries on actor save, reconnect and download pick them up.
+    if (!node->account_controller()->has_current_profile()) {
+        return;
+    }
+
     std::vector<DbRow> pending;
     {
         std::scoped_lock lock(pending_vector_rows_mutex_);
