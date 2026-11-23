@@ -21,7 +21,9 @@ class SecretSessionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / (test + '_bin')
             build = subprocess.run(
-                [compiler, '-std=c++23', '-Wall', '-Wextra', '-O1',
+                # Qt's emit, slots and signals are macros in the core build: a name that collides with
+                # them compiles in isolation and breaks (or silently does nothing) inside the core
+                [compiler, '-std=c++23', '-Wall', '-Wextra', '-O1', '-Demit=@', '-Dslots=@', '-Dsignals=@',
                  '-I', str(root / 'headers'), '-I', str(prefix / 'include'),
                  '-I', str(root / 'sources/chat'),
                  *[str(root / 'sources/chat' / (name + '.cpp')) for name in sources],

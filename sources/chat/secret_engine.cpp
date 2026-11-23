@@ -72,7 +72,7 @@ struct Engine::Impl {
 
     explicit Impl(EngineConfig c) : config(std::move(c)) {}
 
-    void emit(const Event &e) const {
+    void notify(const Event &e) const {
         if (config.on_event)
             config.on_event(e);
     }
@@ -183,7 +183,7 @@ struct Engine::Impl {
             e.reply_to = p.reply_to;
             e.text     = p.text;
             e.sent_at  = p.sent_at;
-            emit(e);
+            notify(e);
             send_untracked(cid, chat, Payload::make_receipt(Payload::ReceiptKind::Delivered, { p.mid }));
             break;
         }
@@ -201,7 +201,7 @@ struct Engine::Impl {
             e.target  = p.target;
             e.emoji   = p.emoji;
             e.removed = p.remove;
-            emit(e);
+            notify(e);
             send_untracked(cid, chat, Payload::make_receipt(Payload::ReceiptKind::Delivered, { p.mid }));
             break;
         }
@@ -219,7 +219,7 @@ struct Engine::Impl {
                 e.kind = p.kind == Payload::ReceiptKind::Delivered ? Event::Kind::Delivered : Event::Kind::Read;
                 e.chat = cid;
                 e.mid  = mid;
-                emit(e);
+                notify(e);
             }
             break;
         }
@@ -228,7 +228,7 @@ struct Engine::Impl {
             Event e;
             e.kind = Event::Kind::PeerOnline;
             e.chat = cid;
-            emit(e);
+            notify(e);
             flush(chat, now);
             break;
         }
@@ -260,7 +260,7 @@ struct Engine::Impl {
         Event created;
         created.kind = Event::Kind::NewChat;
         created.chat = cid;
-        emit(created);
+        notify(created);
         Event e;
         e.kind     = Event::Kind::Message;
         e.chat     = cid;
@@ -268,7 +268,7 @@ struct Engine::Impl {
         e.reply_to = payload->reply_to;
         e.text     = payload->text;
         e.sent_at  = payload->sent_at;
-        emit(e);
+        notify(e);
         send_untracked(cid, chat, Payload::make_receipt(Payload::ReceiptKind::Delivered, { payload->mid }));
     }
 
@@ -435,7 +435,7 @@ void Engine::tick(std::uint64_t now) {
                 e.kind = Event::Kind::Failed;
                 e.chat = cid;
                 e.mid  = o.mid;
-                impl_->emit(e);
+                impl_->notify(e);
                 continue;
             }
             impl_->transmit(o.id, o.wire);
