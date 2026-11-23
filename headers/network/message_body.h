@@ -186,9 +186,16 @@ struct SocketIdentifier {
 struct CustomMessage {
     ActorId     owner;
     std::string data;
+    // The application the payload belongs to. Empty is the untagged form every older sender
+    // produces and it is handled exactly as before. Older nodes read only owner and data and
+    // ignore this field, so a tagged message still travels through them.
+    std::string app;
 
-    MSGPACK_DEFINE(owner, data)
+    MSGPACK_DEFINE(owner, data, app)
 };
+
+// Tag of the Custom messages that carry secret chat envelopes
+inline constexpr std::string_view CustomAppSecretChat = "secret-chat/1";
 
 inline std::string generate_message_id(const std::string& body = std::string()) {
     // Seconds + bounded(100000) gave only 100k distinct ids per second NETWORK-WIDE;

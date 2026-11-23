@@ -55,6 +55,25 @@ Encrypted SQLite on the device: sessions, skipped keys, messages, per-chat setti
 is wrapped by the device keystore and by the app passcode when one is set. Losing the device
 loses the chats. Expired messages (disappearing timer) are deleted from disk, not hidden.
 
+## Sharing the network with other applications
+
+`Custom` messages are the application channel of the network and the VPN application uses
+them too. Without a namespace a node of one application hands the other's payloads to its
+own parser and drops what it cannot read, which breaks relaying through it. `CustomMessage`
+therefore carries an `app` tag:
+
+- Empty tag: the legacy untagged form, handled exactly as before (the VPN keeps working with
+  no change).
+- Tagged message: `NetworkManager::register_custom_app(tag, relay)` claims a tag. A claimed
+  tag is delivered to `customMessageReceived` (and relayed when `relay` is set); an unclaimed
+  tag is relayed untouched and never reaches another application's handler.
+- Secret chat claims `CustomAppSecretChat` (`"secret-chat/1"`) with relay on.
+- Wire compatibility: the field is the last element of the MessagePack array. An old node reads
+  only `owner` and `data` and ignores the rest; a new node reading an old message sees an empty
+  tag. Checked in both directions. An old VPN node still hands a tagged message to its own
+  handler and may not relay it, so secret envelopes should not rely on a path made only of such
+  nodes until the VPN side skips tags it does not know.
+
 ## Transport in v1: sealed envelope, relay only
 
 A new network message type carries a **sealed envelope** (`SecretEnvelope`):

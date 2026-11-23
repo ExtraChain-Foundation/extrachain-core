@@ -279,6 +279,11 @@ private:
     mutable std::mutex                 avoided_peers_mutex_;
     std::set<std::string>              avoided_peers_;
 
+    mutable std::mutex           custom_apps_mutex_;
+    std::map<std::string, bool>  custom_apps_;
+    // Empty when the tag is not claimed here, otherwise whether the node relays it as well
+    std::optional<bool> custom_app_claim(const std::string& app) const;
+
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           messages_;
     std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;
     std::map<std::string, MessageIdDataReceived>                                messages_received_;
@@ -417,6 +422,12 @@ public:
     bool        save_first_node(const std::string_view first_node);
 
     void send_broadcast_message_further(const NetworkPackageStorage& package_data);
+
+    // An application claims a tag of Custom messages. A message with a claimed tag is handed to
+    // customMessageReceived, and when `relay` is set the node also passes it on. A message with a
+    // tag nobody here claimed is passed on untouched and never reaches another application's
+    // handler, so two applications on one network cannot swallow each other's traffic.
+    void register_custom_app(const std::string& app, bool relay);
 
     void save_to_cache(const std::string& serialized_message,
                        SendMode           send_mode,

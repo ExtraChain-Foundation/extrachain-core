@@ -52,6 +52,7 @@ class CustomReputationTests(unittest.TestCase):
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <map>
 #include <unordered_set>
 #include <vector>
 #define emit
@@ -60,7 +61,7 @@ enum class MessageType { Custom, ShareConnections, NewActor, Actor, Actors, Acto
 enum class SendMode { Broadcast, Focused };
 enum class MessageStatus { NoStatus, Request, Response };
 struct NodeId { int actor_id; std::string node_identifier; };
-struct CustomMessage { std::string body; };
+struct CustomMessage { std::string body; std::string app; };
 struct MessageBody {
     MessageType message_type;
     SendMode send_type;
@@ -75,11 +76,14 @@ struct NetworkPackageStorage {
 };
 class NetworkManager;
 std::string generate_message_id() { return "unused-synthetic-id"; }
+std::string g_custom_app;
 namespace MessagePack {
 template<class T> std::string serialize(const T&) { return {}; }
 template<class T> std::optional<T> deserialize(const std::string& body) {
     if (body == "invalid") { return std::nullopt; }
-    return T{body};
+    T value{body};
+    if constexpr (requires { value.app; }) { value.app = g_custom_app; }
+    return value;
 }
 }
 int warnings = 0;
@@ -140,6 +144,12 @@ public:
     TrafficObserver* calculate_traffic_ = &traffic;
     std::string first_node_ = "synthetic-bootstrap";
     int emitted = 0, forwarded = 0;
+    std::map<std::string, bool> claims;
+    std::optional<bool> custom_app_claim(const std::string& app) const {
+        const auto it = claims.find(app);
+        if (it == claims.end()) { return std::nullopt; }
+        return it->second;
+    }
     std::optional<Responder> non_custom;
     explicit NetworkManager(Node* value) : node(value) {}
     void customMessageReceived(const NetworkPackageStorage& package, const CustomMessage& custom) {
@@ -188,6 +198,29 @@ int main(int argc, char** argv) {
                         require(manager.emitted == (mode == "custom-local" ? 1 : 0));
                         require(manager.forwarded == (mode == "custom-forward" ? 1 : 0));
                         require(warnings == (mode == "custom-invalid" ? 1 : 0));
+                    }
+                }
+            }
+        } else if (mode == "custom-tagged-relay" || mode == "custom-tagged-quiet"
+                   || mode == "custom-tagged-unclaimed") {
+            for (bool root : {false, true}) {
+                for (auto send : {SendMode::Broadcast, SendMode::Focused}) {
+                    for (bool app : {false, true}) {
+                        Node node;
+                        node.is_custom_app_ = app;
+                        node.reputation.unavailable = true;
+                        NetworkManager manager(&node);
+                        g_custom_app = "secret-chat/1";
+                        if (mode == "custom-tagged-relay") { manager.claims["secret-chat/1"] = true; }
+                        if (mode == "custom-tagged-quiet") { manager.claims["secret-chat/1"] = false; }
+                        if (mode == "custom-tagged-unclaimed") { manager.claims["vpn/1"] = true; }
+                        manager.dispatch(MessageType::Custom, send, root, true);
+                        manager.queue.drain();
+                        g_custom_app.clear();
+                        const bool claimed = mode != "custom-tagged-unclaimed";
+                        require(manager.emitted == (claimed ? 1 : 0));
+                        require(manager.forwarded == (mode == "custom-tagged-quiet" ? 0 : 1));
+                        require(!manager.non_custom.has_value());
                     }
                 }
             }
@@ -324,7 +357,8 @@ int main(int argc, char** argv) {
             raise AssertionError(result.stdout + result.stderr)
 
     def test_custom_and_non_custom_dispatch(self):
-        for mode in ('custom-local', 'custom-forward', 'custom-invalid', 'non-custom-focused',
+        for mode in ('custom-local', 'custom-forward', 'custom-invalid', 'custom-tagged-relay',
+                     'custom-tagged-quiet', 'custom-tagged-unclaimed', 'non-custom-focused',
                      'non-custom-broadcast', 'interleaved', 'deferred', 'shutdown-after-read',
                      'shutdown-after-write', 'read-failure', 'cached-focused', 'cached-broadcast',
                      'cached-shutdown', 'unused-focused', 'unused-broadcast',

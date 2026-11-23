@@ -1063,6 +1063,19 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 }
 
+void NetworkManager::register_custom_app(const std::string &app, bool relay) {
+    std::scoped_lock lock(custom_apps_mutex_);
+    custom_apps_[app] = relay;
+}
+
+std::optional<bool> NetworkManager::custom_app_claim(const std::string &app) const {
+    std::scoped_lock lock(custom_apps_mutex_);
+    const auto       it = custom_apps_.find(app);
+    if (it == custom_apps_.end())
+        return std::nullopt;
+    return it->second;
+}
+
 void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage &package_data) {
     if (package_data.msg_body.send_type != SendMode::Broadcast) {
         eWarning("Send Broadcast Message error - wrong network send type: {}", package_data.msg_body.send_type);
@@ -1553,8 +1566,17 @@ void NetworkManager::dispatch_received(const PendingReceive &pending) {
             return;
         }
 
-        if (node->is_custom_app_) {
-            emit customMessageReceived(package_data, custom_deserialize_result.value());
+        const auto &custom = custom_deserialize_result.value();
+        if (custom.app.empty()) {
+            if (node->is_custom_app_) {
+                emit customMessageReceived(package_data, custom);
+            } else {
+                send_broadcast_message_further(package_data);
+            }
+        } else if (const auto relay = custom_app_claim(custom.app); relay.has_value()) {
+            if (relay.value())
+                send_broadcast_message_further(package_data);
+            emit customMessageReceived(package_data, custom);
         } else {
             send_broadcast_message_further(package_data);
         }
