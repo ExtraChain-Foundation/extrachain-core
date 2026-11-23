@@ -504,6 +504,17 @@ bool DfsVector::store_add(DbRow &row) {
     return res.has_value();
 }
 
+bool DfsVector::is_materialized() const {
+    DbConnector db(file_path_);
+    db.open(/*create_if_missing*/ false);
+    if (!db.is_open()) {
+        return false;
+    }
+    const bool has_table = db.table_exists("Vector");
+    db.close();
+    return has_table;
+}
+
 std::expected<DfsVectorApplyResult, DfsVectorError> DfsVector::local_add(const DbRow &row, bool check) {
     auto verification = verify(row);
     if (!verification.has_value()) {
@@ -530,9 +541,18 @@ std::expected<DfsVectorApplyResult, DfsVectorError> DfsVector::local_add(const D
         return std::unexpected(DfsVectorError::InvalidRow);
     }
 
+    // Never create the file here. A vector that is not on this device yet gets its database and
+    // its table from the content that arrives from the network; a file made now would be empty,
+    // the write into it would fail for good, and the content that comes later would meet a
+    // second, different copy
     DbConnector db(file_path_);
-    if (!db.open()) {
-        return std::unexpected(DfsVectorError::StorageFailure);
+    db.open(/*create_if_missing*/ false);
+    if (!db.is_open()) {
+        return std::unexpected(DfsVectorError::CollectionNotFound);
+    }
+    if (!db.table_exists("Vector")) {
+        db.close();
+        return std::unexpected(DfsVectorError::CollectionNotFound);
     }
 
     bool res = db.replace("Vector", row);

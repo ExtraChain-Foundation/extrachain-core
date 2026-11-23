@@ -563,10 +563,12 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     // All early-returns below used to permanently block re-download. Don't skip: the
     // content-package will restore both files.
     bool vector_broken_on_disk = false;
-    if (row.has_value() && row->type == Dfs::FileType::Vector) {
+    if (row.has_value() && (row->type == Dfs::FileType::Vector || row->type == Dfs::FileType::Dictionary)) {
         const auto main_path = std::filesystem::path(Dfs::Path::filePath(owner_id, dir_row.file_id));
-        vector_broken_on_disk =
-            !std::filesystem::exists(main_path) || !std::filesystem::exists(main_path.string() + ".vector");
+        // A dictionary has no .vector companion: its template is built in
+        const bool companion_missing =
+            row->type == Dfs::FileType::Vector && !std::filesystem::exists(main_path.string() + ".vector");
+        vector_broken_on_disk = !std::filesystem::exists(main_path) || companion_missing;
         if (vector_broken_on_disk) {
             eWarning("[Load] REPAIR {}/{}: vector unreadable on disk (db or .vector missing)",
                      owner_id,
@@ -606,7 +608,11 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                                     dir_row.file_id,
                                                     false,
                                                     node->account_controller()->system_actor().id());
-                if (res.has_value()) {
+                if (res.has_value() && !res->second.is_materialized()) {
+                    // The file is there, the Vector table is not (an empty file left by a write
+                    // that came before the content): the content has to come again
+                    eWarning("[Load] REPAIR {}/{}: database without the Vector table", owner_id, dir_row.file_id);
+                } else if (res.has_value()) {
                     auto& [dir_row, dfs_vector] = res.value();
                     if (row.has_value()) {
                         auto vector_file_hash = dfs_vector.calculate_template_file_hash();

@@ -124,6 +124,11 @@ public:
 
     bool                                                store_add(DbRow& row);
     std::expected<DfsVectorApplyResult, DfsVectorError> local_add(const DbRow& row, bool check);
+
+    // True when the database file is on this device and holds the Vector table: the vector has
+    // arrived from the network or was made here. A vector known only from the dirs (not downloaded
+    // yet) is not materialized, and nothing may be written into it until it is
+    bool is_materialized() const;
     std::optional<DbRow>                                remove(const std::string& primary_data);
 
     std::pair<std::string, bool> calculate_hash(const DbRow& row);

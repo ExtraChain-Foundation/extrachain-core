@@ -941,7 +941,18 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
     }
 
     auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.store_add(row);
+    if (!dfs_vector.is_materialized()) {
+        // The dirs know this vector, its content has not been downloaded yet. Writing now would
+        // start a second copy beside the one the network holds, so the write is refused and the
+        // vector is asked for; the caller can try again once it has arrived
+        eWarning("[Dfs] add_vector_row: {} / {} is not on this device yet (state {}), requesting it and refusing the write",
+                 owner_id,
+                 file_id,
+                 magic_enum::enum_name(dir_row.state));
+        request_file(owner_id, file_id);
+        return false;
+    }
+    auto operation_res = dfs_vector.store_add(row);
     if (!operation_res) {
         eWarning("[Dfs] Can't store to vector {} / {}", owner_id, file_id);
         return false;
