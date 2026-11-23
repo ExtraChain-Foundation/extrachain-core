@@ -258,9 +258,11 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
         return std::unexpected(ChatError::Unknown);
     }
 
+    // The network's own vectors (its id, the Chat template) arrive from the network after a sign-in or
+    // an import. Until then this is a state to wait out, not a failure: the same error as for MyChats
     auto network_id = node->actor_index()->network_id();
     if (network_id.is_zero()) {
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(ChatError::StorageUnavailable);
     }
 
     auto search_result =
@@ -269,7 +271,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
                                                                           Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
                                                                           "Chat");
     if (!search_result.has_value()) {
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(ChatError::StorageUnavailable);
     }
 
     // Per-chat actor — derived from seed with chat_key as label, recoverable from seed phrase.
