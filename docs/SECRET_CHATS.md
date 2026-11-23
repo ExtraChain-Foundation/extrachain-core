@@ -77,6 +77,21 @@ Delivery:
 3. No acknowledgement: the sender keeps the message in a local encrypted queue and resends with
    backoff, up to a limit shown to the user as "not delivered".
 
+Presence and delivery state:
+
+- There is no presence registry and no "is X online" query: a query would tell nodes who looks
+  for whom. Online is proven only by an acknowledgement that arrives.
+- Message states: sending, delivered (acknowledgement received), optionally read. Without an
+  acknowledgement the sender resends with growing pauses (for example 10 s, 1 min, 5 min) up to a
+  limit, then shows "not delivered".
+- Hello: when a device connects to the network it sends each secret contact a short ratchet
+  message "I am here". A contact that receives it flushes its queue to that person at once, so
+  delivery only needs the two online windows to overlap, whichever side connects second. Relays
+  see an opaque envelope like any other. The contact learns that the sender is online, so this
+  is a setting; with it off no hello is sent and the queue goes out on the timer alone.
+- Messages that cannot be delivered before the windows overlap wait in the sender's local
+  queue. Removing that limit is what the later mailbox is for.
+
 Abuse control in v1 is by size and rate only: a hard cap on the envelope, and the existing
 relay rate limits. Nothing is stored on nodes, so storage cannot be filled.
 
