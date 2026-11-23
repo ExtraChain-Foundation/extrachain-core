@@ -504,45 +504,6 @@ bool DfsVector::store_add(DbRow &row) {
     return res.has_value();
 }
 
-bool DfsVector::ensure_table(DbConnector &db) {
-    if (db.table_exists("Vector")) {
-        return true;
-    }
-    auto vector_template = collection_template_;
-    if (vector_template.fields().empty()) {
-        eWarning("[DfsVector] No Vector table in {} and no template to make it from", file_path_.native().string());
-        return false;
-    }
-    if (is_encrypted_) {
-        vector_template.set_to_blob();
-    }
-    if (vector_template.primary.has_value()) {
-        const auto &primary = vector_template.primary.value();
-        vector_template.preadd_fields({ primary,
-                                        Dfs::Field::ActorId("actor").not_null(),
-                                        Dfs::Field::Blob("sign").not_null(),
-                                        Dfs::Field::Timestamp("timestamp").not_null(),
-                                        Dfs::Field::Integer("status").not_null() });
-    } else {
-        vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                        Dfs::Field::Blob("sign").not_null(),
-                                        Dfs::Field::Timestamp("timestamp").not_null(),
-                                        Dfs::Field::Integer("status").not_null() });
-    }
-    auto schema = vector_template.to_db_schema();
-    if (!schema.has_value()) {
-        return false;
-    }
-    schema->set_table_name("Vector");
-    // create_table(schema) reports success whatever the query did, so the table itself is asked
-    db.create_table(schema.value());
-    const bool made = db.table_exists("Vector");
-    eWarning("[DfsVector] The Vector table was missing in {}, {}",
-             file_path_.native().string(),
-             made ? "made it again" : "could not make it");
-    return made;
-}
-
 std::expected<DfsVectorApplyResult, DfsVectorError> DfsVector::local_add(const DbRow &row, bool check) {
     auto verification = verify(row);
     if (!verification.has_value()) {
@@ -571,10 +532,6 @@ std::expected<DfsVectorApplyResult, DfsVectorError> DfsVector::local_add(const D
 
     DbConnector db(file_path_);
     if (!db.open()) {
-        return std::unexpected(DfsVectorError::StorageFailure);
-    }
-    if (!ensure_table(db)) {
-        db.close();
         return std::unexpected(DfsVectorError::StorageFailure);
     }
 

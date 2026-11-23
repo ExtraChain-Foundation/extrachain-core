@@ -57,11 +57,6 @@ private:
     Dfs::FileType           file_type_;
     bool                    is_encrypted_;
 
-    // A database file can exist without its table: an interrupted creation, or a file some
-    // older build created on a read. Writing then failed for good ("no such table: Vector"),
-    // so the table is made again from the template the vector keeps beside it
-    bool ensure_table(class DbConnector& db);
-
     DfsVector() = default;
     DfsVector(ExtraChainNode*              node,
               const Actor<KeyPrivate>&     actor,
