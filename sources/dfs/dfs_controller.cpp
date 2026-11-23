@@ -1932,6 +1932,12 @@ void DfsController::network_response_content_vector(
         file_link_fragment.fragment_numbers.emplace(1);
         load_manager_.remove_active_download(file_link_fragment);
 
+        // A package that was not stored must not finish the download: finishing marks the vector
+        // Ready and completed while its database is absent or empty, and nothing asks for the
+        // content again
+        if (!res_handle) {
+            return;
+        }
         load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
     });
 }
