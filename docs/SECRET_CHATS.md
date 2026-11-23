@@ -74,6 +74,20 @@ therefore carries an `app` tag:
   handler and may not relay it, so secret envelopes should not rely on a path made only of such
   nodes until the VPN side skips tags it does not know.
 
+### Older applications must not be disturbed
+
+Applications released before secret chats stay on the network and must neither crash nor act on
+secret traffic. The rule for the `data` of a secret chat `CustomMessage` is: it is exactly one
+MessagePack binary value (`custom_payload`). The VPN application, for example, reads `data` as
+one of a few array structs, a map or a boolean; a binary value is none of them, so each parser
+throws an exception the reader already catches, and the reader logs the packet as not its own
+and returns. A wrapper in the shape of an array is not safe: MessagePack accepts an array with
+fewer elements than the struct, so short payloads were mistaken for a message of the other
+application in a test. `tests/secret_custom_compat.cpp` runs 100 000 random envelopes through
+parsers shaped like those of the VPN with the real MessagePack library and checks both
+directions of the tagged frame. An older node that does not relay what it cannot parse is a
+loss of one path, not a fault.
+
 ## Transport in v1: sealed envelope, relay only
 
 A new network message type carries a **sealed envelope** (`SecretEnvelope`):

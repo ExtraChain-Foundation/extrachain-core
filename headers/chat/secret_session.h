@@ -94,6 +94,13 @@ struct SignedPreKey {
     static std::expected<SignedPreKey, Error> generate(const IdentityKeys &identity, std::uint32_t id);
 };
 
+// Envelope bytes as they travel in `CustomMessage::data`: exactly one MessagePack binary value.
+// Other applications on the network read that field as an array, a map or a boolean; a binary
+// value is none of these, so their parsers reject it instead of mistaking it for their own
+// payload. Opening is strict: the type, the declared length and the end of data must agree.
+Bytes                       custom_payload(std::span<const std::uint8_t> envelope);
+std::expected<Bytes, Error> open_custom_payload(std::span<const std::uint8_t> data);
+
 // Id under which the first message of a new session is delivered to the owner of a signed prekey.
 MailboxId initial_mailbox_id(const Key32 &signed_prekey);
 

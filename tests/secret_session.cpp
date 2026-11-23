@@ -375,6 +375,31 @@ void test_safety_number() {
     CHECK(p.a.safety_number() == safety_number(p.alice.public_key, p.bob.public_key));
 }
 
+void test_custom_payload() {
+    for (std::size_t len : { std::size_t(0), std::size_t(1), std::size_t(255), std::size_t(256), std::size_t(4400),
+                             std::size_t(65535), std::size_t(65536), std::size_t(70000) }) {
+        Bytes envelope(len);
+        randombytes_buf(envelope.data(), envelope.size());
+        const Bytes wrapped = custom_payload(envelope);
+        CHECK(wrapped[0] == 0xc4 || wrapped[0] == 0xc5 || wrapped[0] == 0xc6);
+        auto opened = open_custom_payload(wrapped);
+        CHECK(opened.has_value() && *opened == envelope);
+        // A wrong length or trailing bytes are not accepted
+        Bytes longer = wrapped;
+        longer.push_back(0);
+        CHECK(!open_custom_payload(longer).has_value());
+        if (!wrapped.empty()) {
+            Bytes shorter = wrapped;
+            shorter.pop_back();
+            CHECK(!open_custom_payload(shorter).has_value());
+        }
+    }
+    CHECK(!open_custom_payload(Bytes {}).has_value());
+    CHECK(!open_custom_payload(Bytes { 0x92, 1, 2 }).has_value()); // a MessagePack array
+    CHECK(!open_custom_payload(Bytes { 0xc4 }).has_value());
+    CHECK(!open_custom_payload(Bytes { 0xc6, 0, 0 }).has_value());
+}
+
 } // namespace
 
 int main() {
@@ -394,6 +419,7 @@ int main() {
     test_other_session_cannot_read();
     test_handshake_failures();
     test_safety_number();
+    test_custom_payload();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

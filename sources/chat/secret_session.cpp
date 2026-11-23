@@ -410,6 +410,58 @@ std::expected<SignedPreKey, Error> SignedPreKey::generate(const IdentityKeys &id
     return prekey;
 }
 
+Bytes custom_payload(std::span<const std::uint8_t> envelope) {
+    Bytes out;
+    const std::size_t n = envelope.size();
+    if (n < 0x100) {
+        out.push_back(0xc4);
+        out.push_back(static_cast<std::uint8_t>(n));
+    } else if (n < 0x10000) {
+        out.push_back(0xc5);
+        out.push_back(static_cast<std::uint8_t>(n >> 8));
+        out.push_back(static_cast<std::uint8_t>(n));
+    } else {
+        out.push_back(0xc6);
+        for (int shift = 24; shift >= 0; shift -= 8)
+            out.push_back(static_cast<std::uint8_t>(n >> shift));
+    }
+    put_bytes(out, envelope);
+    return out;
+}
+
+std::expected<Bytes, Error> open_custom_payload(std::span<const std::uint8_t> data) {
+    if (data.empty())
+        return std::unexpected(Error::BadFormat);
+    std::size_t header = 0;
+    std::size_t length = 0;
+    switch (data[0]) {
+    case 0xc4:
+        header = 2;
+        if (data.size() < header)
+            return std::unexpected(Error::BadFormat);
+        length = data[1];
+        break;
+    case 0xc5:
+        header = 3;
+        if (data.size() < header)
+            return std::unexpected(Error::BadFormat);
+        length = (static_cast<std::size_t>(data[1]) << 8) | data[2];
+        break;
+    case 0xc6:
+        header = 5;
+        if (data.size() < header)
+            return std::unexpected(Error::BadFormat);
+        for (int i = 1; i <= 4; ++i)
+            length = (length << 8) | data[i];
+        break;
+    default:
+        return std::unexpected(Error::BadFormat);
+    }
+    if (data.size() - header != length)
+        return std::unexpected(Error::BadFormat);
+    return Bytes(data.begin() + static_cast<std::ptrdiff_t>(header), data.end());
+}
+
 MailboxId initial_mailbox_id(const Key32 &signed_prekey) {
     ensure_sodium();
     std::array<std::uint8_t, crypto_generichash_BYTES> digest {};
