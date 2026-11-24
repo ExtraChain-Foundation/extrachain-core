@@ -86,27 +86,6 @@ int installActorCommitGate(sqlite3 *database, char **, const sqlite3_api_routine
     return SQLITE_OK;
 }
 
-QueryGate *luminanceCommitGate = nullptr;
-QString luminanceDatabasePath;
-bool rejectLuminanceCommit = false;
-
-int holdLuminanceCommit(void *)
-{
-    if (rejectLuminanceCommit) {
-        return 1;
-    }
-    return luminanceCommitGate ? holdActorCommit(luminanceCommitGate) : 0;
-}
-
-int installLuminanceCommitGate(sqlite3 *database, char **, const sqlite3_api_routines *)
-{
-    const auto filename = QString::fromUtf8(sqlite3_db_filename(database, "main"));
-    if (QDir::cleanPath(QDir::fromNativeSeparators(filename)) == luminanceDatabasePath) {
-        sqlite3_commit_hook(database, holdLuminanceCommit, nullptr);
-    }
-    return SQLITE_OK;
-}
-
 Actor<KeyPublic> syntheticActor()
 {
     Actor<KeyPrivate> actor;
@@ -121,7 +100,7 @@ class DbConnectorConcurrencyTest : public QObject
     Q_OBJECT
 
 private slots:
-    void luminanceReadBeforeIncrementAndReopen()
+    void luminanceReadBeforeIncrementAndRestartEmpty()
     {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -142,7 +121,7 @@ private slots:
         }
         LuminanceManager reopened(nullptr);
         QVERIFY(reopened.init_db());
-        QCOMPARE(reopened.read_luminance(identity), 2);
+        QCOMPARE(reopened.read_luminance(identity), -1);
     }
 
     void luminanceSeparatesActorAndNodeKeys()
@@ -187,124 +166,6 @@ private slots:
         manager.write_luminance(identity, 0);
         manager.decrement(identity);
         QCOMPARE(manager.read_luminance(identity), 0);
-    }
-
-    void luminanceMutationsRefreshTimestamp()
-    {
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        const auto previous = QDir::currentPath();
-        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
-        QVERIFY(QDir::setCurrent(directory.path()));
-        const NodeId identity { syntheticActor().id(), "test-node" };
-        LuminanceManager manager(nullptr);
-        QVERIFY(manager.init_db());
-        manager.write_luminance(identity, 5);
-        DbConnector observer(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
-        QVERIFY(observer.open());
-        for (int operation = 0; operation < 3; ++operation) {
-            QVERIFY(observer.query("UPDATE luminance SET timestamp = 0"));
-            if (operation == 0) {
-                manager.increment(identity);
-            } else if (operation == 1) {
-                manager.decrement(identity);
-            } else {
-                manager.write_luminance(identity, 8);
-            }
-            const auto rows = observer.select("SELECT timestamp FROM luminance");
-            QCOMPARE(rows.size(), std::size_t(1));
-            QVERIFY(std::stoll(rows.front().at("timestamp")) > 0);
-        }
-    }
-
-    void luminanceRemovesOnlyOldRecords()
-    {
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        const auto previous = QDir::currentPath();
-        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
-        QVERIFY(QDir::setCurrent(directory.path()));
-        const auto actor = syntheticActor();
-        const NodeId old { actor.id(), "old-node" };
-        const NodeId fresh { actor.id(), "fresh-node" };
-        LuminanceManager manager(nullptr);
-        QVERIFY(manager.init_db());
-        manager.write_luminance(old, 7);
-        manager.write_luminance(fresh, 8);
-        DbConnector observer(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
-        QVERIFY(observer.open());
-        QVERIFY(observer.query("UPDATE luminance SET timestamp = 0 WHERE luminance = 7"));
-        QVERIFY(observer.query("UPDATE luminance SET timestamp = 9223372036854775807 WHERE luminance = 8"));
-        manager.remove_old();
-        QCOMPARE(manager.read_luminance(old), -1);
-        QCOMPARE(manager.read_luminance(fresh), 8);
-        QCOMPARE(observer.select("SELECT node_id FROM luminance").size(), std::size_t(1));
-    }
-
-    void luminanceUpdateWaitsForCommit()
-    {
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        const auto previous = QDir::currentPath();
-        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
-        QVERIFY(QDir::setCurrent(directory.path()));
-        luminanceDatabasePath = QDir::cleanPath(directory.filePath(QString::fromStdString(Luminance::DATABASE)));
-        QCOMPARE(sqlite3_auto_extension(reinterpret_cast<void (*)()>(installLuminanceCommitGate)), SQLITE_OK);
-        const auto resetExtension = qScopeGuard([] {
-            luminanceCommitGate = nullptr;
-            luminanceDatabasePath.clear();
-            sqlite3_cancel_auto_extension(reinterpret_cast<void (*)()>(installLuminanceCommitGate));
-        });
-        const NodeId identity { syntheticActor().id(), "test-node" };
-        LuminanceManager manager(nullptr);
-        QVERIFY(manager.init_db());
-        manager.write_luminance(identity, 1);
-        QueryGate gate;
-        luminanceCommitGate = &gate;
-        auto writer = std::async(std::launch::async, [&] { manager.increment(identity); });
-        const bool entered = gate.awaitEntry();
-        const bool waited = writer.wait_for(150ms) == std::future_status::timeout;
-        gate.release();
-        writer.get();
-        luminanceCommitGate = nullptr;
-        QVERIFY(entered);
-        QVERIFY2(waited, "Reputation update returned before its SQLite commit completed");
-        DbConnector observer(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
-        QVERIFY(observer.open());
-        const auto rows = observer.select("SELECT luminance FROM luminance");
-        QCOMPARE(rows.size(), std::size_t(1));
-        QCOMPARE(rows.front().at("luminance"), std::string("2"));
-    }
-
-    void luminanceFailedCommitDoesNotPublishNewValue()
-    {
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        const auto previous = QDir::currentPath();
-        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
-        QVERIFY(QDir::setCurrent(directory.path()));
-        luminanceDatabasePath = QDir::cleanPath(directory.filePath(QString::fromStdString(Luminance::DATABASE)));
-        QCOMPARE(sqlite3_auto_extension(reinterpret_cast<void (*)()>(installLuminanceCommitGate)), SQLITE_OK);
-        const auto resetExtension = qScopeGuard([] {
-            rejectLuminanceCommit = false;
-            luminanceDatabasePath.clear();
-            sqlite3_cancel_auto_extension(reinterpret_cast<void (*)()>(installLuminanceCommitGate));
-        });
-        const NodeId identity { syntheticActor().id(), "test-node" };
-        LuminanceManager manager(nullptr);
-        QVERIFY(manager.init_db());
-        manager.write_luminance(identity, 4);
-        rejectLuminanceCommit = true;
-        manager.increment(identity);
-        rejectLuminanceCommit = false;
-        QCOMPARE(manager.read_luminance(identity), 4);
-        DbConnector observer(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
-        QVERIFY(observer.open());
-        const auto rows = observer.select("SELECT luminance FROM luminance");
-        QCOMPARE(rows.size(), std::size_t(1));
-        QCOMPARE(rows.front().at("luminance"), std::string("4"));
-        manager.increment(identity);
-        QCOMPARE(manager.read_luminance(identity), 5);
     }
 
     void lockGroupRetainsOwnershipAndSerializationAfterMove()

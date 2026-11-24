@@ -20,124 +20,59 @@
 #include "managers/luminance_manager.h"
 
 #include <QDir>
-#include <QScopeGuard>
+#include <QFile>
+#include <algorithm>
+#include <limits>
 
 #include "chain/actor_id.h"
-#include "utils/db_connector.h"
 #include "utils/exc_logs.h"
+#include "utils/exc_utils.h"
 
-LuminanceManager::LuminanceManager(ExtraChainNode *node)
-    : node(node) {
+namespace {
+std::string luminance_key(const NodeId &node_id) {
+    return fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
+}
+} // namespace
+
+LuminanceManager::LuminanceManager(ExtraChainNode *node, std::function<Clock::time_point()> clock)
+    : clock_(std::move(clock)), node(node) {
     this->init_db();
 }
 
 bool LuminanceManager::init_db() {
-    if (db_initialized_) {
-        return true;
+    // The SQLite store of older builds holds nothing that is still valid after a restart
+    bool removed = false;
+    for (const auto *suffix : { "", "-wal", "-shm", "-journal" }) {
+        removed |= QFile::remove(QString::fromStdString(Luminance::DATABASE + suffix));
     }
-
-    if (luminance_db_ && luminance_db_->is_open()) {
-        db_initialized_ = true;
-        return true;
+    QDir().rmdir(QString::fromStdString(Luminance::FOLDER));
+    if (removed) {
+        eLog("[LuminanceManager] Removed the legacy database, luminance is kept in memory");
     }
-
-    // bool is_exists = QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).exists();
-    invalidate_cache();
-
-    QDir().mkdir(QString::fromStdString(Luminance::FOLDER));
-
-    std::string db_path = Luminance::DATABASE;
-    // The receive worker owns network reputation operations; unrelated databases
-    // must not hold them behind the legacy shared connector mutex.
-    luminance_db_ =
-        std::make_unique<DbConnector>(db_path, DbConnectorType::Regular, DbConnectorLockScope::Connection);
-
-    if (!luminance_db_->open()) {
-        eCritical("[LuminanceManager] Failed to open database");
-        return false;
-    }
-
-    // Create table if it doesn't exist
-    bool success = luminance_db_->query(Config::DataStorage::LUMINANCE_TABLE_CREATE);
-
-    if (!success) {
-        eCritical("[LuminanceManager] Failed to create table");
-        return false;
-    }
-
-    eLog("[LuminanceManager] Database initialized");
-    db_initialized_ = true;
     return true;
 }
 
 void LuminanceManager::reset_db() {
-    invalidate_cache();
-    db_initialized_ = false;
-
-    if (db_initialized_) {
-        luminance_db_->close();
-        QFile::remove(QString::fromStdString(Luminance::DATABASE));
-    }
-
-    luminance_db_.reset();
+    std::lock_guard lock(mutex_);
+    entries_.clear();
+    full_logged_ = false;
 }
 
 int LuminanceManager::read_luminance(const NodeId &node_id) {
-    auto node_id_str = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
-    int  luminance   = -1;
-    std::uint64_t generation;
-    {
-        std::lock_guard lock(cache_mutex_);
-        if (const auto found = cache_.find(node_id_str); found != cache_.end()) {
-            return found->second;
-        }
-        generation = cache_generation_;
-    }
-
-    auto rows = luminance_db_->select(
-        fmt::format("SELECT * FROM {} WHERE node_id = '{}'", Config::DataStorage::LUMINANCE_TABLE, node_id_str));
-
-    if (rows.empty() || rows.size() > 1) {
-        return luminance;
-    }
-
-    try {
-        luminance = std::stoi(rows[0]["luminance"]);
-    } catch (const std::exception &) {
-        return luminance;
-    }
-
-    if (node_id_str.size() <= CacheKeyBytes) {
-        std::lock_guard lock(cache_mutex_);
-        if (generation == cache_generation_) {
-            if (cache_.size() >= CacheEntries) {
-                cache_.clear();
-            }
-            cache_.insert_or_assign(node_id_str, luminance);
-        }
-    }
-    return luminance;
+    const auto      key = luminance_key(node_id);
+    std::lock_guard lock(mutex_);
+    const auto      found = entries_.find(key);
+    return found == entries_.end() ? -1 : found->second.luminance;
 }
 
 std::optional<int> LuminanceManager::cached_luminance(const NodeId &node_id) const {
-    const auto key = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
-    std::unique_lock lock(cache_mutex_, std::try_to_lock);
-    if (lock.owns_lock()) {
-        if (const auto found = cache_.find(key); found != cache_.end()) {
-            return found->second;
-        }
+    const auto       key = luminance_key(node_id);
+    std::unique_lock lock(mutex_, std::try_to_lock);
+    if (!lock.owns_lock()) {
+        return std::nullopt;
     }
-    return std::nullopt;
-}
-
-void LuminanceManager::invalidate_cache(const std::string *key) {
-    std::lock_guard lock(cache_mutex_);
-    ++cache_generation_;
-    if (key) {
-        cache_.erase(*key);
-    } else {
-        cache_.clear();
-    }
+    const auto found = entries_.find(key);
+    return found == entries_.end() ? -1 : found->second.luminance;
 }
 
 void LuminanceManager::increment(const NodeId &node_id) {
@@ -153,47 +88,57 @@ void LuminanceManager::write_luminance(const NodeId &node_id, int luminance) {
 }
 
 void LuminanceManager::remove_old() {
-    invalidate_cache();
-    const auto invalidate = qScopeGuard([this] { invalidate_cache(); });
-    // eTemp("[LuminanceManager] Remove old");
-    auto now       = Utils::current_date_ms();
-    auto threshold = now - Luminance::AUTOREMOVE_MS;
-    luminance_db_->query(fmt::format("DELETE FROM luminance WHERE timestamp < {}", threshold));
+    const auto      threshold = now() - std::chrono::milliseconds(Luminance::AUTOREMOVE_MS);
+    std::lock_guard lock(mutex_);
+    std::erase_if(entries_, [threshold](const auto &entry) { return entry.second.seen < threshold; });
+    if (entries_.size() < MaxEntries) {
+        full_logged_ = false;
+    }
+}
+
+std::size_t LuminanceManager::size() const {
+    std::lock_guard lock(mutex_);
+    return entries_.size();
 }
 
 void LuminanceManager::update_luminance(const NodeId &node_id, Operation op, int value) {
-    // eTemp("[LuminanceManager] update_luminance: {}, {}, {}", node_id, op, value);
-    auto        node_id_str = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
-    // Never predict a committed value: the existing SQL API can fail without throwing.
-    invalidate_cache(&node_id_str);
-    const auto invalidate = qScopeGuard([&] { invalidate_cache(&node_id_str); });
-    auto        now         = Utils::current_date_ms();
-    std::string update_expr;
-    int         initial_value;
-
+    auto            key  = luminance_key(node_id);
+    const auto      seen = now();
+    std::lock_guard lock(mutex_);
+    auto            found = entries_.find(key);
+    if (found == entries_.end()) {
+        // A sender that does not fit keeps the default luminance until old entries expire
+        if (key.size() > MaxKeyBytes) {
+            return;
+        }
+        if (entries_.size() >= MaxEntries) {
+            if (!full_logged_) {
+                full_logged_ = true;
+                eWarning("[LuminanceManager] {} senders tracked, new ones wait for expiry", entries_.size());
+            }
+            return;
+        }
+        const int initial = op == Operation::Increment ? 1 : op == Operation::Set ? std::max(0, value) : 0;
+        entries_.emplace(std::move(key), Entry { initial, seen });
+        return;
+    }
+    auto &entry = found->second;
     switch (op) {
     case Operation::Increment:
-        update_expr   = "luminance + 1";
-        initial_value = 1;
+        if (entry.luminance < std::numeric_limits<int>::max()) {
+            ++entry.luminance;
+        }
         break;
     case Operation::Decrement:
-        update_expr   = "MAX(0, luminance - 1)";
-        initial_value = 0;
+        entry.luminance = std::max(0, entry.luminance - 1);
         break;
     case Operation::Set:
-        update_expr   = std::to_string(std::max(0, value));
-        initial_value = std::max(0, value);
+        entry.luminance = std::max(0, value);
         break;
     }
+    entry.seen = seen;
+}
 
-    luminance_db_->query(
-        fmt::format("INSERT INTO luminance (node_id, luminance, timestamp) VALUES ('{}', {}, {}) "
-                    "ON CONFLICT(node_id) DO UPDATE SET "
-                    "luminance = {}, "
-                    "timestamp = {}",
-                    node_id_str,
-                    initial_value,
-                    now,
-                    update_expr,
-                    now));
+LuminanceManager::Clock::time_point LuminanceManager::now() const {
+    return clock_ ? clock_() : Clock::now();
 }

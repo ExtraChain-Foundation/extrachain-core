@@ -11,9 +11,10 @@ also transfers its mutex. A SQLite build with threading disabled is rejected.
 The application must not select SQLite's single-thread startup mode; see the
 [SQLite threading contract](https://www.sqlite.org/threadsafe.html).
 
-Production opt-ins are `LuminanceManager` and the DFS metadata connector created
-by `DirsSpace::database()` for `DirsManager`. Reputation operations now run on
-the [bounded receive worker](network-receive-queue.md); synchronous DFS metadata
+The production opt-in is the DFS metadata connector created by
+`DirsSpace::database()` for `DirsManager`; `LuminanceManager` no longer uses
+SQLite. Reputation operations run on the
+[bounded receive worker](network-receive-queue.md); synchronous DFS metadata
 callers can still stall network dispatch. `DirsManager` creates the metadata connection once;
 DFS consumers share that same connector through `get_db_instance()`. Do not open
 another independent metadata connection while that owner is alive. Collection
@@ -65,19 +66,10 @@ are checked. Additional tests retain group ownership/serialization across moves
 and distinguish independent groups. Passing them does not remove synchronous
 actor-file/SQLite writes or qualify full-load latency; task 185 remains separate.
 
-The same target characterizes the real `LuminanceManager` with seven scenarios:
-read-before-increment and reopen visibility, distinct actor/node keys,
-set/decrement clamping, timestamp refresh, expiry selection, waiting for a
-SQLite commit hook, and rollback when that hook rejects the commit. A failed
-increment leaves both the manager's read and a sequential independent SQL
-observer at the previous value; a subsequent successful increment works.
-Observers are test-only and do not establish safe concurrent ownership of a
-production connection. Hooks are removed and temporary working directories
-restored on exit. The full target passes 20 scenarios on Linux and MSVC
-(22 Qt results including initialization/cleanup).
-
-These characterize the unchanged synchronous storage API, not a crash/power-loss
-test or complete node-lifecycle test. Queue ownership, ordering and shutdown are
+The same target keeps three `LuminanceManager` scenarios: read-before-increment
+with an empty store after a restart, distinct actor/node keys, and set/decrement
+clamping. Reputation no longer uses SQLite, so its timestamp, commit-hook and
+rollback scenarios were removed. Queue ownership, ordering and shutdown are
 covered separately by `extrachain-receive-tests` and the receive-worker contract.
 Task 210 still requires deployment/runtime qualification. Reputation influences
 admission; optimistic unpublished increments or a stale cache are not replacements

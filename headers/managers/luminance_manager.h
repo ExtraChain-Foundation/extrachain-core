@@ -19,21 +19,27 @@
 
 #pragma once
 
-#include <boost/describe/class.hpp>
+#include <chrono>
 #include <cstdint>
-#include <memory>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
 
 class ExtraChainNode;
-class DbConnector;
 struct NodeId;
 
+// Broadcast counts per sending node, kept only in memory: an entry lives 30 s after its last packet, so a disk
+// copy never outlives a restart and only made every received packet wait for SQLite
 class LuminanceManager {
 public:
-    LuminanceManager(ExtraChainNode *node);
+    using Clock = std::chrono::steady_clock;
+
+    static constexpr std::size_t MaxEntries  = 65536;
+    static constexpr std::size_t MaxKeyBytes = 256;
+
+    explicit LuminanceManager(ExtraChainNode *node, std::function<Clock::time_point()> clock = {});
     ~LuminanceManager() = default;
 
     bool init_db();
@@ -47,6 +53,8 @@ public:
     void write_luminance(const NodeId &node_id, int luminance);
     void remove_old();
 
+    std::size_t size() const;
+
 private:
     enum class Operation {
         Increment,
@@ -54,17 +62,19 @@ private:
         Set
     };
 
+    struct Entry {
+        int               luminance;
+        Clock::time_point seen;
+    };
+
     void update_luminance(const NodeId &node_id, Operation op, int value = 0);
-    void invalidate_cache(const std::string *key = nullptr);
+    Clock::time_point now() const;
 
 private:
-    std::unique_ptr<DbConnector> luminance_db_;
-    bool                         db_initialized_ = false; // Whether db is initialized
-    static constexpr std::size_t CacheEntries = 1024;
-    static constexpr std::size_t CacheKeyBytes = 256;
-    mutable std::mutex cache_mutex_;
-    std::unordered_map<std::string, int> cache_;
-    std::uint64_t cache_generation_ = 0;
+    mutable std::mutex                     mutex_;
+    std::unordered_map<std::string, Entry> entries_;
+    std::function<Clock::time_point()>     clock_;
+    bool                                   full_logged_ = false;
 
     ExtraChainNode *node;
 };

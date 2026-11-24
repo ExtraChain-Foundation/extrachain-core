@@ -5,6 +5,8 @@
 #include "managers/luminance_manager.h"
 
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QPointer>
 #include <QScopeGuard>
@@ -265,7 +267,7 @@ private slots:
         QTRY_COMPARE(completed, 1);
     }
 
-    void reputationCacheInvalidatesWritesAndDoesNotCacheMissingRows() {
+    void reputationStoreAnswersFromMemory() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const auto previous = QDir::currentPath();
@@ -273,85 +275,104 @@ private slots:
         QVERIFY(QDir::setCurrent(directory.path()));
         LuminanceManager storage(nullptr);
         const auto peer = identity();
-        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.cached_luminance(peer), std::optional<int>(-1));
         QCOMPARE(storage.read_luminance(peer), -1);
-        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.size(), std::size_t(0));
         storage.write_luminance(peer, 7);
-        QCOMPARE(storage.read_luminance(peer), 7);
         QCOMPARE(storage.cached_luminance(peer), std::optional<int>(7));
         storage.increment(peer);
-        QVERIFY(!storage.cached_luminance(peer));
-        QCOMPARE(storage.read_luminance(peer), 8);
+        QCOMPARE(storage.cached_luminance(peer), std::optional<int>(8));
         storage.decrement(peer);
-        QVERIFY(!storage.cached_luminance(peer));
         QCOMPARE(storage.read_luminance(peer), 7);
         storage.write_luminance(peer, -10);
-        QVERIFY(!storage.cached_luminance(peer));
         QCOMPARE(storage.read_luminance(peer), 0);
         storage.reset_db();
-        QVERIFY(!storage.cached_luminance(peer));
+        QCOMPARE(storage.cached_luminance(peer), std::optional<int>(-1));
         QVERIFY(storage.init_db());
-        QCOMPARE(storage.read_luminance(peer), 0);
-    }
-
-    void reputationCacheInvalidatesFailedWriteAndExpiry() {
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        const auto previous = QDir::currentPath();
-        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
-        QVERIFY(QDir::setCurrent(directory.path()));
-        LuminanceManager storage(nullptr);
-        const auto peer = identity();
-        storage.write_luminance(peer, 7);
-        QCOMPARE(storage.read_luminance(peer), 7);
-        DbConnector control(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
-        QVERIFY(control.open());
-        QVERIFY(control.query("CREATE TRIGGER reject_update BEFORE UPDATE ON luminance "
-                              "BEGIN SELECT RAISE(FAIL, 'synthetic rejected write'); END"));
-        storage.increment(peer);
-        QVERIFY(!storage.cached_luminance(peer));
-        QCOMPARE(storage.read_luminance(peer), 7);
-        QVERIFY(control.query("DROP TRIGGER reject_update"));
-        QVERIFY(control.query("UPDATE luminance SET timestamp = 0"));
-        storage.remove_old();
-        QVERIFY(!storage.cached_luminance(peer));
         QCOMPARE(storage.read_luminance(peer), -1);
+        QVERIFY(!QFileInfo::exists(QString::fromStdString(Luminance::FOLDER)));
     }
 
-    void reputationCacheIsBoundedAndPreservesOtherPeers() {
+    void reputationExpiresThirtySecondsAfterLastPacket() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const auto previous = QDir::currentPath();
         const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
         QVERIFY(QDir::setCurrent(directory.path()));
+        auto now = LuminanceManager::Clock::time_point {} + 1h;
+        LuminanceManager storage(nullptr, [&] { return now; });
+        const auto quiet = identity();
+        const auto active = identity();
+        storage.increment(quiet);
+        storage.increment(active);
+        now += 29s;
+        storage.increment(active);
+        storage.remove_old();
+        QCOMPARE(storage.read_luminance(quiet), 1);
+        QCOMPARE(storage.read_luminance(active), 2);
+        now += 2s;
+        storage.remove_old();
+        QCOMPARE(storage.read_luminance(quiet), -1);
+        QCOMPARE(storage.read_luminance(active), 2);
+        now += 27s;
+        storage.remove_old();
+        QCOMPARE(storage.read_luminance(active), 2);
+        now += 1s + 1ms;
+        storage.remove_old();
+        QCOMPARE(storage.read_luminance(active), -1);
+        QCOMPARE(storage.size(), std::size_t(0));
+        storage.increment(active);
+        QCOMPARE(storage.read_luminance(active), 1);
+    }
+
+    void reputationStoreIsBoundedAndPreservesTrackedPeers() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        auto now = LuminanceManager::Clock::time_point {} + 1h;
+        LuminanceManager storage(nullptr, [&] { return now; });
+        const auto tracked = identity();
+        storage.write_luminance(tracked, 5);
+        for (std::size_t i = 1; i < LuminanceManager::MaxEntries; ++i) {
+            storage.increment({ tracked.actor_id, fmt::format("synthetic-{}", i) });
+        }
+        QCOMPARE(storage.size(), LuminanceManager::MaxEntries);
+        const auto stranger = identity();
+        storage.increment(stranger);
+        QCOMPARE(storage.read_luminance(stranger), -1);
+        storage.increment(tracked);
+        QCOMPARE(storage.read_luminance(tracked), 6);
+        const auto longPeer = NodeId { tracked.actor_id, std::string(LuminanceManager::MaxKeyBytes, 'x') };
+        now += 31s;
+        storage.increment(tracked);
+        storage.remove_old();
+        QCOMPARE(storage.size(), std::size_t(1));
+        storage.increment(longPeer);
+        QCOMPARE(storage.read_luminance(longPeer), -1);
+        storage.increment(stranger);
+        QCOMPARE(storage.read_luminance(stranger), 1);
+        QCOMPARE(storage.read_luminance(tracked), 7);
+    }
+
+    void legacyReputationDatabaseIsRemoved() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto previous = QDir::currentPath();
+        const auto restore = qScopeGuard([&] { QDir::setCurrent(previous); });
+        QVERIFY(QDir::setCurrent(directory.path()));
+        QVERIFY(QDir().mkdir(QString::fromStdString(Luminance::FOLDER)));
+        for (const auto *suffix : { "", "-wal", "-shm" }) {
+            QFile file(QString::fromStdString(Luminance::DATABASE + suffix));
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QVERIFY(file.write("legacy") > 0);
+        }
         LuminanceManager storage(nullptr);
-        const auto first = identity();
-        const auto second = identity();
-        storage.write_luminance(first, 1);
-        storage.write_luminance(second, 2);
-        QCOMPARE(storage.read_luminance(first), 1);
-        QCOMPARE(storage.read_luminance(second), 2);
-        storage.increment(second);
-        QCOMPARE(storage.cached_luminance(first), std::optional<int>(1));
-        QVERIFY(!storage.cached_luminance(second));
-        DbConnector control(Luminance::DATABASE, DbConnectorType::Regular, DbConnectorLockScope::Connection);
-        QVERIFY(control.open());
-        QVERIFY(control.query("BEGIN TRANSACTION"));
-        for (int i = 0; i < 1100; ++i) {
-            const auto key = fmt::format("{}_synthetic-{}", first.actor_id, i);
-            QVERIFY(control.query(fmt::format("INSERT INTO luminance VALUES ('{}', 3, 0)", key)));
-        }
-        const auto longPeer = NodeId { first.actor_id, std::string(257, 'x') };
-        QVERIFY(control.query(fmt::format("INSERT INTO luminance VALUES ('{}_{}', 4, 0)",
-                                          longPeer.actor_id, longPeer.node_identifier)));
-        QVERIFY(control.query("COMMIT"));
-        for (int i = 0; i < 1100; ++i) {
-            QCOMPARE(storage.read_luminance({ first.actor_id, fmt::format("synthetic-{}", i) }), 3);
-        }
-        QVERIFY(!storage.cached_luminance(first));
-        QCOMPARE(storage.read_luminance(first), 1);
-        QCOMPARE(storage.read_luminance(longPeer), 4);
-        QVERIFY(!storage.cached_luminance(longPeer));
+        QVERIFY(!QFileInfo::exists(QString::fromStdString(Luminance::DATABASE)));
+        QVERIFY(!QFileInfo::exists(QString::fromStdString(Luminance::DATABASE + "-wal")));
+        QVERIFY(!QFileInfo::exists(QString::fromStdString(Luminance::FOLDER)));
+        QCOMPARE(storage.read_luminance(identity()), -1);
     }
 
     void ownerCacheLookupsStayCoherentWithWorkerWrites() {
@@ -692,6 +713,7 @@ private slots:
         const auto peer = identity();
         Gate gate;
         std::atomic<bool> finished = false;
+        std::atomic<int> committed = 0;
         bool storageDestroyedAfterJoin = false;
         int continuations = 0;
         auto owner = std::make_unique<Owner>();
@@ -703,6 +725,7 @@ private slots:
             owner->queue->defer([&] {
                 gate.wait();
                 storage->increment(peer);
+                committed = storage->read_luminance(peer);
                 finished = true;
             }, [&] { ++continuations; });
         });
@@ -714,8 +737,7 @@ private slots:
         QCoreApplication::processEvents();
         QVERIFY(storageDestroyedAfterJoin);
         QCOMPARE(continuations, 0);
-        LuminanceManager reopened(nullptr);
-        QCOMPARE(reopened.read_luminance(peer), 8);
+        QCOMPARE(committed.load(), 8);
         auto second = std::make_unique<Owner>();
         second->queue = new NetworkReceiveQueue(second.get(), [](const auto &) {});
         delete second->queue.data();

@@ -1,8 +1,8 @@
 # Bounded Network Receive Queue
 
-Task 210 moves network reputation SQL off the node's Qt event loop. It does not
-batch writes, change SQLite pragmas/schema, change admission
-rules, or move the message switch to a worker thread.
+Task 210 moves network reputation off the node's Qt event loop. It does not
+change admission rules or move the message switch to a worker thread. Reputation
+itself is now an in-memory store, so the worker stages no longer touch SQLite.
 
 ## Ordering And Ownership
 
@@ -36,18 +36,17 @@ include DAG messages or unknown types: their read-before-increment responder
 values, fallback and multiplier remain unchanged. No authorization check is
 removed, and no accepted frame overtakes another.
 
-The read-through cache retains at most 1024 successful, parsed reputation reads
-with keys of at most 256 bytes. At capacity it flushes before inserting another
-entry; it is not an LRU. Missing/error/invalid rows are not cached. Owner lookups
-use `try_lock` and fall back to the worker on contention; no cache mutex is held
-across SQL. Per-node mutations invalidate before and after SQL, including an
-exception or nonthrowing write failure. A generation check prevents an older
-in-flight read from refilling the cache across invalidation. Expiry invalidates
-all entries before/after its query; reset/reinitialization also discard cache
-state. Writes are never reflected optimistically. Runtime database mutations
-must go through LuminanceManager; out-of-process database edits are not cache
-coherent. This does not change the existing lifecycle requirement against
-reset/destruction overlapping worker access.
+Reputation is kept only in memory: a map of at most 65536 peers with keys of at
+most 256 bytes, each entry holding the broadcast count and the time of its last
+update. Expiry removes entries older than 30 seconds by a monotonic clock, the
+same window the SQLite table had, so nothing outlives a restart and the legacy
+`luminance/Luminance.db` (with its WAL files) is deleted on start. A full map
+keeps tracked peers counting and gives a new peer the default value until expiry
+frees room. Owner lookups use `try_lock`, answer missing peers with -1 and fall
+back to the worker only on contention. Under host I/O pressure the SQLite version
+made every broadcast wait for a write; the worker now never touches the disk.
+This does not change the existing lifecycle requirement against reset/destruction
+overlapping worker access.
 
 The pending receive owns the decoded body, signature, identifier and responder.
 The next packet cannot begin until all stages and callbacks of the current one
@@ -123,9 +122,8 @@ format, increasing queue capacity or changing FIFO admission.
 
 Thrown worker/handler exceptions suppress that packet's remaining dispatch and
 report a generic error without payloads or credentials. Later packets may proceed.
-An exception from the error reporter cannot strand the queue. The existing
-Luminance API returns no write status: a nonthrowing failed SQLite query retains
-its previous semantics and is not converted into a successful-commit guarantee.
+An exception from the error reporter cannot strand the queue. Reputation
+updates are in-memory and cannot fail.
 
 ## Shutdown Contract
 
@@ -137,8 +135,8 @@ Initialization/reset/destruction of the storage must not overlap worker access.
 `ExtraChainNode` joins the receive worker at the start of its destructor and its
 thread-finished cleanup, before cleanup callbacks or any manager teardown.
 LuminanceManager is not a QObject. It is now explicitly owned by unique_ptr,
-replacing an unowned allocation; its database closes after the early join and
-before QObject deletes the network-manager child. A QPointer guards the network
+replacing an unowned allocation; its in-memory store is destroyed after the early
+join and before QObject deletes the network-manager child. A QPointer guards the network
 manager when deferred cleanup has already deleted it. This corrects ownership;
 it is not evidence that the previously leaked storage caused a use-after-free.
 `NetworkManager` also destroys the queue first in its own destructor. Stop rejects
@@ -148,17 +146,18 @@ not promise to process the backlog or to turn an accepted read into a new write
 after shutdown. The existing node-enabled checks suppress stages/dispatch that
 have not started. No new dependence on the shared Boost pool is introduced.
 
-Stop can wait for the underlying synchronous SQL operation; it is not a bounded
-shutdown deadline. No journal mode, fsync policy or power-loss guarantee changes.
+Stop can wait for the accepted worker stage; it is not a bounded shutdown
+deadline.
 Lifecycle-only direct storage callers must retain their existing lifetime rules.
 
 ## Tests And Qualification
 
 With `EXTRACHAIN_BUILD_DB_TESTS=ON`, build/run `extrachain-receive-tests` as well as
 `extrachain-db-tests`. Queue tests use real Qt events and a dedicated worker;
-reputation order/shutdown tests use the real LuminanceManager and temporary SQLite.
-Cache regressions cover missing rows, successful/failed writes, expiry, reset,
-bounded entries/keys and isolation between peers. Extracted production setup
+reputation order/shutdown tests use the real in-memory LuminanceManager. Store
+regressions cover missing peers, writes, the 30-second expiry under a controlled
+clock, reset, bounded entries/keys, removal of the legacy database and isolation
+between peers. Extracted production setup
 tests cover cache-hit responder values, deferred broadcast increments and shutdown.
 `network_dfs_size_fanout.py` compiles the actual activation callback and senders
 with a routing observer: one/100 peers, reconnect, empty target, explicit global
@@ -171,8 +170,9 @@ The compiled `network_receive_timing.py` fixture uses the actual timer class wit
 a controlled monotonic clock and log observer. It covers the exact threshold,
 type updates, early return, unwinding and throwing log sinks. Admission and
 reputation fixtures stub timing, whose output does not alter their contracts.
-The parent-ownership regression uses a real Qt child queue and owned real SQLite
-storage, then verifies commit visibility after the storage is destroyed.
+The parent-ownership regression uses a real Qt child queue and owned real
+storage, and checks that the accepted increment landed before the storage is
+destroyed.
 `network_receive_shutdown.py` compiles the actual node shutdown bodies with
 dependency-order observers: destructor and thread-finished cleanup failed before
 the early join, while uninitialized-node destruction already passed. This checks
