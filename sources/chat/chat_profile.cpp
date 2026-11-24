@@ -27,6 +27,8 @@ ChatProfile::ChatProfile(ChatManager* owner)
     : owner_(owner) {
 }
 
+static std::vector<Dfs::DirRow> profile_storage_rows(ExtraChainNode* node, const ActorId& chat_main_id);
+
 std::expected<Dfs::DirRow, ChatError> ChatProfile::ensure_storage_row() {
     auto existing = find_storage_row(owner_->current_chat_actor_id());
     if (existing.has_value()) {
@@ -100,23 +102,34 @@ std::optional<Dfs::DirRow> ChatProfile::find_storage_row(const ActorId& chat_mai
 }
 
 bool ChatProfile::set_name(const std::string& name) {
-    auto profile_row = ensure_storage_row();
-    if (!profile_row.has_value()) {
-        return false;
-    }
-    auto chat_actor_id = owner_->current_chat_actor_id();
-    return owner_->node->dfs()->dictionary_set_value(chat_actor_id, profile_row->file_id, "name", name,
-                                                      chat_actor_id);
+    return set_entry("name", name);
 }
 
 bool ChatProfile::set_bio(const std::string& bio) {
+    return set_entry("bio", bio);
+}
+
+// An empty value cannot be stored (the row is refused), so clearing a field removes its key. Reads
+// fall through older profile copies for missing keys, so the key goes from every copy, or the old
+// text would come back from one of them.
+bool ChatProfile::set_entry(const std::string& key, const std::string& value) {
+    auto chat_actor_id = owner_->current_chat_actor_id();
+    if (value.empty()) {
+        if (chat_actor_id.is_zero()) {
+            return false;
+        }
+        for (const auto& row : profile_storage_rows(owner_->node, chat_actor_id)) {
+            if (owner_->node->dfs()->read_dictionary(chat_actor_id, row.file_id, key).has_value()) {
+                owner_->node->dfs()->dictionary_remove_value(chat_actor_id, row.file_id, key, chat_actor_id);
+            }
+        }
+        return true;
+    }
     auto profile_row = ensure_storage_row();
     if (!profile_row.has_value()) {
         return false;
     }
-    auto chat_actor_id = owner_->current_chat_actor_id();
-    return owner_->node->dfs()->dictionary_set_value(chat_actor_id, profile_row->file_id, "bio", bio,
-                                                      chat_actor_id);
+    return owner_->node->dfs()->dictionary_set_value(chat_actor_id, profile_row->file_id, key, value, chat_actor_id);
 }
 
 bool ChatProfile::set_avatar(const Chat::ChatProfileAvatar& avatar) {

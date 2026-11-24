@@ -33,6 +33,8 @@ public:
 
     bool set_name(const std::string &name);
     bool set_bio(const std::string &bio);
+    // Stores one profile field; an empty value removes the field
+    bool set_entry(const std::string &key, const std::string &value);
     bool set_avatar(const Chat::ChatProfileAvatar &avatar);
     std::expected<Chat::ChatProfileAvatar, ChatError> upload_avatar(const std::filesystem::path &full_path,
                                                                      const std::filesystem::path &mini_path,
