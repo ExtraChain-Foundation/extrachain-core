@@ -42,6 +42,23 @@ namespace {
     bool same_chat_link(const Chat::Chat& lhs, const Chat::Chat& rhs) {
         return lhs.owner_id == rhs.owner_id && lhs.file_id == rhs.file_id;
     }
+
+    // A message id is the primary key of its row in the chat vector: a second message with the
+    // same id replaces the first. Six hex characters (24 bits) collide with ~50% odds by ~5000
+    // messages in one chat, so new messages take 128 random bits from libsodium. Older short ids
+    // stay valid, nothing checks the length.
+    std::string new_message_id() {
+        std::array<unsigned char, 16> bytes {};
+        randombytes_buf(bytes.data(), bytes.size());
+        static constexpr char hex[] = "0123456789abcdef";
+        std::string           id;
+        id.reserve(bytes.size() * 2);
+        for (auto b : bytes) {
+            id += hex[b >> 4];
+            id += hex[b & 0x0f];
+        }
+        return id;
+    }
 } // namespace
 
 ChatManager::ChatManager(ExtraChainNode* node)
@@ -964,7 +981,7 @@ std::expected<Chat::SendResult, ChatError> ChatManager::send_text_message(const 
 
     auto message_data = Chat::MessageData { .data = text, .reply_id = message_text.reply_id };
     message_data.type = Chat::MessageType::Text;
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    auto message      = Chat::Message { .id = new_message_id(), .message = message_data };
     auto stored       = add_new_message(owner_id, file_id, message);
     if (!stored.has_value()) {
         return std::unexpected(stored.error());
@@ -977,7 +994,7 @@ std::expected<bool, ChatError> ChatManager::add_new_message_created(const ActorI
     // TODO: check size, only if size == 0
 
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Created };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    auto message      = Chat::Message { .id = new_message_id(), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
@@ -985,7 +1002,7 @@ std::expected<bool, ChatError> ChatManager::add_new_message_invite(const ActorId
                                                                    const std::string& file_id,
                                                                    const ActorId&     actor) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Invite, .data = actor.to_string() };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    auto message      = Chat::Message { .id = new_message_id(), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
@@ -993,7 +1010,7 @@ std::expected<bool, ChatError> ChatManager::add_new_message_joined(const ActorId
                                                                    const std::string& file_id,
                                                                    const ActorId&     actor) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Join, .data = actor.to_string() };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    auto message      = Chat::Message { .id = new_message_id(), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
@@ -1001,7 +1018,7 @@ std::expected<bool, ChatError> ChatManager::add_gif_message(const ActorId&      
                                                             const std::string&       file_id,
                                                             const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Gif, .data = message_text.text };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    auto message      = Chat::Message { .id = new_message_id(), .message = message_data };
     // TODO: with id exists check
     return add_new_message(owner_id, file_id, message);
 }
@@ -1010,7 +1027,7 @@ std::expected<bool, ChatError> ChatManager::add_image_message(const ActorId&    
                                                               const std::string&       file_id,
                                                               const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Image, .data = message_text.text };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    auto message      = Chat::Message { .id = new_message_id(), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
@@ -1018,7 +1035,7 @@ std::expected<bool, ChatError> ChatManager::add_video_message(const ActorId&    
                                                               const std::string&       file_id,
                                                               const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Video, .data = message_text.text };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    auto message      = Chat::Message { .id = new_message_id(), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
@@ -1026,7 +1043,7 @@ std::expected<bool, ChatError> ChatManager::add_audio_message(const ActorId&    
                                                               const std::string&       file_id,
                                                               const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Audio, .data = message_text.text };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    auto message      = Chat::Message { .id = new_message_id(), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
@@ -1034,7 +1051,7 @@ std::expected<bool, ChatError> ChatManager::add_file_message(const ActorId&     
                                                              const std::string&       file_id,
                                                              const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::File, .data = message_text.text };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    auto message      = Chat::Message { .id = new_message_id(), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
