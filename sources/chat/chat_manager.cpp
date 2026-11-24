@@ -46,7 +46,7 @@ namespace {
     // A message id is the primary key of its row in the chat vector: a second message with the
     // same id replaces the first. Six hex characters (24 bits) collide with ~50% odds by ~5000
     // messages in one chat, so new messages take 128 random bits from libsodium. Older short ids
-    // stay valid, nothing checks the length.
+    // stay valid; ids past max_message_id_length are dropped on read.
     std::string new_message_id() {
         std::array<unsigned char, 16> bytes {};
         randombytes_buf(bytes.data(), bytes.size());
@@ -58,6 +58,23 @@ namespace {
             id += hex[b & 0x0f];
         }
         return id;
+    }
+
+    // Our ids are 6 (old) or 32 (new) characters. Anything longer did not come from a client of ours,
+    // so such a row is skipped instead of reaching the UI; the same goes for a reply pointing at one.
+    constexpr std::size_t max_message_id_length = 300;
+
+    std::optional<Chat::Message> parse_message_row(DbRow row) {
+        row.erase("sign");
+        row.erase("status");
+        auto message = Utils::from_dbrow<Chat::Message>(row);
+        if (!message.has_value() || message->id.size() > max_message_id_length) {
+            return std::nullopt;
+        }
+        if (message->message.reply_id.has_value() && message->message.reply_id->size() > max_message_id_length) {
+            return std::nullopt;
+        }
+        return message.value();
     }
 } // namespace
 
@@ -169,9 +186,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
                                      return;
                                  }
 
-                                 message_row->erase("sign");
-                                 message_row->erase("status");
-                                 auto message = Utils::from_dbrow<Chat::Message>(message_row.value());
+                                 auto message = parse_message_row(message_row.value());
                                  if (!message.has_value()) {
                                      return;
                                  }
@@ -832,11 +847,7 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_mess
     messages.reserve(db_rows->size());
 
     for (const auto& db_row : db_rows.value()) {
-        auto rown = db_row;
-        rown.erase("sign");
-        rown.erase("status");
-
-        auto message = Utils::from_dbrow<Chat::Message>(rown);
+        auto message = parse_message_row(db_row);
         if (!message.has_value()) {
             continue;
         }
@@ -884,10 +895,7 @@ std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const Act
         }
 
         for (auto& db_row : db_rows.value()) {
-            db_row.erase("sign");
-            db_row.erase("status");
-
-            auto message = Utils::from_dbrow<Chat::Message>(db_row);
+            auto message = parse_message_row(db_row);
             if (!message.has_value()) {
                 continue;
             }
