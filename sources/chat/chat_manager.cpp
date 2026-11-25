@@ -79,8 +79,9 @@ namespace {
 } // namespace
 
 ChatManager::ChatManager(ExtraChainNode* node)
-    : node(node) {
-    QObject::connect(node->dfs(), &DfsController::added, node, [this](ActorId owner_id, Dfs::DirRow dir_row) {
+    : node(node)
+    , signal_guard_(std::make_unique<QObject>()) {
+    QObject::connect(node->dfs(), &DfsController::added, signal_guard_.get(), [this](ActorId owner_id, Dfs::DirRow dir_row) {
         if (!activated_ || owner_id != current_chat_actor_id()) {
             return;
         }
@@ -90,7 +91,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
         parse_invite(owner_id, dir_row);
     });
 
-    QObject::connect(node->actor_index(), &ActorIndex::actorSaved, node, [this](ActorId actor_id) {
+    QObject::connect(node->actor_index(), &ActorIndex::actorSaved, signal_guard_.get(), [this](ActorId actor_id) {
         if (activated_) {
             for (const auto& chat : chats_) {
                 if (chat.invite_pending && chat.peer_chat_main_id == actor_id) {
@@ -104,7 +105,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
         }
     });
 
-    QObject::connect(node->network(), &NetworkManager::connectionStatusChanged, node, [this](bool connected) {
+    QObject::connect(node->network(), &NetworkManager::connectionStatusChanged, signal_guard_.get(), [this](bool connected) {
         if (!connected || !activated_) {
             return;
         }
@@ -120,7 +121,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
         retry_received_invites();
     });
 
-    QObject::connect(node->dfs(), &DfsController::downloaded, node, [this](ActorId owner_id, Dfs::DirRow dir_row) {
+    QObject::connect(node->dfs(), &DfsController::downloaded, signal_guard_.get(), [this](ActorId owner_id, Dfs::DirRow dir_row) {
         if (!this->activated_) {
             return;
         }
@@ -143,7 +144,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
 
     QObject::connect(node->dfs(),
                      &DfsController::downloaded,
-                     node,
+                     signal_guard_.get(),
                      [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
                          for (auto& chat : chats_) {
                              if ((chat.owner_id != owner_id && chat.chat.peer_id != owner_id)
@@ -158,7 +159,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
 
     QObject::connect(node->dfs(),
                      &DfsController::vectorRowAdded,
-                     node,
+                     signal_guard_.get(),
                      [this](ActorId owner_id, Dfs::DirRow dir_row, DbRow row) {
                          if (row["status"] != "1") {
                              return;
@@ -202,7 +203,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
 
     QObject::connect(node->dfs(),
                      &DfsController::vectorRowRemoved,
-                     node,
+                     signal_guard_.get(),
                      [this](ActorId owner_id, Dfs::DirRow dir_row, DbRow row) {
                          for (const auto& chat : std::as_const(chats_)) {
                              if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id)
@@ -1402,7 +1403,7 @@ void ChatManager::schedule_pending_invite_retry() {
         return;
     }
 
-    QTimer::singleShot(PendingInviteRetryIntervalMs, node, [this]() {
+    QTimer::singleShot(PendingInviteRetryIntervalMs, signal_guard_.get(), [this]() {
         pending_invite_retry_scheduled_.store(false);
         if (activated_) {
             retry_pending_invites();
@@ -1498,7 +1499,7 @@ void ChatManager::schedule_retry_received_invites() {
     if (received_invites_retry_scheduled_.exchange(true)) {
         return;
     }
-    QTimer::singleShot(1000, node, [this]() {
+    QTimer::singleShot(1000, signal_guard_.get(), [this]() {
         received_invites_retry_scheduled_ = false;
         retry_received_invites();
     });

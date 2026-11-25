@@ -20,6 +20,8 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
+#include <QObject>
 #include <extrachain_global.h>
 #include <expected>
 #include <unordered_map>
@@ -45,6 +47,9 @@ class ExtraChainNode;
 class EXTRACHAIN_EXPORT ChatManager {
 private:
     ExtraChainNode *node;
+    // Context of every signal connection this manager makes: they go away with it, so a signal
+    // sent later (the network closing its sockets on shutdown) never reaches a deleted manager
+    std::unique_ptr<QObject> signal_guard_;
 
 public:
     ChatManager(ExtraChainNode *node);

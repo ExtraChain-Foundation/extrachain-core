@@ -603,6 +603,9 @@ bool NetworkManager::check_port_sync(const QString    &ip,
 }
 
 NetworkManager::~NetworkManager() {
+    // Closing the sockets below reports them gone; the managers that listen may already be
+    // deleted on shutdown, so nothing is announced any more
+    blockSignals(true);
     // Finish the accepted SQL stage before any receive callback loses its owner
     receive_queue_.reset();
     eLog("[NetworkManager] Finish him with {} connections", connections_->size());
