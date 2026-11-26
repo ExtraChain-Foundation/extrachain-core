@@ -145,5 +145,6 @@ public:
     void dogenerate();
 
 signals:
+    void profileChanging();
     void dogenerated();
 };

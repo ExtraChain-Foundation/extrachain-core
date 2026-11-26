@@ -49,6 +49,7 @@ SeedProfile AccountController::create_profile(const std::string               &h
 
     auto profile = PrivateProfile::create(system_actor, main_actor, hash, node);
     profiles_.push_back(profile);
+    emit profileChanging();
     current_profile_ = system_actor.id();
     node->actor_index()->store_new_actor(system_actor.to_public());
     node->actor_index()->store_new_actor(main_actor.to_public());
@@ -174,6 +175,7 @@ bool AccountController::load_profile(const ActorId                &actor_id,
         }
 
         profiles_.push_back(profile);
+        emit profileChanging();
         current_profile_ = profile.system().id();
         node->start();             // TODO: remove
         autologin_hash.save(hash); // TODO: add arg
@@ -192,6 +194,7 @@ bool AccountController::load_profile(const ActorId                &actor_id,
             }
 
             profiles_.push_back(profile);
+            emit profileChanging();
             current_profile_ = try_new->actors()[0].id();
             insert_to_profile_set(try_new->actors()[0].id());
             autologin_hash.save(hash); // TODO: add arg
@@ -301,6 +304,7 @@ bool AccountController::empty() const {
 
 void AccountController::change_current_profile(const ActorId &actorId) {
     if (!profile(actorId).actors().empty()) {
+        emit profileChanging();
         current_profile_ = actorId.to_string();
     }
 }
@@ -322,6 +326,7 @@ const Actor<KeyPrivate> &AccountController::current_wallet() const {
 }
 
 void AccountController::clear() {
+    emit profileChanging();
     profiles_.clear();
     current_profile_ = ActorId();
     eLog("[AccountController] Cleared");
@@ -485,6 +490,7 @@ bool AccountController::delete_current_profile() {
     }
 
     const auto victim = current_profile_;
+    emit profileChanging();
 
     // File first: a stale list entry is recoverable, a file off the list is not
     const auto file_name =

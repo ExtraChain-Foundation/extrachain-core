@@ -1,6 +1,9 @@
 #include "network/websocket_service.h"
+#include "network/network_manager.h"
+#include "managers/extrachain_node.h"
 
 #include <QCoreApplication>
+#include <QTcpSocket>
 #include <QSignalSpy>
 #include <QWebSocketServer>
 #include <QtTest>
@@ -9,7 +12,7 @@
 namespace {
 class Harness : public WebSocketService {
 public:
-    explicit Harness(QWebSocket *socket = nullptr) : WebSocketService(socket, nullptr) {
+    explicit Harness(QWebSocket *socket = nullptr, ExtraChainNode* node = nullptr) : WebSocketService(socket, node) {
         activated_ = true;
     }
     bool is_active() const override { return !closed_; }
@@ -34,6 +37,48 @@ private slots:
 
     void cleanupTestCase() {
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+
+    void suspensionClosesLiveSocketsAndSuppressesQueuedWrites() {
+        ExtraChainNodeWrapper wrapper(nullptr, true, true, 0);
+        auto& node = *wrapper.node;
+        QVERIFY(node.set_network_suspended(true));
+        NetworkManager manager(&node, 0);
+        QWebSocketServer server("private-fixture", QWebSocketServer::NonSecureMode);
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        QWebSocket peer;
+        QSignalSpy messages(&peer, &QWebSocket::textMessageReceived);
+        peer.open(QUrl(QString("ws://127.0.0.1:%1").arg(server.serverPort())));
+        QTRY_VERIFY(server.hasPendingConnections());
+        Harness service(server.nextPendingConnection(), &node);
+        manager.connections()->insert(&service);
+        QSignalSpy sends(&service, &WebSocketService::sendMessageInternal);
+        service.send_message("blocked-account-message");
+        manager.apply_network_suspension();
+        QTRY_COMPARE(peer.state(), QAbstractSocket::UnconnectedState);
+        QCOMPARE(messages.count(), 0);
+        QCOMPARE(sends.count(), 0);
+        QCOMPARE(service.queue_size(), 0L);
+        QVERIFY(service.socket() == nullptr);
+        manager.connections()->clear();
+        manager.start_network();
+        manager.connect_to_node_slot("127.0.0.1", Network::Protocol::WebSocket, false, false);
+        QVERIFY(!manager.server_status());
+        QCOMPARE(manager.open_connections_count(), 0);
+    }
+
+    void suspendingPortProbeCancelsItsTimeout() {
+        ExtraChainNodeWrapper wrapper(nullptr, true, true, 0);
+        auto& node = *wrapper.node;
+        NetworkManager manager(&node, 0);
+        manager.check_port("127.0.0.1", Network::Protocol::WebSocket, false, false);
+        QVERIFY(!manager.findChildren<QTcpSocket*>().empty());
+        QVERIFY(node.set_network_suspended(true));
+        manager.apply_network_suspension();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QVERIFY(manager.findChildren<QTcpSocket*>().empty());
+        QTest::qWait(3100);
+        QCOMPARE(manager.open_connections_count(), 0);
     }
 
     void burstPostsOneDequeueWake() {

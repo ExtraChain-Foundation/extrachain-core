@@ -53,6 +53,13 @@
 
 std::atomic<bool> node_enabled { true };
 
+bool ExtraChainNode::set_network_suspended(bool suspended) {
+    if (QThread::currentThread() != thread()) { return false; }
+    network_suspended_ = suspended;
+    if (network_manager_) { network_manager_->apply_network_suspension(); }
+    return true;
+}
+
 ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app, std::uint16_t ws_port)
     : QObject(parent)
     , node(new ExtraChainNode(is_client_application, is_custom_app, ws_port)) {

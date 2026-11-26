@@ -93,7 +93,36 @@ bool NetworkManager::server_status(Network::Protocol protocol) const {
     return false;
 }
 
+void NetworkManager::apply_network_suspension() {
+    if (QThread::currentThread() != thread()) { return; }
+    if (!node->network_suspended()) {
+        if (!ws_server_) { start_network(); }
+        else if (!ws_server_->isListening() && Network::isStartedServer && local_) {
+            ws_server_->listen(QHostAddress::Any, ws_port);
+        }
+        reconnection();
+        return;
+    }
+    if (ws_server_) { ws_server_->close(); }
+    std::vector<QPointer<SocketService>> sockets;
+    {
+        auto connections = *connections_;
+        for (auto* socket : *connections) { sockets.emplace_back(socket); }
+    }
+    for (const auto& socket : sockets) {
+        if (!socket) { continue; }
+        if (auto* ws = qobject_cast<WebSocketService*>(socket.data()); ws && ws->socket()) {
+            ws->socket()->abort();
+        }
+        if (socket) { socket->closeSocket(); }
+    }
+    // Port probes are owned directly here; they must not survive the socket barrier
+    const auto probes = findChildren<QTcpSocket*>(QString(), Qt::FindDirectChildrenOnly);
+    for (auto* probe : probes) { probe->abort(); probe->deleteLater(); }
+}
+
 void NetworkManager::connect_network() {
+    if (node->network_suspended()) { return; }
     if (!Utils::vector_contains(first_nodes_, first_node_)) {
         emit connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
         return;
@@ -250,6 +279,7 @@ void NetworkManager::process() {
 }
 
 void NetworkManager::reconnection() {
+    if (node->network_suspended()) { return; }
     if (this->node->account_controller()->empty()) {
         return;
     }
@@ -472,12 +502,13 @@ void NetworkManager::check_port(const QString     ip,
                                 Network::Protocol protocol,
                                 const bool        request,
                                 const bool        isConstant) {
+    if (node->network_suspended()) { return; }
     // if (active_connections_count() > Network::maxConnections) {
     //     return;
     // }
 
     auto *socket = new QTcpSocket(this);
-    auto *timer  = new QTimer(this);
+    auto *timer  = new QTimer(socket);
     timer->setSingleShot(true);
 
     pending_port_checks_++;
@@ -497,7 +528,7 @@ void NetworkManager::check_port(const QString     ip,
         socket->deleteLater();
     });
 
-    connect(timer, &QTimer::timeout, this, [socket, timer]() {
+    connect(timer, &QTimer::timeout, socket, [socket, timer]() {
         socket->abort();
         socket->deleteLater();
         timer->deleteLater();
@@ -511,6 +542,7 @@ bool NetworkManager::check_port_sync(const QString    &ip,
                                      Network::Protocol protocol,
                                      const bool        request,
                                      const bool        isConstant) {
+    if (node->network_suspended()) { return false; }
     QTcpSocket socket;
 
     socket.connectToHost(QHostAddress(ip), ws_port);
@@ -573,6 +605,7 @@ void NetworkManager::check_connections_status() {
 }
 
 void NetworkManager::start_network() {
+    if (node->network_suspended()) { return; }
     eLog("[NetworkManager] Start servers... {}", (ws_port == 17593 ? "Network" : "Else"));
 
     if (!local_) {
@@ -617,6 +650,7 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
                                           const bool        request,
                                           bool              isConstant,
                                           const bool        is_light) {
+    if (node->network_suspended()) { return; }
     if (ip.toStdString() == first_node_) {
         isConstant = true;
     }
@@ -666,6 +700,7 @@ void NetworkManager::connect_to_websocket(const QString &ip,
                                           bool           requestListNodes,
                                           const bool     isConstant,
                                           const bool     is_light) {
+    if (node->network_suspended()) { return; }
     if (ip.isEmpty()) {
         return;
     }
@@ -737,6 +772,7 @@ bool NetworkManager::send_message_checker(MessageType      type,
                                           SendMode         send_mode,
                                           MessageStatus    status,
                                           const Responder &responder) {
+    if (node->network_suspended()) { return false; }
     if (/*send_mode != SendMode::Broadcast && */ status == MessageStatus::Response && responder.message_id().empty() && responder.identifiers().empty()) {
         eCritical("[Network] Send message error: empty message id or receiver identifiers for response message");
         return false;
@@ -804,6 +840,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                               SendMode           send_mode,
                                               MessageStatus      status,
                                               const Responder   &responder) {
+    if (node->network_suspended()) { return {}; }
     auto       &main_actor = node->account_controller()->system_actor();
     MessageBody message    = make_init_message(data_serialized,
                                             send_mode,
@@ -876,6 +913,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               const std::string &receiver_identifier,
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
+    if (node->network_suspended()) { return; }
     if (QThread::currentThread() != thread()) {
         // Socket state and routing must be inspected on their owning event loop.
         QMetaObject::invokeMethod(this,
@@ -2412,6 +2450,10 @@ bool NetworkManager::save_first_node(const std::string_view first_node) {
 void NetworkManager::onNewWsConnection() {
     eLog("NetworkManager::onNewWsConnection()");
     auto ws = ws_server_->nextPendingConnection();
+    if (node->network_suspended()) {
+        if (ws) { ws->abort(); ws->deleteLater(); }
+        return;
+    }
     if (ws == nullptr)
         eFatal("[WS] Error: ws == nulltpr");
 

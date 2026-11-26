@@ -122,6 +122,7 @@ private:
     Dag*               dag_                = nullptr;
     std::unique_ptr<LuminanceManager> luminance_manager_;
     QPointer<NetworkManager> network_manager_;
+    std::atomic_bool network_suspended_ { false };
     AccountController* account_controller_ = nullptr;
     DataMiningManager* dmm_                = nullptr;
     TokenManager*      token_manager_      = nullptr;
@@ -186,6 +187,9 @@ public:
 
     Dag*               dag() const;
     NetworkManager*    network() const;
+    // Owner thread, including before process(); suspends identity-bearing P2P independently of VPN control
+    bool set_network_suspended(bool suspended);
+    bool network_suspended() const { return network_suspended_.load(); }
     LuminanceManager*  luminance_manager() const;
     AccountController* account_controller() const;
     ActorIndex*        actor_index() const;

@@ -63,7 +63,7 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
                    const QString              &errorData,
                    std::string                 ip,
                    std::string                 identifier) {
-                if (m_ws == nullptr) {
+                if ((this->node && this->node->network_suspended()) || m_ws == nullptr) {
                     return;
                 }
 
@@ -94,7 +94,7 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
     if (!m_pingTimer) {
         m_pingTimer = new QTimer(this);
         connect(m_pingTimer, &QTimer::timeout, this, [this]() {
-            if (m_ws && m_ws->isValid() && activated_) {
+            if ((!this->node || !this->node->network_suspended()) && m_ws && m_ws->isValid() && activated_) {
                 m_ws->ping();
                 // eLog("[WS] Ping {}", ip());
                 m_failedPongs++;
@@ -123,10 +123,11 @@ QWebSocket *WebSocketService::socket() const {
 }
 
 bool WebSocketService::is_active() const {
-    return activated_ && m_ws->isValid();
+    return activated_ && m_ws && m_ws->isValid();
 }
 
 void WebSocketService::open(const QString &ip, quint16 port) {
+    if (node && node->network_suspended()) { closeSocket(); return; }
     if (m_ws->isValid()) {
         eCritical("[WS] Already opened");
         closeSocket();
@@ -214,6 +215,7 @@ bool WebSocketService::operator==(const WebSocketService &service) const {
 
 // for first message
 void WebSocketService::onTextMessage(const QString &message) {
+    if (node && node->network_suspended()) { return; }
     m_failedPongs = 0;
 
     if (message.isEmpty())
@@ -283,6 +285,7 @@ void WebSocketService::onTextMessage(const QString &message) {
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
+    if (node && node->network_suspended()) { return; }
     m_failedPongs = 0;
 
     if (!activated_) {
@@ -299,6 +302,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
 }
 
 void WebSocketService::processMessage(const QByteArray &message) {
+    if (node && node->network_suspended()) { return; }
     auto mess = prepareReceiveMessage(message);
 
     if (!node_enabled) {
@@ -315,6 +319,7 @@ void WebSocketService::processMessage(const QByteArray &message) {
 }
 
 void WebSocketService::send_message(const QByteArray &data, Priority priority) {
+    if (node && node->network_suspended()) { return; }
     if (!is_active() || closed_) {
         eLog("[WS] {} Try to send without activation {}", direction_, data.left(35));
         return;
@@ -376,6 +381,7 @@ void WebSocketService::scheduleDequeue() {
 }
 
 void WebSocketService::tryDequeueMessage() {
+    if (node && node->network_suspended()) { return; }
     {
         QMutexLocker locker(&queue_mutex_);
         dequeue_pending_ = false;
@@ -417,6 +423,7 @@ void WebSocketService::tryDequeueMessage() {
 }
 
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
+    if (node && node->network_suspended()) { return; }
     if (data.isEmpty() || closed_) {
         return;
     }
@@ -457,6 +464,7 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
 }
 
 void WebSocketService::flush() {
+    if (node && node->network_suspended()) { return; }
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         return;
     }
@@ -507,6 +515,7 @@ void WebSocketService::connections() {
 }
 
 void WebSocketService::send_public_key() {
+    if (node && node->network_suspended()) { return; }
     auto pub_key_str = Utils::to_base64(ByteArray(priv_.public_key()).toString());
 
     if (m_ws == nullptr) {
@@ -535,6 +544,7 @@ void WebSocketService::send_public_key() {
 }
 
 void WebSocketService::handshake() {
+    if (node && node->network_suspended()) { return; }
     auto first_message = generate_first_message();
     auto encrypted     = prepareSendMessage(first_message);
     if (encrypted.isEmpty()) {
