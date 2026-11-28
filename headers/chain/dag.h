@@ -587,6 +587,7 @@ private:
     std::unordered_map<std::string, DagLastInfo> last_info_;  // Last chain info from peers
     QTimer                                      *timer_sync_; // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
+    std::uint64_t                                last_behind_sync_ms_         = 0; // Last sync started by live traffic far ahead
     bool                                         search_control_              = false;
     std::uint64_t                                timestamp_control_search_start_ = 0;
     bool                                         light_requested_             = false;

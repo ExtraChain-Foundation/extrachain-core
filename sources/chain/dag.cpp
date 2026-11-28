@@ -359,6 +359,20 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
             if (tx.section() < this->current_section()) {
                 // need sync?
             }
+
+            // A Ready node more than the acceptance window behind the network
+            // rejects all live traffic and never catches up: a Ready node does not
+            // run the start check. Live traffic far ahead starts a sync, at most once
+            // a minute; the sync fetches the missing sections (handle_sync_request).
+            const auto now = Utils::current_date_ms();
+            if (status_ == DagStatus::Ready && tx.section() > this->current_section() + SectionId(15)
+                && now - last_behind_sync_ms_ > 60000) {
+                last_behind_sync_ms_ = now;
+                eLog("[Dag] Behind the network: {} -> {}, start sync",
+                     this->current_section().to_string(NumeralBase::Dec),
+                     tx.section().to_string(NumeralBase::Dec));
+                this->start_sync();
+            }
         }
     } else {
         eLog("[Dag] Transaction from network approved: {}", transaction);
